@@ -86,7 +86,7 @@ Table with:
 - Seniority
 - Remote (full/hybrid/onsite)
 - Team size (if mentioned)
-- **Culture screen** (see `_shared.md` § Scoring System): pass / caution / fail, with the specific evidence found or missing — not just a score, name what you saw
+- **Culture screen** (see `_shared.md` § Scoring System): pass / caution / fail, with the specific evidence found or missing — not just a score, name what you saw. When `culture_screen.require` includes an interview-process criterion, name the interview stages found (or their absence), e.g. "take-home + system design" vs. "3 rounds of algorithm interviews"
 - TL;DR in 1 sentence
 
 ### Geo-mismatch check
