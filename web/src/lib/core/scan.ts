@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { writeTempPortals, cleanupTempPortals } from "./portals";
 import { profileTargetKeywords } from "@/lib/profile-keywords.mjs";
 import { titleFit } from "@/lib/title-fit.mjs";
@@ -207,7 +208,7 @@ function runScanner(
     if (useJson) args.push("--json");
 
     const child = spawn(process.execPath, args, {
-      cwd: careerOpsRoot(),
+      cwd: resolveCodeRoot(process.cwd(), process.env),
       env: { ...process.env, CAREER_OPS_PORTALS: tempPortals },
     });
 

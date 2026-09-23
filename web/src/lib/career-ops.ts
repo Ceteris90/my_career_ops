@@ -24,11 +24,10 @@ import { pdfIndexEntryForReport } from "@/lib/apply/cv-selection.mjs";
 import { NOTES_START, NOTES_END, profilePath as profileMemoryPath, readProfileMemory } from "@/lib/profile-memory.mjs";
 
 /**
- * Resolve the career-ops "home" — the directory holding the user's sibling
- * files (cv.md, data/, reports/). In production the web/ app lives inside the
- * career-ops checkout, so the home is its parent (..). Dev overrides via
- * CAREER_OPS_ROOT to read the user's real (gitignored) data from a separate
- * checkout — see web/.env.local.
+ * Resolve the career-ops DATA root — the directory holding the user's files
+ * (cv.md, data/, reports/). Same precedence as the core: CAREER_OPS_ROOT →
+ * CAREER_OPS_DATA_DIR → `.career-ops-data` marker → the checkout itself. For
+ * scripts, system modes and templates use resolveCodeRoot() (core/code-root.mjs).
  */
 export function careerOpsRoot(): string {
   // `process.cwd()` is `<core>/web` for `next dev`/`next start`, so its parent is

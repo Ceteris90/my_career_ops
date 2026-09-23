@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
-import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { rootScript } from "@/lib/career-ops";
+import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { canonicalizeStatus } from "@/lib/core/states";
 import { parseCliJson, trackerRowArg, clientErrorMessage } from "@/lib/status-cli.mjs";
 
@@ -74,7 +75,7 @@ function runSetStatus(args: string[]): Promise<CliResult> {
       process.execPath,
       [rootScript("set-status"), ...args],
       {
-        cwd: careerOpsRoot(),
+        cwd: resolveCodeRoot(process.cwd(), process.env),
         timeout: SET_STATUS_TIMEOUT_MS,
         env: { ...process.env, ...boundedLockWait() },
       },
