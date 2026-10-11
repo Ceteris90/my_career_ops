@@ -32,6 +32,9 @@ check('HelloWork page: entity-spelled tag', employerFromHtml(page({ '@type': 'Or
 check('plain ld+json tag, string org', employerFromHtml(page('Astek').replace('ld&#x2B;json', 'ld+json')), 'Astek');
 check('a board as the org is no answer', employerFromHtml(page({ name: 'HelloWork' })), null);
 check('no JSON-LD', employerFromHtml('<html></html>'), null);
+// #43: a HelloWork page with no JobPosting block names the employer in its title.
+check('no JobPosting: the title names the employer', employerFromHtml('<title>Offre Emploi CDI Ing&#xE9;nieur Data Science Paris - Recrutement par Assystem &amp; Co | Hellowork</title>'), 'Assystem & Co');
+check('no JobPosting, anonymous posting', employerFromHtml('<title>Offre Emploi CDI Ing&#xE9;nieur QA &#xCE;le-de-France | Hellowork</title>'), null);
 
 const dir = mkdtempSync(join(tmpdir(), 'board-employer-'));
 const cachePath = join(dir, 'employer-names.json');
