@@ -396,6 +396,17 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 
   `run.sh` makes each job's CV and cover letter itself right before that job (`freemotion-night/prepare-docs.mjs`), and ends with the inbox check, the reply check (`inbox-replies.py`: proposals only, applied with `--apply`) and the open agent-inbox items. Drivers, in order: agy, codex, the second Claude account (`sonnet1`), copilot; that is `run.sh`'s default, so don't pass `DRIVER_ORDER` unless asked.
 
+- **"full night run"** = one scan, then a round of 50 applications every 5 hours until the morning (user, 2026-10-10). One command, started in the background:
+
+  ```bash
+  bash freemotion-night/full-night.sh
+  python -u freemotion-night/night-mail.py     # second background task: progress emails
+  ```
+
+  `night-mail.py` reads the night's log and emails `NIGHT_MAIL_TO` (in `.env`) at the start, every 10 jobs, at the end of each round and at the end of the night.
+
+  It scans once, then repeats the "apply" steps with `--top 50`. A round starts 5 hours after the one before started; rounds start as long as it is before 09:00, and the first 5-hour mark at or after 09:00 still starts one last round. Drivers, in order: agy, agy-sonnet, codex, copilot, the second Claude account (`sonnet1`), then this session's own Claude account (`sonnet`) with no cap, until it reports its limit. So say at the start that this session may have no allowance left by the morning, and that the log is `tmp/fm/night/full-night.log`. `touch tmp/fm/night/stop-night` ends it after the round in hand.
+
 - **"weekly review"** = `node freemotion-night/lessons.mjs weekly`, then read the report it writes (`data/lessons-weekly/<year>-W<week>.md`): for the top recurring lessons that are still open, look at the code and propose concrete fixes; the user decides. A fix commit says "fixes Lnn" in its message, which is how the next weekly review checks it. After each run, `run.sh` files that run's failures as lessons by itself (`lessons.mjs review`, one tool-free Claude Code call).
 
 Personal rules on top of these (letter wording, CV rules) stay in `modes/_custom.md`.

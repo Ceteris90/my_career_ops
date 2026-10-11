@@ -1,5 +1,5 @@
-// node freemotion-night/usage.mjs [run-id] — per-job token use for an overnight run (agy, agy-sonnet, sonnet1, sonnet;
-// codex/copilot jobs are listed without tokens: see codex-usage.mjs / copilot-usage.mjs).
+// node freemotion-night/usage.mjs [run-id] — per-job token use for an overnight run (agy, agy-sonnet, codex, sonnet1, sonnet;
+// copilot jobs are listed without tokens: see copilot-usage.mjs; codex-usage.mjs shows Codex's 5-hour/weekly windows).
 // node freemotion-night/usage.mjs --drivers — every run: per driver, jobs and sent, and how many jobs each
 // driver did between its limit hits (tmp/fm/usage/limit-hits.tsv, written by run.sh).
 // Defaults to the run id in tmp/fm/night/run-id (the last sheets make-jobs.mjs wrote).
@@ -14,6 +14,16 @@ const runs = existsSync(runsPath) ? readFileSync(runsPath, 'utf8').trim().split(
 const ledger = readFileSync(`${ROOT}/data/freemotion-submissions.tsv`, 'utf8').split('\n').map((l) => l.split('\t')).filter((c) => c[7] === RUN);
 const k = (x) => (x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? Math.round(x / 1e3) + 'k' : String(x));
 const read = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } };
+// Codex's exec log is JSONL; each `turn.completed` event carries that turn's usage (cached is part of input).
+const codexUsage = (p) => {
+  if (!existsSync(p)) return null;
+  const u = { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 };
+  for (const line of readFileSync(p, 'utf8').split('\n')) {
+    if (!line.includes('"turn.completed"')) continue;
+    try { const x = JSON.parse(line).usage ?? {}; u.input_tokens += x.input_tokens ?? 0; u.cached_input_tokens += x.cached_input_tokens ?? 0; u.output_tokens += (x.output_tokens ?? 0) + (x.reasoning_output_tokens ?? 0); } catch { /* torn line */ }
+  }
+  return u;
+};
 const tot = { usd: 0, sent: 0, jobs: 0 };
 if (DRIVERS) { driverReport(); process.exit(0); }
 console.log('job   driver  result             fresh in / cached in / out');
@@ -21,9 +31,11 @@ for (const [n, , , d] of runs) {
   const brief = `${ROOT}/tmp/fm/night/job-${n}.md`;
   const url = existsSync(brief) ? (readFileSync(brief, 'utf8').match(/^   (https?:\/\/\S+)/m) ?? [])[1] : null;
   const res = ledger.filter((c) => c[1] === url).at(-1)?.[5] ?? '-';
-  const j = read(`${ROOT}/tmp/fm/usage/${d}-${n}.json`);
+  const file = `${ROOT}/tmp/fm/usage/${d}-${n}.json`;
+  const j = d.startsWith('codex') ? codexUsage(file) : read(file);
   let fin = 0, cached = 0, out = 0;
   if (j && d.startsWith('agy')) { fin = j.usage?.input_tokens ?? 0; cached = j.usage?.cache_read_tokens ?? 0; out = j.usage?.output_tokens ?? 0; }
+  if (j && d.startsWith('codex')) { cached = j.cached_input_tokens; fin = j.input_tokens - cached; out = j.output_tokens; }
   if (j && d.startsWith('sonnet')) { const u = j.usage ?? {}; fin = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0); cached = u.cache_read_input_tokens ?? 0; out = u.output_tokens ?? 0; tot.usd += j.total_cost_usd ?? 0; }
   tot[d] = (tot[d] ?? 0) + fin + cached + out; tot.jobs++; if (res === 'submitted') tot.sent++;
   console.log(`${n}  ${d.padEnd(10)}  ${res.padEnd(17)}  ${k(fin)} / ${k(cached)} / ${k(out)}`);

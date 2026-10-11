@@ -100,6 +100,7 @@ import { loadTargets } from '../targets.mjs';
 import { getCareerOpsRoot } from '../path-resolver.mjs';
 import { requiredYears } from '../lib/required-years.mjs';
 import { loadPostingTexts } from '../lib/posting-text.mjs';
+import { resolveBoardEmployers } from '../lib/board-employer.mjs';
 import { fetchMissingTexts, raiseInInbox, textLine, textProblems } from './fetch-texts.mjs';
 import { localToday } from '../lib/local-today.mjs';
 import { checkLivenessViaApi } from '../liveness-api.mjs';
@@ -111,6 +112,7 @@ const APEC_CACHE = join(ROOT, 'data/apec-routes.json');
 const DAY_MS = 86_400_000;
 
 const SITE_BLACKLIST = join(ROOT, 'data/site-blacklist.md');
+const EMPLOYER_NAMES = join(ROOT, 'data/employer-names.json');
 
 export const ROUTE_RANK = { 'apply-here': 0, 'apec-account': 1, 'freework-account': 2, 'francetravail-page': 2, 'apec-unrouted': 2, 'blocked-site': 2, 'linkedin-lead': 3 };
 export const SCHEDULED = new Set(['apply-here', 'apec-account', 'freework-account', 'francetravail-page']);
@@ -448,7 +450,16 @@ export async function selectCandidates({ days = MAX_AGE_DAYS, drop = () => {} } 
     candidates.push({ ...x, ...v.fields });
   }
 
-  return { rows, candidates };
+  // The same company checks, for a row whose employer became known later
+  // (a board's name replaced by the real one, lib/board-employer.mjs).
+  const recheck = (x) => {
+    if (trackerKeys.has(`${companyKey(x.co)}|${titleKey(x.title)}`)) return 'already in tracker';
+    if (matchBlacklist(blacklist, x.co)) return 'blacklisted company';
+    if (!checkCompany(x.co, capCounts).allowed) return 'company cap reached';
+    return null;
+  };
+
+  return { rows, candidates, recheck };
 }
 
 async function main() {
@@ -464,7 +475,7 @@ async function main() {
   const drop = (why) => (drops[why] = (drops[why] || 0) + 1);
   let gateLine = '';
 
-  const { rows, candidates } = await selectCandidates({ days: DAYS, drop });
+  const { rows, candidates, recheck } = await selectCandidates({ days: DAYS, drop });
 
   // The model (issue #10): a quick batched go / no-go on the titles that are
   // not clearly ours, then the full score for every job that passed.
@@ -613,7 +624,19 @@ async function main() {
     const penalized = sectorKept.filter((x) => x.sectorPenalty).length;
     sectorLine = `  sectors: ${applied.dropped.length} at score 0, ${penalized} ranked lower, ${applied.unanswered} not judged yet`;
   }
-  const ranked = capPerCompany([...sectorKept].sort(rankOrder));
+  // Jobs a board relays under its own name ("Hellowork" from APEC's feed): the
+  // real employer from the posting page, then the company checks again on it
+  // (a Capgemini posting got through as "Hellowork" on 2026-10-07).
+  const relayed = sectorKept.filter((x) => SCHEDULED.has(x.route));
+  const employers = await resolveBoardEmployers(relayed, { cachePath: EMPLOYER_NAMES });
+  const named = sectorKept.filter((x) => {
+    if (!x.boardCo) return true;
+    const why = recheck(x);
+    if (why) { drop(`${why} (employer behind ${x.boardCo})`); return false; }
+    return true;
+  });
+  if (employers.resolved || employers.unknown) console.log(`  employers behind a board's name: ${employers.resolved} found, ${employers.unknown} not named on the page`);
+  const ranked = capPerCompany([...named].sort(rankOrder));
   const scheduled = ranked.filter((x) => SCHEDULED.has(x.route));
   const liveCheck = argv.includes('--no-live-check') ? null : await takeLive(scheduled, TOP);
   const list = (liveCheck ? liveCheck.live : scheduled.slice(0, TOP))

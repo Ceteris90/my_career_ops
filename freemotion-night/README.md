@@ -41,6 +41,11 @@ bash freemotion-night/run.sh <firstNumber> <secondNumber> ...     # applies, one
 node freemotion-night/usage.mjs                                   # next morning: results and tokens used
 ```
 
+A full night: `bash freemotion-night/full-night.sh` scans once, then runs the last four steps with
+`--top 50` every 5 hours; the first 5-hour mark at or after 09:00 starts the last round. Drivers: agy,
+agy-sonnet, codex, copilot, the second Claude account, then this shell's own Claude account until its limit.
+Log: `tmp/fm/night/full-night.log`. `touch tmp/fm/night/stop-night` ends it after the round in hand.
+
 ## Watching the browser (visible window)
 
 The browser is Camoufox with no window by default. To watch a run, or step in:
