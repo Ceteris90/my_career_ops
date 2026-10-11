@@ -441,8 +441,8 @@ read_spend_tier() {
 spend_tier_to_model() {
   case "$1" in
     economy) echo "claude-haiku-4-5" ;;
-    premium) echo "claude-opus-5" ;;
-    standard|*) echo "claude-sonnet-5" ;;
+    premium) echo "claude-opus-5-5" ;;
+    standard|*) echo "claude-sonnet-5-5" ;;
   esac
 }
 
@@ -724,7 +724,10 @@ rate_limit_delay() {
   fi
   base=30
   (( base <= RATE_LIMIT_SLEEP )) || base=$RATE_LIMIT_SLEEP
-  hint=$(LC_ALL=C awk -v cap="$RATE_LIMIT_SLEEP" '
+  # A log that exists and is empty has no header to find, and awk would print
+  # nothing for it: skip the two processes. A missing log still reaches awk.
+  hint=""
+  [[ -e "$log_file" && ! -s "$log_file" ]] || hint=$(LC_ALL=C awk -v cap="$RATE_LIMIT_SLEEP" '
     tolower($0) ~ /^[[:space:]]*retry-after:[[:space:]]*[0-9]+[[:space:]]*$/ {
       value=$0
       sub(/^[^:]*:[[:space:]]*/, "", value)
@@ -1228,7 +1231,12 @@ process_offer() {
       local -a report_artifacts=()
       if [[ -n "$report_num" && "$report_num" != "-" ]]; then
         shopt -s nullglob
-        report_artifacts=("$REPORTS_DIR/$report_num-"*.md)
+        local candidate
+        # The reservation sentinel ({num}-RESERVED.md) is the parent's own file,
+        # not a worker artifact (same exclusion as the report-file check below).
+        for candidate in "$REPORTS_DIR/$report_num-"*.md; do
+          [[ "$candidate" == *-RESERVED.md ]] || report_artifacts+=("$candidate")
+        done
         shopt -u nullglob
       fi
       if [[ -f "$tracker_artifact" || ${#report_artifacts[@]} -gt 0 ]]; then

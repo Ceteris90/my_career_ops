@@ -4,7 +4,22 @@ Aday bir ilan yapıştırdığında (metin veya URL) HER ZAMAN 7 bloğun tamamı
 
 ## Adım 0 — Arketip Tespiti
 
-İlanı `_shared.md`'deki arketiplerden birine sınıflandır. Hibrit ise en yakın ikisini belirt. Bu tespite göre:
+İlanı `_shared.md`'deki arketiplere göre sınıflandır — yani, tanımlı olduğu
+yerde, kullanıcının `modes/_profile.md` → *Your Target Roles* altındaki kendi
+arketiplerine göre. `_profile.md` yoksa, *Your Target Roles* bölümü yoksa ya da
+o tabloda hiç satır yoksa, `_shared.md`'deki varsayılan tabloya göre sınıflandır
+ve oradaki bir eşleşmeyi hedef say. Kullanıcının hedeflerinden ikisinin hibritiyse
+ikisini de belirt.
+
+**"Hiçbiri" geçerli bir sonuçtur ve öyle raporlanmalıdır.** Rol, kullanıcının
+hedeflediği hiçbir şeyle eşleşmiyorsa en yakın etiketi seçme ve hibrit deme:
+bunu açıkça söyle, North Star'a 1 ver ve değerlendirmeye diğer boyutlarda devam
+et — raporun geri kalanı yine de işe yarar; dürüst bir gerekçeyle verilmiş düşük
+bir uyum puanı, kullanıcının başvurmadığı bir iş için kendinden emin bir uyum
+anlatısından daha faydalıdır. `_profile.md`'de hedefler tanımlıysa, yalnızca
+`_shared.md`'deki varsayılan tabloyla eşleşmek onlarla eşleşmek demek değildir.
+
+Bu tespite göre:
 - B bloğunda hangi kanıt noktalarını öne çıkaracağın belirlenir
 - E bloğunda CV özeti nasıl yeniden yazılacağı belirlenir
 - F bloğunda hangi STAR hikayeleri hazırlanacağı belirlenir
@@ -112,6 +127,15 @@ Değerlendirmenin tamamını `reports/{###}-{sirket-slug}-{YYYY-MM-DD}.md` olara
 
 **Tarih:** {YYYY-MM-DD}
 **Arketip:** {tespit edilen}
+<!-- Rol kullanıcının hedeflerinden biriyle eşleşiyorsa onun adını yaz. Hiçbiriyle
+     eşleşmiyorsa bu alan boş BIRAKILMAZ ve muğlak geçilmez — boş bir alan aracın
+     çalışmadığı gibi okunur, "muhtemelen X ile Y'nin hibriti" ise burada önlenmek
+     istenen zorlamanın ta kendisidir. Şunlardan birini yaz:
+       Hedef değil — en yakın varsayılan: {_shared.md tablosundaki satır}
+       Hedef değil — yakın eşleşme yok
+     Varsayılan satırı adlandırmak okuyucunun rolü konumlandırmasına yine yardım
+     eder; yapmaması gereken, kullanıcının gerçekten sahip olduğu bir hedefin yerine
+     geçmektir. -->
 **Puan:** {X.X}/5
 **URL:** {ilan URL'si}
 **PDF:** ✅/❌
@@ -139,6 +163,9 @@ Değerlendirmenin tamamını `reports/{###}-{sirket-slug}-{YYYY-MM-DD}.md` olara
 
 ## G) İlan Meşruiyeti
 (Blok G'nin tam içeriği)
+
+## Karar (lead)
+(başvurulup başvurulmayacağı tek cümlede — `final_decision` alanını yeniden ifade eder, yukarıdaki Karar bölümüne bakın)
 
 ## Risk Summary
 (her risk sinyali için bir satır, sabit sıra — yukarıdaki Risk Summary bölümüne bakın)
@@ -239,9 +266,29 @@ Ardından `node merge-tracker.mjs` çalıştır.
 
 ---
 
+## Karar (lead)
+
+Blok G'den hemen sonra, `## Risk Summary` bloğundan önce bir `## Karar (lead)` bloğu yazın. Okuyucunun raporu açarken sorduğu tek soruyu yanıtlar: başvurmalı mıyım?
+
+**Türetilmiş, asla özgün.** `## Machine Summary` içindeki `final_decision` tek doğruluk kaynağıdır. Bu blok aynı kararı tek bir insan cümlesiyle yeniden ifade eder ve başka bir karar ortaya atmaz. Cümle ile alan çelişirse alan doğrudur, kusur cümledir. Kalın yazılan karar o alanın değerindir: Apply, Consider, Research first veya Skip.
+
+**`(lead)` işareti işlevseldir, ve bilinçli olarak dilden bağımsızdır.** Web rapor görünümü, işareti taşıyan bloğu sayfanın giriş vurgusuna yükseltir ve onu başlık sözcüğüne ya da blok harfine göre değil işarete göre tanır. Bu yüzden her çeviri kendi adını ve aynı parantezi korur: `## Karar (lead)`, `## Verdict (lead)`. `(lead)` asla çevrilmez, bu bloğa asla harf verilmez. A–H dizisinin dışındadır.
+
+**Yeni yargı yok.** Bu blok yazıldığında tüm girdiler zaten toplanmıştır. Kararı ve raporun daha önce ortaya koyduğu tek bir gerekçeyi yazın. Yeniden puanlamayın, yeni kanıt eklemeyin.
+
+Blok biçimi:
+
+```markdown
+## Karar (lead)
+
+**Apply.** Rolün temel ekseninde güçlü eşleşme, sert engel yok, ve Blok G High Confidence döndürdü.
+```
+
+---
+
 ## Risk Summary (Blok G'den sonra)
 
-Rapor gövdesini Blok G'nin hemen ardından, Blok H'den önce bir `## Risk Summary` bloğuyla kapatın — her risk sinyali için bir satır, sabit sıra. Böylece adayın gerçekten sorduğu soru ("bu şirkete katılmak güvenli mi?") Blok A, Blok G ve harici bir dosyayı zihinde birleştirmek yerine tek ekranda yanıtlanır.
+Rapor gövdesini, Blok G'yi izleyen `## Karar (lead)` bloğunun hemen ardından, Blok H'den önce bir `## Risk Summary` bloğuyla kapatın — her risk sinyali için bir satır, sabit sıra. Böylece adayın gerçekten sorduğu soru ("bu şirkete katılmak güvenli mi?") Blok A, Blok G ve harici bir dosyayı zihinde birleştirmek yerine tek ekranda yanıtlanır.
 
 **Yalnızca toplama, sıfır yeni yargı.** Her satır, kaynak sinyalin zaten ürettiği kararı alıntılar veya ona bağlanır. Özet asla yeniden puanlamaz, yeniden ağırlıklandırmaz veya kararı geçersiz kılmaz — bir satır yanlış görünüyorsa düzeltme buraya değil, kaynak sinyale aittir.
 

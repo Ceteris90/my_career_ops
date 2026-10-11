@@ -3,6 +3,7 @@ import path from "node:path";
 import * as yaml from "js-yaml";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { resolveDataRoot } from "@/lib/core/data-root.mjs";
+import { readTrackerFile } from "@/lib/core/tracker-files.mjs";
 import { resolveCodeRoot, resolveRootScript } from "@/lib/core/code-root.mjs";
 import { parseApplications } from "@/lib/tracker-table.mjs";
 import { parseStatusLog } from "@/lib/pipeline-sankey.mjs";
@@ -17,6 +18,10 @@ import { resolvePdfIndexPath } from "@/lib/core/pdf-index";
 // don't drift into two different definitions of "which report does this
 // index row belong to" (#2599, #2008 review).
 import { pdfIndexEntryForReport } from "@/lib/apply/cv-selection.mjs";
+// The managed-block markers and the profile read live together in one plain
+// module, so rememberFact() (the block's only WRITER) and readMemory() (its
+// reader) cannot drift apart, and so the read rule is testable from web/tests.
+import { NOTES_START, NOTES_END, profilePath as profileMemoryPath, readProfileMemory } from "@/lib/profile-memory.mjs";
 
 /**
  * Resolve the career-ops "home" — the directory holding the user's sibling
@@ -30,7 +35,14 @@ export function careerOpsRoot(): string {
   // the core checkout — the same directory `path-resolver.mjs` calls `__dirname`.
   // resolveDataRoot() needs it explicitly because relative env values and marker
   // contents resolve against it; see data-root.mjs for why that base matters.
-  const coreRoot = path.resolve(process.cwd(), "..");
+  //
+  // Via resolveCodeRoot(), NOT a hardcoded `..`, so this agrees with rootScript()
+  // just below — which already resolves the checkout that way. With
+  // CAREER_OPS_CODE_ROOT set and a RELATIVE data root, the two were computing
+  // from different bases: the script came from the configured checkout and the
+  // data root from the process's parent. Identical when the variable is unset,
+  // which is every default install.
+  const coreRoot = resolveCodeRoot(process.cwd(), process.env);
   return resolveDataRoot(
     coreRoot,
     (p) => {
@@ -149,7 +161,7 @@ export type Application = {
  * to the running system checkout for that system-layer alias table.
  */
 export function readApplications(): Application[] {
-  const md = read("data/applications.md");
+  const md = readTrackerFile(careerOpsRoot());
   if (!md) return [];
   // parseApplications derives each row from WEB_FIELD (tracker-table.mjs), so
   // its keys are exactly this type's field names by construction — adding a
@@ -169,20 +181,18 @@ export type StatusLogRow = {
   note: string;
 };
 
-/** Append-only tracker transitions from data/status-log.tsv. A missing log is
+/** Append-only transitions beside the active tracker. A missing log is
  *  normal (no status change recorded yet) and yields []. Any other read failure
  *  is rethrown: an unreadable log must not pass for an empty one, which would
  *  silently drop recorded interview paths from the Sankey (web/AGENTS.md: a
  *  missing file is not a malformed file). */
 export function readStatusLog(): StatusLogRow[] {
-  let tsv: string;
-  try {
-    tsv = fs.readFileSync(path.join(careerOpsRoot(), "data/status-log.tsv"), "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return [];
-    throw err;
-  }
-  return parseStatusLog(tsv);
+  return parseStatusLog(readApplicationStatusLog() ?? "");
+}
+
+/** Ledger sibling of the same tracker readApplications consumes. */
+export function readApplicationStatusLog(): string | null {
+  return readTrackerFile(careerOpsRoot(), "status-log.tsv");
 }
 
 /** Resolve the report-number cell in data/pdf-index.tsv for a given report id.
@@ -412,29 +422,13 @@ export function findApplication(n: string): Application | null {
  *  web assistant learns go HERE (single source of truth) inside a managed marker
  *  block — so the CLI sees them too. No web-only memory store (that would drift). */
 export function profilePath(): string {
-  return path.join(careerOpsRoot(), "modes", "_profile.md");
+  return profileMemoryPath(careerOpsRoot());
 }
 
-const NOTES_START = "<!-- co-web-notes:start -->";
-const NOTES_END = "<!-- co-web-notes:end -->";
-
-/** Read back ONLY the web-assistant managed notes from modes/_profile.md (small,
- *  focused — the agent reads the rest of the canonical files itself). Falls back
- *  to the legacy web-only memory file for back-compat. */
+/** Read modes/_profile.md back for injection into a prompt. profile-memory.mjs
+ *  owns the rule and is where it is tested. */
 export function readMemory(): string {
-  try {
-    const md = fs.readFileSync(profilePath(), "utf8");
-    const i = md.indexOf(NOTES_START);
-    const j = md.indexOf(NOTES_END);
-    if (i !== -1 && j !== -1 && j > i) return md.slice(i + NOTES_START.length, j).trim();
-  } catch {
-    /* no _profile.md yet */
-  }
-  try {
-    return fs.readFileSync(path.join(careerOpsRoot(), ".career-ops-web", "memory.md"), "utf8").trim();
-  } catch {
-    return "";
-  }
+  return readProfileMemory(careerOpsRoot());
 }
 
 /** Append a durable fact to the canonical modes/_profile.md (creating the file +
