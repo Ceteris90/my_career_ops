@@ -73,5 +73,6 @@ for i in reversed(ids):
     links = [u for u in re.findall(r'https?://[^\s"\'<>]+', body) if host_pat.search(u)]
     print('FROM:', frm[:60]); print('SUBJECT:', subj[:80]); print('DATE:', dec(msg['Date'])[:30])
     for u in dict.fromkeys(links): print("LINK:", u)
+    print("BODY:", body)
     break
 M.logout()
