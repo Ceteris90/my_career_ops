@@ -516,7 +516,7 @@ async function main() {
     copyFileSync(outcome.result.pdf, outPdf);
     const outYaml = outPdf.replace(/\.pdf$/i, '') + '.yaml';
     copyFileSync(outcome.result.yamlPath, outYaml);
-    if (opts.report) updatePDFManifest(opts.report, outPdf, outYaml, base.format);
+    if (opts.report) await updatePDFManifest(opts.report, outPdf, outYaml, base.format);
     if (siteLink) await (await import('./lib/site-links.mjs')).markUsed(siteLink, 'cv', { root }).catch(() => {});
     logFit(outcome.step.name === floor && outcome.tried.length > 1 ? 'floor' : 'fit');
 

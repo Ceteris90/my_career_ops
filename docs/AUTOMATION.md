@@ -29,6 +29,10 @@ Three independent pieces, smallest first. You can use any of them on their own.
 > local files. Evaluating a shortlisted role later (`/career-ops pipeline`) is the
 > only step that spends tokens.
 
+> Companion page: [Keeping portals.yml live](KEEPING_PORTALS_LIVE.md) covers the
+> house rule that keeps the scan list itself current (companies get auto-added as
+> they come up) and the zero-token commands to validate `portals.yml` afterwards.
+
 ---
 
 ## 1. Schedule the scan
@@ -99,6 +103,19 @@ replace the `StartCalendarInterval` block with an interval in seconds:
 ```
 
 ### Windows — Task Scheduler
+
+Automatic recurring scans from the Scheduled scans page are Windows-only. On
+macOS and Linux, saved scans run only through **Run now**.
+The web UI's Scheduled scans page supports multiple saved cadences. Install its
+local queue worker from the repository root with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File web/scripts/install-scan-schedule.ps1
+```
+
+The task checks for due jobs every 15 minutes and runs at most one queued scan per
+check in the current user's interactive session; you must be logged in. Use `web/scripts/uninstall-scan-schedule.ps1` to remove it. For a single fixed
+daily scan without the web UI, use the lower-level Task Scheduler recipe below.
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "node.exe" -Argument "scan.mjs" -WorkingDirectory "C:\path\to\career-ops"

@@ -19,7 +19,8 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -178,7 +179,7 @@ Es formuliert deinen Lebenslauf um; es darf ihn nie erfinden. Eine Prüfung im C
 | **Interview Story Bank** | Sammelt STAR+Reflection-Geschichten über Bewertungen hinweg: 5-10 Master-Stories, die du an die Behavioral Questions anpassen kannst, die dir gestellt werden |
 | **Verhandlungsskripte**  | Frameworks für Gehaltsverhandlungen, Pushback gegen geografische Abschläge, Hebel durch konkurrierende Angebote                          |
 | **Bewerbungs-E-Mail-Entwürfe** | Formelle E-Mails an Recruiter:innen, für Empfehlungen oder Initiativbewerbungen aus einem Report oder einer eingefügten Stellenbeschreibung, mit Betreff, Anhang-Checkliste, belegten Fit-Punkten und einem Kontaktblock aus deinem Profil. Nur Entwürfe. |
-| **Portal-Scanner**       | 100+ vorkonfigurierte Unternehmen (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) plus eigene Queries über Ashby, Greenhouse, Lever, Wellfound |
+| **Portal-Scanner**       | 100+ vorkonfigurierte Unternehmen (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) plus eigene Websuche-Queries über Ashby, Greenhouse, Lever, Wellfound |
 | **Finanzierte Unternehmen entdecken** | Der Befehl `company:funded` (erst prüfen, dann handeln) zeigt kürzlich finanzierte Unternehmen und Quellendiagnosen aus strukturierten öffentlichen Feeds, ohne deine Daten anzufassen |
 | **Batch-Verarbeitung**   | Parallele Bewertung mit headless CLI-Workern (`claude -p` / `opencode run`)                                                             |
 | **Dashboard TUI**        | Terminal-UI zum Durchsuchen, Filtern und Sortieren deiner Pipeline                                                                       |
@@ -286,7 +287,6 @@ career-ops nutzt einen gemeinsamen Befehls-Router. In CLIs, die Slash Commands r
 /career-ops interview    → Interaktives Onboarding-Interview für Profil und Lebenslauf
 /career-ops master-profile → Dein Master Career Profile importieren, prüfen und validieren
 /career-ops eu-swe    → Eine europäische SWE-Bewerbung vor Lebenslauf, Bewerbung und Interview kalibrieren
-/career-ops eu-fintech → 21 EU-Fintech-Portale nach Product-Manager-Rollen scannen (ohne Tokens)
 /career-ops interview/plan → Zeitgeblockter Vorbereitungsplan für ein anstehendes Interview
 /career-ops interview/practice → Übungsinterview, eine Frage nach der anderen mit Feedback
 /career-ops interview/debrief → Debrief nach dem Interview: Lücken schließen, nächste Runde vorhersagen

@@ -19,7 +19,8 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -178,7 +179,7 @@ career-ops उम्मीदवारों के लिए हमेशा �
 | **इंटरव्यू स्टोरी बैंक** | मूल्यांकनों के दौरान STAR+Reflection कहानियाँ जमा करता है: 5-10 मास्टर कहानियाँ, जिन्हें आप सामने आने वाले व्यवहारिक सवालों के हिसाब से ढाल सकते हैं |
 | **नेगोशिएशन स्क्रिप्ट**  | वेतन बातचीत के फ़्रेमवर्क, भौगोलिक कटौती का जवाब, प्रतिस्पर्धी ऑफ़र का लाभ                                                                |
 | **आवेदन ईमेल ड्राफ़्ट**  | रिपोर्ट या पेस्ट की गई JD से रिक्रूटर/रेफ़रल/कोल्ड आवेदन के औपचारिक ईमेल, विषय पंक्ति, अटैचमेंट चेकलिस्ट, स्रोत-समर्थित फ़िट पॉइंट और प्रोफ़ाइल-आधारित संपर्क ब्लॉक के साथ। सिर्फ़ ड्राफ़्ट। |
-| **पोर्टल स्कैनर**        | 100+ कंपनियाँ पहले से कॉन्फ़िगर (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + Ashby, Greenhouse, Lever, Wellfound पर कस्टम क्वेरी      |
+| **पोर्टल स्कैनर**        | 100+ कंपनियाँ पहले से कॉन्फ़िगर (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + Ashby, Greenhouse, Lever, Wellfound पर कस्टम वेब-सर्च क्वेरी |
 | **फ़ंडेड कंपनी डिस्कवरी** | रिव्यू-फ़र्स्ट `company:funded` कमांड संरचित सार्वजनिक फ़ीड से हाल में फ़ंड पाई कंपनियाँ और स्रोत डायग्नोस्टिक्स दिखाता है, आपका डेटा छुए बिना |
 | **बैच प्रोसेसिंग**       | हेडलेस CLI वर्कर्स (`claude -p` / `opencode run`) के साथ समानांतर मूल्यांकन                                                               |
 | **Dashboard TUI**        | अपनी पाइपलाइन ब्राउज़, फ़िल्टर और सॉर्ट करने के लिए टर्मिनल UI                                                                            |
@@ -286,7 +287,6 @@ career-ops एक साझा कमांड राउटर इस्ते�
 /career-ops interview    → इंटरैक्टिव प्रोफ़ाइल/CV ऑनबोर्डिंग इंटरव्यू
 /career-ops master-profile → अपना Master Career Profile इम्पोर्ट करें, उसकी समीक्षा करें और उसे सत्यापित करें
 /career-ops eu-swe    → CV/apply/interview से पहले यूरोपीय SWE आवेदन कैलिब्रेट करें
-/career-ops eu-fintech → Product Manager भूमिकाओं के लिए 21 EU फ़िनटेक पोर्टल स्कैन करें (ज़ीरो-टोकन)
 /career-ops interview/plan → आने वाले इंटरव्यू के लिए समय-खंडों में तैयारी योजना
 /career-ops interview/practice → अभ्यास इंटरव्यू, फ़ीडबैक के साथ एक बार में एक सवाल
 /career-ops interview/debrief → इंटरव्यू के बाद डीब्रीफ़: कमियाँ भरें, अगले राउंड का अनुमान लगाएँ

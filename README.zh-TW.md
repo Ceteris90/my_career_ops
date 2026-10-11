@@ -19,7 +19,8 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -178,7 +179,7 @@ career-ops 對求職者永久免費。這些公司贊助了本專案：
 | **面試故事庫**           | 跨評估累積 STAR+反思故事：5 到 10 個主故事，可以針對你遇到的行為面試問題靈活調整                                                                         |
 | **談判話術**             | 薪資談判框架、應對地域折價、以競爭 offer 作為籌碼                                                                                         |
 | **申請郵件草稿**         | 從報告或貼上的職缺描述產生給招募人員、內推或主動應徵的正式郵件，包含主旨、附件清單、有憑有據的契合點，以及來自你個人資料的聯絡資訊區塊。僅限草稿。 |
-| **求職平台掃描器**       | 預先設定 100+ 家企業（Anthropic、OpenAI、ElevenLabs、Retool、n8n…）+ 跨 Ashby、Greenhouse、Lever、Wellfound 的自訂查詢                     |
+| **求職平台掃描器**       | 預先設定 100+ 家企業（Anthropic、OpenAI、ElevenLabs、Retool、n8n…）+ 跨 Ashby、Greenhouse、Lever、Wellfound 的自訂網頁搜尋查詢             |
 | **已募資企業探索**       | 以審閱為先的 `company:funded` 指令從結構化的公開資料來源列出近期獲得募資的企業與來源診斷，不更動你的資料                                    |
 | **批次處理**             | 用無頭 CLI worker（`claude -p` / `opencode run`）並行評估                                                                                  |
 | **Dashboard TUI**        | 在終端機裡瀏覽、篩選和排序你的流程                                                                                                        |
@@ -286,7 +287,6 @@ career-ops 使用共用的指令路由。在會註冊斜線指令的 CLI 裡，�
 /career-ops interview    → 互動式的個人資料／履歷入門訪談
 /career-ops master-profile → 匯入、審閱並驗證你的主職涯檔案（Master Career Profile）
 /career-ops eu-swe    → 在履歷／申請／面試前校準一份歐洲 SWE 申請
-/career-ops eu-fintech → 掃描 21 個歐洲金融科技求職平台的 Product Manager 職缺（零 token）
 /career-ops interview/plan → 為即將到來的面試制定按時間區塊安排的準備計畫
 /career-ops interview/practice → 模擬面試，一次一個問題並給出回饋
 /career-ops interview/debrief → 面試後檢討：補上短板，預測下一輪

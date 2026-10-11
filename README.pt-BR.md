@@ -19,7 +19,8 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -178,7 +179,7 @@ Ele reformula seu currículo; nunca deve inventá-lo. Uma verificação no códi
 | **Banco de histórias de entrevista** | Acumula histórias STAR+Reflexão ao longo das avaliações: 5-10 histórias principais que você pode adaptar às perguntas comportamentais que receber |
 | **Scripts de negociação** | Frameworks para negociação salarial, resposta a desconto geográfico, alavanca com ofertas concorrentes                                  |
 | **Rascunhos de e-mail de candidatura** | E-mails formais para recrutador, indicação ou candidatura espontânea a partir de um relatório ou de uma descrição colada, com assunto, checklist de anexos, pontos de aderência com fonte e um bloco de contato vindo do seu perfil. Só rascunho. |
-| **Scanner de portais**   | 100+ empresas pré-configuradas (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + consultas customizadas em Ashby, Greenhouse, Lever, Wellfound |
+| **Scanner de portais**   | 100+ empresas pré-configuradas (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + consultas customizadas de busca na web em Ashby, Greenhouse, Lever, Wellfound |
 | **Descoberta de empresas financiadas** | O comando `company:funded`, feito para revisar antes de agir, traz empresas com financiamento recente e diagnósticos de fonte a partir de feeds públicos estruturados, sem editar seus dados |
 | **Processamento em lote** | Avaliação paralela com workers de CLI sem interface (`claude -p` / `opencode run`)                                                      |
 | **Dashboard TUI**        | Interface no terminal para navegar, filtrar e ordenar seu pipeline                                                                       |
@@ -286,7 +287,6 @@ O career-ops usa um roteador de comandos compartilhado. Nas CLIs que registram c
 /career-ops interview    → Entrevista interativa de onboarding do perfil e do currículo
 /career-ops master-profile → Importa, revisa e valida seu Master Career Profile
 /career-ops eu-swe    → Calibra uma candidatura europeia de SWE antes do currículo, da candidatura ou da entrevista
-/career-ops eu-fintech → Escaneia 21 portais fintech europeus buscando vagas de Product Manager (sem tokens)
 /career-ops interview/plan → Plano de preparação por blocos de tempo para uma entrevista próxima
 /career-ops interview/practice → Entrevista de prática, uma pergunta por vez com feedback
 /career-ops interview/debrief → Debrief pós-entrevista: fecha lacunas, prevê a próxima rodada
