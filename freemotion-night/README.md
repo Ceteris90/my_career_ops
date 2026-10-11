@@ -41,7 +41,9 @@ bash freemotion-night/run.sh <firstNumber> <secondNumber> ...     # applies, one
 node freemotion-night/usage.mjs                                   # next morning: results and tokens used
 ```
 
-A full night: `bash freemotion-night/full-night.sh` scans once, then runs the last four steps with
+A full night: `node freemotion-night/scheduled.mjs start-night` starts `full-night.sh` (and the progress
+emails, `night-mail.py`) in the "FreeMotion night" task, so it keeps going when the Claude Code session
+ends (#41); `--jobs`, `--end`, `--every`, `--no-scan`, `--no-mail` change the defaults. `full-night.sh` scans once, then runs the last four steps with
 `--top 50` every 5 hours; the first 5-hour mark at or after 09:00 starts the last round. Drivers: agy,
 agy-sonnet, codex, copilot, the second Claude account, then this shell's own Claude account until its limit.
 Log: `tmp/fm/night/full-night.log`. `touch tmp/fm/night/stop-night` ends it after the round in hand.
@@ -136,7 +138,7 @@ takes applications (`URL_ONLY` = a partner site, `EMAIL_ONLY` = on APEC itself, 
 
 ## What runs by itself (Windows Task Scheduler)
 
-`node freemotion-night/scheduled.mjs install` creates three tasks in the `career-ops` folder (no admin
+`node freemotion-night/scheduled.mjs install` creates four tasks in the `career-ops` folder (no admin
 rights needed; `status` shows them, `uninstall` removes them). They run hidden, and a run missed while the PC
 was off starts when it is on again:
 
@@ -145,6 +147,7 @@ was off starts when it is on again:
 | FreeMotion scan | every day 06:00 | `scan.mjs`, `make-pool.mjs` (posting texts, scores), the reply check |
 | FreeMotion loops | at log-on and 06:00 | starts the three scoring loops below if they are not running |
 | FreeMotion weekly | Mondays 09:00 | `lessons.mjs weekly`: the lessons report |
+| FreeMotion night | never by itself | the full night run, started by `scheduled.mjs start-night` only |
 
 "apply" is never scheduled: it spends the drivers' allowances and sends real applications.
 Logs: `tmp/fm/scheduled/<task>-<date>.log`. Only what needs a person goes to `data/agent-inbox.md`, once
