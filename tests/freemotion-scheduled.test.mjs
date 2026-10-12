@@ -38,3 +38,11 @@ try {
 } finally { rmSync(dir, { recursive: true, force: true }); }
 
 if (S.LOOPS.length === 3 && S.LOOPS.every((l) => l.args.includes('--models') || l.args.includes('--model'))) pass('the three scoring loops are the README ones'); else fail('loops list changed');
+
+// #41: start-night hands full-night.sh its settings and the drivers' environment, and refuses bad values.
+const env = S.nightEnv(['--jobs', '30', '--end', '08:00', '--no-scan'], { PATH: 'C:\bin', CLAUDE_CONFIG_DIR: 'C:\c3', SECRET: 'x' });
+if (env.ROUND_JOBS === '30' && env.END_AT === '08:00' && env.NO_SCAN === '1' && env.PATH === 'C:\bin' && env.CLAUDE_CONFIG_DIR === 'C:\c3' && !('SECRET' in env)) pass('start-night passes the settings, PATH and the Claude account, nothing else');
+else fail(`night env: ${JSON.stringify(env)}`);
+let refused = 0;
+for (const bad of [['--jobs', 'many'], ['--end', 'nine'], ['--jobs'], ['--jobs', '--no-scan']]) { try { S.nightEnv(bad, {}); } catch { refused++; } }
+if (refused === 4) pass('a bad --jobs or --end is refused before anything starts'); else fail(`refused ${refused} of 4`);

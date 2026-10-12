@@ -416,12 +416,13 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 
   `run.sh` makes each job's CV and cover letter itself right before that job (`freemotion-night/prepare-docs.mjs`), and ends with the inbox check, the reply check (`inbox-replies.py`: proposals only, applied with `--apply`) and the open agent-inbox items. Drivers, in order: agy, codex, the second Claude account (`sonnet1`), copilot; that is `run.sh`'s default, so don't pass `DRIVER_ORDER` unless asked.
 
-- **"full night run"** = one scan, then a round of 50 applications every 5 hours until the morning (user, 2026-10-10). One command, started in the background:
+- **"full night run"** = one scan, then a round of 50 applications every 5 hours until the morning (user, 2026-10-10). One command; it returns at once, because the night runs in the Windows task "FreeMotion night", not in this session, so closing the session or a memory kill no longer ends it (#41, user, 2026-10-11):
 
   ```bash
-  bash freemotion-night/full-night.sh
-  python -u freemotion-night/night-mail.py     # second background task: progress emails
+  node freemotion-night/scheduled.mjs start-night     # --jobs 50 --end 09:00 --every 5 --no-scan --no-mail
   ```
+
+  It starts `full-night.sh` and `night-mail.py` (progress emails) with this shell's PATH and Claude account. It refuses when a night is already running. If it says the task is not installed, run `node freemotion-night/scheduled.mjs install` once.
 
   `night-mail.py` reads the night's log and emails `NIGHT_MAIL_TO` (in `.env`) at the start, every 10 jobs, at the end of each round and at the end of the night.
 
