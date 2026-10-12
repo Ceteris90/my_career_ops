@@ -187,6 +187,11 @@ const NOT_GUARDED = new Map([
   ['voice-dna.md', 'ships as a populated system default, so edits to it are legit'],
   ['.claude/settings.json', 'project harness config, not gitignored, may legitimately be committed'],
   ['.claude/hooks/', 'project harness config, not gitignored, may legitimately be committed'],
+  // Fork (moudimash99, #44): this fork commits these on purpose; the user chose exceptions over untracking (2026-10-12).
+  ['config/targets.yml', 'fork: the target-role word list, role words only, tracked by design'],
+  ['.codex/config.toml', 'fork: the Codex driver config the night runs need, no personal data'],
+  ['config/apply-answers.yml', 'fork: tracked on purpose by the user (#44)'],
+  ['config/apply-essays.yml', 'fork: tracked on purpose by the user (#44)'],
 ]);
 
 test('the guard blocks every update-system.mjs user-layer path not allowlisted', () => {
