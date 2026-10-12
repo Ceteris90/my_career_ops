@@ -237,7 +237,7 @@ export async function prepareDocs(job, { root = getCareerOpsRoot(), driver, forc
     if (after !== before) { writeFileSync(letter.path, after); try { await markUsed(siteLink, 'letter', { root }); } catch {} }
   }
 
-  const state = { num: job.num, run: job.run ?? null, url: job.url, company: job.co, role: job.title, lang, langWhy: language.why, dir, cv, letter, siteLink, at: new Date().toISOString(), sent: null };
+  const state = { num: job.num, run: job.run ?? null, url: job.url, company: job.co, role: job.title, lang, langWhy: language.why, dir, cv, letter, siteLink, docTokens: { ...(writer.tokens ?? {}) }, at: new Date().toISOString(), sent: null };
   writeFileSync(statePath, JSON.stringify(state, null, 1));
   return state;
 }
