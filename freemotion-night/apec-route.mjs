@@ -49,7 +49,7 @@
  *
  * Usage:
  *   node freemotion-night/apec-route.mjs [--ids 179467750W,179468553W | --in <rows.json> | --days 14]
- *                                        [--max 30] [--gap 4] [--out <file>]
+ *                                        [--max 30] [--gap 4] [--out <file>] [--no-sign-in]
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -59,6 +59,7 @@ import { htmlToText } from '../providers/_html-to-text.mjs';
 import { savePostingTexts } from '../lib/posting-text.mjs';
 import { localToday } from '../lib/local-today.mjs';
 import { isCaptchaPage, openCamoufoxPage } from '../lib/camoufox-page.mjs';
+import { signInApec } from '../lib/apec-signin.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SEARCH_PATH = '/cms/webservices/rechercheOffre';
@@ -75,6 +76,12 @@ const MAX = Number(flag('--max', 30)); // new postings asked about per run
 const GAP = Number(flag('--gap', 4)); // seconds between offer-data requests
 const IDS = flag('--ids', '');
 const IN = flag('--in', '');
+// #25 (user, 2026-10-12): the lookups run signed in to APEC, in a browser profile kept between runs
+// (tmp/fm/apec-profile), like the agents' sessions; --no-sign-in is the old fresh, anonymous page.
+const SIGN_IN = !argv.includes('--no-sign-in');
+const PROFILE = join(ROOT, 'tmp/fm/apec-profile');
+// Less regular than a fixed gap: a person does not click every 1.5 s.
+const pause = (minS, maxS) => sleep((minS + Math.random() * (maxS - minS)) * 1000);
 const idOf = (url) => (String(url || '').match(/^https:\/\/www\.apec\.fr\/.*\/detail-offre\/([A-Za-z0-9-]+)/) || [])[1];
 
 /** Rows to route: --ids, else --in, else recent APEC rows of the scan history. */
@@ -155,7 +162,12 @@ let blocked = '';
 let routed = 0;
 const texts = [];
 if (asking.length) {
-  const page = await openCamoufoxPage(`${OFFER_BASE}/${asking[0].apecId}`);
+  let signedIn = null;
+  const page = await openCamoufoxPage(`${OFFER_BASE}/${asking[0].apecId}`, SIGN_IN ? {
+    profileDir: PROFILE,
+    prepare: async (p) => { signedIn = await signInApec(p); },
+  } : {});
+  if (signedIn) console.log(`apec-route: ${signedIn.ok ? 'signed in to APEC' : `not signed in (${signedIn.why}); asking anyway`}`);
   try {
     // 1. Liveness of the new ones. A live hit also refreshes the row's details.
     for (const r of asking) {
@@ -175,7 +187,7 @@ if (asking.length) {
         }
         console.error(`apec-route: search failed for ${r.apecId}: ${e.message}`);
       }
-      await sleep(1500);
+      await pause(3, 7);
     }
 
     // 2. Route of the new live ones.
@@ -201,7 +213,7 @@ if (asking.length) {
       cache[r.apecId] = route;
       if (!r.textOnly) out.push(toRow(r, route));
       routed++;
-      await sleep(GAP * 1000);
+      await pause(GAP, GAP * 2);
     }
   } finally {
     await page.close();
