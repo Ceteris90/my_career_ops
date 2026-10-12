@@ -147,7 +147,7 @@ try {
   } else fail('isEnglishPosting() misreads French postings as English');
 
   // ---- posting text fetch ----------------------------------------------------------
-  const { jobPostingText, linkedinPostingText, fetchPostingText } = await load('lib/posting-fetch.mjs');
+  const { jobPostingText, helloworkPostingText, linkedinPostingText, fetchPostingText } = await load('lib/posting-fetch.mjs');
   const hwPage = `<html><head><script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"X"},
     {"@type":"JobPosting","title":"Ingénieur Sysops","description":"<p>Vous avez <b>5 ans d'expérience</b> sur Linux.</p>"}]}</script></head><body>menu 30 ans</body></html>`;
   if (jobPostingText(hwPage) === "Vous avez 5 ans d'expérience sur Linux." && jobPostingText('<html>no ld</html>') === null) {
@@ -157,6 +157,18 @@ try {
   if (jobPostingText(hwEscaped) === "Vous avez 5 ans d'expérience sur Linux.") {
     pass('jobPostingText() also reads HelloWork\'s escaped type (ld&#x2B;json, 2026-09-30)');
   } else fail(`jobPostingText (escaped type) = ${JSON.stringify(jobPostingText(hwEscaped))}`);
+  // #43: from 2026-10-09 many HelloWork pages have no JobPosting block; the text is in the page's sections.
+  const missions = 'Analyser le modèle de prévision existant et concevoir de nouvelles approches de séries temporelles. '.repeat(4);
+  const hwNoLd = `<html><script type="application/ld&#x2B;json">{"@type":"WebSite","name":"Hellowork"}</script><nav>Missions d'intérim</nav>
+    <details open><summary><h2><span>&#xC0; noter sur ce job</span></h2></summary><div>Hybride</div></details>
+    <details open><summary><h2 class="x"><span>D&#xE9;tail du poste</span></h2></summary><div class="typo-long-m"><p>${missions}</p></div><button>Voir plus</button></details>
+    <details open><summary><h2><span>Le profil recherch&#xE9;</span></h2></summary><div><ul><li>Python expert</li></ul></div></details>
+    <h2>Cr&#xE9;ez votre compte Hellowork et activez votre alerte</h2><form>CDI CDD Intérim</form></html>`;
+  const hwText = helloworkPostingText(hwNoLd) || '';
+  if (hwText.startsWith('Détail du poste') && hwText.includes('Python expert') && !/Voir plus|CDD|noter sur ce job|intérim/.test(hwText)
+      && helloworkPostingText(hwEscaped) === "Vous avez 5 ans d'expérience sur Linux." && helloworkPostingText('<html>no sections</html>') === null) {
+    pass('helloworkPostingText() reads the page sections when there is no JobPosting block, JSON-LD first (#43)');
+  } else fail(`helloworkPostingText = ${JSON.stringify(hwText)}`);
   const li = readFileSync(join(ROOT, 'tests/fixtures/linkedin-guest-live-onsite.html'), 'utf8');
   if (/Own reporting end to end/.test(linkedinPostingText(li) || '') && linkedinPostingText('<html></html>') === null) {
     pass('linkedinPostingText() reads the guest page\'s description block');
