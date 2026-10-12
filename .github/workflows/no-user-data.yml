@@ -87,6 +87,8 @@ jobs:
                 'batch/batch-runner.sh',
                 'batch/logs/.gitkeep',
                 'batch/tracker-additions/.gitkeep',
+                // Fork (moudimash99): an old tracked entry from 2026-08, kept on purpose (#44).
+                'batch/tracker-additions/capgemini-entry.json',
               ]),
               'documents/': new Set([
                 'documents/.gitkeep',

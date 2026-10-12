@@ -8834,6 +8834,8 @@ try {
         cwd: ROOT,
         encoding: 'utf-8',
         timeout: 30000,
+        // A real tracker of 2,000+ rows prints over 1 MB of JSON, past the 1 MB default (#45).
+        maxBuffer: 64 * 1024 * 1024,
         env: { ...process.env, CAREER_OPS_PROFILE: CADENCE_FIXTURE },
       });
     } catch (cliErr) {
