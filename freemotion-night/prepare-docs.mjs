@@ -42,6 +42,7 @@ import { assignLetterArm, markLetterFallback, markLetterSent } from '../lib/lett
 import { loadPostingTexts } from '../lib/posting-text.mjs';
 import { readCurrentState } from '../lib/freemotion-submissions.mjs';
 import { appendLetterLog, openingOf } from '../lib/letter-check.mjs';
+import { docLanguage } from '../lib/doc-language.mjs';
 import { chainWriter, isOut, writerOrder, WRITER_ORDER } from '../lib/doc-writers.mjs';
 import { buildCvContext, loadContextInputs } from '../cv-write.mjs';
 import { loadLetterInputs, renderLetterPdf, writeLetter } from '../letter-write.mjs';
@@ -196,7 +197,6 @@ export async function prepareDocs(job, { root = getCareerOpsRoot(), driver, forc
   mkdirSync(dir, { recursive: true });
   const candidateMd = readFileSync(join(root, 'config/freemotion-candidate.md'), 'utf8');
   const generic = genericCvPath(candidateMd);
-  const lang = job.english ? 'en' : 'fr';
   const writer = write ?? writerFor(driver);
 
   // A failed draw must not stop an application: generic CV, short letter (the claim step's own rule).
@@ -212,6 +212,10 @@ export async function prepareDocs(job, { root = getCareerOpsRoot(), driver, forc
     jdPath = join(dir, 'posting.md');
     writeFileSync(jdPath, `# ${job.title} — ${job.co}\n${job.url}\n\n${text}\n`);
   }
+  // The posting's language decides the CV and letter (#12); unclear means French, said here.
+  const language = docLanguage({ text, title: job.title });
+  const lang = language.lang;
+  if (!language.sure) console.log(`note: job ${job.num}: posting language unclear (${language.why})`);
 
   // This application's own machaka.net/r/<code> link (issue #11, lib/site-links.mjs): in the tailored CV's
   // header (it still reads "machaka.net"), in the letter, and on the sheet's Website line for forms. The
@@ -233,7 +237,7 @@ export async function prepareDocs(job, { root = getCareerOpsRoot(), driver, forc
     if (after !== before) { writeFileSync(letter.path, after); try { await markUsed(siteLink, 'letter', { root }); } catch {} }
   }
 
-  const state = { num: job.num, run: job.run ?? null, url: job.url, company: job.co, role: job.title, lang, dir, cv, letter, siteLink, at: new Date().toISOString(), sent: null };
+  const state = { num: job.num, run: job.run ?? null, url: job.url, company: job.co, role: job.title, lang, langWhy: language.why, dir, cv, letter, siteLink, at: new Date().toISOString(), sent: null };
   writeFileSync(statePath, JSON.stringify(state, null, 1));
   return state;
 }

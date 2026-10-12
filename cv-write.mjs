@@ -29,6 +29,7 @@ import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { docLanguage } from './lib/doc-language.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 export const ARMS = ['strict', 'loose'];
@@ -183,7 +184,9 @@ async function main() {
   if (o.help || !o.jd || !o.arm || (!o.out && !o['context-only'])) { console.error(usage); process.exitCode = o.help ? 0 : 1; return; }
   try {
     const root = getCareerOpsRoot();
-    const context = buildCvContext({ ...loadContextInputs({ jd: o.jd, root }), arm: o.arm, lang: o.lang });
+    const inputs = loadContextInputs({ jd: o.jd, root });
+    // One rule for the documents' language (#12): the posting's, French when unclear.
+    const context = buildCvContext({ ...inputs, arm: o.arm, lang: docLanguage({ text: inputs.jdText, lang: o.lang }).lang });
     if (o['context-only']) {
       const p = resolve(o['context-only']);
       mkdirSync(dirname(p), { recursive: true });

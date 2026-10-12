@@ -36,6 +36,7 @@ import * as yaml from 'js-yaml';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { markdownSections, writeWithAgy } from './cv-write.mjs';
+import { docLanguage } from './lib/doc-language.mjs';
 import {
   LETTER_LOG_RELATIVE_PATH, appendLetterLog, checkLetter, detectLanguage, openingOf, parseVoiceDna, recentLetters,
 } from './lib/letter-check.mjs';
@@ -154,7 +155,8 @@ export function rolloutPick(root, currentParts, rng = Math.random) {
 export const MAX_REVISIONS = 2;
 
 export async function writeLetter({ inputs, version, format, lang, root, write = writeWithAgy, rollout = true, rng = Math.random }) {
-  const postingLanguage = lang || detectLanguage(inputs.jdText);
+  // One rule for the documents' language (#12): never 'unknown', French when unclear.
+  const postingLanguage = docLanguage({ text: inputs.jdText, lang }).lang;
   const recent = recentLetters(root);
   const voiceRules = existsSync(join(root, 'voice-dna.md')) ? parseVoiceDna(join(root, 'voice-dna.md')) : undefined;
   const pick = rollout ? rolloutPick(root, inputs.parts, rng) : { id: promptVersion(inputs.parts), parts: inputs.parts, state: null };
@@ -276,7 +278,7 @@ async function main() {
       const letter = JSON.parse(readFileSync(jsonPath, 'utf8'));
       const text = letterText(letter);
       const voiceRules = existsSync(join(root, 'voice-dna.md')) ? parseVoiceDna(join(root, 'voice-dna.md')) : undefined;
-      const res = checkLetter({ text, version, postingLanguage: o.lang || detectLanguage(inputs.jdText), recent: recentLetters(root), voiceRules });
+      const res = checkLetter({ text, version, postingLanguage: docLanguage({ text: inputs.jdText, lang: o.lang }).lang, recent: recentLetters(root), voiceRules });
       if (!res.ok) {
         console.log(JSON.stringify({ status: 'rejected', problems: res.problems, warnings: res.warnings }, null, 2));
         process.exitCode = 2;
@@ -300,7 +302,7 @@ async function main() {
       const p = resolve(o['context-only']);
       const pick = o.noRollout ? { id: promptVersion(inputs.parts), parts: inputs.parts } : rolloutPick(root, inputs.parts);
       mkdirSync(dirname(p), { recursive: true });
-      writeFileSync(p, buildLetterContext({ parts: pick.parts, cvMd: inputs.cvMd, jdText: inputs.jdText, version, format, lang: o.lang || detectLanguage(inputs.jdText) }));
+      writeFileSync(p, buildLetterContext({ parts: pick.parts, cvMd: inputs.cvMd, jdText: inputs.jdText, version, format, lang: docLanguage({ text: inputs.jdText, lang: o.lang }).lang }));
       console.log(JSON.stringify({ status: 'context', path: p, promptVersion: pick.id }));
       return;
     }
