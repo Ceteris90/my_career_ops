@@ -114,6 +114,8 @@ const SENIOR = /\b(senior|sr\.?|expert|exp[ée]riment[ée]e?|confirm[ée]e?)\b/i
 // Now: the posting text decides when there is enough of it; the title only
 // when there is none. Both compared without accents.
 const FRENCH_TITLE = /\b(h\/f|f\/h|h\/f\/x|f\/h\/x|ingenieure?|developpeur|developpeuse|architecte|consultante?|expert\.e|chef|projet|responsable|administrateur|administratrice|analyste|gestionnaire|technicien|technicienne|coordinateur|coordinatrice|formateur|formatrice|integrateur|referent|referente|donnees|systemes?|reseaux?|securite|confirme|confirmee|experimente|experimentee|exploitation|recette|plateforme|ingenierie|charge|chargee|de|des|du|et|en|pour|sur)\b/;
+/** A title that is plainly French ("H/F", French job words). */
+export const isFrenchTitle = (title) => FRENCH_TITLE.test(deaccent(title));
 const FR_WORDS = new Set(['le', 'la', 'les', 'des', 'du', 'une', 'et', 'pour', 'vous', 'nous', 'avec', 'dans', 'sur', 'est', 'sont', 'votre', 'notre', 'au', 'aux', 'qui', 'que', 'nos', 'vos', 'ou', 'par', 'plus']);
 const EN_WORDS = new Set(['the', 'and', 'for', 'you', 'we', 'with', 'our', 'your', 'are', 'is', 'to', 'of', 'will', 'this', 'that', 'in', 'on', 'as', 'be', 'an', 'or', 'who', 'what', 'about']);
 const MIN_TEXT_WORDS = 40;

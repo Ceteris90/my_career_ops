@@ -34,6 +34,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { DOCS_END, DOCS_START, docsBlock } from './prepare-docs.mjs';
+import { docLanguage } from '../lib/doc-language.mjs';
+import { loadPostingTexts } from '../lib/posting-text.mjs';
+import { getCareerOpsRoot } from '../path-resolver.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT_SHOWN = ROOT.replace(/\\/g, '/');
@@ -165,6 +168,10 @@ const SITE_NOTES = [
 ];
 
 mkdirSync(OUT, { recursive: true });
+
+// The documents' and answers' language: the same rule prepare-docs uses (#12), from the posting text.
+const TEXTS = loadPostingTexts(getCareerOpsRoot(), order.map((x) => x.url));
+for (const x of order) x.english = docLanguage({ text: TEXTS.get(x.url), title: x.title }).lang === 'en';
 
 for (let b = 0; b < order.length; b++) {
   const jobs = order.slice(b, b + 1);
