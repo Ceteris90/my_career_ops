@@ -88,19 +88,19 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-import { MAX_AGE_DAYS, capPerCompany, companyKey, judge, rankScore, titleKey } from './pool-rules.mjs';
+import { MAX_AGE_DAYS, RANK_NUDGES, capPerCompany, companyKey, judge, rankScore, titleKey } from './pool-rules.mjs';
 import { applySectors, readSectors } from './llm-sector.mjs';
 import { AGY_SCORE_MODEL, CLAUDE_SCORE_MODEL, DEFAULT_MODEL, FACTORS, GATE_SCHEMA, STRETCH_AT, agyGenerate, claudeGenerate, gateJobs, gateStore, geminiGateGenerate, geminiGenerate, scoreJobsAgy, jobKey, readGate, readScores, resolveCandidate, scoreJobs, verdictOf } from './llm-score.mjs';
 import normalizeUrl from '../url-key.mjs';
 import { readCurrentState } from '../lib/freemotion-submissions.mjs';
-import { checkCompany, countByCompany, matchBlacklist } from '../lib/company-cap.mjs';
+import { DEFAULT_CAP, WINDOW_DAYS, checkCompany, countByCompany, matchBlacklist } from '../lib/company-cap.mjs';
 import { resolveColumns, parseTrackerRow } from '../tracker-parse.mjs';
 import { isMainModule } from '../lib/is-main-module.mjs';
 import { loadTargets } from '../targets.mjs';
 import { getCareerOpsRoot } from '../path-resolver.mjs';
 import { requiredYears } from '../lib/required-years.mjs';
 import { loadPostingTexts } from '../lib/posting-text.mjs';
-import { resolveBoardEmployers } from '../lib/board-employer.mjs';
+import { isBoardName, resolveBoardEmployers } from '../lib/board-employer.mjs';
 import { fetchMissingTexts, raiseInInbox, textLine, textProblems } from './fetch-texts.mjs';
 import { localToday } from '../lib/local-today.mjs';
 import { checkLivenessViaApi } from '../liveness-api.mjs';
@@ -459,7 +459,7 @@ export async function selectCandidates({ days = MAX_AGE_DAYS, drop = () => {} } 
     return null;
   };
 
-  return { rows, candidates, recheck };
+  return { rows, candidates, recheck, capCounts };
 }
 
 async function main() {
@@ -475,7 +475,7 @@ async function main() {
   const drop = (why) => (drops[why] = (drops[why] || 0) + 1);
   let gateLine = '';
 
-  const { rows, candidates, recheck } = await selectCandidates({ days: DAYS, drop });
+  const { rows, candidates, recheck, capCounts } = await selectCandidates({ days: DAYS, drop });
 
   // The model (issue #10): a quick batched go / no-go on the titles that are
   // not clearly ours, then the full score for every job that passed.
@@ -634,9 +634,16 @@ async function main() {
     const why = recheck(x);
     if (why) { drop(`${why} (employer behind ${x.boardCo})`); return false; }
     return true;
+  }).map((x) => {
+    // Employer still hidden behind the board's name (#37): one point lower, user 2026-10-12.
+    if (!isBoardName(x.co || '')) return x;
+    const y = { ...x, hiddenEmployer: true, score: +(x.score + RANK_NUDGES.hiddenEmployer).toFixed(2) };
+    return x.rank != null ? { ...y, rank: rankScore(y) } : y;
   });
   if (employers.resolved || employers.unknown) console.log(`  employers behind a board's name: ${employers.resolved} found, ${employers.unknown} not named on the page`);
-  const ranked = capPerCompany([...named].sort(rankOrder));
+  // At most what is left of each employer's weekly cap (5 in any 7 days, lib/company-cap.mjs);
+  // a board's name is not capped.
+  const ranked = capPerCompany([...named].sort(rankOrder), (co) => checkCompany(co, capCounts).remaining);
   const scheduled = ranked.filter((x) => SCHEDULED.has(x.route));
   const liveCheck = argv.includes('--no-live-check') ? null : await takeLive(scheduled, TOP);
   const list = (liveCheck ? liveCheck.live : scheduled.slice(0, TOP))
@@ -658,7 +665,7 @@ async function main() {
   if (textRun) console.log(textLine(textRun));
   console.log(`  passed the rules: ${routed.length} | merged away as duplicates: ${routed.length - kept.length} (${merges.length} groups, see merges.txt)`);
   if (sectorLine) console.log(sectorLine);
-  console.log(`  kept: ${ranked.length} after the ${4}-per-company cap | by route: ${sorted(count(ranked, (x) => x.route))}`);
+  console.log(`  kept: ${ranked.length} after the per-employer cap (${DEFAULT_CAP} in any ${WINDOW_DAYS} days) | by route: ${sorted(count(ranked, (x) => x.route))}`);
   console.log(`  scheduled pool by source: ${sorted(count(ranked.filter((x) => SCHEDULED.has(x.route)), (x) => x.source))}`);
   if (liveCheck) console.log(`  live check: ${liveCheck.checked} checked (the rest cached), ${liveCheck.dropped.length} skipped as dead or unclear (see dead.txt)`);
   console.log(`  tonight's list: ${list.length} jobs | Toulouse ${list.filter((x) => x.toulouse).length} · Paris ${list.filter((x) => x.paris).length} · English ${list.filter((x) => x.english).length} · model-scored ${list.filter((x) => x.fit != null).length} · stretch ${list.filter((x) => x.tier === 'stretch').length} -> ${join('tmp/fm/night', 'list.json')}`);

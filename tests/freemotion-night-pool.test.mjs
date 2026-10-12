@@ -14,7 +14,7 @@ console.log('\nfreemotion-night — pool rules, routes, merge, site review');
 const load = (p) => import(pathToFileURL(join(ROOT, p)).href);
 
 try {
-  const { titleKey, companyKey, placeFlags, judge, capPerCompany } = await load('freemotion-night/pool-rules.mjs');
+  const { titleKey, companyKey, placeFlags, judge, capPerCompany, rankScore } = await load('freemotion-night/pool-rules.mjs');
   const { linkKey, routeOf, mergeSameJobs, parseSiteBlacklist, isBlockedSite, SCHEDULED } = await load('freemotion-night/make-pool.mjs');
   const { tallySites } = await load('freemotion-night/site-review.mjs');
 
@@ -60,6 +60,11 @@ try {
   else fail('Java should be kept and ranked low');
   if (capPerCompany(Array.from({ length: 6 }, (_, i) => ({ co: i < 5 ? 'ACME SAS' : 'Other', title: `t${i}` }))).length === 5) pass('capPerCompany() keeps 4 per company key');
   else fail('cap per company');
+  // make-pool passes what is left of each employer's weekly cap (lib/company-cap.mjs).
+  const left = { acme: 2, other: 0 };
+  if (capPerCompany(Array.from({ length: 6 }, (_, i) => ({ co: i < 5 ? 'ACME SAS' : 'Other', title: `t${i}` })), (co) => left[co.split(' ')[0].toLowerCase()]).length === 2) pass("capPerCompany() keeps what is left of each employer's weekly cap");
+  else fail('capPerCompany() with a per-employer limit');
+  if (rankScore({ fit: 4.5, hiddenEmployer: true }) === 3.5) pass('a hidden employer ranks one point lower (#37)'); else fail(`hidden employer rank = ${rankScore({ fit: 4.5, hiddenEmployer: true })}`);
 
   // ---- routes ------------------------------------------------------------
   const r = (source, url, apec) => routeOf({ source, url }, apec);

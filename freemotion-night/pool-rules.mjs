@@ -130,12 +130,13 @@ const MIN_TEXT_WORDS = 40;
 // offstack keeps targets.yml `rank_low` meaning "ranked low" at this scale.
 // sectorPenalty: targets.yml `sectors.penalty` for the job's sector (space -1,
 // user 2026-10-04), set by llm-sector.mjs applySectors().
-export const RANK_NUDGES = { toulouse: 0.3, paris: 0.1, english: 0.2, offstack: -0.5 };
+export const RANK_NUDGES = { toulouse: 0.3, paris: 0.1, english: 0.2, offstack: -0.5, hiddenEmployer: -1 };
 
-/** @param {{ fit: number, toulouse?: boolean, paris?: boolean, english?: boolean, offstack?: boolean, sectorPenalty?: number }} x */
+/** @param {{ fit: number, toulouse?: boolean, paris?: boolean, english?: boolean, offstack?: boolean, sectorPenalty?: number, hiddenEmployer?: boolean }} x */
 export function rankScore(x) {
   const place = x.toulouse ? RANK_NUDGES.toulouse : x.paris ? RANK_NUDGES.paris : 0;
-  const r = Number(x.fit) + place + (x.english ? RANK_NUDGES.english : 0) + (x.offstack ? RANK_NUDGES.offstack : 0) + (x.sectorPenalty || 0);
+  const r = Number(x.fit) + place + (x.english ? RANK_NUDGES.english : 0) + (x.offstack ? RANK_NUDGES.offstack : 0) + (x.sectorPenalty || 0)
+    + (x.hiddenEmployer ? RANK_NUDGES.hiddenEmployer : 0);
   return Math.round(r * 100) / 100;
 }
 
@@ -193,12 +194,16 @@ export function judge(x, targets = targetsOrThrow()) {
   return { ok: true, fields: { score: +score.toFixed(2), points: role.points, kind, needsModel, senior, english, toulouse, paris, offstack } };
 }
 
-/** Keep the best PER_COMPANY postings per company (input sorted best-first). */
-export function capPerCompany(list) {
+/**
+ * Keep the best postings per company (input sorted best-first): at most
+ * `limitOf(company)`, by default PER_COMPANY. make-pool passes what is left of
+ * the employer's weekly cap (lib/company-cap.mjs).
+ */
+export function capPerCompany(list, limitOf = () => PER_COMPANY) {
   const n = {};
   return list.filter((x) => {
     const k = companyKey(x.co);
     if (!k) return true;
-    return (n[k] = (n[k] || 0) + 1) <= PER_COMPANY;
+    return (n[k] = (n[k] || 0) + 1) <= limitOf(x.co);
   });
 }
