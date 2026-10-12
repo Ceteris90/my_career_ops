@@ -19,7 +19,7 @@ import { pathToFileURL } from 'url';
 
 console.log('\ncompany-cap — no employer gets asked 411 times');
 
-const { countByCompany, checkCompany, capKey, resolveCountedKey, report, DEFAULT_CAP } =
+const { countByCompany, checkCompany, capKey, resolveCountedKey, report, DEFAULT_CAP, WINDOW_DAYS } =
   await import(pathToFileURL(join(ROOT, 'lib/company-cap.mjs')).href);
 
 const check = (label, actual, expected) => {
@@ -41,7 +41,7 @@ const TRACKER = `# Applications Tracker
 | 6 | 2026-01-06 | SII | Arch | 4.5/5 | SKIP | ❌ | - | never sent |
 `;
 
-const counts = countByCompany(TRACKER);
+const counts = countByCompany(TRACKER, { windowDays: null });   // every row, whatever its date
 
 check('sent rows are counted', counts.get('thales').sent, 3);
 // A Rejected row is still an application that went out, and counting it is
@@ -102,16 +102,27 @@ check('the refusal says why', /410 applications already sent/.test(checkCompany(
 check('a division block names what it matched',
   checkCompany('Airbus Atlantic', new Map([['airbus', { company: 'Airbus', sent: 145 }]]), 20).matchedAs, 'Airbus');
 
-check('the default cap is the one the user chose', DEFAULT_CAP, 20);
+check('the default cap is the one the user chose: 5 in any 7 days (2026-10-12)', [DEFAULT_CAP, WINDOW_DAYS], [5, 7]);
+
+// ------------------------------------------------------------ the 7-day window
+
+const NOW = new Date(2026, 0, 10, 12);   // 2026-01-10, local
+const recent = countByCompany(TRACKER, { now: NOW });
+// The window is today and the 6 days before: 2026-01-04 .. 2026-01-10.
+check('rows older than 7 days do not count', recent.has('thales'), false);
+check('a row 6 days old still counts', recent.get('davidson')?.sent, 1);
+check('a row exactly 7 days old does not', countByCompany(TRACKER.replace('2026-01-04', '2026-01-03'), { now: NOW }).has('davidson'), false);
+check("a job board's name is never capped", checkCompany('Hellowork', new Map([['hellowork', { company: 'Hellowork', sent: 50 }]])).allowed, true);
+check('the refusal names the window', /last 7 days/.test(checkCompany('X', new Map([['x', { company: 'X', sent: 5 }]])).reason), true);
 
 // ---------------------------------------------------------- the report
 
 const r = report(new Map([
   ['a', { company: 'A', sent: 40 }],
-  ['b', { company: 'B', sent: 18 }],
+  ['b', { company: 'B', sent: 19 }],
   ['c', { company: 'C', sent: 2 }],
 ]), 20);
 check('over-cap employers are listed', r.overCap.map((x) => x.company), ['A']);
-check('near-cap employers are listed separately', r.nearCap.map((x) => x.company), ['B']);
-check('and the total is the sum', r.total, 60);
+check('employers one short of the cap are listed separately', r.nearCap.map((x) => x.company), ['B']);
+check('and the total is the sum', r.total, 61);
 check('an empty tracker reports nothing', report(new Map(), 20).overCap, []);
