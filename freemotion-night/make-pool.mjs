@@ -422,7 +422,7 @@ export async function selectCandidates({ days = MAX_AGE_DAYS, drop = () => {} } 
   // The scan's own location filter (portals.yml location_filter), run again
   // here: rows saved before a block entry was added (US "City, ST" boards
   // until 2026-09-26) would otherwise reach the model and the list.
-  const { default: yaml } = await import('js-yaml');
+  const yaml = await import('js-yaml');   // js-yaml 5 has no default export (v1.36.0)
   const inFrance = buildLocationFilter(existsSync(PORTALS_PATH) ? yaml.load(readFileSync(PORTALS_PATH, 'utf8'))?.location_filter : null);
   const trackerText = readFileSync(join(ROOT, 'data/applications.md'), 'utf8');
   const trackerLines = trackerText.split(/\r?\n/);
