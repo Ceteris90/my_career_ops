@@ -285,7 +285,10 @@ Before every browser action and every command, write ONE short line in your repl
 ## Report
 Write as you go to \`tmp/fm/night/report-${first + b}.md\`: what you filled,
 what you decided yourself and why, any problems, and ${REHEARSAL ? 'the exact URL and page text of the filled form' : 'the exact page text after submitting'}.
-Finish with a 3-line summary.
+Finish with a 3-line summary, then ONE last line, exactly one of:
+\`Outcome: submitted — "<the page's own words after submitting>"\` (only for a confirmed submission)
+\`Outcome: <already-applied | validation-failed | captcha | blocked-waf | errored> — <why, one line>\`
+It is how the result is kept if your record or finalize call fails.
 `;
   writeFileSync(join(OUT, `job-${first + b}.md`), md);
   // What prepare-docs.mjs needs to make this job's CV and letter right before it runs.

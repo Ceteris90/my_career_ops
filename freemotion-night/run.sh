@@ -284,6 +284,9 @@ for n in "$@"; do
     fi
     break
   done
+  # The agent may have sent the form and then crashed on its own record call (L52): its report's
+  # Outcome line is recorded first; only a job with nothing usable is closed as errored.
+  [ "$(result_of "$u")" = in-progress ] && node freemotion-night/report-outcome.mjs $n $RUN
   [ "$(result_of "$u")" = in-progress ] && close_open "$u" "run ended without recording a result; check before any retry"
   echo "job $n ($d): $(result_of "$u")"
   # Only sent applications count in the CV and letter experiments.
