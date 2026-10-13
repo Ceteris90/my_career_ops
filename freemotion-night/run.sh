@@ -172,28 +172,9 @@ run_agy_watch() {  # <num> <model or empty> <file prefix>
   kill $ctl 2>/dev/null
   : > "tmp/fm/usage/$3-$1.json"   # no print-mode output in watch mode (limit checks find nothing)
 }
-# Context test (#61): every model call re-reads the whole conversation (23k tokens at the first call of a
-# Codex job, ~75k by the end). Half the Codex jobs, drawn per job and kept for a retry, have Codex
-# summarise the conversation once it reaches CTX_COMPACT_AT tokens and go on from the summary; the other
-# half run as before. data/context-test.tsv holds the draws; `usage.mjs --context-test` compares tokens
-# and Codex's weekly % per SENT application. CTX_TEST=0 turns it off (every job runs as before).
-CTX_COMPACT_AT=${CTX_COMPACT_AT:-45000}
-ctx_arm() {  # <num>
-  local a; a=$(awk -F'\t' -v n="$1" -v r="$RUN" '$1==n && $6==r {a=$4} END {print a}' data/context-test.tsv 2>/dev/null)
-  if [ -z "$a" ]; then
-    [ "${CTX_TEST:-1}" = 0 ] && { echo full; return; }
-    a=full; [ $(( RANDOM % 2 )) = 1 ] && a=compact
-    [ -f data/context-test.tsv ] || printf 'job\ttime\tdriver\tarm\tcompact_at\trun\n' > data/context-test.tsv
-    printf '%s\t%s\tcodex\t%s\t%s\t%s\n' "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$a" "$CTX_COMPACT_AT" "$RUN" >> data/context-test.tsv
-  fi
-  echo $a
-}
 run_codex() {
-  local arm compact=; arm=$(ctx_arm $1)
-  [ "$arm" = compact ] && compact="-c model_auto_compact_token_limit=$(awk -F'\t' -v n="$1" -v r="$RUN" '$1==n && $6==r {c=$5} END {print c}' data/context-test.tsv)"
-  echo "context test: job $1 runs as \"$arm\""
   timeout 1500 codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C "$ROOT" --json \
-    ${CODEX_MODEL:+-m "$CODEX_MODEL"} ${CODEX_EFFORT:+-c model_reasoning_effort="\"$CODEX_EFFORT\""} $compact \
+    ${CODEX_MODEL:+-m "$CODEX_MODEL"} ${CODEX_EFFORT:+-c model_reasoning_effort="\"$CODEX_EFFORT\""} \
     -o "tmp/fm/usage/codex-$1.txt" "$(prompt $1)" < /dev/null > "tmp/fm/usage/codex-$1.json" 2> "tmp/fm/usage/codex-$1.err"
 }
 run_copilot() {
