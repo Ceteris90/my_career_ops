@@ -43,7 +43,7 @@ import { loadPostingTexts } from '../lib/posting-text.mjs';
 import { readCurrentState } from '../lib/freemotion-submissions.mjs';
 import { appendLetterLog, openingOf } from '../lib/letter-check.mjs';
 import { docLanguage } from '../lib/doc-language.mjs';
-import { chainWriter, isOut, writerOrder, WRITER_ORDER } from '../lib/doc-writers.mjs';
+import { chainWriter, isOut, WRITER_ORDER } from '../lib/doc-writers.mjs';
 import { buildCvContext, loadContextInputs } from '../cv-write.mjs';
 import { loadLetterInputs, renderLetterPdf, writeLetter } from '../letter-write.mjs';
 import { getSiteLink, markUsed, replaceSiteMentions } from '../lib/site-links.mjs';
@@ -54,10 +54,10 @@ export const DOCS_END = '<!-- docs:end -->';
 export const CV_REVISIONS = 1;
 const shown = (p) => String(p).replace(/\\/g, '/');
 const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } };
-// The writers to try, in order: DOCS_WRITERS="codex agy" overrides; the job's driver leads when it is one.
-const writerFor = (driver) => {
+// The writers to try, in order (codex first): DOCS_WRITERS="agy codex" overrides.
+const writerFor = () => {
   const env = (process.env.DOCS_WRITERS || '').split(/\s+/).filter(Boolean);
-  return chainWriter({ names: writerOrder({ first: driver, order: env.length ? env : WRITER_ORDER }), skip: (n) => isOut(n, REPO) });
+  return chainWriter({ names: env.length ? env : WRITER_ORDER, skip: (n) => isOut(n, REPO) });
 };
 const oneLine = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
 
@@ -197,7 +197,7 @@ export async function prepareDocs(job, { root = getCareerOpsRoot(), driver, forc
   mkdirSync(dir, { recursive: true });
   const candidateMd = readFileSync(join(root, 'config/freemotion-candidate.md'), 'utf8');
   const generic = genericCvPath(candidateMd);
-  const writer = write ?? writerFor(driver);
+  const writer = write ?? writerFor();
 
   // A failed draw must not stop an application: generic CV, short letter (the claim step's own rule).
   const meta = { company: job.co, role: job.title, root };

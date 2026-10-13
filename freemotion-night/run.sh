@@ -45,8 +45,8 @@
 # Before every job, freemotion-night/prepare-docs.mjs makes that posting's CV and cover letter: it draws
 # the two arms (CV generic 15 / loose 50 / strict 35, letter none 15 / short 35 / full 50), has them
 # written and checked, and puts them into the sheet; the agent only uploads and pastes. About two
-# minutes a job. Writers: the job's driver first, then agy, codex, the second Claude account, copilot
-# (DOCS_WRITERS="codex agy" for another order). When none answers, the generic CV goes out with no letter.
+# minutes a job. Writers: codex first, then agy, the second Claude account, copilot
+# (DOCS_WRITERS="agy codex" for another order). When none answers, the generic CV goes out with no letter.
 # HelloWork postings: after the documents and before the agent, freemotion-night/sites/hellowork.mjs does
 # HelloWork's own form without a model (claim, sign-in, name, CV, letter, "Postuler", the phone step) and
 # writes what it did into the sheet; the agent then only records it, or continues on the employer's page,
@@ -237,6 +237,9 @@ limit_reset() {
         | grep -qiE 'usage limit|rate.?limit|quota|premium request|ai credits|credit limit|limit reached|exceeded|(^|[^0-9])429([^0-9]|$)' || return
       echo $(( now + RECHECK )) ;;
     sonnet|sonnet1)
+      # Only an error result: an agent's own report can say "usage limit" too (job 2902, 2026-10-11, an
+      # hourly retry loop on a job it had just found already applied).
+      grep -qE '"is_error": ?true' "tmp/fm/usage/$d-$n.json" 2>/dev/null || return
       grep -qiE 'hit your (session|weekly|usage) limit|session limit|usage limit' "tmp/fm/usage/$d-$n.json" 2>/dev/null || return
       # "resets 12:10am (Europe/Paris)": that clock time today, or tomorrow if it has passed.
       rs=$(grep -oE 'resets [0-9]{1,2}(:[0-9]{2})? ?[ap]m' "tmp/fm/usage/$d-$n.json" | head -1 | sed 's/resets //')

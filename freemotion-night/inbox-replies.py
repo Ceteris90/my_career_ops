@@ -83,6 +83,10 @@ INTERVIEW = [
 # A job board's copy of our own application quotes the cover letter ("j'aimerais échanger avec
 # vous"): no invitation is read from these senders.
 BOARD_SENDERS = r'hellowork|free-work|freework|apec\.fr|welcometothejungle|francetravail|linkedin|indeed'
+# An applicant-tracking system's acknowledgement can quote it too (Workable: "Here's a copy of your
+# application data", Fifty-Five 2026-10-11, read as a recruiter who wants to talk): nothing is read
+# from that point on. The sender stays readable, since a recruiter's own message comes through it too.
+APPLICATION_COPY = r"(?i)copy of your application"
 CONFIRMATION = [
     r'bien recu\w* (votre|ta) candidature', r'accuse\w* (de )?reception', r'bien (ete )?(enregistre|prise en compte|transmise|recue)',
     r'candidature est (bien )?arrivee', r'merci (d avoir postule|pour (votre|ta) candidature|de (votre|ta) candidature|de l interet)',
@@ -117,7 +121,7 @@ def stated(patterns, sents, guard):
 
 def classify(subject, body, sender=''):
     """-> (kind, evidence). kind: rejection | interview | confirmation | other."""
-    sents = sentences(subject + ' . ' + body[:6000])
+    sents = sentences(subject + ' . ' + re.split(APPLICATION_COPY, body, maxsplit=1)[0][:6000])
     hit = stated(REJECTION, sents, CONDITIONAL)
     if hit: return 'rejection', hit
     if not re.search(BOARD_SENDERS, sender.lower()):
@@ -297,6 +301,7 @@ SELF_TEST = [
     ('confirmation', 'Thank you for applying', "We received your application. Our hiring team plans to schedule interviews over the next few weeks.", 'x@example.com'),
     ('interview', 'Echange opportunité', "Etes-vous toujours à l'écoute du marché ? Si oui, pouvez-vous me remonter vos disponibilités sur les 10 prochains jours ?", 'x@example.com'),
     ('other', 'Votre candidature à Ingénieur', "J'aimerais échanger avec vous sur le programme.", 'Hellowork <notification@' + 'hellowork.com>'),
+    ('confirmation', 'Thanks for applying to Example', "Your application has been submitted successfully. Here's a copy of your application data for safekeeping. Cover letter. Bonjour, je souhaiterais échanger avec vous sur ce poste.", 'Workable <noreply@' + 'candidates.workablemail.com>'),
 ]
 
 def self_test():
