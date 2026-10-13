@@ -119,6 +119,10 @@ prompt() {
   [ -n "$WATCH" ] && echo "A person is watching this run and approves every browser action that types, clicks, chooses or opens a page. Do ONE such action per tool call, with the plain tools (browser_click, browser_type, browser_select_option, browser_file_upload...) rather than page code, so they can see each step. If a browser tool answers WAITING FOR THE PERSON, call the same tool again with exactly the same arguments and do nothing else. If it answers NOT DONE with a message from the person, follow that message. If it answers STOPPED, stop at once. Never invent data, and never record a submission the site did not confirm. When the task is finished, write DONE."
 }
 RUN_START=$(date -u +%Y-%m-%dT%H:%M:%SZ)  # the end-of-run letter sample covers this run only
+# The runs before this one, checked against the inbox (L69): a "sent" that HelloWork never confirmed, or a
+# sent one recorded as failed, is corrected, so the statistics count real applications. Only records 30+
+# minutes old change (check-sent.py), so this run's own jobs, whose emails are still coming, are not touched.
+timeout 600 python freemotion-night/check-sent.py --days 2 --fix 2>/dev/null | grep -E '^   (submitted|errored) ' | sed 's/^   /note: inbox correction: /' || true
 url_of() { grep -m1 -oE '^   https?://\S+' "tmp/fm/night/job-$1.md" | tr -d ' '; }
 result_of() { awk -F'\t' -v u="$1" -v r="$RUN" '$2==u && $8==r {o=$6} END {print o}' data/freemotion-submissions.tsv; }
 close_open() { node lib/freemotion-submissions.mjs finalize --url "$1" --outcome errored --run-id $RUN --notes "$2" > /dev/null 2>&1; }
@@ -278,6 +282,17 @@ for n in "$@"; do
     reset=$(limit_reset $d $n)
     if [ -n "$reset" ] && [ "$(result_of "$u")" != submitted ]; then
       mark_out $d $reset "limit hit on job $n"
+      # It may have been sent just before the limit (L54): the report's Outcome line, then the inbox (only
+      # ever upgraded to sent), before another driver starts it again and the employer gets it twice.
+      [ "$(result_of "$u")" = in-progress ] && node freemotion-night/report-outcome.mjs $n $RUN
+      if [ "$(result_of "$u")" != submitted ]; then
+        sleep 120   # the confirmation email takes a minute or two
+        timeout 300 python freemotion-night/check-sent.py --days 1 --run "$RUN" --url "$u" --fix --only-sent > /dev/null 2>&1 || true
+      fi
+      if [ "$(result_of "$u")" = submitted ]; then
+        printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$start" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$d" "$BROWSER_MODE" >> tmp/fm/usage/night-runs.tsv
+        echo "note: job $n was sent before $d's limit (report or inbox); not handed on"; break
+      fi
       [ "$(result_of "$u")" = in-progress ] && close_open "$u" "$d usage limit mid-job; handing to the next driver"
       [ "$d" = sonnet ] && printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$start" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$d" "$BROWSER_MODE" >> tmp/fm/usage/night-runs.tsv
       continue

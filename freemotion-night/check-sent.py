@@ -23,6 +23,9 @@
 #                                                         inbox is clear (appends a row through
 #                                                         lib/freemotion-submissions.mjs finalize;
 #                                                         nothing is ever deleted)
+#   python freemotion-night/check-sent.py --days 1 --url <posting> --fix --only-sent
+#                                                         one posting, and only ever marked sent
+#                                                         (run.sh, after a limit hit mid-job)
 import csv, datetime, email, html, imaplib, os, re, subprocess, sys, unicodedata
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
@@ -34,6 +37,12 @@ def flag(name, default=None):
 DAYS = int(flag('--days', '3'))
 RUN = flag('--run')
 FIX = '--fix' in args
+# --url <posting>: that posting only. --only-sent: with --fix, only ever record a job as sent, never as
+# not sent (run.sh, when a driver hits its limit mid-job: was it sent before another driver starts it
+# again? W42 review, L54).
+URL = flag('--url')
+ONLY_SENT = '--only-sent' in args
+bare = lambda u: (u or '').split('?')[0].split('#')[0].rstrip('/').lower()
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 # ── our records ─────────────────────────────────────────────────────────
@@ -50,7 +59,8 @@ with open(os.path.join(ROOT, 'data/freemotion-submissions.tsv'), encoding='utf-8
     for r in csv.DictReader(fh, delimiter='\t'):
         try: at = datetime.datetime.fromisoformat(r['timestamp'].replace('Z', '+00:00'))
         except Exception: continue
-        if at < since or (RUN and r['run_id'] != RUN) or r['outcome'] == 'rehearsal': continue
+        if at < since or (RUN and r['run_id'] != RUN) or r['outcome'] in ('rehearsal', 'skipped'): continue
+        if URL and bare(r['raw_url']) != bare(URL): continue
         key = (r['url_key'], r['run_id'])
         j = jobs.setdefault(key, {'url': r['raw_url'], 'company': r['company'], 'role': r['role'], 'run': r['run_id'], 'first': at})
         j.update(outcome=r['outcome'], note=r.get('notes', ''), at=at)
@@ -188,7 +198,7 @@ print(f'{"when":11} {"our record":17} {"what the inbox says":52} company | job')
 for j, verdict, sent, mismatch, rej in rows:
     mark = '!!' if mismatch else '  '
     print(f'{mark}{paris(j["at"]):11} {j["outcome"]:17} {verdict + (" (then rejected)" if rej else ""):52} {j["company"]} | {j["role"][:60]}')
-bad = [r for r in rows if r[3]]
+bad = [r for r in rows if r[3] and (r[2] or not ONLY_SENT)]
 print(f'\n!! = our record disagrees with the inbox: {len(bad)}')
 for j, verdict, sent, *_ in bad:
     print(f'   {("SENT" if sent else "NOT SENT") + ", record says " + j["outcome"]}: {j["company"]} | {j["role"][:60]} | {j["url"]}')

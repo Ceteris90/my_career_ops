@@ -172,8 +172,10 @@ try {
     check('  ...and a HEADFUL=1 run restores on exit and on Ctrl+C',
       [sh.includes("trap 'node lib/freemotion-browser-mode.mjs restore' EXIT"), sh.includes("trap 'exit 130' INT TERM HUP")],
       [true, true]);
+    // Every line that writes a night-runs.tsv row, however many there are, ends with the mode.
+    const writes = sh.split('\n').filter((l) => l.includes('>> tmp/fm/usage/night-runs.tsv'));
     check('  ...and every night-runs.tsv row records the mode',
-      (sh.match(/"\$d" "\$BROWSER_MODE" >> tmp\/fm\/usage\/night-runs\.tsv/g) ?? []).length, 2);
+      writes.length >= 2 && writes.every((l) => l.includes('"$d" "$BROWSER_MODE" >> tmp/fm/usage/night-runs.tsv')), true);
   }
 
   // ── CLI ─────────────────────────────────────────────────────────────────
