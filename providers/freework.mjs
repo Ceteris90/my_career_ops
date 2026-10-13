@@ -92,8 +92,11 @@ export function normalizeFreeworkPosting(x) {
   if (Number.isFinite(max) && max > 0) {
     job.salary = { min: Number.isFinite(min) && min > 0 ? min : max, max, currency: 'EUR' };
   }
-  if (typeof x.description === 'string' && x.description.trim()) {
-    const text = htmlToText(x.description);
+  // The profile ("profil recherché") comes in its own field, and that is where requirements such as
+  // "nationalité française obligatoire" are written (fork, W42 review).
+  const body = [x.description, x.candidateProfile].filter((v) => typeof v === 'string' && v.trim()).join('\n');
+  if (body) {
+    const text = htmlToText(body);
     if (text) job.description = text;
   }
   return job;

@@ -5,6 +5,7 @@
 // copy — same rationale that produced _html-entities when entity decoders
 // drifted across four files (#1555/#1639/#2623).
 import { decodeEntities } from './_html-entities.mjs';
+import { clipWithRequirements } from '../lib/posting-requirements.mjs';
 
 // Capped like greenhouse/alibaba full-text JDs: a 10 KB/posting body is
 // normal on these boards, and scan payloads must stay sane.
@@ -47,9 +48,7 @@ export function htmlToText(content) {
   // leading angle bracket; this keeps the text visible while making it inert.
   const decoded = decodeEntities(stripMarkup(content));
   const decodedTwice = decodeEntities(stripMarkup(decoded));
-  return stripMarkup(decodedTwice)
-    .replace(/<(?=\/?[a-z!?])/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, DESCRIPTION_CAP);
+  // Cut at DESCRIPTION_CAP, keeping the later sentences on nationality, clearance and the place of
+  // work after the cut: requirements sit at the end of a long posting (fork, W42 review).
+  return clipWithRequirements(stripMarkup(decodedTwice).replace(/<(?=\/?[a-z!?])/gi, ''), DESCRIPTION_CAP);
 }

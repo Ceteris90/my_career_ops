@@ -20,6 +20,7 @@
  */
 
 import { TARGETS_PATH, loadTargets } from '../targets.mjs';
+import { ineligibleReason } from '../lib/posting-requirements.mjs';
 
 export const MAX_AGE_DAYS = 14;
 export const PER_COMPANY = 4;
@@ -180,6 +181,9 @@ export function judge(x, targets = targetsOrThrow()) {
   if (co && MANUAL.test(co)) return { ok: false, why: 'company handled by hand' };
   if (DEFENCE.test(`${co} ${t}`)) return { ok: false, why: 'defence/ministry' };
   if (GOVERNMENT.test(`${co} ${t}`)) return { ok: false, why: 'government' };
+  // French nationality or a security clearance stated in the text (lib/posting-requirements.mjs; W42, L70).
+  const bad = x.text ? ineligibleReason(x.text) : null;
+  if (bad) return { ok: false, why: bad.why };
   const role = targets.judgeTitle(t);
   if (role.dropped) return { ok: false, why: role.dropped };
   // Kept, but not for agy on the title alone: the model (llm-score.mjs) decides.

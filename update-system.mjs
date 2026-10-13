@@ -607,6 +607,7 @@ const SYSTEM_PATHS = [
   'lib/freemotion-inventory.mjs',
   'lib/freemotion-submissions.mjs',
   'lib/required-years.mjs',
+  'lib/posting-requirements.mjs',
   'lib/posting-text.mjs',
   'lib/posting-fetch.mjs',
   'lib/freemotion-validate.mjs',
