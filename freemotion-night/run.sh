@@ -83,6 +83,8 @@ if [ -n "$WATCH" ]; then
 fi
 BROWSER_MODE=$(node lib/freemotion-browser-mode.mjs show --mode-only) || { echo "could not read the browser mode; stopping"; exit 1; }
 node lib/freemotion-browser-mode.mjs show
+# The browser must start at all, or no job can work (L63): stop with the reason.
+why=$(node freemotion-night/browser-check.mjs) || { echo "the browser (Camoufox) does not start: $why; stopping"; exit 1; }
 OUT=tmp/fm/night/out
 mkdir -p tmp/fm/usage "$OUT"
 ORDER=${DRIVER_ORDER:-agy codex sonnet1 copilot}
@@ -282,7 +284,21 @@ for n in "$@"; do
     fi
     # 5th column: the browser window (headless | headful), to compare job times between the two.
     printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$start" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$d" "$BROWSER_MODE" >> tmp/fm/usage/night-runs.tsv
-    if grep -qiE 'no such host|network issue|Eligibility check failed|ENOTFOUND|ECONNRESET|connection (error|refused)' "tmp/fm/usage/$d-$n.json" "tmp/fm/usage/$d-$n.err" 2>/dev/null && [ "$(result_of "$u")" != submitted ]; then
+    # The driver's browser broke (L63): 3+ launch failures in its output. That driver sits out an hour and
+    # the job goes to the next one; it is not the posting's fault and not a network failure.
+    if [ "$(node freemotion-night/browser-check.mjs --log "tmp/fm/usage/$d-$n.json" "tmp/fm/usage/$d-$n.err")" -ge 3 ] && [ "$(result_of "$u")" != submitted ]; then
+      mark_out $d $(( $(date +%s) + RECHECK )) "its browser failed to start (job $n)"
+      [ "$(result_of "$u")" = in-progress ] && close_open "$u" "$d's browser failed to start; handing to the next driver"
+      continue
+    fi
+    # Network words only in the driver's own errors: Codex's and Copilot's logs also hold page text and tool
+    # output, where "connection error" once sent a working job into a 5-minute wait and a retry (L63).
+    neterr=$(case $d in
+      codex) cat "tmp/fm/usage/codex-$n.err" 2>/dev/null; grep -E '"type":"(error|turn\.failed)"' "tmp/fm/usage/codex-$n.json" 2>/dev/null ;;
+      copilot) cat "tmp/fm/usage/copilot-$n.err" 2>/dev/null; grep -E '"type":"[a-z._]*error' "tmp/fm/usage/copilot-$n.json" 2>/dev/null ;;
+      *) cat "tmp/fm/usage/$d-$n.json" "tmp/fm/usage/$d-$n.err" 2>/dev/null ;;
+    esac)
+    if echo "$neterr" | grep -qiE 'no such host|network issue|Eligibility check failed|ENOTFOUND|ECONNRESET|connection (error|refused)' && [ "$(result_of "$u")" != submitted ]; then
       [ "$(result_of "$u")" = in-progress ] && close_open "$u" "network failure mid-run (attempt $attempt); retrying"
       echo "note: network problem on job $n (attempt $attempt), waiting 5 min"; sleep 300; continue
     fi
