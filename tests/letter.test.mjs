@@ -36,6 +36,10 @@ const again = chk.checkLetter({ text: FR, version: 'short', factCheck: false, re
 check('a repeated opening is caught', again.problems.some((p) => p.startsWith('opening repeats')), true);
 const copy = chk.checkLetter({ text: FR, version: 'short', factCheck: false, recent: [{ opening: 'something else entirely here', text: FR }] });
 check('copied passages are caught', copy.problems.some((p) => p.startsWith('copies long passages')), true);
+// W42 review (L57): the problem quotes the copied wording, so a revision knows what to change.
+const quotedRuns = (copy.problems.find((p) => p.startsWith('copies long passages')) || '').match(/"[^"]+"/g) || [];
+const plain = (s) => s.toLowerCase().normalize('NFD').replace(/[^a-z]+/g, '');
+check('the copied passages are quoted (1 to 4, from the letter)', quotedRuns.length >= 1 && quotedRuns.length <= 4 && quotedRuns.every((x) => plain(FR).includes(plain(x).slice(0, 12))), true);
 check('"as an AI Pipeline Developer" is a job title, not a finding', chk.checkLetter({ text: EN.replace('At Murex', 'As an AI Pipeline Developer at ZAKA I built things. At Murex'), version: 'short', factCheck: false }).problems.some((p) => /meta commentary/.test(p)), false);
 
 // ── context + text ────────────────────────────────────────────────────
