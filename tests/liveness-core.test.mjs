@@ -429,3 +429,16 @@ for (const { text, label } of [
     ? pass(`${label} -> active/apply_control_visible`)
     : fail(`${label} classified ${verdict.result}/${verdict.code}, expected active/apply_control_visible`);
 }
+
+// W42 review (L64): Cadremploi's banner puts "est" between the two words, and so passed as live.
+console.log('\nliveness-core — French "offre est expirée" / "a expiré" (Cadremploi)');
+for (const [label, text] of [
+  ['"Désolé, cette offre est expirée."', 'Désolé, cette offre est expirée. Postuler'],
+  ['"Cette offre a expiré"', 'Cette offre a expiré le 3 octobre. Postuler'],
+]) {
+  expired(text) === 'expired' ? pass(`${label} -> expired`) : fail(`${label} NOT classified expired`);
+}
+// A deadline still ahead is not a closure.
+expired('Cette offre expire le 30 novembre. Postuler') !== 'expired'
+  ? pass('"Cette offre expire le 30 novembre" (a deadline ahead) -> not expired')
+  : fail('"Cette offre expire le 30 novembre" wrongly classified expired');

@@ -59,7 +59,10 @@ const HARD_EXPIRED_PATTERNS = [
   /diese stelle (ist )?(nicht mehr|bereits) besetzt/i,
   // French closure banners. Spelled accent-free on purpose: normalizeForMatch
   // strips diacritics, so "expiree" here matches "expirée" on the page.
-  /offre (expiree|n'est plus disponible)/i,
+  // "Désolé, cette offre est expirée." (Cadremploi) and "cette offre a expiré": the verb between the two
+  // words made expired postings pass as live (W42 review, L64).
+  /offre (est )?(expiree|n'est plus disponible)/i,
+  /offre a expire\b/i,
   /(cette )?offre n'est plus (disponible|en ligne|active)/i,
   /(offre|poste|annonce) (deja )?pourvu(e)?/i,
   /offre (cloturee|desactivee|terminee)/i,

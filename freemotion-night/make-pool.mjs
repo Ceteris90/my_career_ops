@@ -599,9 +599,18 @@ async function main() {
 
   const blockedSites = existsSync(SITE_BLACKLIST) ? parseSiteBlacklist(readFileSync(SITE_BLACKLIST, 'utf8')) : [];
   const routed = [];
+  // The run log again, on the link a job is applied at: an APEC listing becomes its HelloWork or
+  // Cadremploi link only here, after selectCandidates() checked the APEC one, so a posting that
+  // failed came back every night (W42 review: the same Astek job 6 times, an expired Cadremploi
+  // job 4 times, 12 repeat attempts in a week).
+  const runLogNow = readCurrentState();
   for (const x of candidates) {
     const rt = routeOf(x, x.source === 'apec' ? apecCache[apecIdOf(x.url)] : undefined);
     if ('drop' in rt) { drop(rt.drop); continue; }
+    if (rt.url !== x.url) {
+      const logged = runLogNow.get(normalizeUrl(rt.url));
+      if (logged && logged.outcome !== 'rehearsal') { drop('already tried (run log, at its apply link)'); continue; }
+    }
     const route = SCHEDULED.has(rt.route) && isBlockedSite(rt.url, blockedSites) ? 'blocked-site' : rt.route;
     routed.push({ ...x, origUrl: x.url, url: rt.url, apecUrl: rt.apecUrl, route, seenOn: [x.source] });
   }
