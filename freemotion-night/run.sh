@@ -93,6 +93,10 @@ if [ -z "$CLAUDE1_DIR" ]; then
   CLAUDE1_DIR=$HOME_W/.claude-account1
   case "$CLAUDE_CONFIG_DIR" in *[/\\].claude-account1|*[/\\].claude-account1[/\\]) CLAUDE1_DIR=$HOME_W/.claude-account2 ;; esac
 fi
+# Before every run: how much of each Claude account's week and 5 hours is used (one tiny call each), and
+# Codex's last known windows. "allowance:" lines also go into night-mail.py's emails.
+CLAUDE1_DIR="$CLAUDE1_DIR" node freemotion-night/claude-usage.mjs || true
+node freemotion-night/codex-usage.mjs --allowance || true
 [ -n "$AGY_ONLY" ] && DRIVER=agy
 [ -n "$DRIVER" ] && ORDER=$DRIVER
 # agy's browser comes from agy's own MCP list (~/.gemini/config/mcp_config.json), not from .mcp.json.
