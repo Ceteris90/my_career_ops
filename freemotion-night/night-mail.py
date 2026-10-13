@@ -6,7 +6,8 @@
 #   - one every --every finished jobs (default 10; 0 = none),
 #   - one at the end of each round, and one when the night is done (then it exits).
 # Each says what every job ended as (company and role from tmp/fm/night/job-<N>.json), the counts for the
-# round and for the night, and the notes the run printed (a driver out, a wait, a failure).
+# round and for the night, and the notes the run printed (a driver out, a wait, a failure), with the
+# Claude and Codex allowances run.sh prints before each round (claude-usage.mjs).
 # Sent through Gmail's SMTP with the .env login the other mail scripts use (GMAIL_MACHAKA_USER,
 # GMAIL_MACHAKA_APP_PASSWORD). --dry-run prints the emails instead. It gives up after 30 hours.
 import argparse, json, os, re, smtplib, sys, time
@@ -95,6 +96,8 @@ while time.time() < deadline:
                 send(f'Full night run: round {round_no}, {len(jobs)} jobs: {counts(jobs)}', body(round_no, jobs, notes, night))
         elif line.startswith('note: ') and not line.startswith('note: round'):
             notes.append(line[6:])
+        elif line.startswith('allowance: '):   # run.sh, before each round: Claude's and Codex's windows
+            notes.append(line[11:])
         elif line == 'ALL DONE' or 'nothing to apply to this round' in line or 'no jobs this round' in line:
             send(f'Full night run: round {round_no} done: {counts(jobs)}', body(round_no, jobs, notes, night))
         elif line.startswith('FULL NIGHT DONE'):

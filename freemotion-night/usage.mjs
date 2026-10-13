@@ -5,15 +5,20 @@
 // node freemotion-night/usage.mjs --cost [--since YYYY-MM-DD] — cost per SENT application (#7): per driver,
 // jobs, sent, tokens (Copilot: AI credits; Claude: list-price $) per sent application, and what writing the
 // CVs and letters cost (docs-<N>.json docTokens, written by prepare-docs.mjs since 2026-10-12).
+// node freemotion-night/usage.mjs --context-test [--since YYYY-MM-DD] — the context test (#61): Codex jobs run
+// with their whole conversation vs compacted at CTX_COMPACT_AT tokens (run.sh, data/context-test.tsv):
+// model calls, compactions, tokens and Codex's weekly % per job and per SENT application.
 // Defaults to the run id in tmp/fm/night/run-id (the last sheets make-jobs.mjs wrote).
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
+import { homedir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..').replace(/\\/g, '/');
 const DRIVERS = process.argv.includes('--drivers');
 const COST = process.argv.includes('--cost');
+const CTX = process.argv.includes('--context-test');
 const SINCE = (() => { const i = process.argv.indexOf('--since'); return i >= 0 ? process.argv[i + 1] : ''; })();
-const RUN = DRIVERS || COST ? null : process.argv[2] ?? readFileSync(`${ROOT}/tmp/fm/night/run-id`, 'utf8').trim();
+const RUN = DRIVERS || COST || CTX ? null : process.argv[2] ?? readFileSync(`${ROOT}/tmp/fm/night/run-id`, 'utf8').trim();
 const runsPath = `${ROOT}/tmp/fm/usage/night-runs.tsv`;
 const runs = existsSync(runsPath) ? readFileSync(runsPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => l.split('\t')) : [];
 const ledger = readFileSync(`${ROOT}/data/freemotion-submissions.tsv`, 'utf8').split('\n').map((l) => l.split('\t')).filter((c) => c[7] === RUN);
@@ -50,8 +55,10 @@ function jobUse(d, n) {
   return r;
 }
 const tot = { usd: 0, sent: 0, jobs: 0 };
+let sessionIndex = null;   // Codex session logs by thread id (codexSession, --context-test)
 if (DRIVERS) { driverReport(); process.exit(0); }
 if (COST) { costReport(); process.exit(0); }
+if (CTX) { contextReport(); process.exit(0); }
 console.log('job   driver  result             fresh in / cached in / out');
 for (const [n, , , d] of runs) {
   if (runOf(n) !== RUN) continue;   // this run's jobs only (#39)
@@ -131,4 +138,70 @@ function costReport() {
   console.log(`TOTAL ${all.jobs} driver runs, ${all.sent} sent`);
   if (docs.jobs) console.log(`CV + letter writing: ${docs.jobs} jobs · ${Object.entries(docs.tokens).map(([w, t]) => `${w} ${k(t)}`).join(' · ')} · ${all.sent ? k(Math.round(docs.sentTokens / Math.max(1, sentJobs.size))) : '-'} per sent application (copilot reports no tokens)`);
   else console.log('CV + letter writing: no job with docTokens yet (recorded from 2026-10-12 on)');
+}
+
+/** A Codex job's session log (~/.codex/sessions/Y/M/D/rollout-*-<thread>.jsonl): model calls, compactions, weekly %. */
+function codexSession(n) {
+  const log = `${ROOT}/tmp/fm/usage/codex-${n}.json`;
+  if (!existsSync(log)) return null;
+  const tid = (readFileSync(log, 'utf8').match(/"thread_id":"([\w-]+)"/) ?? [])[1];
+  if (!tid) return null;
+  if (!sessionIndex) {
+    sessionIndex = new Map();
+    const base = `${homedir()}/.codex/sessions`;
+    const ls = (p) => { try { return readdirSync(p); } catch { return []; } };
+    for (const y of ls(base)) for (const m of ls(`${base}/${y}`)) for (const d of ls(`${base}/${y}/${m}`)) {
+      for (const f of ls(`${base}/${y}/${m}/${d}`)) { const id = (f.match(/-([0-9a-f]{8}-[0-9a-f-]{27})\.jsonl$/) ?? [])[1]; if (id) sessionIndex.set(id, `${base}/${y}/${m}/${d}/${f}`); }
+    }
+  }
+  const path = sessionIndex.get(tid);
+  if (!path) return null;
+  const r = { calls: 0, compactions: 0, weekFirst: null, weekLast: null };
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    if (line.includes('"type":"compacted"')) { r.compactions++; continue; }
+    if (!line.includes('"token_count"')) continue;
+    try {
+      const p = JSON.parse(line).payload ?? {};
+      if ((p.info?.last_token_usage?.input_tokens ?? 0) > 0) r.calls++;
+      const w = p.rate_limits?.secondary?.used_percent;
+      if (Number.isFinite(w)) { r.weekFirst ??= w; r.weekLast = w; }
+    } catch { /* torn line */ }
+  }
+  return r;
+}
+
+function contextReport() {
+  const path = `${ROOT}/data/context-test.tsv`;
+  if (!existsSync(path)) { console.log('No context test yet: run.sh draws an arm for each Codex job (data/context-test.tsv).'); return; }
+  const arms = new Map();   // job|run -> {arm, at}
+  for (const c of readFileSync(path, 'utf8').trim().split('\n').slice(1).map((l) => l.split('\t'))) arms.set(`${c[0]}|${c[5]}`, { arm: c[3], at: c[4] });
+  const outcome = new Map();
+  for (const c of readFileSync(`${ROOT}/data/freemotion-submissions.tsv`, 'utf8').split('\n').map((l) => l.split('\t'))) {
+    if (c[1] && c[5] && c[5] !== 'in-progress') outcome.set(`${c[1]}|${c[7]}`, c[5]);
+  }
+  const by = {};
+  for (const [n, start, , d] of runs) {
+    if (d !== 'codex' || (SINCE && String(start).slice(0, 10) < SINCE)) continue;
+    const run = runOf(n);
+    const a = arms.get(`${n}|${run}`);
+    if (!a) continue;   // ran before the test
+    const name = a.arm === 'compact' ? `compact ${Math.round(a.at / 1000)}k` : a.arm;
+    const s = (by[name] ??= { jobs: 0, sent: 0, tokens: 0, calls: 0, compactions: 0, week: 0, weekJobs: 0, logs: 0 });
+    const u = jobUse('codex', n);
+    s.jobs++; s.tokens += u.fin + u.cached + u.out;
+    if (outcome.get(`${urlOf(n)}|${run}`) === 'submitted') s.sent++;
+    const x = codexSession(n);
+    if (x) {
+      s.logs++; s.calls += x.calls; s.compactions += x.compactions;
+      if (x.weekFirst !== null && x.weekLast >= x.weekFirst) { s.week += x.weekLast - x.weekFirst; s.weekJobs++; }
+    }
+  }
+  console.log(`Context test (#61): Codex jobs with the whole conversation vs compacted${SINCE ? `, since ${SINCE}` : ''}`);
+  console.log('arm            jobs  sent  sent%  calls/job  compactions/job  tokens/job  tokens/sent  week %/sent');
+  for (const [name, s] of Object.entries(by).sort()) {
+    const per = (x, m) => (m ? x / m : 0);
+    console.log(`${name.padEnd(13)} ${String(s.jobs).padStart(5)} ${String(s.sent).padStart(5)} ${(s.jobs ? (100 * s.sent / s.jobs).toFixed(0) : '0').padStart(5)}%  ${per(s.calls, s.logs).toFixed(1).padStart(9)}  ${per(s.compactions, s.logs).toFixed(1).padStart(15)}  ${k(Math.round(per(s.tokens, s.jobs))).padStart(10)}  ${(s.sent ? k(Math.round(s.tokens / s.sent)) : '-').padStart(11)}  ${(s.sent && s.weekJobs ? (s.week * (s.jobs / s.weekJobs) / s.sent).toFixed(1) : '-').padStart(11)}`);
+  }
+  if (!Object.keys(by).length) console.log('(no Codex job has run under the test yet)');
+  console.log('Week %: the change in Codex\'s weekly window during each job (whole %, so read it over many jobs).');
 }

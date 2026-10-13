@@ -13,6 +13,7 @@
  * Usage:
  *   node freemotion-night/codex-usage.mjs            this run (tmp/fm/night/run-id)
  *   node freemotion-night/codex-usage.mjs --all      every Codex job today and yesterday
+ *   node freemotion-night/codex-usage.mjs --allowance  the two windows only, as one line
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
@@ -23,7 +24,7 @@ import { fileURLToPath } from 'url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SESSIONS = join(homedir(), '.codex/sessions');
 const all = process.argv.includes('--all');
-const paris = (sec) => new Date(sec * 1000).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const paris = (sec) => new Date(sec * 1000).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 
 // Session logs from the last two days (a night run crosses midnight).
@@ -91,6 +92,16 @@ const run = existsSync(join(ROOT, 'tmp/fm/night/run-id')) ? readFileSync(join(RO
 const results = outcomes(run);
 const sessions = sessionFiles().map(readSession);
 const latest = [...sessions].reverse().find((s) => s.limits)?.limits;
+
+// --allowance: only the two windows, as one "allowance:" line (run.sh prints it before every run).
+if (process.argv.includes('--allowance')) {
+  const s = sessions.filter((x) => x.limits).at(-1);
+  const at = s ? new Date(s.mtime).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  console.log(latest
+    ? `allowance: Codex (as of its last session, ${at}): week ${latest.secondary.used_percent}% (resets ${paris(latest.secondary.resets_at)}) · 5 hours ${latest.primary.used_percent}% (resets ${paris(latest.primary.resets_at)})`
+    : 'allowance: Codex: no session in the last two days to read it from');
+  process.exit(0);
+}
 
 console.log(`Codex allowance${latest ? '' : ': no rate-limit data found in today\'s session logs'}`);
 if (latest) {
