@@ -13,7 +13,7 @@ import { pass, fail, rmSync } from './helpers.mjs';
 import {
   DOCS_END, DOCS_START, applyToSheet, contactLine, docsBlock, genericCvPath, patchSheet, prepareDocs, summary, syncSent,
 } from '../freemotion-night/prepare-docs.mjs';
-import { chainWriter, writerOrder } from '../lib/doc-writers.mjs';
+import { chainWriter, WRITER_ORDER } from '../lib/doc-writers.mjs';
 import { foldLedger, readLedger } from '../lib/cv-experiment.mjs';
 import { LETTER_SPEC } from '../lib/letter-experiment.mjs';
 import { savePostingTexts } from '../lib/posting-text.mjs';
@@ -51,8 +51,7 @@ const check = (label, actual, expected) => {
 
 // ── writers ──────────────────────────────────────────────────────────────
 {
-  check('the job\'s driver writes first when it is a writer', writerOrder({ first: 'codex' }), ['codex', 'agy', 'sonnet1', 'copilot']);
-  check('agy-sonnet counts as agy; copilot leads its own jobs', [writerOrder({ first: 'agy-sonnet' }), writerOrder({ first: 'copilot' })], [['agy', 'codex', 'sonnet1', 'copilot'], ['copilot', 'agy', 'codex', 'sonnet1']]);
+  check('codex writes first, whichever driver runs the job', WRITER_ORDER, ['codex', 'agy', 'sonnet1', 'copilot']);
   const calls = [];
   const writers = {
     agy: async () => { calls.push('agy'); throw new Error('quota exhausted'); },
