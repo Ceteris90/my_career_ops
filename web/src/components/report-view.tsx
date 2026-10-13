@@ -21,6 +21,7 @@ import { ScoreLevers } from "@/components/score-levers";
 import { PrepPack } from "@/components/prep-pack";
 import { GeneratePdfButton } from "@/components/generate-pdf-button";
 import { ApplyButton } from "@/components/apply-button";
+import { MarkPdfReadyButton } from "@/components/mark-pdf-ready-button";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
 import { ReportMarkdown } from "@/components/report-markdown";
 import { KeywordCoverage } from "@/components/keyword-coverage";
@@ -51,6 +52,8 @@ export function ReportView({
   pdfReadyFromIndex = false,
   coverReady = false,
   backHref = "/pipeline",
+  applyHref,
+  reportNum = null,
 }: {
   id: string;
   app: Application | null;
@@ -65,6 +68,8 @@ export function ReportView({
    *  from here. */
   coverReady?: boolean;
   backHref?: string;
+  applyHref?: string;
+  reportNum?: number | null;
 }) {
   const meta = report ? parseReport(report) : null;
   const field = (label: string) => meta?.fields.find((f) => f.label === label)?.value;
@@ -103,6 +108,15 @@ export function ReportView({
         <div className="mt-4 flex flex-wrap items-center gap-2.5">
           {app && <StatusSelect n={id} current={app.status} />}
           <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={pdfReady} />
+          {applyHref && (
+            <Link
+              href={applyHref}
+              className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
+            >
+              Apply checklist
+            </Link>
+          )}
+          <MarkPdfReadyButton reportNum={reportNum} ready={pdfReady} />
           {coverReady && (
             <a
               href={`/api/cover-pdf?application=${encodeURIComponent(id)}`}

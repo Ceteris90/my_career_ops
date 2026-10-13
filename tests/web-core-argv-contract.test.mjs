@@ -144,6 +144,22 @@ const CALL_SITES = [
     probe: 'run',
   },
   {
+    // /api/followups/seed passes [row, '--json'] through postCoreScript.
+    source: 'web/src/lib/run-core-script.ts',
+    script: 'followup-seed.mjs',
+    args: ['1', '--json'],
+    probe: 'json-any-exit',
+  },
+  {
+    // /api/pdf-ready passes [report, '--json'] through postCoreScript. The
+    // fixture has no PDF on disk, so the script refuses, but it still has to
+    // accept the argv and answer in JSON the route can map.
+    source: 'web/src/lib/run-core-script.ts',
+    script: 'mark-pdf-ready.mjs',
+    args: ['1', '--json'],
+    probe: 'json-any-exit',
+  },
+  {
     source: 'web/src/lib/core/pipeline.ts',
     script: null,
     args: [],
