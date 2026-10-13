@@ -93,6 +93,7 @@ import { applySectors, readSectors } from './llm-sector.mjs';
 import { AGY_SCORE_MODEL, CLAUDE_SCORE_MODEL, DEFAULT_MODEL, FACTORS, GATE_SCHEMA, STRETCH_AT, agyGenerate, claudeGenerate, gateJobs, gateStore, geminiGateGenerate, geminiGenerate, scoreJobsAgy, jobKey, readGate, readScores, resolveCandidate, scoreJobs, verdictOf } from './llm-score.mjs';
 import normalizeUrl from '../url-key.mjs';
 import { readCurrentState } from '../lib/freemotion-submissions.mjs';
+import { ineligibleReason } from '../lib/posting-requirements.mjs';
 import { DEFAULT_CAP, WINDOW_DAYS, checkCompany, countByCompany, matchBlacklist } from '../lib/company-cap.mjs';
 import { resolveColumns, parseTrackerRow } from '../tracker-parse.mjs';
 import { isMainModule } from '../lib/is-main-module.mjs';
@@ -596,6 +597,22 @@ async function main() {
   candidates.length = 0;
   candidates.push(...applied.kept);
 
+  // Requirements the candidate cannot meet, read from the posting text now that every text is in
+  // (HelloWork's and WTTJ's come after judge() ran): French nationality, a security clearance (W42
+  // review, L70). And a job with no location AND no text is not sent yet: nothing could tell it was
+  // in France (iCIMS gives no location; four Nortal jobs in Helsinki and Estonia reached a run).
+  {
+    const texts = loadPostingTexts(getCareerOpsRoot(), candidates.map((x) => x.url));
+    const ok = candidates.filter((x) => {
+      const text = texts.get(x.url);
+      const bad = text ? ineligibleReason(text) : null;
+      if (bad) { drop(bad.why); return false; }
+      if (!text && !String(x.loc || '').trim()) { drop('no location and no posting text yet'); return false; }
+      return true;
+    });
+    candidates.length = 0;
+    candidates.push(...ok);
+  }
 
   const blockedSites = existsSync(SITE_BLACKLIST) ? parseSiteBlacklist(readFileSync(SITE_BLACKLIST, 'utf8')) : [];
   const routed = [];
