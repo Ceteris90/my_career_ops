@@ -4,15 +4,16 @@
 // renderInPage wrote the buffer with fs/promises writeFile, which truncates
 // the existing PDF before writing. A write that failed partway left an empty
 // or partial PDF where the previous good one had been, and pdf-index.tsv kept
-// pointing Apply at it. A reader that opened the old PDF before the re-render
-// shows the difference: after an atomic replace it still reads the old bytes,
-// after an in-place rewrite it reads whatever the new write left behind.
+// pointing Apply at it. A hard link to the old PDF shows the difference: after
+// an atomic replace it still holds the old bytes, after an in-place rewrite it
+// holds whatever the new write left behind. A link rather than an open file
+// handle, because Windows refuses to rename over a file that is open.
 //
 // Run:  node --test tests/generate-pdf-atomic-write.test.mjs
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -37,17 +38,14 @@ test('re-rendering replaces the previous PDF instead of rewriting it in place', 
     mkdirSync(outDir);
     const outPath = join(outDir, 'cv.pdf');
     writeFileSync(outPath, 'previous good pdf');
-    const reader = openSync(outPath, 'r');
-    try {
-      await renderHtmlToPdf('<!doctype html><html><body>cv</body></html>', outPath, {
-        workspaceRoot: workspace,
-        format: 'letter',
-        launchBrowser,
-      });
-      assert.equal(readFileSync(reader, 'utf8'), 'previous good pdf');
-    } finally {
-      closeSync(reader);
-    }
+    const previous = join(outDir, 'cv-previous.pdf');
+    linkSync(outPath, previous);
+    await renderHtmlToPdf('<!doctype html><html><body>cv</body></html>', outPath, {
+      workspaceRoot: workspace,
+      format: 'letter',
+      launchBrowser,
+    });
+    assert.equal(readFileSync(previous, 'utf8'), 'previous good pdf');
     assert.deepEqual(readFileSync(outPath), NEW_PDF);
     assert.deepEqual(readdirSync(outDir).filter((name) => name.endsWith('.tmp')), []);
   } finally {
