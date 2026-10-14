@@ -90,6 +90,45 @@ def body_text(msg):
     out = re.sub(r'<style.*?</style>', ' ', out, flags=re.S | re.I)
     return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', out))).replace('‌', '')
 
+# An employer email about an application not finished is no confirmation (searched 2026-10-14: 32 of them
+# since 2026-09-01, every one with "candidature" or "application" in its subject):
+#   'employer-verify'      "confirm your email to finish the application": Teamtailor, Taleez, BPCE's
+#                          recruitmail. Not sent until the link is opened; the confirmation mail follows.
+#   'employer-started'     Amazon's "Suivez l'évolution de votre candidature", sent when the form is opened
+#                          ("Vous travaillez toujours sur la candidature ?"). Proves nothing either way.
+#   'employer-incomplete'  "Votre candidature ... est incomplète" (Amazon, three days later).
+# Both Amazon jobs of 2026-09-30 were recorded as sent on the 'started' mail. A real confirmation of the
+# same job ('employer') still wins over all three.
+INCOMPLETE = re.compile(r"\bincompl[eè]te?\b|n.est pas (?:encore )?(?:termin|finalis|compl[eé]t)|(?:has|is) not (?:yet )?(?:been )?(?:completed|submitted)|haven.t (?:yet )?(?:finished|completed)", re.I)
+VERIFY = re.compile(r"(?:v[eé]rifie[zr]|confirme[zr]|valide[zr]) votre adresse (?:e-?)?mail|verify your e-?mail|confirm your e-?mail|confirmez votre candidature|confirm your application", re.I)
+STARTED = re.compile(r"travaillez toujours sur (?:la|votre) candidature|terminer (?:la|votre) candidature|still working on (?:the|your) application|(?:finish|complete) (?:the|your) application", re.I)
+def employer_kind(subj, text):
+    head = subj + ' ' + text[:800]
+    if INCOMPLETE.search(head): return 'employer-incomplete'
+    if VERIFY.search(head): return 'employer-verify'
+    if STARTED.search(head): return 'employer-started'
+    return 'employer'
+
+if '--self-test' in args:
+    cases = [
+        ("Suivez l'évolution de votre candidature", "Bonjour, Nous vous remercions de votre intérêt pour SDE (ID: 1). Si vous avez terminé la candidature : parfait ! Vous travaillez toujours sur la candidature ? Pas d'inquiétude. Vous pouvez la terminer ici", 'employer-started'),
+        ("Votre candidature auprès d'Amazon est incomplète", "Nous avons remarqué que votre candidature pour le poste de SDE est incomplète.", 'employer-incomplete'),
+        ("Merci d'avoir postulé chez Amazon !", "Merci d'avoir postulé chez Amazon ! Nous avons bien reçu votre candidature pour le poste de SDE.", 'employer'),
+        ("Au sujet de votre candidature Amazon", "Après avoir soigneusement examiné votre candidature, nous avons décidé de ne pas la retenir.", 'employer'),
+        ("Thank you for your application", "We have received your application for Cloud Engineer and will review it.", 'employer'),
+        ("Your application is incomplete", "You haven't finished your application for Data Engineer.", 'employer-incomplete'),
+        ("Finalisez votre candidature pour le poste de Data Engineer", "Vérifiez votre adresse e-mail pour compléter la candidature pour Data Engineer. Visitez l'URL ci-dessous", 'employer-verify'),
+        ("Complete the application for Senior Data Engineer", "Verify your email to complete the application for Senior Data Engineer", 'employer-verify'),
+        ("Confirmez votre candidature pour Ingénieur Devops", "Bonjour, Afin de finaliser votre candidature, vous devez valider votre adresse e-mail en cliquant sur le bouton", 'employer-verify'),
+        ("Veuillez confirmer votre adresse mail au moyen du bouton ci dessous pour valider votre candidature", "Nous avons enregistré une candidature pour le poste de Data Engineer (F/H). Veuillez confirmer votre adresse e-mail", 'employer-verify'),
+        # BPCE's real confirmation, which only invites a video: not a verify mail
+        ("Complétez votre candidature pour l'Offre Architecte technique F/H", "Bonjour Mohammad, Merci d'avoir postulé à notre offre. Nous avons bien pris en compte votre candidature.", 'employer'),
+        ("Candidature bien reçue !", "Merci d'avoir postulé pour le poste : Chef de projet.", 'employer'),
+    ]
+    bad = [(s, want, employer_kind(s, t)) for s, t, want in cases if employer_kind(s, t) != want]
+    for s, want, got in bad: print(f'FAIL {s!r}: {got}, want {want}')
+    print(f'employer email kinds: {len(cases) - len(bad)} passed, {len(bad)} failed'); sys.exit(1 if bad else 0)
+
 # Both inboxes (gmail_boxes.py): applications since 2026-10-14 give the new address, older ones the old one.
 mails = []
 for user, pw in accounts():
@@ -127,6 +166,8 @@ for user, pw in accounts():
             if not co:
                 m = re.search(r'(?:chez|site de|entreprise) (.{2,80}?)(?:$|[.,!])', subj)
                 co = m.group(1) if m else ''
+        else:
+            kind = employer_kind(subj, text)
         mails.append({'kind': kind, 'date': date, 'subject': subj, 'from': frm, 'company': co, 'title': title, 'text': text[:6000]})
     M.logout()
 
@@ -171,9 +212,13 @@ for j in jobs:
     elif 'hw-sent' in ev: verdict, sent = 'HelloWork: sent', True
     elif 'hw-redirect' in ev:
         if 'employer' in ev: verdict, sent = 'passed to employer site; employer confirmed', True
+        elif 'employer-incomplete' in ev or 'employer-verify' in ev: verdict, sent = 'passed to employer site; employer says unfinished', False
         elif j['outcome'] == 'submitted': verdict, sent = 'passed to employer site; agent saw a confirmation there', True
         else: verdict, sent = 'passed to employer site; NOT finished there', False
     elif 'employer' in ev: verdict, sent = 'employer confirmed by email', True
+    elif 'employer-incomplete' in ev: verdict, sent = 'employer says the application is incomplete', False
+    elif 'employer-verify' in ev: verdict, sent = 'employer asked to confirm the email; not confirmed', False
+    elif 'employer-started' in ev: verdict, sent = 'employer: application started, not confirmed', None
     elif is_hw(j) and j['outcome'] in ('submitted', 'errored', 'unknown') and (datetime.datetime.now(datetime.timezone.utc) - j['at']).total_seconds() > 1800:
         verdict, sent = 'no HelloWork email: probably not sent', False
     else: verdict, sent = 'no email found', None
