@@ -1,8 +1,8 @@
 # freemotion-night/gmail_boxes.py — the Gmail inboxes the mail scripts read (imap-link, imap-otp, check-sent,
 # inbox-replies, followups).
 #
-# Applications give mohammad.m.machaka@gmail.com since 2026-10-14 (GMAIL_APPLY_USER in .env); the ~3,000
-# before went out with machaka.mohammad@gmail.com (GMAIL_MACHAKA_USER), and their replies keep arriving
+# Applications give a new address since 2026-10-14 (GMAIL_APPLY_USER in .env); the ~3,000
+# before went out with the older one (GMAIL_MACHAKA_USER), and their replies keep arriving
 # there. So every reader reads both: the new inbox first, then the old one. Each needs its Gmail app password
 # (GMAIL_APPLY_APP_PASSWORD, GMAIL_MACHAKA_APP_PASSWORD); a box without one is left out.
 import imaplib, os, sys
