@@ -128,8 +128,9 @@ function BulletRow({ n, bullet, parent, siblings, first, last, movable, edits, h
     const text = draft.trim();
     if (!text || text === shown.text) return setEditing(false);
     setBusy(true);
-    const r = await fetch(`/api/cv-studio/${encodeURIComponent(n)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "keywords", text }) }).catch(() => null);
-    const keywords = r?.ok ? ((await r.json()) as { keywords: string[] }).keywords : [];
+    const keywords = await fetch(`/api/cv-studio/${encodeURIComponent(n)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "keywords", text }) })
+      .then((r) => (r.ok ? (r.json() as Promise<{ keywords: string[] }>) : { keywords: [] }))
+      .then((b) => b.keywords, () => []);
     dispatch({ type: "use", id: bullet.id, use: { kind: "custom", text, keywords } });
     setBusy(false);
     setEditing(false);

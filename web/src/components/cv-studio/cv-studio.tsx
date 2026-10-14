@@ -20,6 +20,9 @@ const REASONS: Record<string, { title: string; body: string }> = {
   "no-report": { title: "Report not found", body: "There is no evaluation report with this number." },
 };
 
+const STALE = "This CV was regenerated in another tab. Reload the Studio.";
+const SAVE_ERRORS: Record<string, string> = { stale: STALE, busy: "This CV is already being saved. Wait for that save to finish." };
+
 export function CvStudio({ n }: { n: string }) {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   useEffect(() => {
@@ -54,10 +57,21 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
   const { doc, tree } = data;
   const [edits, dispatch] = useReducer((e: StudioEdits, a: StudioAction) => studioReducer(e, a, doc), data.edits);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const resolved = useMemo(() => resolveStudio(doc, edits), [doc, edits]);
   const html = useMemo(() => renderBlocks(tree, resolved.view, { added: resolved.added }), [tree, resolved]);
   const tailoredPresent = useMemo(() => resolveStudio(doc, emptyEdits(doc.sourceHash)).coverage.present, [doc]);
   const dropped = tailoredPresent.filter((k) => resolved.coverage.missing.includes(k));
+
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const send = useCallback(
+    (method: "PUT" | "POST", body: object) => {
+      const sent = queue.current.then(() => fetch(`/api/cv-studio/${encodeURIComponent(n)}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+      queue.current = sent.catch(() => {});
+      return sent;
+    },
+    [n],
+  );
 
   const first = useRef(true);
   useEffect(() => {
@@ -67,21 +81,23 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
     }
     setSave((s) => (s.kind === "saved" ? { kind: "idle" } : s));
     const t = setTimeout(() => {
-      fetch(`/api/cv-studio/${encodeURIComponent(n)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ edits }) }).catch(() => {});
+      send("PUT", { edits })
+        .then((r) => setAutosaveError(r.ok ? null : r.status === 409 ? STALE : "Autosave failed. Your latest changes are not saved yet."))
+        .catch(() => setAutosaveError("Autosave failed. Is the dashboard still running?"));
     }, 500);
     return () => clearTimeout(t);
-  }, [edits, n]);
+  }, [edits, send]);
 
   const saveForApply = useCallback(async () => {
     setSave({ kind: "saving" });
     try {
-      const r = await fetch(`/api/cv-studio/${encodeURIComponent(n)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "save", edits }) });
+      const r = await send("POST", { op: "save", edits });
       const body = (await r.json()) as { pdf?: string; warnings?: string[]; error?: string };
-      setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, warnings: body.warnings ?? [] } : { kind: "failed", error: body.error === "stale" ? "This CV was regenerated in another tab. Reload the Studio." : body.error ?? "Saving failed." });
+      setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, warnings: body.warnings ?? [] } : { kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
     } catch {
       setSave({ kind: "failed", error: "Saving failed. Is the dashboard still running?" });
     }
-  }, [edits, n]);
+  }, [edits, send]);
 
   const changed = doc.sections.flatMap((s) => s.items.flatMap((i) => i.bullets)).filter((b) => b.change !== "same").length;
 
@@ -125,6 +141,7 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
         </Notice>
       )}
       {save.kind === "failed" && <Notice tone="error">{save.error}</Notice>}
+      {autosaveError && <Notice tone="error">{autosaveError}</Notice>}
 
       <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
         <div className="space-y-4">
