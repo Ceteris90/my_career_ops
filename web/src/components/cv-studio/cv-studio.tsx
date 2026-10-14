@@ -12,7 +12,7 @@ import { CoverageMeter } from "./coverage-meter";
 
 type Loaded = { ok: true; reportNum: string; company: string; file: string; tree: BlockTree; doc: StudioDoc; edits: StudioEdits; stale: boolean; hasBase: boolean };
 type LoadState = { kind: "loading" } | { kind: "error"; reason: string } | { kind: "ready"; data: Loaded };
-type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; pdf: string; warnings: string[] } | { kind: "failed"; error: string };
+type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; pdf: string; indexed: boolean; warnings: string[] } | { kind: "failed"; error: string };
 
 const REASONS: Record<string, { title: string; body: string }> = {
   "no-tailored-cv": { title: "No tailored CV yet", body: "Generate a tailored CV from the report page first. The Studio opens it for review once it exists." },
@@ -92,8 +92,8 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
     setSave({ kind: "saving" });
     try {
       const r = await send("POST", { op: "save", edits });
-      const body = (await r.json()) as { pdf?: string; warnings?: string[]; error?: string };
-      setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, warnings: body.warnings ?? [] } : { kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
+      const body = (await r.json()) as { pdf?: string; indexed?: boolean; warnings?: string[]; error?: string };
+      setSave(r.ok && body.pdf ? { kind: "saved", pdf: body.pdf, indexed: body.indexed === true, warnings: body.warnings ?? [] } : { kind: "failed", error: SAVE_ERRORS[body.error ?? ""] ?? body.error ?? "Saving failed." });
     } catch {
       setSave({ kind: "failed", error: "Saving failed. Is the dashboard still running?" });
     }
@@ -130,11 +130,17 @@ function Studio({ n, data }: { n: string; data: Loaded }) {
       {data.stale && <Notice tone="warn">This CV was regenerated since your last visit, so earlier edits were cleared.</Notice>}
       {!data.hasBase && <Notice tone="warn">No cv.md found, so changes cannot be compared with your base CV.</Notice>}
       {save.kind === "saved" && (
-        <Notice tone="ok">
-          Saved. Apply now uploads this version.{" "}
-          <a href={`/api/cv-pdf?n=${encodeURIComponent(data.reportNum)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium underline">
-            <FileText className="size-3.5" /> Open {save.pdf}
-          </a>
+        <Notice tone={save.indexed ? "ok" : "warn"}>
+          {save.indexed ? (
+            <>
+              Saved. Apply now uploads this version.{" "}
+              <a href={`/api/cv-pdf?n=${encodeURIComponent(data.reportNum)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium underline">
+                <FileText className="size-3.5" /> Open {save.pdf}
+              </a>
+            </>
+          ) : (
+            <>Saved {save.pdf}, but data/pdf-index.tsv was not updated, so Apply still uploads the earlier PDF.</>
+          )}
           {save.warnings.filter((w) => !/cv-facts\.json/.test(w)).map((w) => (
             <span key={w} className="mt-1 block text-xs opacity-80">{w}</span>
           ))}
