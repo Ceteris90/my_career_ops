@@ -409,3 +409,41 @@ export function trackerLivenessTargets(trackerText, { statuses = DEFAULT_TRACKER
   }
   return { targets, noUrl };
 }
+
+export const DEFAULT_DISCARD_STATUSES = ['evaluated'];
+
+/**
+ * Closed-posting note stamped onto Discarded rows.
+ * @param {string} [day] YYYY-MM-DD (defaults to caller-supplied today)
+ */
+export function postingClosedNote(day) {
+  return `posting closed ${day}`;
+}
+
+/**
+ * Every tracker row in `statuses` whose posting URL is in `expiredUrls`.
+ * Unlike trackerLivenessTargets, this keeps duplicate rows that share a URL
+ * so a single expired verdict can discard every Evaluated copy.
+ *
+ * @param {string} trackerText
+ * @param {Iterable<string>} expiredUrls
+ * @param {{statuses?: string[], reportsRoot?: string}} [options]
+ * @returns {{num: number, company: string, role: string, status: string, url: string}[]}
+ */
+export function planExpiredDiscards(trackerText, expiredUrls, { statuses = DEFAULT_DISCARD_STATUSES, reportsRoot } = {}) {
+  const wanted = new Set(statuses.map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const expired = new Set([...expiredUrls].filter(Boolean));
+  if (expired.size === 0 || wanted.size === 0) return [];
+  const lines = String(trackerText ?? '').split(/\r?\n/);
+  const colmap = resolveColumns(lines);
+  const rows = [];
+  for (const line of lines) {
+    const row = parseTrackerRow(line, colmap);
+    if (!row || !wanted.has(row.status.trim().toLowerCase())) continue;
+    const url = isWebUrl(row.url) ? row.url
+      : reportUrlForNumbers(extractTrackerReportNumbers(row.report, row.notes), reportsRoot, isWebUrl);
+    if (!url || !expired.has(url)) continue;
+    rows.push({ num: row.num, company: row.company, role: row.role, status: row.status, url });
+  }
+  return rows;
+}
