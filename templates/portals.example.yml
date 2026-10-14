@@ -68,11 +68,12 @@
 # Regional variants count as one language (en-GB equals en), and a posting whose
 # language the ATS doesn't report is compared as before.
 #
-# Some ATSes (Personio) serve every language version of a posting under one URL.
-# With the switch off they return each posting once, in its own default
-# language; with it on they return every version, at one extra request per
-# further language. A `?language=xx` on such a careers_url asks for that
-# language instead of the default wherever a posting has it.
+# Some ATSes (Personio, Recruitee) serve every language version of a posting
+# under one URL. With the switch off they return each posting once, in its own
+# default language; with it on they return every version — Personio at one
+# extra request per further language, Recruitee from the response it already
+# fetches. A `?language=xx` on a Personio careers_url asks for that language
+# instead of the default wherever a posting has it.
 #
 # scan_history:
 #   dedup_include_language: true
