@@ -125,6 +125,7 @@ function BulletRow({ n, bullet, parent, siblings, first, last, movable, edits, h
   const [busy, setBusy] = useState(false);
 
   const saveDraft = async () => {
+    if (busy) return;
     const text = draft.trim();
     if (!text || text === shown.text) return setEditing(false);
     setBusy(true);
