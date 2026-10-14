@@ -44,9 +44,11 @@ type SortKey = (typeof SORT_KEYS)[number];
 export function PipelineView({
   applications,
   inbox,
+  inboxCount,
 }: {
   applications: Application[];
-  inbox: InboxJob[];
+  inbox: InboxJob[] | null;
+  inboxCount: number;
 }) {
   const params = useSearchParams();
   const router = useRouter();
@@ -114,19 +116,6 @@ export function PipelineView({
     if (!isPending) setPendingTab(null);
   }, [isPending]);
 
-  // Pending + deduped by URL (pipeline.md can list the same posting twice) so the
-  // header count, the tab count and the triage list all agree on one number.
-  const pendingInbox = useMemo(() => {
-    const seen = new Set<string>();
-    const out: InboxJob[] = [];
-    for (const j of inbox) {
-      if (j.done || seen.has(j.url)) continue;
-      seen.add(j.url);
-      out.push(j);
-    }
-    return out;
-  }, [inbox]);
-
   const filtered = useMemo(() => {
     if (tab === "INBOX") return [];
     let rows = visibleApplications;
@@ -184,7 +173,7 @@ export function PipelineView({
         <div>
           <h1 className="font-display text-2xl tracking-tight text-landing">Pipeline</h1>
           <p className="mt-1 text-sm text-muted">
-            <span className="tabular-nums">{pendingInbox.length}</span> in inbox ·{" "}
+            <span className="tabular-nums">{inboxCount}</span> in inbox ·{" "}
             <span className="tabular-nums">{visibleApplications.length}</span> tracked
           </p>
         </div>
@@ -207,7 +196,7 @@ export function PipelineView({
         {TABS.map((t) => {
           const count =
             t === "INBOX"
-              ? pendingInbox.length
+              ? inboxCount
               : t === "ALL"
                 ? visibleApplications.length
                 : visibleApplications.filter((r) => canonStatus(r.status).includes(t)).length;
@@ -289,8 +278,20 @@ export function PipelineView({
       {visibleTab === "INBOX" ? (
         /* ── Inbox: the triage surface (Abundance → Triage → Shortlist → Score) ── */
         <>
-          <InboxTriage inbox={pendingInbox} />
-          {pendingInbox.length === 0 && <InboxEmpty tracked={visibleApplications.length} />}
+          {inbox === null ? (
+            <div aria-label="Loading inbox" className="mt-4 overflow-x-auto rounded-2xl border border-border">
+              <table className="w-full min-w-[44rem] text-sm">
+                <tbody className="divide-y divide-border">
+                  <PipelineTableRowsSkeleton />
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <>
+              <InboxTriage inbox={inbox} />
+              {inbox.length === 0 && <InboxEmpty tracked={visibleApplications.length} />}
+            </>
+          )}
         </>
       ) : isPending || filtered.length > 0 ? (
         /* ── Tracker table ──
