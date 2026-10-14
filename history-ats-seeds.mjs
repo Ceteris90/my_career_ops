@@ -64,7 +64,7 @@ function seedOf(company, rawUrl, source) {
   };
 }
 
-function linkedReportNumbers(reportCell, notesCell) {
+export function linkedReportNumbers(reportCell, notesCell) {
   const link = String(reportCell ?? '').match(/\[([^\]]*)\]\(([^)]+)\)/);
   if (!link) return extractTrackerReportNumbers(reportCell, notesCell);
   // Reuse the tracker's canonical local-target validation. It rejects HTTP(S)

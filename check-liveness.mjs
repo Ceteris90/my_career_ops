@@ -38,6 +38,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
+import { createHash } from 'crypto';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 
 const USAGE = `Usage:
@@ -110,68 +111,48 @@ export async function recordExpiredVerdicts(verdicts) {
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 
+function runSetStatus(args, trackerPath) {
+  try {
+    return JSON.parse(execFileSync(process.execPath, [join(CODE_ROOT, 'set-status.mjs'), ...args], {
+      encoding: 'utf-8',
+      env: { ...process.env, CAREER_OPS_TRACKER: trackerPath },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }));
+  } catch (err) {
+    try {
+      return JSON.parse(err.stdout);
+    } catch {
+      return { error: (typeof err.stderr === 'string' && err.stderr.trim()) || err.message };
+    }
+  }
+}
+
 /**
  * Move planned rows to Discarded through set-status.mjs (locked atomic write).
  * Dry-run when apply is false: resolve only, write nothing.
  *
+ * The liveness sweep can take minutes, so each row is planned again against
+ * the tracker as it is now, and set-status refuses the write under its lock
+ * if the tracker changed after that re-plan.
+ *
  * @param {{num: number, company: string, role: string, status: string, url: string}[]} rows
- * @param {{apply: boolean, note: string, trackerPath?: string}} options
- * @returns {{num: number, company: string, role: string, url: string, changed: boolean, dryRun: boolean, error?: string}[]}
+ * @param {{apply: boolean, note: string, trackerPath: string, reportsRoot: string}} options
+ * @returns {{num: number, company: string, role: string, url: string, changed: boolean, dryRun: boolean, error?: string, skipped?: string}[]}
  */
-export function discardExpiredRows(rows, { apply, note, trackerPath } = {}) {
-  const scriptPath = join(CODE_ROOT, 'set-status.mjs');
-  const env = trackerPath ? { ...process.env, CAREER_OPS_TRACKER: trackerPath } : process.env;
-  const results = [];
-  for (const row of rows) {
-    const args = ['--row', String(row.num), 'Discarded', '--note', note, '--json'];
-    if (!apply) args.push('--dry-run');
-    try {
-      const out = execFileSync(process.execPath, [scriptPath, ...args], {
-        encoding: 'utf-8',
-        env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const parsed = JSON.parse(out);
-      results.push({
-        num: row.num,
-        company: row.company,
-        role: row.role,
-        url: row.url,
-        changed: Boolean(parsed.changed),
-        dryRun: Boolean(parsed.dryRun) || !apply,
-        error: parsed.error,
-      });
-    } catch (err) {
-      let error = err.message;
-      if (err.stdout) {
-        try {
-          const parsed = JSON.parse(err.stdout);
-          error = parsed.error || error;
-          results.push({
-            num: row.num,
-            company: row.company,
-            role: row.role,
-            url: row.url,
-            changed: false,
-            dryRun: !apply,
-            error,
-          });
-          continue;
-        } catch { /* fall through */ }
-      }
-      const stderr = typeof err.stderr === 'string' ? err.stderr.trim() : '';
-      results.push({
-        num: row.num,
-        company: row.company,
-        role: row.role,
-        url: row.url,
-        changed: false,
-        dryRun: !apply,
-        error: stderr || error,
-      });
+export function discardExpiredRows(rows, { apply, note, trackerPath, reportsRoot }) {
+  return rows.map((row) => {
+    const base = { num: row.num, company: row.company, role: row.role, url: row.url, changed: false, dryRun: !apply };
+    const current = readFileSync(trackerPath, 'utf-8');
+    if (!planExpiredDiscards(current, [row.url], { reportsRoot }).some((r) => r.num === row.num)) {
+      return { ...base, skipped: 'no longer Evaluated with this posting' };
     }
-  }
-  return results;
+    const args = ['--row', String(row.num), 'Discarded', '--note', note, '--json',
+      '--expect-tracker', createHash('sha256').update(current, 'utf8').digest('hex')];
+    if (!apply) args.push('--dry-run');
+    const out = runSetStatus(args, trackerPath);
+    if (out.error) return { ...base, error: out.error };
+    return { ...base, changed: Boolean(out.changed), dryRun: Boolean(out.dryRun) || !apply };
+  });
 }
 
 async function main() {
@@ -333,8 +314,12 @@ async function main() {
     } else {
       const mode = applyDiscards ? 'apply' : 'dry-run';
       console.log(`\nDiscard expired (${mode}): ${planned.length} Evaluated row(s) → Discarded`);
-      const results = discardExpiredRows(planned, { apply: applyDiscards, note, trackerPath });
+      const results = discardExpiredRows(planned, { apply: applyDiscards, note, trackerPath, reportsRoot });
       for (const r of results) {
+        if (r.skipped) {
+          console.log(`  · #${r.num} ${r.company} · ${r.role} — skipped, ${r.skipped}`);
+          continue;
+        }
         if (r.error) {
           console.log(`  ❌ #${r.num} ${r.company} · ${r.role} — ${r.error}`);
           process.exitCode = 1;

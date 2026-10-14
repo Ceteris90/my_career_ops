@@ -4,7 +4,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { ROOT } from './helpers.mjs';
+import { discardExpiredRows } from '../check-liveness.mjs';
 import {
   trackerLivenessTargets,
   planExpiredDiscards,
@@ -93,68 +95,85 @@ test('--discard-expired without --tracker exits 1', () => {
   assert.match(result.stderr, /requires --tracker/);
 });
 
-test('--tracker --discard-expired dry-runs set-status and leaves the tracker unchanged', (t) => {
+const EXPIRED_URL = 'https://job-boards.greenhouse.io/acme/jobs/1';
+const LIVE_URL = 'https://job-boards.greenhouse.io/globex/jobs/2';
+
+function discardSandbox(t, rows, reportUrls) {
   const root = mkdtempSync(join(tmpdir(), 'liveness-discard-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const data = join(root, 'data');
   const reportsDir = join(root, 'reports');
   mkdirSync(data, { recursive: true });
   mkdirSync(reportsDir, { recursive: true });
-  writeFileSync(join(data, 'applications.md'), [
+  const trackerPath = join(data, 'applications.md');
+  writeFileSync(trackerPath, [
     '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
     '|---|------|---------|------|-------|--------|-----|--------|-------|',
-    '| 1 | 2026-09-01 | Acme | Engineer | 4.0/5 | Evaluated | ❌ | [1](../reports/001-acme.md) | |',
-    '| 2 | 2026-09-02 | Globex | Engineer | 4.0/5 | Applied | ❌ | [2](../reports/002-globex.md) | |',
+    ...rows,
     '',
   ].join('\n'));
-  writeFileSync(join(reportsDir, '001-acme.md'), '**URL:** https://job-boards.greenhouse.io/humeai/jobs/1\n');
-  writeFileSync(join(reportsDir, '002-globex.md'), '**URL:** https://job-boards.eu.greenhouse.io/parloa/jobs/4566280101\n');
-  const before = readFileSync(join(data, 'applications.md'), 'utf8');
-  const result = spawnSync(
+  for (const [name, url] of Object.entries(reportUrls)) writeFileSync(join(reportsDir, name), `**URL:** ${url}\n`);
+  const stub = join(root, 'ats-stub.mjs');
+  writeFileSync(stub, [
+    `globalThis.fetch = async (url) => String(url).endsWith('/boards/acme/jobs/1')`,
+    `  ? new Response('', { status: 404 })`,
+    `  : new Response('{"id":2}', { status: 200, headers: { 'content-type': 'application/json' } });`,
+  ].join('\n'));
+  const run = (...flags) => spawnSync(
     process.execPath,
-    [join(ROOT, 'check-liveness.mjs'), '--tracker', '--discard-expired', '--no-record', '--no-fallback'],
-    {
-      env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: data },
-      encoding: 'utf8',
-      timeout: 60_000,
-    },
+    ['--import', pathToFileURL(stub).href, join(ROOT, 'check-liveness.mjs'), '--tracker', '--discard-expired', '--no-record', '--no-fallback', ...flags],
+    { env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: data }, encoding: 'utf8', timeout: 60_000 },
   );
-  assert.match(result.stdout, /Discard expired \(dry-run\)/, result.stdout + result.stderr);
+  return { trackerPath, reportsDir, run };
+}
+
+test('--tracker --discard-expired dry-runs set-status and leaves the tracker unchanged', (t) => {
+  const { trackerPath, run } = discardSandbox(t, [
+    '| 1 | 2026-09-01 | Acme | Engineer | 4.0/5 | Evaluated | ❌ | [1](../reports/001-acme.md) | |',
+    '| 2 | 2026-09-02 | Globex | Engineer | 4.0/5 | Evaluated | ❌ | [2](../reports/002-globex.md) | |',
+    '| 3 | 2026-09-03 | Acme | Engineer | 4.0/5 | Applied | ❌ | [3](../reports/003-acme.md) | |',
+  ], { '001-acme.md': EXPIRED_URL, '002-globex.md': LIVE_URL, '003-acme.md': EXPIRED_URL });
+  const before = readFileSync(trackerPath, 'utf8');
+  const result = run();
   const discardSection = result.stdout.split('Discard expired')[1] ?? '';
-  assert.match(discardSection, /#1 Acme/);
-  assert.doesNotMatch(discardSection, /#2 Globex/);
-  assert.match(discardSection, /would discard \(posting closed /);
-  assert.equal(readFileSync(join(data, 'applications.md'), 'utf8'), before);
+  assert.match(result.stdout, /Discard expired \(dry-run\): 1 Evaluated row/, result.stdout + result.stderr);
+  assert.match(discardSection, /#1 Acme · Engineer — would discard \(posting closed \d{4}-\d{2}-\d{2}\)/);
+  assert.doesNotMatch(discardSection, /#2 Globex|#3 Acme/);
+  assert.equal(readFileSync(trackerPath, 'utf8'), before);
 });
 
 test('--tracker --discard-expired --apply writes Discarded with the closed note', (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'liveness-discard-apply-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const data = join(root, 'data');
-  const reportsDir = join(root, 'reports');
-  mkdirSync(data, { recursive: true });
-  mkdirSync(reportsDir, { recursive: true });
-  writeFileSync(join(data, 'applications.md'), [
-    '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
-    '|---|------|---------|------|-------|--------|-----|--------|-------|',
+  const { trackerPath, run } = discardSandbox(t, [
     '| 1 | 2026-09-01 | Acme | Engineer | 4.0/5 | Evaluated | ❌ | [1](../reports/001-acme.md) | |',
-    '',
-  ].join('\n'));
-  writeFileSync(join(reportsDir, '001-acme.md'), '**URL:** https://job-boards.greenhouse.io/humeai/jobs/1\n');
-  const result = spawnSync(
-    process.execPath,
-    [join(ROOT, 'check-liveness.mjs'), '--tracker', '--discard-expired', '--apply', '--no-record', '--no-fallback'],
-    {
-      env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: data },
-      encoding: 'utf8',
-      timeout: 60_000,
-    },
-  );
-  assert.match(result.stdout, /Discard expired \(apply\)/, result.stdout + result.stderr);
-  assert.match(result.stdout, /discarded \(posting closed /, result.stdout);
-  const after = readFileSync(join(data, 'applications.md'), 'utf8');
-  assert.match(after, /\| Discarded \|/);
-  assert.match(after, /posting closed \d{4}-\d{2}-\d{2}/);
-  assert.doesNotMatch(after, /\| Evaluated \|/);
+    '| 2 | 2026-09-02 | Globex | Engineer | 4.0/5 | Evaluated | ❌ | [2](../reports/002-globex.md) | |',
+  ], { '001-acme.md': EXPIRED_URL, '002-globex.md': LIVE_URL });
+  const result = run('--apply');
+  assert.match(result.stdout, /#1 Acme · Engineer — discarded \(posting closed /, result.stdout + result.stderr);
+  const rows = readFileSync(trackerPath, 'utf8').split('\n').filter((line) => /^\| [12] \|/.test(line));
+  assert.match(rows[0], /\| Discarded \|.*posting closed \d{4}-\d{2}-\d{2}/);
+  assert.match(rows[1], /\| Evaluated \|/);
 });
 
+test('a Report link whose label and target disagree is not trusted for a posting URL', (t) => {
+  const { trackerPath, reportsDir } = discardSandbox(t, [
+    '| 7 | 2026-09-07 | Initech | Engineer | 4.0/5 | Evaluated | ❌ | [7](../reports/008-initech.md) | |',
+    '| 8 | 2026-09-08 | Initech | Analyst | 4.0/5 | Applied | ❌ | [8](../reports/008-initech.md) | |',
+  ], { '008-initech.md': EXPIRED_URL });
+  const text = readFileSync(trackerPath, 'utf8');
+  assert.deepEqual(planExpiredDiscards(text, [EXPIRED_URL], { reportsRoot: reportsDir }), []);
+  assert.deepEqual(trackerLivenessTargets(text, { reportsRoot: reportsDir }).noUrl, [7]);
+});
+
+test('--apply leaves a row that moved out of Evaluated after the check', (t) => {
+  const { trackerPath, reportsDir } = discardSandbox(t, [
+    '| 1 | 2026-09-01 | Acme | Engineer | 4.0/5 | Applied | ❌ | [1](../reports/001-acme.md) | |',
+  ], { '001-acme.md': EXPIRED_URL });
+  const before = readFileSync(trackerPath, 'utf8');
+  const planned = [{ num: 1, company: 'Acme', role: 'Engineer', status: 'Evaluated', url: EXPIRED_URL }];
+  const results = discardExpiredRows(planned, { apply: true, note: 'posting closed 2026-10-14', trackerPath, reportsRoot: reportsDir });
+  assert.deepEqual(results, [{
+    num: 1, company: 'Acme', role: 'Engineer', url: EXPIRED_URL, changed: false, dryRun: false,
+    skipped: 'no longer Evaluated with this posting',
+  }]);
+  assert.equal(readFileSync(trackerPath, 'utf8'), before);
+});
