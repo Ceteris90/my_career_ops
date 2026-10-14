@@ -91,15 +91,16 @@ function withLanguage(url, language) {
  * once, from its top-level fields, with no `language`.
  *
  * Further translations are returned only when `allLanguages` is true. A
- * translation whose text is identical to a version already returned is a copy
+ * translation that would come out as the same Job text as a version already
+ * returned — same trimmed title and same plain-text description — is a copy
  * under another label, not a translation, and is skipped.
  *
  * @param {any} j - One offer.
  * @param {boolean} allLanguages
- * @returns {Array<{title: string, body: string[], language?: string}>}
+ * @returns {Array<{title: string, description: string, language?: string}>}
  */
 function languageVersions(j, allLanguages) {
-  const top = { title: j.title.trim(), body: [j.description, j.requirements] };
+  const top = versionText(j.title, j.description, j.requirements);
   const translations = j.translations && typeof j.translations === 'object' ? j.translations : {};
   const entries = Object.entries(translations)
     .filter(([code, t]) => LANGUAGE_RE.test(code) && t && typeof t === 'object');
@@ -107,17 +108,33 @@ function languageVersions(j, allLanguages) {
   if (!defaultEntry) return [top];
   const versions = [{ ...top, language: defaultEntry[0] }];
   if (!allLanguages) return versions;
-  const seen = new Set([JSON.stringify([defaultEntry[1].title, defaultEntry[1].description, defaultEntry[1].requirements])]);
+  const versionKey = (v) => JSON.stringify([v.title, v.description]);
+  const seen = new Set([versionKey(top)]);
   for (const [code, t] of entries) {
     if (code === defaultEntry[0]) continue;
-    const title = typeof t.title === 'string' ? t.title.trim() : '';
-    if (!title) continue;
-    const text = JSON.stringify([t.title, t.description, t.requirements]);
-    if (seen.has(text)) continue;
-    seen.add(text);
-    versions.push({ title, body: [t.description, t.requirements], language: code });
+    const version = versionText(t.title, t.description, t.requirements);
+    if (!version.title || seen.has(versionKey(version))) continue;
+    seen.add(versionKey(version));
+    versions.push({ ...version, language: code });
   }
   return versions;
+}
+
+/**
+ * The Job text of one version: the trimmed title, and the description and
+ * requirements joined, introduction first, and stripped to plain text.
+ *
+ * @param {unknown} title
+ * @param {unknown} description
+ * @param {unknown} requirements
+ * @returns {{title: string, description: string}}
+ */
+function versionText(title, description, requirements) {
+  const body = [description, requirements].filter(part => typeof part === 'string' && part.trim());
+  return {
+    title: typeof title === 'string' ? title.trim() : '',
+    description: htmlToText(body.join('\n')),
+  };
 }
 
 // Recruitee serves a shared demo/trial-account posting for tenants that
@@ -413,14 +430,12 @@ export function parseRecruiteeResponse(json, companyName, { allLanguages = false
     const salary = parseSalary(j.salary);
 
     for (const version of languageVersions(j, allLanguages)) {
-      const body = version.body.filter(part => typeof part === 'string' && part.trim());
-      const description = htmlToText(body.join('\n'));
       out.push({
         title: version.title,
         url: version.language ? withLanguage(url, version.language) : url,
         location,
         company: companyName,
-        ...(description ? { description } : {}),
+        ...(version.description ? { description: version.description } : {}),
         ...(postedAt !== undefined ? { postedAt } : {}),
         ...(salary ? { salary } : {}),
         ...(version.language ? { language: version.language } : {}),

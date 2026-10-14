@@ -390,6 +390,27 @@ try {
     fail(`unusable translations = ${JSON.stringify(unusableTranslations.map(v => [v.language, v.title]))}`);
   }
 
+  // A copy is judged by the Job it would produce, not by the raw payload: a
+  // translation that differs from the default one only in markup and
+  // whitespace yields the same title and description, so it is skipped too.
+  const markupCopy = parseRecruiteeResponse({
+    offers: [{
+      title: 'Founder Associate (m/w/d)',
+      careers_url: 'https://acme.recruitee.com/o/founder-associate',
+      description: '<p>Same text</p>',
+      requirements: '<p>Same list</p>',
+      translations: {
+        de: { title: 'Founder Associate (m/w/d)', description: '<p>Same text</p>', requirements: '<p>Same list</p>' },
+        en: { title: ' Founder Associate (m/w/d) ', description: '<div>Same   text</div>', requirements: '<ul><li>Same list</li></ul>' },
+      },
+    }],
+  }, 'Acme', { allLanguages: true });
+  if (markupCopy.length === 1 && markupCopy[0].language === 'de') {
+    pass('parseRecruiteeResponse skips a translation that differs from the default one only in markup and whitespace');
+  } else {
+    fail(`markup copy = ${JSON.stringify(markupCopy.map(v => [v.language, v.title, v.description]))}`);
+  }
+
   // No translation equal to the top-level fields → the default language is
   // unknown: one Job, top-level fields, no `language`, URL unchanged.
   const unknownDefault = parseRecruiteeResponse({
