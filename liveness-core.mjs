@@ -1,5 +1,4 @@
-import { linkedReportNumbers } from './history-ats-seeds.mjs';
-import { resolveColumns, parseTrackerRow, reportUrlForNumbers } from './tracker-parse.mjs';
+import { resolveColumns, parseTrackerRow, linkedReportNumbers, reportUrlForNumbers } from './tracker-parse.mjs';
 
 // Portals write closure banners with typographic punctuation and accents:
 // WTTJ renders "Cette offre n’est plus disponible." with U+2019, not ASCII "'".
