@@ -2123,8 +2123,9 @@ async function renderInPage(browser, html, outputPath, opts = {}) {
     });
 
     // Write PDF only after rendering has completed. Renderer cleanup still runs
-    // if an injected browser fails before producing a buffer.
-    await writeFile(outputPath, pdfBuffer);
+    // if an injected browser fails before producing a buffer. The atomic write
+    // keeps the previous PDF intact if this write fails partway.
+    writeFileAtomic(outputPath, pdfBuffer);
 
     // Read the root page-tree count so page-like text in streams is ignored.
     const pageCount = countRenderedPdfPages(pdfBuffer);
