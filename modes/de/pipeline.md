@@ -4,7 +4,7 @@ Verarbeitet URLs von Stellenanzeigen, die in `data/pipeline.md` gesammelt wurden
 
 ## Workflow
 
-1. **Lesen** von `data/pipeline.md` → alle Items mit `- [ ]` im Abschnitt "Pendientes" / "Pending" / "Offen" finden
+1. **Lesen** von `data/pipeline.md` (mit `grep -n -m 20 '^- \[ \] ' data/pipeline.md` suchen, nicht die ganze Datei lesen) → alle Items mit `- [ ]` im Abschnitt "Pendientes" / "Pending" / "Offen" finden
 2. **Für jede offene URL**:
    a. Die nächste fortlaufende `REPORT_NUM` atomar reservieren, indem `node reserve-report-num.mjs` ausgeführt wird (und den Sentinel mit `node reserve-report-num.mjs --release <num>` freigeben, sobald der Report geschrieben ist)
    b. **Stellenanzeige extrahieren** mit Playwright (`browser_navigate` + `browser_snapshot`) → WebFetch → WebSearch
