@@ -313,8 +313,8 @@ function roleMatch(a, b) {
  * @returns {number} Parsed score, or 0 when no number is present.
  */
 function parseScore(s) {
-  const m = s.replace(/\*\*/g, '').match(/([\d.]+)/);
-  return m ? parseFloat(m[1]) : 0;
+  const m = s.replace(/\*\*/g, '').match(/(\d+(?:[.,]\d+)?)/);
+  return m ? parseFloat(m[1].replace(',', '.')) : 0;
 }
 
 /**
