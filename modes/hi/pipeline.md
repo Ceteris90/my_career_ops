@@ -4,7 +4,7 @@
 
 ## Workflow
 
-1. **पढ़ें** `data/pipeline.md` (`grep -n -m 20 '^- \[ \] ' data/pipeline.md` से खोजें, पूरी फ़ाइल न पढ़ें) → "Pending" / "En attente" / "Pendientes" / "Offen" / "लंबित" section में `- [ ]` items ढूंढें
+1. **पढ़ें** `data/pipeline.md` (`grep -n -m 20 '^- \[ \] ' data/pipeline.md` से खोजें, हर batch के बाद तब तक फिर से खोजें जब तक कुछ न बचे, पूरी फ़ाइल न पढ़ें) → "Pending" / "En attente" / "Pendientes" / "Offen" / "लंबित" section में `- [ ]` items ढूंढें
 2. **हर pending URL के लिए**:
    a. `node reserve-report-num.mjs` run करके atomically अगला `REPORT_NUM` reserve करें (और report लिखने के बाद `node reserve-report-num.mjs --release <num>` run करके sentinel release करें)
    b. **Offer extract करें** Playwright से (`browser_navigate` + `browser_snapshot`) → WebFetch → WebSearch

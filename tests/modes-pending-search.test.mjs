@@ -33,6 +33,10 @@ for (const rel of pipelineModes) {
   });
 }
 
+test('the pipeline mode repeats the bounded search until nothing is pending', () => {
+  assert.match(readFileSync(join(MODES, 'pipeline.md'), 'utf-8'), /repeat until the search prints nothing/);
+});
+
 test('the scan mode does not read its dedup sources whole', () => {
   const src = readFileSync(join(MODES, 'scan.md'), 'utf-8');
   assert.doesNotMatch(src, /\*\*Read (History|Dedup Sources)\*\*/);
