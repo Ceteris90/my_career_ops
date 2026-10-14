@@ -48,13 +48,16 @@ export function parseRewrite(reply) {
 }
 
 /**
- * The claims verify-cv-facts.mjs found that cv.md does not support. It is the
- * same gate generate-pdf.mjs runs, so a rewrite the Studio offers also passes
- * the render on save.
+ * The claims verify-cv-facts.mjs found that cv.md does not support, plus the
+ * metrics the rewritten bullet's own text does not carry. The cv.md check is
+ * the same gate generate-pdf.mjs runs, so a rewrite the Studio offers also
+ * passes the render on save. The bullet check stops a true metric from another
+ * role moving into this one.
  *
- * @param {{invented: string[], unsupportedFacts: {value: string}[], forbidden: string[]}} result
+ * @param {{invented: string[], unsupportedFacts: {value: string}[], forbidden: string[]}} cv
+ * @param {{invented: string[]}} bullet
  * @returns {string[]}
  */
-export function unsupportedClaims(result) {
-  return [...new Set([...result.invented, ...result.unsupportedFacts.map((f) => f.value), ...result.forbidden])];
+export function unsupportedClaims(cv, bullet) {
+  return [...new Set([...cv.invented, ...cv.unsupportedFacts.map((f) => f.value), ...cv.forbidden, ...bullet.invented])];
 }

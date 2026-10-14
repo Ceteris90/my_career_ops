@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readJsonObject } from "@/lib/json-body";
-import { claimsNotInCv, keywordsInText, loadStudio } from "@/lib/cv-studio/server";
+import { keywordsInText, loadStudio, unsupportedRewriteClaims } from "@/lib/cv-studio/server";
 import { runRewrite } from "@/lib/cv-studio/rewrite-run";
 import { buildRewritePrompt, MAX_INSTRUCTION, parseRewrite } from "@/lib/cv-studio/rewrite.mjs";
 
@@ -12,10 +12,11 @@ type RouteContext = { params: Promise<{ n: string }> };
 
 const MESSAGES = {
   "no-cli": "No AI CLI is set up. Choose one in Config, or edit the wording by hand.",
+  unfenced: "This AI CLI cannot be limited to read-only access, so the rewrite did not run. Choose Claude or Codex in Config, or edit the wording by hand.",
   refused: "The AI CLI could not be started with read-only access, so nothing ran.",
   failed: "The AI CLI did not finish. Check that it is signed in, then try again.",
   "no-answer": "The AI CLI replied without a usable bullet. Try a different instruction.",
-  unsupported: "The rewrite was discarded because your CV does not support",
+  unsupported: "The rewrite was discarded because it adds claims this bullet does not support:",
 } as const;
 
 export async function POST(req: Request, { params }: RouteContext) {
@@ -36,7 +37,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   if (!run.ok) return NextResponse.json({ error: MESSAGES[run.reason], detail: run.detail }, { status: 502 });
   const text = parseRewrite(run.reply);
   if (!text) return NextResponse.json({ error: MESSAGES["no-answer"] }, { status: 422 });
-  const claims = await claimsNotInCv(text);
+  const claims = await unsupportedRewriteClaims(text, [bullet.base, bullet.tailored].filter((t) => t !== null).join("\n"));
   if (claims.length) return NextResponse.json({ error: `${MESSAGES.unsupported} ${claims.join(", ")}.`, claims }, { status: 422 });
   return NextResponse.json({ text, keywords: (await keywordsInText(n, text)) ?? [] });
 }

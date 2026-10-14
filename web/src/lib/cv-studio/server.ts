@@ -142,13 +142,17 @@ export async function keywordsInText(n: string, text: string): Promise<string[] 
   return km.extractKeywords(fs.readFileSync(id.file, "utf8")).filter((k) => km.keywordCount(k, text) > 0);
 }
 
-type VerifyCvFacts = { verifyFacts: (text: string, opts: { sourcePaths: string[]; configPath: string }) => Parameters<typeof unsupportedClaims>[0] };
+type VerifyCvFacts = {
+  verifyFacts: (text: string, opts: { sourcePaths: string[]; configPath: string }) => Parameters<typeof unsupportedClaims>[0];
+  auditClaims: (text: string, sourceText: string) => Parameters<typeof unsupportedClaims>[1];
+};
 
-/** The claims in `text` that cv.md and article-digest.md do not support. */
-export async function claimsNotInCv(text: string): Promise<string[]> {
+/** The claims in a rewrite that cv.md and article-digest.md do not support, and the metrics its own bullet does not carry. */
+export async function unsupportedRewriteClaims(text: string, bulletText: string): Promise<string[]> {
   const root = careerOpsRoot();
-  const { verifyFacts } = await coreModule<VerifyCvFacts>("verify-cv-facts");
-  return unsupportedClaims(verifyFacts(text, { sourcePaths: [path.join(root, "cv.md"), path.join(root, "article-digest.md")], configPath: path.join(root, "config", "cv-facts.json") }));
+  const { verifyFacts, auditClaims } = await coreModule<VerifyCvFacts>("verify-cv-facts");
+  const cv = verifyFacts(text, { sourcePaths: [path.join(root, "cv.md"), path.join(root, "article-digest.md")], configPath: path.join(root, "config", "cv-facts.json") });
+  return unsupportedClaims(cv, auditClaims(text, bulletText));
 }
 
 export type RenderOutcome = { ok: true; pdf: string; indexed: boolean; warnings: string[] } | { ok: false; error: string };
