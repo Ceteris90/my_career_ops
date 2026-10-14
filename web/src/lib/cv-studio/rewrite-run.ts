@@ -33,7 +33,11 @@ export function runRewrite(cliId: string, prompt: string): Promise<RewriteRun> {
     let err = "";
     child.stdout.on("data", (d: Buffer) => (out += d.toString()));
     child.stderr.on("data", (d: Buffer) => (err += d.toString()));
-    const killer = setTimeout(() => child.kill("SIGTERM"), KILL_MS);
+    const killer = setTimeout(() => {
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
+      resolve({ ok: false, reason: "failed", detail: `no reply after ${KILL_MS / 1000}s` });
+    }, KILL_MS);
     child.on("close", (code: number | null) => {
       clearTimeout(killer);
       resolve(code === 0 ? { ok: true, reply: out } : { ok: false, reason: "failed", detail: err.trim().split("\n").filter(Boolean).at(-1)?.slice(0, 300) });

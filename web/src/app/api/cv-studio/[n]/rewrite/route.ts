@@ -34,7 +34,10 @@ export async function POST(req: Request, { params }: RouteContext) {
   if (!bullet) return NextResponse.json({ error: "unknown bullet" }, { status: 404 });
 
   const run = await runRewrite(body.cliId, buildRewritePrompt({ instruction, base: bullet.base, tailored: bullet.tailored, keywords: load.doc.keywords }));
-  if (!run.ok) return NextResponse.json({ error: MESSAGES[run.reason], detail: run.detail }, { status: 502 });
+  if (!run.ok) {
+    if (run.detail) console.error(`cv-studio rewrite ${run.reason}: ${run.detail}`);
+    return NextResponse.json({ error: MESSAGES[run.reason] }, { status: 502 });
+  }
   const text = parseRewrite(run.reply);
   if (!text) return NextResponse.json({ error: MESSAGES["no-answer"] }, { status: 422 });
   const claims = await unsupportedRewriteClaims(text, [bullet.base, bullet.tailored].filter((t) => t !== null).join("\n"));
