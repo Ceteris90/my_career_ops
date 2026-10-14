@@ -250,3 +250,18 @@ test("an entry the tailor left without bullets offers no base bullets to restore
   assert.deepEqual(entry.bullets, []);
   assert.deepEqual(entry.restorable, []);
 });
+
+test("wordDiff keeps a trailing comma apart from its word", () => {
+  assert.deepEqual(wordDiff("Built the feature store", "Built the feature store, model monitoring"), [
+    { op: "same", text: "Built the feature store" },
+    { op: "ins", text: ", model monitoring" },
+  ]);
+});
+
+test("wordDiff folds short unchanged words inside a rewrite into one removed and one inserted run", () => {
+  assert.deepEqual(wordDiff("built internal MLOps tooling: model registry", "as technical lead, mentoring the model registry"), [
+    { op: "del", text: "built internal MLOps tooling: " },
+    { op: "ins", text: "as technical lead, mentoring the " },
+    { op: "same", text: "model registry" },
+  ]);
+});
