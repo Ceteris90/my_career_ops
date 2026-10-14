@@ -11,7 +11,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { pass, fail, rmSync } from './helpers.mjs';
 import {
-  DOCS_END, DOCS_START, applyToSheet, contactLine, docsBlock, genericCvPath, patchSheet, prepareDocs, summary, syncSent,
+  DOCS_END, DOCS_START, applyToSheet, contactLine, cvEmail, docsBlock, genericCvPath, patchSheet, prepareDocs, summary, syncSent,
 } from '../freemotion-night/prepare-docs.mjs';
 import { chainWriter, WRITER_ORDER } from '../lib/doc-writers.mjs';
 import { foldLedger, readLedger } from '../lib/cv-experiment.mjs';
@@ -47,6 +47,7 @@ const check = (label, actual, expected) => {
   const cand = '<!-- note -->\n## Data\nMohammad · Machaka · m@example.com · +33 7 00 00 00 00\nCV: C:/x/output/cv-m.pdf\nAvailable 2026\n';
   check('the generic CV is the candidate file\'s CV line', genericCvPath(cand), 'C:/x/output/cv-m.pdf');
   check('contact line for a letter PDF', contactLine(cand), 'm@example.com · +33 7 00 00 00 00');
+  check('a letter PDF gives the CV\'s email, not the form one', contactLine(cand, cvEmail('# M\nToulouse · [d@example.org](mailto:d@example.org) · +33')), 'd@example.org · +33 7 00 00 00 00');
 }
 
 // ── writers ──────────────────────────────────────────────────────────────
