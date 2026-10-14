@@ -263,8 +263,9 @@ export function PipelineView({
         /* ── Inbox: the triage surface (Abundance → Triage → Shortlist → Score) ── */
         <>
           {inbox === null ? (
-            <div aria-label="Loading inbox" className="mt-4 overflow-x-auto rounded-2xl border border-border">
-              <table className="w-full min-w-[44rem] text-sm">
+            <div role="status" className="mt-4 overflow-x-auto rounded-2xl border border-border">
+              <span className="sr-only">Loading inbox…</span>
+              <table aria-hidden="true" className="w-full min-w-[44rem] text-sm">
                 <tbody className="divide-y divide-border">
                   <PipelineTableRowsSkeleton />
                 </tbody>
