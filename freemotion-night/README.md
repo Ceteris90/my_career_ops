@@ -10,7 +10,9 @@ Applies to a list of jobs one at a time while you sleep. Each job gets a fresh A
 2. Put the facts and wording rules for free-text questions in `config/freemotion-facts-fr.txt` and
    `config/freemotion-rules-fr.txt`. (Cover letters are not written from these: see "CV and letter".)
    Tailored CVs need RenderCV: `pip install -r requirements-cv.txt`.
-3. Email links: `.env` needs `GMAIL_MACHAKA_USER` and `GMAIL_MACHAKA_APP_PASSWORD`.
+3. Email links: `.env` needs a Gmail login with an app password: `GMAIL_APPLY_USER` + `GMAIL_APPLY_APP_PASSWORD`
+   (the address applications give) and/or `GMAIL_MACHAKA_USER` + `GMAIL_MACHAKA_APP_PASSWORD` (the older one).
+   The mail scripts read every inbox set there (`gmail_boxes.py`).
    The fit score needs `GEMINI_API_KEY` (a free key from aistudio.google.com); `GEMINI_MODEL` picks the model.
 4. Accounts you made by hand (Free-Work): `node lib/freemotion-credentials.mjs save --domain www.free-work.com --email <you>`.
    It asks for the password and keeps it in `data/freemotion-credentials/`, which git never sees.

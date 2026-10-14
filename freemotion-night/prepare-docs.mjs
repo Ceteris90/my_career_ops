@@ -72,10 +72,20 @@ export function genericCvPath(candidateMd) {
   return (String(candidateMd).match(/^CV:\s*(.+\.pdf)\s*$/m) ?? [])[1]?.trim() ?? '';
 }
 
-/** Email, phone… for a letter PDF's header: the candidate file's "Name · Name · email · phone" line. */
-export function contactLine(candidateMd) {
+/**
+ * Email, phone… for a letter PDF's header: the candidate file's "Name · Name · email · phone" line.
+ * docsEmail replaces its email: forms give one address (the candidate file's, which gets the automatic
+ * replies) and documents another (the CV's, for people), user 2026-10-14.
+ */
+export function contactLine(candidateMd, docsEmail = '') {
   const line = String(candidateMd).split('\n').find((l) => l.includes('@') && l.includes(' · '));
-  return line ? line.split(' · ').slice(2).join(' · ').trim() : '';
+  if (!line) return '';
+  return line.split(' · ').slice(2).map((p) => (docsEmail && p.includes('@') ? docsEmail : p)).join(' · ').trim();
+}
+
+/** The email cv.md shows, which documents give (contactLine). '' when there is none. */
+export function cvEmail(cvMd) {
+  return (String(cvMd).match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/) ?? [''])[0];
 }
 
 /**
@@ -321,7 +331,8 @@ async function main() {
     if (flag('--letter-pdf')) {
       const pdf = join(state.dir, state.lang === 'en' ? 'cover-letter-mohammad-machaka.pdf' : 'lettre-de-motivation-mohammad-machaka.pdf');
       const candidateMd = readFileSync(join(root, 'config/freemotion-candidate.md'), 'utf8');
-      await renderLetterPdf(readJson(join(state.dir, 'letter.json')), pdf, { contact: contactLine(candidateMd), company: job.co });
+      const cvMd = existsSync(join(root, 'cv.md')) ? readFileSync(join(root, 'cv.md'), 'utf8') : '';
+      await renderLetterPdf(readJson(join(state.dir, 'letter.json')), pdf, { contact: contactLine(candidateMd, cvEmail(cvMd)), company: job.co });
       console.log(`LETTER FILE: ${shown(pdf)}`);
       return;
     }

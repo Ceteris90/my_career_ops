@@ -6,7 +6,7 @@
 # HelloWork, and one it marked "already applied" had never been sent at all. This
 # script puts the two side by side, job by job, so that is seen the next morning.
 #
-# Evidence read (read-only IMAP, the same .env login as imap-link.py):
+# Evidence read (read-only IMAP, both inboxes of gmail_boxes.py, like imap-link.py):
 #   HelloWork  "Votre candidature est arrivée chez X"              -> sent through HelloWork
 #              "Finalisez votre candidature sur le site de X"      -> passed on to the employer's
 #                                                                    own site: sent only if the
@@ -76,12 +76,10 @@ for url, j in latest.items(): j['first'] = first[url]
 jobs = sorted(latest.values(), key=lambda j: j['at'])
 
 # ── the inbox ───────────────────────────────────────────────────────────
-env = {}
-for line in open(os.path.join(ROOT, '.env'), encoding='utf-8'):
-    if '=' in line and not line.lstrip().startswith('#'):
-        k, v = line.split('=', 1); env[k.strip()] = v.strip().strip('"').strip("'")
-user, pw = env.get('GMAIL_MACHAKA_USER'), env.get('GMAIL_MACHAKA_APP_PASSWORD')
-if not user or not pw: sys.exit('GMAIL_MACHAKA_USER and GMAIL_MACHAKA_APP_PASSWORD must be set in .env')
+sys.dont_write_bytecode = True    # no __pycache__ next to the scripts
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gmail_boxes import accounts, addresses, login
+MINE = addresses()
 def dec(s): return ''.join(p.decode(e or 'utf-8', 'replace') if isinstance(p, bytes) else p for p, e in decode_header(s or ''))
 def body_text(msg):
     out = ''
@@ -92,50 +90,45 @@ def body_text(msg):
     out = re.sub(r'<style.*?</style>', ' ', out, flags=re.S | re.I)
     return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', out))).replace('‌', '')
 
-def all_mail(M):
-    """Gmail's All Mail folder (name depends on the account's language): archived and filtered mail too.
-    Reading the Inbox alone missed 109 of 501 application emails since 2026-10-01. Not spam, not bin."""
-    for line in M.list()[1]:
-        line = line.decode('utf-8', 'replace')
-        if '\\All' in line: return line.rsplit(' "/" ', 1)[-1].strip()
-    return 'INBOX'
-M = imaplib.IMAP4_SSL('imap.gmail.com'); M.login(user, pw); M.select(all_mail(M), readonly=True)
-ids = M.search(None, f'(SINCE "{(since - datetime.timedelta(days=1)).strftime("%d-%b-%Y")}")')[1][0].split()
+# Both inboxes (gmail_boxes.py): applications since 2026-10-14 give the new address, older ones the old one.
 mails = []
-for i in ids:
-    h = email.message_from_bytes(M.fetch(i, '(BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')[1][0][1])
-    subj, frm = dec(h['Subject']), dec(h['From'])
-    if user.lower() in frm.lower(): continue                          # our own mail (All Mail holds Sent too)
-    hw = 'hellowork' in frm.lower()
-    if not (hw or re.search(r'candidature|application|postul|applying|votre profil', subj, re.I)): continue
-    try: date = parsedate_to_datetime(h['Date'])
-    except Exception: continue
-    # A Date header without a time zone gives a naive datetime, which cannot be compared with the run's
-    # times (crash after run fm-2026-10-08-night): read it as UTC.
-    if date.tzinfo is None: date = date.replace(tzinfo=datetime.timezone.utc)
-    msg = email.message_from_bytes(M.fetch(i, '(BODY.PEEK[])')[1][0][1])
-    text = body_text(msg)
-    kind, co, title = 'employer', '', ''
-    if hw:
-        if re.search(r'est arriv', subj, re.I):
-            kind = 'hw-sent'
-            m = re.search(r'"([^"]{3,160})" pour l.entreprise (.{2,80}?)\.', text)
-            if m: title, co = m.group(1), m.group(2)
-        elif re.search(r'finalisez', subj, re.I):
-            kind = 'hw-redirect'
-            m = re.search(r"l.offre (.{3,160}?), vous avez .t. redirig.\(e\) vers le site de l.entreprise (.{2,80}?)\.", text)
-            if m: title, co = m.group(1), m.group(2)
-        elif re.search(r'transmise', subj + ' ' + text[:600], re.I):
-            kind = 'hw-failed'
-        elif re.search(r'retenue', subj, re.I):
-            kind = 'rejected'
-        else:
-            continue
-        if not co:
-            m = re.search(r'(?:chez|site de|entreprise) (.{2,80}?)(?:$|[.,!])', subj)
-            co = m.group(1) if m else ''
-    mails.append({'kind': kind, 'date': date, 'subject': subj, 'from': frm, 'company': co, 'title': title, 'text': text[:6000]})
-M.logout()
+for user, pw in accounts():
+    M = login(user, pw)
+    ids = M.search(None, f'(SINCE "{(since - datetime.timedelta(days=1)).strftime("%d-%b-%Y")}")')[1][0].split()
+    for i in ids:
+        h = email.message_from_bytes(M.fetch(i, '(BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')[1][0][1])
+        subj, frm = dec(h['Subject']), dec(h['From'])
+        if any(a in frm.lower() for a in MINE): continue      # our own mail (All Mail holds Sent too)
+        hw = 'hellowork' in frm.lower()
+        if not (hw or re.search(r'candidature|application|postul|applying|votre profil', subj, re.I)): continue
+        try: date = parsedate_to_datetime(h['Date'])
+        except Exception: continue
+        # A Date header without a time zone gives a naive datetime, which cannot be compared with the run's
+        # times (crash after run fm-2026-10-08-night): read it as UTC.
+        if date.tzinfo is None: date = date.replace(tzinfo=datetime.timezone.utc)
+        msg = email.message_from_bytes(M.fetch(i, '(BODY.PEEK[])')[1][0][1])
+        text = body_text(msg)
+        kind, co, title = 'employer', '', ''
+        if hw:
+            if re.search(r'est arriv', subj, re.I):
+                kind = 'hw-sent'
+                m = re.search(r'"([^"]{3,160})" pour l.entreprise (.{2,80}?)\.', text)
+                if m: title, co = m.group(1), m.group(2)
+            elif re.search(r'finalisez', subj, re.I):
+                kind = 'hw-redirect'
+                m = re.search(r"l.offre (.{3,160}?), vous avez .t. redirig.\(e\) vers le site de l.entreprise (.{2,80}?)\.", text)
+                if m: title, co = m.group(1), m.group(2)
+            elif re.search(r'transmise', subj + ' ' + text[:600], re.I):
+                kind = 'hw-failed'
+            elif re.search(r'retenue', subj, re.I):
+                kind = 'rejected'
+            else:
+                continue
+            if not co:
+                m = re.search(r'(?:chez|site de|entreprise) (.{2,80}?)(?:$|[.,!])', subj)
+                co = m.group(1) if m else ''
+        mails.append({'kind': kind, 'date': date, 'subject': subj, 'from': frm, 'company': co, 'title': title, 'text': text[:6000]})
+    M.logout()
 
 # ── match ───────────────────────────────────────────────────────────────
 BOARDS = {'hellowork', 'cadremploi', 'apec', 'france travail', 'meteojob', 'free work', 'jobteaser', 'indeed', 'linkedin'}
