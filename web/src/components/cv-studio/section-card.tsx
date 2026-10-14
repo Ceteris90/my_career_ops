@@ -231,6 +231,7 @@ function RewritePanel({ n, bullet, current, onUse }: { n: string; bullet: Studio
   const [instruction, setInstruction] = useState("");
   const [proposal, setProposal] = useState<Proposal>({ kind: "idle" });
   const run = async (text: string) => {
+    if (proposal.kind === "running") return;
     const cliId = readSavedCliId();
     if (!cliId) return setProposal({ kind: "failed", error: "No AI CLI is set up. Choose one in Config, or edit the wording by hand." });
     setProposal({ kind: "running" });
