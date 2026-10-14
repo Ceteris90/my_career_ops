@@ -212,6 +212,20 @@ try {
     fail(`equal-score re-eval mishandled: ${sameRow.trim()} | ${same.output.trim()}`);
   }
 
+  // A hand-edited row can hold a decimal-comma score. Read period-only, 4,2 is
+  // 4, so a 4.1 re-eval would look like an upgrade and lose its superseded note.
+  const comma = runMergeDetailed({
+    '11-initech.tsv': '11\t2026-03-03\tInitech\tPayments PM\tEvaluated\t4.1/5\t✅\t[11](reports/11-initech-2026-03-03.md)\tre-scored\n',
+  }, {
+    rows: '| 7 | 2026-02-01 | Initech | Payments PM | 4,2/5 | Evaluated | ✅ | [7](../reports/7-initech-2026-02-01.md) | original eval |\n',
+  });
+  const commaRow = comma.tracker.split('\n').find(l => /\bInitech\b/.test(l)) || '';
+  if (/Superseded report/.test(commaRow) && /DOWNGRADE/.test(comma.output)) {
+    pass('merge reads a decimal-comma tracker score as 4.2, not 4');
+  } else {
+    fail(`decimal-comma merge mishandled: ${commaRow.trim()} | ${comma.output.trim()}`);
+  }
+
   // --- Unscoreable re-evals must NOT overwrite a real score (#2803) -----------
   // parseScore() maps every documented no-score sentinel (N/A / — / -, AGENTS.md
   // #1799) to 0, so a re-eval that failed to fetch used to read as a genuine
