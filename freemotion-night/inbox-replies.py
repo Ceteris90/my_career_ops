@@ -1,7 +1,7 @@
 # freemotion-night/inbox-replies.py — what did the employers answer?
 #
 # check-sent.py answers "did the application go out?". This one answers "what did they say?":
-# it reads the inbox (read-only IMAP, the same .env login) for rejections and for messages from
+# it reads both inboxes (read-only IMAP, gmail_boxes.py) for rejections and for messages from
 # a recruiter who wants to talk, matches each one to its row in the tracker, and prints the
 # status changes it PROPOSES. Nothing changes until a person picks which to apply:
 #
@@ -29,6 +29,9 @@
 import datetime, email, html, imaplib, json, os, re, subprocess, sys, unicodedata
 from email.header import decode_header
 from email.utils import getaddresses, parsedate_to_datetime
+sys.dont_write_bytecode = True    # no __pycache__ next to the scripts
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gmail_boxes import accounts, addresses, login
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 args = sys.argv[1:]
@@ -148,22 +151,18 @@ def answerable(addr):
     """An address a person may read: not a no-reply box and not an applicant-tracking system."""
     return bool(addr) and not re.search(AUTOMATED, addr.split('@')[0]) and not re.search(ATS_DOMAINS, addr.split('@')[-1])
 
-def all_mail(M):
-    """Gmail's All Mail folder (name depends on the account's language): archived and filtered mail too.
-    Reading the Inbox alone missed 109 of 501 application emails since 2026-10-01. Not spam, not bin."""
-    for line in M.list()[1]:
-        line = line.decode('utf-8', 'replace')
-        if '\\All' in line: return line.rsplit(' "/" ', 1)[-1].strip()
-    return 'INBOX'
-
 def read_inbox():
-    """-> (mails about an application, how many emails the inbox held, the skipped ones' sender and subject)."""
-    env = {}
-    for line in open(os.path.join(ROOT, '.env'), encoding='utf-8'):
-        if '=' in line and not line.lstrip().startswith('#'):
-            k, v = line.split('=', 1); env[k.strip()] = v.strip().strip('"').strip("'")
-    user, pw = env.get('GMAIL_MACHAKA_USER'), env.get('GMAIL_MACHAKA_APP_PASSWORD')
-    if not user or not pw: sys.exit('GMAIL_MACHAKA_USER and GMAIL_MACHAKA_APP_PASSWORD must be set in .env')
+    """-> (mails about an application, how many emails the inboxes held, the skipped ones' sender and subject).
+    Both inboxes (gmail_boxes.py): applications since 2026-10-14 give the new address, older ones the old
+    one. Each mail carries its 'box', the address whose inbox holds it (a follow-up draft goes there)."""
+    mails, total, skipped = [], 0, []
+    mine = addresses()
+    for user, pw in accounts():
+        got, n, sk = read_box(user, pw, mine)
+        mails += got; total += n; skipped += sk
+    return mails, total, skipped
+
+def read_box(user, pw, mine):
     # Fetched in batches of 100 messages, and a dropped connection is opened again and the batch
     # retried: one message per request took over 10 minutes for ~1,250 emails, and Gmail cut the
     # connection partway (2026-10-05, WinError 10053).
@@ -171,7 +170,7 @@ def read_inbox():
     def connect():
         try: conn['M'].logout()
         except Exception: pass
-        conn['M'] = imaplib.IMAP4_SSL('imap.gmail.com'); conn['M'].login(user, pw); conn['M'].select(all_mail(conn['M']), readonly=True)
+        conn['M'] = login(user, pw)
     def fetch(ids, part):
         """-> {id: raw bytes} for these message ids."""
         for attempt in range(4):
@@ -197,7 +196,7 @@ def read_inbox():
         if i not in heads: continue
         h = email.message_from_bytes(heads[i])
         subj, frm = dec(h['Subject']), dec(h['From'])
-        if address(frm) == user.lower(): continue                      # our own mail
+        if address(frm) in mine: continue                              # our own mail
         ps = plain(subj)
         about = re.search(ABOUT_AN_APPLICATION, f' {ps} ') or re.search(RECRUITING_SENDER, plain(frm))
         if not about or re.search(NOISE, ps):
@@ -214,7 +213,7 @@ def read_inbox():
         text = body_text(email.message_from_bytes(bodies[i]))
         mails.append({'date': date.isoformat(), 'from': frm, 'subject': subj, 'text': text[:6000],
                       'reply_to': address(dec(h['Reply-To'])) or address(frm),
-                      'message_id': (h['Message-ID'] or f'imap-{i.decode()}').strip()})
+                      'message_id': (h['Message-ID'] or f'imap-{user}-{i.decode()}').strip(), 'box': user})
     try: conn['M'].logout()
     except Exception: pass
     return mails, len(ids), skipped

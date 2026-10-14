@@ -80,15 +80,16 @@ REFUSAL = (r'unfortunately|malheureusement|not able to offer|unable to offer|reg
            r'other candidates|autres candidat|(wasn t|was not|isn t|is not|not) (a |the )?(good |right |best |strong )?(fit|match)|'
            r'decided|decision|ne correspond pas|pas correspondre')
 
-def connect():
-    env = {}
-    for line in open(os.path.join(ROOT, '.env'), encoding='utf-8'):
-        if '=' in line and not line.lstrip().startswith('#'):
-            k, v = line.split('=', 1); env[k.strip()] = v.strip().strip('"').strip("'")
-    user, pw = env.get('GMAIL_MACHAKA_USER'), env.get('GMAIL_MACHAKA_APP_PASSWORD')
-    if not user or not pw: sys.exit('GMAIL_MACHAKA_USER and GMAIL_MACHAKA_APP_PASSWORD must be set in .env')
-    M = imaplib.IMAP4_SSL('imap.gmail.com'); M.login(user, pw)
-    return M, user
+# A draft goes into the inbox that holds the thread it answers (gmail_boxes.py: applications since 2026-10-14
+# use the new address). Drafts and state written before then have no box: they are the old address's.
+def old_box():
+    return ir.accounts()[-1][0]
+
+def connect(box):
+    """-> (IMAP connection with nothing selected, address) for the inbox `box`."""
+    pw = next((p for u, p in ir.accounts() if u.lower() == box.lower()), None)
+    if not pw: sys.exit(f'no app password in .env for the inbox {box}')
+    return ir.login(box, pw, None), box
 
 def special_folder(M, attr):
     """Gmail's Drafts / Sent folder by its flag: its name depends on the account's language ([Gmail]/Brouillons…)."""
@@ -129,7 +130,7 @@ def pick():
         r = due[num]
         cands.append({'row': num, 'company': r['company'], 'role': r['role'], 'applied': r['date'], 'url': r['url'],
                       'to': m.get('reply_to') or ir.address(m['from']), 'to_name': re.sub(r'\s*<.*>', '', m['from']).replace('"', '').strip(),
-                      'contact': kind, 'lang': language(m['subject'] + ' ' + m['text']),
+                      'contact': kind, 'lang': language(m['subject'] + ' ' + m['text']), 'box': m['box'],
                       'ack': {'subject': re.sub(r'\s+', ' ', m['subject']).strip(), 'message_id': m['message_id'], 'date': m['date'], 'text': m['text'][:1500]}})
     cands.sort(key=lambda c: (c['contact'] != 'person', c['applied']))
     # One follow-up per company per batch, and none to a company followed up in the last 14 days: four
@@ -151,43 +152,48 @@ def pick():
 def save(path):
     drafts = [d for d in json.load(open(path, encoding='utf-8')) if d.get('body')]
     if not drafts: print('nothing to save'); return
-    M, user = connect()
-    folder = special_folder(M, '\\Drafts')
     state = load_state()
-    for d in drafts:
-        msg = EmailMessage()
-        msg['From'], msg['To'] = user, d['to']
-        subj = d['ack']['subject']
-        msg['Subject'] = subj if re.match(r'(?i)^(re|tr|fwd?)\s*:', subj) else f'Re: {subj}'
-        msg['In-Reply-To'] = msg['References'] = d['ack']['message_id']
-        msg['Date'] = formatdate(localtime=True)
-        msg['Message-ID'] = make_msgid(domain=user.split('@')[-1])
-        msg.set_content(d['body'])
-        typ, _ = M.append(folder, '(\\Draft)', imaplib.Time2Internaldate(time.time()), msg.as_bytes())
-        if typ != 'OK': print(f"  #{d['row']} {d['company']}: Gmail refused the draft"); continue
-        state[str(d['row'])] = {'company': d['company'], 'role': d['role'], 'to': d['to'], 'contact': d['contact'], 'lang': d['lang'],
-                                'ack_id': d['ack']['message_id'], 'subject': msg['Subject'], 'drafted': datetime.datetime.now().isoformat(timespec='seconds'),
-                                'count': 1, 'sent': None}
-        print(f"  #{d['row']} {d['company']}: draft saved, to {d['to']} ({d['contact']})")
+    for box in dict.fromkeys(d.get('box') or old_box() for d in drafts):
+        M, user = connect(box)
+        folder = special_folder(M, '\\Drafts')
+        for d in drafts:
+            if (d.get('box') or old_box()) != box: continue
+            msg = EmailMessage()
+            msg['From'], msg['To'] = user, d['to']
+            subj = d['ack']['subject']
+            msg['Subject'] = subj if re.match(r'(?i)^(re|tr|fwd?)\s*:', subj) else f'Re: {subj}'
+            msg['In-Reply-To'] = msg['References'] = d['ack']['message_id']
+            msg['Date'] = formatdate(localtime=True)
+            msg['Message-ID'] = make_msgid(domain=user.split('@')[-1])
+            msg.set_content(d['body'])
+            typ, _ = M.append(folder, '(\\Draft)', imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+            if typ != 'OK': print(f"  #{d['row']} {d['company']}: Gmail refused the draft"); continue
+            state[str(d['row'])] = {'company': d['company'], 'role': d['role'], 'to': d['to'], 'contact': d['contact'], 'lang': d['lang'],
+                                    'ack_id': d['ack']['message_id'], 'subject': msg['Subject'], 'drafted': datetime.datetime.now().isoformat(timespec='seconds'),
+                                    'count': 1, 'sent': None, 'box': user}
+            print(f"  #{d['row']} {d['company']}: draft saved in {user}, to {d['to']} ({d['contact']})")
+        M.logout()
     save_state(state)
-    M.logout()
 
 def sent():
     state = load_state()
     open_ = {k: s for k, s in state.items() if not s.get('sent')}
     found = []
     if open_:
-        M, _ = connect()
-        M.select(special_folder(M, '\\Sent'), readonly=True)
-        for k, s in open_.items():
-            typ, data = M.search(None, 'HEADER', 'In-Reply-To', s['ack_id'])
-            ids = data[0].split() if typ == 'OK' and data and data[0] else []
-            if not ids: continue
-            h = email.message_from_bytes(M.fetch(ids[-1], '(BODY.PEEK[HEADER.FIELDS (DATE)])')[1][0][1])
-            when = email.utils.parsedate_to_datetime(h['Date']).date().isoformat()
-            s['sent'] = when
-            found.append({'row': int(k), 'date': when, **{x: s[x] for x in ('company', 'role', 'to', 'contact')}})
-        M.logout()
+        # Each draft is sent from the inbox that holds it: its box's Sent folder.
+        for box in dict.fromkeys(s.get('box') or old_box() for s in open_.values()):
+            M, _ = connect(box)
+            M.select(special_folder(M, '\\Sent'), readonly=True)
+            for k, s in open_.items():
+                if (s.get('box') or old_box()) != box: continue
+                typ, data = M.search(None, 'HEADER', 'In-Reply-To', s['ack_id'])
+                ids = data[0].split() if typ == 'OK' and data and data[0] else []
+                if not ids: continue
+                h = email.message_from_bytes(M.fetch(ids[-1], '(BODY.PEEK[HEADER.FIELDS (DATE)])')[1][0][1])
+                when = email.utils.parsedate_to_datetime(h['Date']).date().isoformat()
+                s['sent'] = when
+                found.append({'row': int(k), 'date': when, **{x: s[x] for x in ('company', 'role', 'to', 'contact')}})
+            M.logout()
         save_state(state)
     json.dump(found, open(flag('--out'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     print(f'{len(found)} follow-up(s) sent since the last check; {len(open_) - len(found)} draft(s) not sent yet')
