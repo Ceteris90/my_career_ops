@@ -357,9 +357,11 @@ try {
       sources: ['techcrunch'],
       months: 3,
       limit: 5,
+      now: new Date('2026-07-20T00:00:00Z'),
     });
     if (
       result.companies[0]?.company === 'Acme' &&
+      result.generated_at === '2026-07-20' &&
       seenFetchOptions.every((call) => call.options?.redirect === 'manual') &&
       String(seenFetchOptions[0]?.url) === 'https://techcrunch.com/feed/' &&
       seenFetchOptions.some((call) => String(call.url) === 'https://techcrunch.com/final-feed/')
