@@ -45,8 +45,13 @@ for (const mode of ['scan', 'pipeline', 'batch', 'ofertas']) {
 check('delegated/headless workers never rename', /worker never renames anything/.test(outOfScope ?? ''));
 
 // The point in the flow where the role and employer first become known.
+// Each pointer must also keep the agency deferral, or it reads as "title at
+// Step 0" for a `?` employer whose agency is not confirmed yet.
 for (const mode of ['modes/auto-pipeline.md', 'modes/oferta.md']) {
-  check(`${mode} points at the router rule`, /\*\*Session title:\*\*[^\n]*\*\*Session Title\*\* rule/.test(read(mode)));
+  const pointer = read(mode).match(/^\*\*Session title:\*\*.*$/m)?.[0] ?? '';
+  check(`${mode} points at the router rule`, pointer.includes('**Session Title** rule'));
+  check(`${mode} defers an agency title to the confirmation handoff`,
+    pointer.includes('`{Role}, via {Agency}`') && pointer.includes('**Agency confirmation handoff**'));
 }
 
 // validate-profile.mjs takes its known keys from the example; an opt-out key

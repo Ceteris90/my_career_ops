@@ -22,7 +22,7 @@ If the input is a **URL** (not pasted JD text), follow this strategy to extract 
 
 **If the input is JD text** (not a URL): use directly, without needing to fetch.
 
-**Session title:** once a real JD is read and the role and employer are known, apply the router's **Session Title** rule (`SKILL.md`, #5303): rename an interactive session to `{Role}, {Company}` when the host allows it.
+**Session title:** once a real JD is read and the role and employer are known, apply the router's **Session Title** rule (`SKILL.md`, #5303): rename an interactive session to `{Role}, {Company}` when the host allows it. An undisclosed-employer agency posting waits for Step 1's **Agency confirmation handoff**, then becomes `{Role}, via {Agency}`.
 
 ## Step 0.5 — Liveness gate
 

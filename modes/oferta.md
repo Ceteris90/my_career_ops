@@ -22,7 +22,7 @@ When the candidate pastes a **URL** (not JD text), confirm the posting is still 
 
 Do not continue to Block A until this gate is resolved. The snapshot captured here is reused by Block G's freshness signals.
 
-**Session title:** once a real JD is read and the role and employer are known, apply the router's **Session Title** rule (`SKILL.md`, #5303): rename an interactive session to `{Role}, {Company}` when the host allows it. On an `auto-pipeline` handoff this already happened in its Step 0.
+**Session title:** once a real JD is read and the role and employer are known, apply the router's **Session Title** rule (`SKILL.md`, #5303): rename an interactive session to `{Role}, {Company}` when the host allows it. On an `auto-pipeline` handoff with a known employer this already happened in its Step 0. An undisclosed-employer agency posting is titled `{Role}, via {Agency}` only after the **Agency confirmation handoff** resolves.
 
 ## Blacklist gate (#1742)
 
