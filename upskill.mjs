@@ -28,6 +28,8 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { load as yamlLoad } from 'js-yaml';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
+import { loadCanonicalStates, resolveCanonicalStateId } from './tracker-utils.mjs';
+import { rankSkipBlockers, parseRequirementImportance } from './skip-blockers.mjs';
 
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 
@@ -36,6 +38,7 @@ const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
 const CV_FILE = join(CAREER_OPS, 'cv.md');
 const PROFILE_FILE = join(CAREER_OPS, 'config/profile.yml');
+const STATES_FILE = join(ROOT, 'templates/states.yml');
 
 // Canonical reports-root containment. A tracker link resolves to a candidate
 // path; accept it only if it stays inside the repo's reports/ directory. Two
@@ -284,6 +287,7 @@ export function parseReportGaps(content) {
   const gapDescriptions = [];
   let score = null;
   let hasMachineSummary = false;
+  let requirements = [];
 
   const summary = parseMachineSummary(content);
   if (summary) {
@@ -291,6 +295,7 @@ export function parseReportGaps(content) {
     if (typeof summary.score === 'number' && Number.isFinite(summary.score)) score = summary.score;
     gapDescriptions.push(...normalizeList(summary.hard_stops));
     gapDescriptions.push(...normalizeList(summary.soft_gaps));
+    requirements = parseRequirementImportance(summary.requirement_importance);
   }
 
   const plain = content.replace(/\*\*/g, '');
@@ -307,7 +312,7 @@ export function parseReportGaps(content) {
     }
   }
 
-  return { score, gapText: gapDescriptions.join('\n'), hasMachineSummary };
+  return { score, gapText: gapDescriptions.join('\n'), hasMachineSummary, requirements };
 }
 
 /**
@@ -440,6 +445,7 @@ function analyze(minReports) {
   const lines = readFileSync(APPS_FILE, 'utf-8').split('\n');
   const colmap = resolveColumns(lines);
   const rows = lines.map(l => parseTrackerRow(l, colmap)).filter(Boolean);
+  const states = loadCanonicalStates(STATES_FILE);
 
   let reportsLinked = 0;
   let reportsRead = 0;
@@ -470,13 +476,16 @@ function analyze(minReports) {
     }
     if (content === null) continue;
     reportsRead += 1;
-    const { score, gapText, hasMachineSummary } = parseReportGaps(content);
+    const { score, gapText, hasMachineSummary, requirements } = parseReportGaps(content);
     if (hasMachineSummary) reportsWithMachineSummary += 1;
     const trackerScore = parseFloat(row.score);
     parsedReports.push({
       num: row.num,
       score: Number.isFinite(trackerScore) ? trackerScore : score,
       gapText,
+      date: row.date,
+      state: resolveCanonicalStateId(row.status, states),
+      requirements,
     });
   }
 
@@ -515,6 +524,7 @@ function analyze(minReports) {
     excludedAsKnown,
     excludedAsCompanyName,
     knownSkills: [...knownSkills].sort(),
+    skipBlockers: rankSkipBlockers(parsedReports),
   };
 }
 
@@ -524,16 +534,26 @@ function printSummary(result) {
     return;
   }
   const m = result.metadata;
+  const pad = (s, n) => String(s).padEnd(n);
   console.log(`UPSKILL GAP MAP (schema v${result.schema_version})`);
   console.log(`Reports: ${m.reportsRead}/${m.reportsLinked} read, ${m.reportsScored} scored, ${m.lowFitReports} low-fit (<${m.lowFitScoreThreshold}), ${m.reportsWithMachineSummary} with Machine Summary`);
   console.log('');
   if (result.gaps.length === 0) {
     console.log('No skill gaps detected across your evaluated reports.');
   } else {
-    const pad = (s, n) => String(s).padEnd(n);
     console.log(`${pad('TIER', 10)}${pad('SKILL', 22)}${pad('REPORTS', 9)}${pad('LOW-FIT', 9)}WEIGHTED`);
     for (const g of result.gaps) {
       console.log(`${pad(g.tier, 10)}${pad(g.skill, 22)}${pad(g.reports, 9)}${pad(`${g.lowFitReports}/${result.metadata.lowFitReports}`, 9)}${g.weightedScore}`);
+    }
+  }
+  const { skips, blockers } = result.skipBlockers;
+  if (blockers.length > 0) {
+    const next = { learn: 'learn it', evidence: 'add evidence if you have it' };
+    console.log('');
+    console.log(`BLOCKED YOUR LAST ${skips} SKIPS (critical or high requirement marked missing or partial)`);
+    console.log(`${pad('SKIPS', 7)}${pad('MISSING', 9)}${pad('PARTIAL', 9)}${pad('3.5+', 6)}${pad('NEXT', 29)}REQUIREMENT`);
+    for (const b of blockers) {
+      console.log(`${pad(b.skips, 7)}${pad(b.missing, 9)}${pad(b.partial, 9)}${pad(b.closeCalls, 6)}${pad(next[b.nudge], 29)}${b.label}`);
     }
   }
   if (result.excludedAsKnown.length > 0) {
