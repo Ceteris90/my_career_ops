@@ -2,9 +2,14 @@ package main
 
 import (
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// compileError matches the file:line:col: prefix the Go compiler puts on every
+// error it reports.
+var compileError = regexp.MustCompile(`(?m)\.go:\d+:\d+: `)
 
 // Every platform variant must still compile.
 //
@@ -51,10 +56,17 @@ func TestEveryPlatformVariantCompiles(t *testing.T) {
 			// A module download failing is the environment, not the code. Told
 			// apart rather than blanket-skipped, so a real compile error still
 			// fails — the same reason the js-yaml probe in
-			// internal/data/tracker_lock_mirror_test.go is narrow.
+			// internal/data/tracker_lock_mirror_test.go is narrow. A compile
+			// error always fails, even when a module download came before it;
+			// `go: downloading` is progress output, not a failure.
 			text := string(out)
+			if compileError.MatchString(text) {
+				t.Errorf("GOOS=%s GOARCH=%s does not compile — the %s-only files are not built by any other job:\n%s",
+					target.goos, target.goarch, target.goos, text)
+				return
+			}
 			for _, networkish := range []string{
-				"go: downloading", "dial tcp", "connection refused",
+				"dial tcp", "connection refused",
 				"certificate", "proxyconnect", "i/o timeout", "no such host",
 			} {
 				if strings.Contains(text, networkish) {
