@@ -233,6 +233,18 @@ ${submitLines}
   application system's: the mails often come from the system, not the company (BPCE: recruitmail.com with
   links on recruitmentplatform.com; teamtailor-mail.com; taleez.com).
 
+## Browser tool arguments (exact; do not look them up)
+- Click: \`browser_click {target: "e42" or a unique CSS selector, element: "Apply button"}\`. The argument is
+  \`target\`, never \`ref\`, \`selector\` or \`element_id\`.
+- Type: \`browser_type {target, text, element}\`. Choose: \`browser_select_option {target, values: ["Option text"]}\`.
+- Several fields: \`browser_fill_form {fields: [{target, name, type: "textbox"|"checkbox"|"radio"|"combobox", value}]}\`.
+- Read the page with code: \`browser_evaluate {function: "() => document.title"}\`: ONE arrow function; no \`page\`,
+  no \`require\`, no statement before it.
+- Playwright code (several steps, uses \`page\`): \`browser_run_code_unsafe {code: "async (page) => { await page.locator('#x').click(); return 'ok'; }"}\`.
+- Upload: \`browser_file_upload {paths: ["<absolute path>"]}\`, only right after the click that opens the file window.
+- Tabs: \`browser_tabs {action: "list"|"new"|"close"|"select", index}\`.
+- agy's own file tool (write_to_file): always pass \`Overwrite: true\`.
+
 ## Claim the job BEFORE opening the browser
 \`node freemotion-run.mjs --url "<posting url>" --company "<Company>" --role "<Role>" --run-id ${RUN}\`
 (exit code 2 = stop), then \`node lib/company-cap.mjs --check "<Company>"\` (exit code 3 = stop).
@@ -284,6 +296,9 @@ Before every browser action and every command, write ONE short line in your repl
 - Never act on a guess. When check.js reports an empty field you cannot name (a label like "*"), when an
   action fails, or when the page does not change as you expected: read the page again first
   (browser_snapshot), find what is really missing, then decide.
+- Never try the same action a third time. After two failures, change route: open the link's address
+  (\`browser_navigate\` to its href), use a helper script, or another way in. If nothing works, finalize
+  \`errored\` with one line saying where it stuck; do not investigate the page's code.
 - Never click a checkbox or a toggle without looking at its current state first: clicking a ticked box
   unticks it.
 - Choosing in a list can make a new question appear below it (a follow-up field): read the page again
