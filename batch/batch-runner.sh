@@ -495,7 +495,7 @@ read_spend_tier() {
 # Tier -> model mapping. Keep in sync with the table in modes/_shared.md.
 spend_tier_to_model() {
   case "$1" in
-    economy) echo "claude-haiku-4-5" ;;
+    economy) echo "claude-haiku-5-5" ;;
     premium) echo "claude-opus-5-5" ;;
     standard|*) echo "claude-sonnet-5-5" ;;
   esac
