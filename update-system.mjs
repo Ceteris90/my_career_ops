@@ -1439,7 +1439,7 @@ function backupTimestamp(branchName) {
   ) || 0;
 }
 
-function newestBackupBranch(branches) {
+function newestBackupBranch(branches, accept = () => true) {
   const branchList = branches.split('\n').map(b => b.trim()).filter(Boolean);
   if (branchList.length === 0) return null;
 
@@ -1450,7 +1450,11 @@ function newestBackupBranch(branches) {
     .filter(entry => entry.timestamp > 0)
     .sort((a, b) => b.timestamp - a.timestamp);
 
-  return timestamped[0]?.branch || branchList[0];
+  const ordered = timestamped.length > 0
+    ? timestamped.map(entry => entry.branch)
+    : branchList;
+
+  return ordered.find(accept) || null;
 }
 
 // A newer backup with no paired target (a retry that died before the fetch
