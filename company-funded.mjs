@@ -934,8 +934,9 @@ function printHuman(result) {
 
 export async function discoverFundedCompanies(opts = {}) {
   const months = opts.months || DEFAULT_MONTHS;
-  // The moment the window is measured back from; one value for the whole run.
-  const now = opts.now instanceof Date ? opts.now : new Date();
+  // The moment the window is measured back from; one value for the whole run,
+  // copied so a caller changing its own Date cannot move it mid-run.
+  const now = opts.now instanceof Date ? new Date(opts.now.getTime()) : new Date();
   const sources = (opts.sources || DEFAULT_SOURCES).map(normalizeSourceName);
   const diagnostics = [...new Set(sources)].map(diagnostic);
   const hits = Array.isArray(opts.discoveryItems)
