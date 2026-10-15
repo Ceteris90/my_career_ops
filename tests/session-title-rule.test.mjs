@@ -50,6 +50,10 @@ const delegated = skill.split('### Modes delegated to subagent')[1]?.split('\n##
 check('delegated `apply` hands role and employer back to the parent for the rename',
   /For `apply` \(with Playwright\), ask the worker to return the role title and employer/.test(delegated)
     && /parent then applies \*\*Session Title\*\*/.test(delegated));
+check('delegated `apply` also returns the agency, and the parent waits for its confirmation',
+  /and any agency the posting came through/.test(delegated)
+    && /parent then applies \*\*Session Title\*\* from those values, after any agency confirmation has resolved/.test(delegated));
+check('delegated `apply` worker never renames', /The worker never renames anything itself/.test(delegated));
 
 // The point in the flow where the role and employer first become known.
 // Each pointer must also keep the agency deferral, or it reads as "title at
