@@ -5,13 +5,24 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${0}")/.." && pwd)"
-OUT_DIR="$REPO/output"
+# Drafts and the sweep log live in the data root. CAREER_OPS_ROOT lets a
+# non-default layout (and the test harness) keep those files off the checkout.
+ROOT="${CAREER_OPS_ROOT:-$REPO}"
+OUT_DIR="$ROOT/output"
 DATE_STR="$(date +%Y-%m-%d)"
 DRAFT_FILE="$OUT_DIR/followup-drafts-$DATE_STR.md"
-LOG_FILE="$REPO/data/followup-sweep.log"
+LOG_FILE="$ROOT/data/followup-sweep.log"
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$(dirname "$LOG_FILE")"
 cd "$REPO"
+
+# Skip before spending an agent turn when the user turned follow-ups off.
+if node followup-cadence.mjs --summary 2>/dev/null | grep -Fq 'Follow-ups are turned off'; then
+  {
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S') follow-up sweep skipped: follow-ups are turned off (follow_ups.enabled: false) ==="
+  } >> "$LOG_FILE"
+  exit 0
+fi
 
 PROMPT="Run the career-ops 'followup' mode (modes/followup.md) against data/applications.md and data/follow-ups.md. Run node followup-cadence.mjs, and for every overdue/urgent entry generate the follow-up email/LinkedIn draft per the mode's framework (voice-dna.md guardrails apply). Write the full dashboard plus every generated draft to $DRAFT_FILE as markdown. Do NOT send, submit, or record anything as sent -- draft-only, for the user to review later. If there is nothing overdue/urgent, write a one-line note to that file saying so instead."
 
