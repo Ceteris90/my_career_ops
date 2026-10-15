@@ -71,6 +71,18 @@ const WORKDAY_TIMEOUT_MS = 10_000;
 // Only jd mode gets this guard: an empty `listing` result is legitimate — a
 // company with no open roles.
 const MIN_JD_TEXT_CHARS = 200;
+const EXPLICITLY_UNAVAILABLE_PAGE = /no longer available|job unavailable|(?:position|job) has been filled|posting closed|no longer accepting applications|the page you are looking for doesn'?t exist|job post no longer exists|page not found|role does not exist/i;
+
+/**
+ * True when the text carries explicit "this posting is gone" copy. Pure —
+ * exported for tests. Only meaningful for a page too short to be a JD: a real
+ * posting can mention these phrases in its body ("we are no longer accepting
+ * applications from agencies"), so callers must not apply it to a full JD.
+ * @param {unknown} text
+ */
+export function isExplicitlyUnavailablePage(text) {
+  return EXPLICITLY_UNAVAILABLE_PAGE.test(String(text || ''));
+}
 
 // Anchor labels that are navigation chrome, not job postings. Kept small and
 // lowercase; matched against the trimmed label.
@@ -139,6 +151,10 @@ export function normalizeJd(raw, finalUrl, textCap = JD_TEXT_CAP) {
     url: finalUrl,
     title: compactText(raw?.title || raw?.jsonLdTitle || '', 300),
     text: compactText(text, textCap),
+    // For the liveness check in jdFailure() only. `text` has had nav/header/footer
+    // stripped, and an expired-posting banner often sits in one of them. Never
+    // emitted on the success path.
+    bodyText: compactText(raw?.bodyText || '', 4000),
   };
 }
 
@@ -697,18 +713,41 @@ export async function fetchJdViaKnownApi(url, textCap = JD_TEXT_CAP, timeoutMs =
  * A `--max-chars` below the floor is honored rather than made unsatisfiable: a
  * caller who asks for 50 chars gets 50, not a guaranteed failure.
  */
-function emitJd(result, maxChars) {
+/**
+ * Why a jd-mode result cannot be emitted, or null when it can. Pure — exported
+ * for tests.
+ *
+ * A page whose cleaned text is below the floor is either unreadable (a client-
+ * rendered shell: `empty_text`, worth another attempt) or gone (the posting
+ * was taken down: `unavailable`, terminal). Both produce the same empty text,
+ * because the "no longer available" banner usually sits in a header or footer
+ * that readDom() strips — so the unstripped body is checked too. A result at or
+ * above the floor is never reclassified: a full JD may quote such a phrase.
+ */
+export function jdFailure(result, maxChars) {
   const floor = Math.min(MIN_JD_TEXT_CHARS, maxChars);
-  if (result.text.length < floor) {
-    console.error(JSON.stringify({
-      error: `extracted ${result.text.length} chars of JD text (minimum ${floor}) — the page most likely renders its content client-side`,
-      code: 'empty_text',
-      url: result.url,
-    }));
+  if (result.text.length >= floor) return null;
+  const gone = [result.text, result.bodyText].find((t) => isExplicitlyUnavailablePage(t));
+  if (gone) return { error: compactText(gone, 500), code: 'unavailable', url: result.url };
+  return {
+    error: `extracted ${result.text.length} chars of JD text (minimum ${floor}) — the page most likely renders its content client-side`,
+    code: 'empty_text',
+    url: result.url,
+    body_text: String(result.bodyText || '').slice(0, 4000),
+  };
+}
+
+function emitJd(result, maxChars) {
+  const failure = jdFailure(result, maxChars);
+  if (failure) {
+    console.error(JSON.stringify(failure));
     process.exitCode = 1;
     return;
   }
-  process.stdout.write(JSON.stringify(result));
+  // bodyText exists only for jdFailure(); drop it so the documented success
+  // shape `{ url, title, text }` is unchanged.
+  const { bodyText: _bodyText, ...emitted } = result;
+  process.stdout.write(JSON.stringify(emitted));
 }
 
 /**
@@ -897,7 +936,11 @@ export async function readDom(page) {
       }
     }
 
-    return { title, text, anchors, jsonLdDescription, jsonLdTitle };
+    // The unstripped body: `text` above removes nav/header/footer, where an
+    // expired-posting banner often lives.
+    const bodyText = (document.body?.innerText || '').slice(0, 4000);
+
+    return { title, text, anchors, jsonLdDescription, jsonLdTitle, bodyText };
   });
 }
 
