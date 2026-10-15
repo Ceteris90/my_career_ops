@@ -251,6 +251,13 @@ function runBatch(dir, entries) {
   });
 }
 
+function runBatchWithFlags(dir, entries, ...flags) {
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(entries));
+  return spawnSync(NODE, [join(ROOT, 'generate-pdf.mjs'), `--batch=${join(dir, 'manifest.json')}`, ...flags], {
+    env: workspaceEnv(dir), encoding: 'utf-8',
+  });
+}
+
 function entry(dir, name, extra = {}) {
   writeFileSync(join(dir, `${name}.html`), HTML);
   return { input: join(dir, `${name}.html`), output: join(dir, 'output', `${name}.pdf`), kind: 'cover', ...extra };
@@ -330,4 +337,23 @@ test('generate-cover-letter: --format takes only a4 or letter, never auto', () =
     assert.equal(res.status, 1, flag + res.stdout);
     assert.match(res.stderr, /Invalid format/, flag);
   }
+});
+
+test('generate-pdf --batch: a global --country covers an entry with none, and an entry format still wins', { skip: !chromiumReady && 'no Chromium' }, () => {
+  const dir = workspace('auto');
+  const res = runBatchWithFlags(dir, [
+    entry(dir, 'bare'),
+    entry(dir, 'own', { country: 'US' }),
+    entry(dir, 'fmt', { format: 'letter' }),
+  ], '--country=DE');
+  assert.equal(res.status, 0, res.stderr + res.stdout);
+  assert.equal(mediaBox(join(dir, 'output', 'bare.pdf')), '595x842');
+  assert.equal(mediaBox(join(dir, 'output', 'own.pdf')), '612x792');
+  assert.equal(mediaBox(join(dir, 'output', 'fmt.pdf')), '612x792');
+});
+
+test('generate-pdf: the usage text names --country', () => {
+  const res = spawnSync(NODE, [join(ROOT, 'generate-pdf.mjs')], { env: workspaceEnv(workspace(null)), encoding: 'utf-8' });
+  assert.match(res.stderr, /--country=XX/);
+  assert.match(res.stderr, /country\?/);
 });

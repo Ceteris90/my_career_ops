@@ -2654,7 +2654,7 @@ try {
   if (
     generatePdfScript.includes('preferCSSPageSize: true') &&
     generatePdfScript.includes("right: '0'") &&
-    generatePdfScript.includes('injectPrintPageCss(html, format)') &&
+    generatePdfScript.includes('injectPrintPageCss(html, format, opts.country)') &&
     !/page\.pdf\(\{\s*format:/s.test(generatePdfScript)
   ) {
     pass('PDF renderer uses CSS @page margins instead of Playwright margins');
