@@ -1439,7 +1439,7 @@ function backupTimestamp(branchName) {
   ) || 0;
 }
 
-function newestBackupBranch(branches) {
+function newestBackupBranch(branches, accept = () => true) {
   const branchList = branches.split('\n').map(b => b.trim()).filter(Boolean);
   if (branchList.length === 0) return null;
 
@@ -1450,7 +1450,25 @@ function newestBackupBranch(branches) {
     .filter(entry => entry.timestamp > 0)
     .sort((a, b) => b.timestamp - a.timestamp);
 
-  return timestamped[0]?.branch || branchList[0];
+  const ordered = timestamped.length > 0
+    ? timestamped.map(entry => entry.branch)
+    : branchList;
+
+  return ordered.find(accept) || null;
+}
+
+// A newer backup with no paired target (a retry that died before the fetch
+// pinned one) must not hide an older backup that still can name its release.
+function rollbackBackupBranch(branches) {
+  const paired = newestBackupBranch(branches, (branch) => {
+    try {
+      git('show-ref', '--verify', '--quiet', targetRefForBackup(branch));
+      return branch;
+    } catch {
+      // This backup has no paired target. Try the next older one.
+    }
+  });
+  return paired || newestBackupBranch(branches);
 }
 
 export function parsePositiveInt(value, fallback) {
@@ -4906,7 +4924,7 @@ function rollback() {
   assertOwnGitToplevel();
   try {
     const branches = git('for-each-ref', '--sort=-committerdate', '--format=%(refname:short)', 'refs/heads/backup-pre-update-*');
-    const latest = newestBackupBranch(branches);
+    const latest = rollbackBackupBranch(branches);
     if (!latest) {
       console.error('No backup branches found. Nothing to rollback.');
       process.exit(1);
