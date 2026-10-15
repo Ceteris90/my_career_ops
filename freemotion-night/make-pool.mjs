@@ -90,7 +90,7 @@ import { fileURLToPath } from 'url';
 
 import { MAX_AGE_DAYS, RANK_NUDGES, capPerCompany, companyKey, judge, rankScore, titleKey } from './pool-rules.mjs';
 import { applySectors, readSectors } from './llm-sector.mjs';
-import { AGY_SCORE_MODEL, CLAUDE_SCORE_MODEL, DEFAULT_MODEL, FACTORS, GATE_SCHEMA, STRETCH_AT, agyGenerate, claudeGenerate, gateJobs, gateStore, geminiGateGenerate, geminiGenerate, scoreJobsAgy, jobKey, readGate, readScores, resolveCandidate, scoreJobs, verdictOf } from './llm-score.mjs';
+import { AGY_SCORE_MODEL, CLAUDE_SCORE_MODEL, DEFAULT_MODEL, FACTORS, GATE_SCHEMA, STRETCH_AT, WEB_SCORERS, agyGenerate, claudeGenerate, gateJobs, gateStore, geminiGateGenerate, geminiGenerate, scoreJobsAgy, jobKey, readGate, readScores, resolveCandidate, scoreJobs, verdictOf } from './llm-score.mjs';
 import normalizeUrl from '../url-key.mjs';
 import { readCurrentState } from '../lib/freemotion-submissions.mjs';
 import { ineligibleReason } from '../lib/posting-requirements.mjs';
@@ -493,8 +493,11 @@ async function main() {
   // --scorer agy | claude (user, 2026-09-30): the quick check and the fit score
   // go through agy's Claude allowance, or tool-free Haiku on the Claude plan
   // (20 jobs a call, --batch), instead of the Gemini API.
+  // --scorer gemini-web | chatgpt-web (#59): only the fit score goes to the website; the quick
+  // check stays on the Gemini API. --llm-max caps how many jobs the website scores.
   const scorer = flag('--scorer', 'gemini');
   const cli = scorer === 'agy' || scorer === 'claude' ? scorer : null;
+  const webScorer = WEB_SCORERS.includes(scorer) ? scorer : null;
   const useAgy = !!cli;
   // --score-since <YYYY-MM-DD|today> (user, 2026-09-30): only jobs the scan first
   // found from that day on get a new fit score; older stored scores still count.
@@ -577,7 +580,7 @@ async function main() {
   }
   if (who) {
     try {
-      textYears = await runModel(candidates, { max: LLM_MAX, rpm: Number(flag('--rpm', 12)), model, tooManyYears, candidate: who, apiKey, cli, parallel: Number(flag('--parallel', 3)), batch: Number(flag('--batch', 0)) || null, since: scoreSince });
+      textYears = await runModel(candidates, { max: LLM_MAX, rpm: Number(flag('--rpm', 12)), model: webScorer ? flag('--model', 'default') : model, tooManyYears, candidate: who, apiKey, cli: cli || webScorer, parallel: Number(flag('--parallel', 3)), batch: Number(flag('--batch', 0)) || null, since: scoreSince });
     } catch (err) {
       console.warn(`make-pool: model step failed (${hideKey(err)}); stored scores still apply.`);
     }

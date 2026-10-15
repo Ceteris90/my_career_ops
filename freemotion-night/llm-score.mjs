@@ -870,19 +870,56 @@ function spawnClaude(text, { model, schema, timeoutMin }) {
 export const claudeGenerate = ({ model = CLAUDE_SCORE_MODEL, schema = RESPONSE_SCHEMA, timeoutMin = 8 } = {}) =>
   agyGenerate({ model, schema, timeoutMin, run: spawnClaude });
 
+// The Gemini and ChatGPT websites (#59): lib/web-llm.py on the user's own
+// accounts, no API quota and no driver allowance. Neither site takes a schema,
+// so it goes into the prompt and the JSON is cut out of the answer. A limit or
+// a signed-out site stops the run like a quota answer. One ChatGPT call at a
+// time: both share one browser profile.
+
+export const WEB_SCORERS = ['gemini-web', 'chatgpt-web'];
+
+/** A `run` for agyGenerate that asks one website through lib/web-llm.py. */
+export function spawnWeb(site, { python = process.env.PYTHON || 'python', script = join(CODE_ROOT, 'lib/web-llm.py') } = {}) {
+  return (text, { schema, timeoutMin }) => new Promise((resolvePromise, reject) => {
+    const child = spawn(python, [script, 'ask', site], { cwd: CODE_ROOT, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8', WEB_LLM_TIMEOUT: String(timeoutMin * 60) } });
+    let out = '';
+    let err = '';
+    const killer = setTimeout(() => child.kill(), (timeoutMin + 1) * 60_000);
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('error', (e) => { clearTimeout(killer); reject(e); });
+    child.on('close', (code) => {
+      clearTimeout(killer);
+      const why = err.trim().split('\n').pop() || `exit ${code}`;
+      if (code === 3 || code === 2) { resolvePromise({ status: 'ERROR', error: `quota: ${why}` }); return; }
+      if (code !== 0) { resolvePromise({ status: 'ERROR', error: why }); return; }
+      const a = out.indexOf('{');
+      const b = out.lastIndexOf('}');
+      resolvePromise({ status: 'SUCCESS', response: a >= 0 && b > a ? out.slice(a, b + 1) : out });
+    });
+    child.stdin.end(`${text}\n\nYour answer must be ONE JSON object that follows this JSON Schema, with nothing before or after it:\n${JSON.stringify(schema)}`);
+  });
+}
+
+/** A `generate(instructions, prompt) → text` backed by a website ('gemini-web' | 'chatgpt-web'). */
+export const webGenerate = ({ driver, schema = RESPONSE_SCHEMA, timeoutMin = 8 }) =>
+  agyGenerate({ model: driver, schema, timeoutMin, run: spawnWeb(driver.replace(/-web$/, '')) });
+
 /**
- * Fit-score jobs through agy (or tool-free claude, `driver: 'claude'`),
+ * Fit-score jobs through agy (or tool-free claude, `driver: 'claude'`, or a website, 'gemini-web' | 'chatgpt-web'),
  * `batch` per call, `parallel` calls at once. Jobs already stored are
  * skipped; stops at a quota answer.
  * @returns {Promise<{ scored: number, failed: number, stoppedByQuota: boolean }>}
  */
-export async function scoreJobsAgy(jobs, { candidate, driver = 'agy', model = driver === 'claude' ? CLAUDE_SCORE_MODEL : AGY_SCORE_MODEL, batch = driver === 'claude' ? 20 : FIT_BATCH, parallel = 3, max = Infinity, storePath = SCORES_PATH, log = () => {} }) {
+export async function scoreJobsAgy(jobs, { candidate, driver = 'agy', model = driver === 'claude' ? CLAUDE_SCORE_MODEL : WEB_SCORERS.includes(driver) ? 'default' : AGY_SCORE_MODEL, batch = driver === 'claude' ? 20 : FIT_BATCH, parallel = 3, max = Infinity, storePath = SCORES_PATH, log = () => {} }) {
   const stored = readScores(storePath);
   const seen = new Set();
   const todo = jobs.filter((j) => { const k = jobKey(j); if (stored.has(k) || seen.has(k)) return false; seen.add(k); return true; }).slice(0, max);
   const chunks = [];
   for (let i = 0; i < todo.length; i += batch) chunks.push(todo.slice(i, i + batch));
-  const generate = (driver === 'claude' ? claudeGenerate : agyGenerate)({ model, schema: BATCH_RESPONSE_SCHEMA });
+  const web = WEB_SCORERS.includes(driver);
+  if (driver === 'chatgpt-web') parallel = 1;
+  const generate = web ? webGenerate({ driver, schema: BATCH_RESPONSE_SCHEMA }) : (driver === 'claude' ? claudeGenerate : agyGenerate)({ model, schema: BATCH_RESPONSE_SCHEMA });
   let scored = 0, failed = 0, stoppedByQuota = false, done = 0;
   const worker = async () => {
     while (chunks.length && !stoppedByQuota) {

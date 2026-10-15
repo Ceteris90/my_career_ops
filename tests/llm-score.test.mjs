@@ -266,6 +266,31 @@ try {
       && q instanceof DailyQuotaError && b.status === 503) {
     pass('agyGenerate(): instructions then posting, structured answer back; quota stops, no capacity is a 503');
   } else fail(`agyGenerate: got=${got} quota=${q?.constructor?.name} busy=${b?.status}`);
+
+  // ---- the websites as the model (#59) -------------------------------------------
+  const { spawnWeb } = m;
+  const fakeDir = mkdtempSync(join(tmpdir(), 'web-llm-fake-'));
+  const fake = join(fakeDir, 'web-llm.mjs');
+  // Stands in for lib/web-llm.py: the prompt arrives on stdin; the site name picks the answer.
+  writeFileSync(fake, [
+    "let s = ''; process.stdin.on('data', (d) => { s += d; }).on('end', () => {",
+    "  const site = process.argv[3];",
+    "  if (site === 'limit') { process.stderr.write('web-llm: gemini: limit (x)'); process.exitCode = 3; return; }",
+    "  if (site === 'out') { process.stderr.write('web-llm: chatgpt: signed out'); process.exitCode = 2; return; }",
+    "  process.stdout.write('Sure, here it is: ' + JSON.stringify({ schema: s.includes('JSON Schema') && s.includes('jobs') }) + ' Hope it helps.');",
+    "});",
+  ].join('\n'));
+  const web = (site) => spawnWeb(site, { python: process.execPath, script: fake });
+  const schema = { type: 'object', properties: { jobs: { type: 'array' } } };
+  const okWeb = await web('gemini')('PROMPT', { schema, timeoutMin: 1 });
+  const limitWeb = await web('limit')('PROMPT', { schema, timeoutMin: 1 });
+  const outWeb = await web('out')('PROMPT', { schema, timeoutMin: 1 });
+  const viaAgy = await agyGenerate({ run: (text, o) => web('limit')(text, o) })('i', 'p').catch((e) => e);
+  rmSync(fakeDir, { recursive: true, force: true });
+  if (okWeb.status === 'SUCCESS' && okWeb.response === '{"schema":true}' && /^quota: .*limit/.test(limitWeb.error)
+      && /^quota: .*signed out/.test(outWeb.error) && viaAgy instanceof DailyQuotaError) {
+    pass('spawnWeb(): the schema goes in the prompt, the JSON is cut out of the answer; a limit or a signed-out site stops like a quota');
+  } else fail(`spawnWeb: ok=${JSON.stringify(okWeb)} limit=${JSON.stringify(limitWeb)} out=${JSON.stringify(outWeb)} viaAgy=${viaAgy?.constructor?.name}`);
 } catch (err) {
   fail(`llm-score suite crashed: ${err.message}`);
 }
