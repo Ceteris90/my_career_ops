@@ -323,8 +323,8 @@ try {
 
   // ── Language versions ──
   // `translations` carries every language version of an offer. The default
-  // one is the translation equal to the top-level fields, whatever its key
-  // order; it always comes first, and the others only with allLanguages.
+  // one is the translation whose Job text equals the top-level one, whatever
+  // its key order; it always comes first, and the others only with allLanguages.
   const bilingual = {
     title: 'Senior QA Engineer (m/w/d)',
     careers_url: 'https://acme.recruitee.com/o/senior-qa',
@@ -411,21 +411,56 @@ try {
     fail(`markup copy = ${JSON.stringify(markupCopy.map(v => [v.language, v.title, v.description]))}`);
   }
 
-  // No translation equal to the top-level fields → the default language is
-  // unknown: one Job, top-level fields, no `language`, URL unchanged.
-  const unknownDefault = parseRecruiteeResponse({
+  // The default version is matched by the whole Job text, requirements
+  // included: a translation with the top-level title and description but other
+  // requirements is a further version, even when its key comes first. A
+  // missing field and an empty one produce the same text.
+  const requirementsDiffer = parseRecruiteeResponse({
     offers: [{
-      title: 'Backend Engineer',
-      careers_url: 'https://acme.recruitee.com/o/backend',
-      description: '<p>Top level</p>',
-      translations: { en: { title: 'Backend Engineer', description: '<p>Something else</p>' } },
+      title: 'Data Engineer (m/w/d)',
+      careers_url: 'https://acme.recruitee.com/o/data',
+      description: '<p>Acme</p>',
+      requirements: null,
+      translations: {
+        en: { title: 'Data Engineer (m/w/d)', description: '<p>Acme</p>', requirements: '<p>English is enough.</p>' },
+        de: { title: 'Data Engineer (m/w/d)', description: '<p>Acme</p>', requirements: '' },
+      },
     }],
   }, 'Acme', { allLanguages: true });
+  if (JSON.stringify(requirementsDiffer.map(v => [v.language, v.description])) === JSON.stringify([['de', 'Acme'], ['en', 'Acme English is enough.']])) {
+    pass('parseRecruiteeResponse matches the default version by title, description and requirements together');
+  } else {
+    fail(`requirements differ = ${JSON.stringify(requirementsDiffer.map(v => [v.language, v.description]))}`);
+  }
+
+  // No translation equal to the top-level fields → the default language is
+  // unknown. Without allLanguages: one Job, top-level fields, no `language`,
+  // URL unchanged. With it: every translation, tagged, in the API's order, and
+  // no untagged top-level Job next to them.
+  const unknownDefaultOffer = {
+    title: 'Backend Engineer (m/w/d)',
+    careers_url: 'https://acme.recruitee.com/o/backend',
+    description: '<p>Top level</p>',
+    translations: {
+      de: { title: 'Backend Engineer (m/w/d)', description: '<p>Top level, edited</p>' },
+      en: { title: 'Backend Engineer (m/f/d)', description: '<p>English</p>' },
+    },
+  };
+  const unknownDefault = parseRecruiteeResponse({ offers: [unknownDefaultOffer] }, 'Acme');
   if (unknownDefault.length === 1 && !('language' in unknownDefault[0])
     && unknownDefault[0].url === 'https://acme.recruitee.com/o/backend' && unknownDefault[0].description === 'Top level') {
     pass('parseRecruiteeResponse returns one top-level Job with no language when no translation matches the top-level fields');
   } else {
     fail(`unknown default = ${JSON.stringify(unknownDefault)}`);
+  }
+  const unknownDefaultAll = parseRecruiteeResponse({ offers: [unknownDefaultOffer] }, 'Acme', { allLanguages: true });
+  if (JSON.stringify(unknownDefaultAll.map(v => [v.language, v.url, v.description])) === JSON.stringify([
+    ['de', 'https://acme.recruitee.com/o/backend?lang=de', 'Top level, edited'],
+    ['en', 'https://acme.recruitee.com/o/backend?lang=en', 'English'],
+  ])) {
+    pass('parseRecruiteeResponse with allLanguages returns every translation, tagged, when none matches the top-level fields');
+  } else {
+    fail(`unknown default, all languages = ${JSON.stringify(unknownDefaultAll.map(v => [v.language, v.url, v.description]))}`);
   }
 
   // fetch() reads the language switch from ctx.dedupIncludeLanguage.

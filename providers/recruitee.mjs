@@ -84,16 +84,21 @@ function withLanguage(url, language) {
  * The language versions of one offer, its default language first.
  *
  * `translations` maps a language code to that version's `title`,
- * `description` and `requirements`. Nothing names the default language, so it
- * is the translation whose `title` and `description` equal the offer's own
- * top-level ones — the version the API serves without a language param. When
- * no translation matches, the language is unknown and the offer comes back
- * once, from its top-level fields, with no `language`.
+ * `description` and `requirements`. Each version, the offer's own top-level
+ * fields included, is compared by the Job text it produces (versionText): the
+ * trimmed title and the plain-text description and requirements. Nothing
+ * names the default language, so it is the translation whose Job text equals
+ * the top-level one — the version the API serves without a language param. A
+ * further translation with the same Job text as a version already returned is
+ * a copy under another label, not a translation, and is skipped.
  *
- * Further translations are returned only when `allLanguages` is true. A
- * translation that would come out as the same Job text as a version already
- * returned — same trimmed title and same plain-text description — is a copy
- * under another label, not a translation, and is skipped.
+ * Without `allLanguages`, the offer comes back once, from its top-level fields,
+ * tagged with the default language when one matches. With it, every
+ * translation comes back, the default one first; when none matches the
+ * top-level fields, the translations come back in the API's order, and the
+ * top-level fields, which would repeat one of them untagged, are left out.
+ * An offer with no usable translation comes back once from its top-level
+ * fields, with no `language`, either way.
  *
  * @param {any} j - One offer.
  * @param {boolean} allLanguages
@@ -101,23 +106,21 @@ function withLanguage(url, language) {
  */
 function languageVersions(j, allLanguages) {
   const top = versionText(j.title, j.description, j.requirements);
+  const versionKey = (v) => JSON.stringify([v.title, v.description]);
   const translations = j.translations && typeof j.translations === 'object' ? j.translations : {};
   const entries = Object.entries(translations)
-    .filter(([code, t]) => LANGUAGE_RE.test(code) && t && typeof t === 'object');
-  const defaultEntry = entries.find(([, t]) => t.title === j.title && t.description === j.description);
-  if (!defaultEntry) return [top];
-  const versions = [{ ...top, language: defaultEntry[0] }];
-  if (!allLanguages) return versions;
-  const versionKey = (v) => JSON.stringify([v.title, v.description]);
-  const seen = new Set([versionKey(top)]);
-  for (const [code, t] of entries) {
-    if (code === defaultEntry[0]) continue;
-    const version = versionText(t.title, t.description, t.requirements);
+    .filter(([code, t]) => LANGUAGE_RE.test(code) && t && typeof t === 'object')
+    .map(([code, t]) => ({ ...versionText(t.title, t.description, t.requirements), language: code }));
+  const defaultEntry = entries.find(v => versionKey(v) === versionKey(top));
+  const versions = defaultEntry ? [{ ...top, language: defaultEntry.language }] : [];
+  if (!allLanguages) return versions.length ? versions : [top];
+  const seen = new Set(versions.map(versionKey));
+  for (const version of entries) {
     if (!version.title || seen.has(versionKey(version))) continue;
     seen.add(versionKey(version));
-    versions.push({ ...version, language: code });
+    versions.push(version);
   }
-  return versions;
+  return versions.length ? versions : [top];
 }
 
 /**
@@ -353,9 +356,10 @@ function parseSalary(salary) {
  * - language: the offer's default language code, read from `translations`
  *   (see languageVersions); omitted when no translation matches the
  *   top-level fields. With `allLanguages` (scan_history.dedup_include_language)
- *   each further translation comes back as its own Job, after the default
- *   one, with its own title and description and the same location, date and
- *   salary. Every Job that carries a `language` carries it as `?lang=` on its
+ *   each translation comes back as its own Job, the default one first, with
+ *   its own title and description and the same location, date and salary;
+ *   when no translation matches the top-level fields, the translations alone
+ *   come back. Every Job that carries a `language` carries it as `?lang=` on its
  *   URL too, so the language versions of one offer share a dedup key in
  *   scan.mjs and are told apart by `language`. The translations ship in the
  *   same response, so no request is added.
