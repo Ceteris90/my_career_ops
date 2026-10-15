@@ -83,3 +83,13 @@ test("both tailored-CV lookups derive their key through this module", () => {
     );
   }
 });
+
+test("cv-pdf refuses cover downloads that lack a report number before the CV fallbacks", () => {
+  const src = readFileSync(join(HERE, "..", "..", "src", "app/api/cv-pdf/route.ts"), "utf8");
+  assert.match(
+    src,
+    /kind === "cover" && !n/,
+    "cover without n must 404 before application or company-slug CV fallbacks",
+  );
+});
+

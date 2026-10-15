@@ -48,7 +48,8 @@ export default async function ApplyPage({
   let cvText: string | null = null;
   try {
     cvText = fs.readFileSync(cvPath, "utf8");
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     cvText = null;
   }
   const fields = cvText == null ? { work: [], education: "" } : cvCopyFields(cvText);

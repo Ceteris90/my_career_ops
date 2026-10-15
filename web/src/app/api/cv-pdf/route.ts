@@ -36,6 +36,13 @@ export async function GET(req: NextRequest) {
   const application = (req.nextUrl.searchParams.get("application") ?? "").trim();
   const kind = req.nextUrl.searchParams.get("kind") === "cover" ? "cover" : "cv";
 
+  // Cover letters only resolve through the report-number index. The application
+  // and company-slug paths below are CV-only and would serve a tailored CV under
+  // a cover download link when kind=cover arrives without n.
+  if (kind === "cover" && !n) {
+    return new Response("indexed cover letter is unavailable", { status: 404 });
+  }
+
   // Preferred path: resolve the EXACT PDF indexed for this report number
   // (data/pdf-index.tsv). Two applications at the same company have two
   // different tailored CVs — the company-slug fallback below can't tell them
