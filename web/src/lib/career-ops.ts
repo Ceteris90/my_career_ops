@@ -278,7 +278,7 @@ export type LifecyclePhase = "first-run" | "in-between" | "established";
  * Server-side lifecycle, mirroring the core doctor.mjs prerequisite list with the
  * SAME existsSync semantics (the SSOT the OnboardingBanner already reads via
  * /api/doctor). The 4 user-layer prereqs: cv.md, config/profile.yml,
- * modes/_profile.md, portals.yml.
+ * modes/_profile.md, portals.yml (or CAREER_OPS_PORTALS).
  *   - first-run  → a TRULY empty install (no cv AND no data): the CV takeover.
  *     CRITICAL back-compat (maintainer): NEVER force onboarding on a user who
  *     already has data (a full pipeline/tracker with no cv.md is valid).
@@ -286,6 +286,12 @@ export type LifecyclePhase = "first-run" | "in-between" | "established";
  *   - established → all 4 prereqs present.
  * onboardingNeeded mirrors doctor.mjs: true if ANY prereq is missing → show banner.
  */
+/** Absolute portals.yml path: CAREER_OPS_PORTALS when set, else <root>/portals.yml. */
+export function portalsConfigPath(root = careerOpsRoot(), env: NodeJS.ProcessEnv = process.env): string {
+  const override = env.CAREER_OPS_PORTALS?.trim();
+  return override ? path.resolve(override) : path.join(root, "portals.yml");
+}
+
 export function doctorState(snapshot?: Pick<PipelineSummary, "applications" | "inbox">): {
   phase: LifecyclePhase;
   onboardingNeeded: boolean;
@@ -293,20 +299,28 @@ export function doctorState(snapshot?: Pick<PipelineSummary, "applications" | "i
   hasCv: boolean;
   hasData: boolean;
 } {
+  const root = careerOpsRoot();
   const has = (rel: string) => {
     try {
-      return fs.existsSync(path.join(careerOpsRoot(), rel));
+      return fs.existsSync(path.join(root, rel));
     } catch {
       return false;
     }
   };
-  const prereqs: [string, string][] = [
-    ["cv.md", "cv.md"],
-    ["config/profile.yml", "config/profile.yml"],
-    ["modes/_profile.md", "modes/_profile.md"],
-    ["portals.yml", "portals.yml"],
+  const hasPortals = () => {
+    try {
+      return fs.existsSync(portalsConfigPath(root));
+    } catch {
+      return false;
+    }
+  };
+  const prereqs: [string, string, () => boolean][] = [
+    ["cv.md", "cv.md", () => has("cv.md")],
+    ["config/profile.yml", "config/profile.yml", () => has("config/profile.yml")],
+    ["modes/_profile.md", "modes/_profile.md", () => has("modes/_profile.md")],
+    ["portals.yml", "portals.yml", hasPortals],
   ];
-  const missing = prereqs.filter(([rel]) => !has(rel)).map(([, label]) => label);
+  const missing = prereqs.filter(([, , check]) => !check()).map(([, label]) => label);
   const hasCv = has("cv.md");
   // Home already reads these files. Reuse that snapshot so its setup check
   // neither parses the tracker twice nor disagrees with the rendered queue.
