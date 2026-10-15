@@ -36,7 +36,7 @@ import { fetchTextWithRetry, sleep } from './_http.mjs';
 //   version comes back; each posting's default-language version first, which
 //   scan.mjs's language-aware URL dedup relies on. A careers_url language does
 //   not narrow this: it and then the preferred languages are only fetched
-//   first, so the cap never drops them.
+//   first, so the cap skips the other languages before a preferred one.
 // The extra fetches are skipped under a health probe (`ctx.maxPages`), which
 // needs one listing request and nothing more.
 //
@@ -214,7 +214,7 @@ export default {
  * and the versions already collected stand. Languages past MAX_EXTRA_LANGUAGES
  * are not fetched, with a warning; the order is the careers_url language
  * first, then the preferred languages best first, then code order, so the cap
- * never drops a language that was asked for.
+ * skips the languages nobody asked for before one that was asked for.
  *
  * @param {string} companyName
  * @param {string} host

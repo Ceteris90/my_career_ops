@@ -649,7 +649,7 @@ try {
     }));
     const fetched = calls.slice(1).map(url => url.replace(`${BASE}?language=`, ''));
     if (JSON.stringify(fetched) === JSON.stringify(['it', 'fr', 'ar', 'cs', 'da'])) {
-      pass('personio.fetch() with dedupIncludeLanguage: the preferred languages come first, best first, so the cap never drops them');
+      pass('personio.fetch() with dedupIncludeLanguage: the preferred languages come first, best first, so the cap skips the other languages first');
     } else {
       fail(`personio.fetch() preferred languages under the cap: fetched ${JSON.stringify(fetched)}`);
     }
