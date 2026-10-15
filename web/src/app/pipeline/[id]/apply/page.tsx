@@ -88,9 +88,7 @@ export default async function ApplyPage({
       cvMissing={cvText == null}
       tips={PORTAL_TIPS}
       trackerNum={app?.n ?? null}
-      reportNum={reportNum}
       status={app?.status ?? ""}
-      pdfReady={(app?.pdf ?? "").includes("✅")}
     />
   );
 }
