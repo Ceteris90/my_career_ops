@@ -13,7 +13,7 @@ import { pass, fail, rmSync } from './helpers.mjs';
 import {
   DOCS_END, DOCS_START, applyToSheet, contactLine, cvEmail, docsBlock, genericCvPath, patchSheet, prepareDocs, summary, syncSent,
 } from '../freemotion-night/prepare-docs.mjs';
-import { chainWriter, WRITER_ORDER } from '../lib/doc-writers.mjs';
+import { chainWriter, webWriter, WRITER_ORDER } from '../lib/doc-writers.mjs';
 import { foldLedger, readLedger } from '../lib/cv-experiment.mjs';
 import { LETTER_SPEC } from '../lib/letter-experiment.mjs';
 import { savePostingTexts } from '../lib/posting-text.mjs';
@@ -52,7 +52,33 @@ const check = (label, actual, expected) => {
 
 // ── writers ──────────────────────────────────────────────────────────────
 {
-  check('codex writes first, whichever driver runs the job', WRITER_ORDER, ['codex', 'agy', 'sonnet1', 'copilot']);
+  check('the two websites write first, then codex, whichever driver runs the job', WRITER_ORDER, ['gemini-web', 'chatgpt-web', 'codex', 'agy', 'sonnet1', 'copilot']);
+
+  // A website writer: lib/web-llm.py's exit code decides what happens (0 answer, 2 signed out, 3 limit).
+  const web = mkdtempSync(join(tmpdir(), 'fm-web-'));
+  try {
+    writeFileSync(join(web, 'agent-inbox.mjs'), "import { appendFileSync } from 'fs'; appendFileSync('data/agent-inbox.md', `- [ ] ${process.argv[3]}\\n`);\n");
+    mkdirSync(join(web, 'data'));
+    const answers = (...rs) => { const seen = []; const run = async (cmd) => { seen.push(cmd); return rs.shift(); }; run.seen = seen; return run; };
+    const outFile = (n) => join(web, 'tmp/fm/night/out', n);
+
+    let run = answers({ code: 0, out: 'Here:\n```json\n{"a": 1}\n```', err: '' });
+    check('an answer is read as JSON, through lib/web-llm.py', [(await webWriter('gemini', { run, root: web })('ctx')).payload, /web-llm\.py" ask gemini$/.test(run.seen[0])], [{ a: 1 }, true]);
+
+    run = answers({ code: 0, out: '{ "p": [ broken ] }', err: '' }, { code: 0, out: '{"p": ["fixed"]}', err: '' });
+    check('broken JSON is asked once more', [(await webWriter('chatgpt', { run, root: web })('ctx')).payload, run.seen.length], [{ p: ['fixed'] }, 2]);
+
+    const errOf = async (p) => { try { await p; return ''; } catch (e) { return e.message; } };
+    run = answers({ code: 3, out: '', err: 'web-llm: gemini: limit (UsageLimitExceeded)' });
+    const limitMsg = await errOf(webWriter('gemini', { run, root: web })('ctx'));
+    const back = Number(readFileSync(outFile('gemini-web'), 'utf8')) * 1000 - Date.now();
+    check('at its limit a site is marked out for about 3 hours', [/limit/.test(limitMsg), back > 2.9 * 3600e3 && back < 3.1 * 3600e3], [true, true]);
+
+    for (let i = 0; i < 2; i++) await errOf(webWriter('chatgpt', { run: answers({ code: 2, out: '', err: 'web-llm: chatgpt: signed out' }), root: web })('ctx'));
+    const inbox = readFileSync(join(web, 'data/agent-inbox.md'), 'utf8').split('\n').filter(Boolean);
+    check('signed out: marked out for a day and ONE inbox note to sign in again',
+      [existsSync(outFile('chatgpt-web')), inbox.length, /chatgpt is signed out: run `python lib\/web-llm\.py signin`/.test(inbox[0])], [true, 1, true]);
+  } finally { rmSync(web, { recursive: true, force: true }); }
   const calls = [];
   const writers = {
     agy: async () => { calls.push('agy'); throw new Error('quota exhausted'); },
