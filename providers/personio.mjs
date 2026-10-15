@@ -29,8 +29,8 @@ import { fetchTextWithRetry, sleep } from './_http.mjs';
 //   posting has it.
 // - `ctx.preferredLanguageRank` (portals.yml preferred_languages), no
 //   careers_url language: one more fetch of `/` per preferred language some
-//   posting has, so those versions come back next to the default one and
-//   scan.mjs keeps the best-ranked one.
+//   posting has, up to MAX_EXTRA_LANGUAGES, so those versions come back next
+//   to the default one and scan.mjs keeps the best-ranked one.
 // - `ctx.dedupIncludeLanguage` (scan_history.dedup_include_language): one more
 //   fetch of `/` per further language, up to MAX_EXTRA_LANGUAGES, so every
 //   version comes back; each posting's default-language version first, which

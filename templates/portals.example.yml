@@ -71,7 +71,7 @@
 # under one URL. With the switch off they return each posting in its own
 # default language only (plus the preferred_languages versions, below, of
 # which the scan still keeps one); with it on they return every version —
-# Personio at one extra request per further language, Recruitee from the
+# Personio at one extra request per further language (at most 5), Recruitee from the
 # response it already fetches.
 #
 # scan_history:
@@ -90,8 +90,8 @@
 # language, and the preferred ones come first. Regional variants count as one
 # language (en-GB equals en).
 #
-# Personio fetches one more careers page per preferred language; Recruitee
-# needs no extra request. To set the language of one company only, put the
+# Personio fetches one more careers page per preferred language some posting
+# has (at most 5); Recruitee needs no extra request. To set the language of one company only, put the
 # ATS's own language param on its careers_url — `?language=xx` on Personio,
 # `?lang=xx` on Recruitee; with dedup_include_language off it overrides this
 # list for that entry, and with it on every version comes back anyway.
