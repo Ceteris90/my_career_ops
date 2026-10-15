@@ -186,6 +186,12 @@ test('generate-pdf: --format still outranks auto and --country', () => {
   assert.match(res.stdout, /📏 Format: LETTER/, res.stdout + res.stderr);
 });
 
+test('generate-pdf: a bare --country with no value fails instead of being dropped', () => {
+  const res = runPdf(workspace('auto'), '--country');
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /Invalid country ""/);
+});
+
 test('generate-pdf: a malformed --country fails loudly, like a bad --format', () => {
   const res = runPdf(workspace('auto'), '--country=Germany');
   assert.equal(res.status, 1);

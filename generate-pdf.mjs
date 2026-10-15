@@ -1501,6 +1501,10 @@ async function generatePDF() {
       format = arg.split('=')[1].toLowerCase();
     } else if (arg.startsWith('--country=')) {
       country = arg.slice('--country='.length);
+    } else if (arg === '--country') {
+      // A flag missing its operand, not an absent flag: left alone it falls through
+      // to the positional arms and the render succeeds on the default sheet.
+      country = '';
     } else if (arg.startsWith('--report=')) {
       reportSupplied = true;
       reportNum = arg.split('=')[1].trim();
