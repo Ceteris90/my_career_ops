@@ -382,9 +382,12 @@ export async function installLivenessRouteGuard(page) {
 }
 
 // One navigation of the page (a goto or a reload). If it fails, wait for the
-// main frame's next commit, Chromium's error page, so the page is settled for
-// whatever navigates it next (see FAILED_NAVIGATION_COMMIT_MS). A lighter page
-// double without waitForEvent skips the wait.
+// main frame to commit Chromium's error page, so the page is settled for
+// whatever navigates it next (see FAILED_NAVIGATION_COMMIT_MS). No other
+// navigation ends the wait: a child frame's, or the old page changing its own
+// URL (a fragment or history change fires framenavigated too), would let the
+// next goto start before the error page commits and interrupts it. A lighter
+// page double without waitForEvent skips the wait.
 async function navigateSettled(page, navigate) {
   try {
     return await navigate();
@@ -393,7 +396,7 @@ async function navigateSettled(page, navigate) {
     if (canWait && err?.name !== 'TimeoutError') {
       await page
         .waitForEvent('framenavigated', {
-          predicate: (frame) => frame === page.mainFrame(),
+          predicate: (frame) => frame === page.mainFrame() && frame.url().startsWith('chrome-error:'),
           timeout: FAILED_NAVIGATION_COMMIT_MS,
         })
         .catch(() => {});

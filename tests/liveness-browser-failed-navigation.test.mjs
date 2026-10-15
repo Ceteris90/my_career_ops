@@ -26,13 +26,17 @@ const posting = (n) => `https://careers.example/jobs/${n}`;
 // after its goto; a failed one rejects at once, and its error page commits
 // 5 ms later, after a frame of the old page has navigated; a commit that lands
 // while a goto waits for its own fails that goto as interrupted, and the
-// interrupted navigation still commits.
-function chromiumLikePage({ failing = [], timingOut = [] }) {
-  const main = {};
-  const child = {};
-  const listeners = new Set();
+// interrupted navigation still commits. With fragmentFirst, the old page also
+// changes its own fragment before the error page commits.
+function chromiumLikePage({ failing = [], timingOut = [], fragmentFirst = false }) {
   let current = 'about:blank';
+  const main = { url: () => current };
+  const child = { url: () => 'https://widgets.example/frame' };
+  const listeners = new Set();
   let waiting = null;
+  const notify = (frame) => {
+    for (const listener of [...listeners]) listener(frame);
+  };
   const commit = (frame, url) => {
     if (frame === main) {
       current = url;
@@ -41,9 +45,16 @@ function chromiumLikePage({ failing = [], timingOut = [] }) {
       if (goto?.url === url) goto.resolve({ status: () => 200 });
       else goto?.reject(new Error(`page.goto: Navigation to "${goto.url}" is interrupted by another navigation to "${url}"`));
     }
-    for (const listener of [...listeners]) listener(frame);
+    notify(frame);
+  };
+  // A same-document navigation fires framenavigated too, but a goto waits for
+  // a new document, so it neither completes nor interrupts one.
+  const changeFragment = (fragment) => {
+    current = `${current.split('#')[0]}#${fragment}`;
+    notify(main);
   };
   const failNavigation = (url) => {
+    if (fragmentFirst) setTimeout(() => changeFragment('apply'), 1);
     setTimeout(() => commit(child, 'https://widgets.example/frame'), 2);
     setTimeout(() => commit(main, 'chrome-error://chromewebdata/'), 5);
     throw new Error(`net::ERR_CONNECTION_FAILED at ${url}`);
@@ -110,6 +121,11 @@ expectCodes(
   'two failed navigations in a row, then a posting that reads active',
   await codes(chromiumLikePage({ failing: [failed, failedToo] }), [failed, failedToo, posting(1)]),
   ['navigation_error', 'navigation_error', 'apply_control_visible'],
+);
+expectCodes(
+  'the old page changing its fragment does not end the wait before the error page',
+  await codes(chromiumLikePage({ failing: [failed], fragmentFirst: true }), [posting(1), failed, posting(2)]),
+  ['apply_control_visible', 'navigation_error', 'apply_control_visible'],
 );
 expectCodes(
   'a failed BambooHR reload does not break the check after it',
