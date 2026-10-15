@@ -5,15 +5,15 @@
  *
  *   node freemotion-night/followups.mjs              log what was sent, pick, write, check, save drafts in Gmail
  *   node freemotion-night/followups.mjs --dry-run    the same without saving: drafts printed and kept in tmp/fm/followups/
- *   options: --max 20 (a week) · --days 7 (since applying) · --writers codex,agy,sonnet1,copilot
+ *   options: --max 20 (a week) · --days 7 (since applying) · --writers chatgpt-web,gemini-web,codex,agy,sonnet1,copilot
  *
  * NOTHING IS SENT. The user reads, edits and sends every draft from Gmail (user, 2026-10-04): each one is a
  * reply in the thread of the employer's acknowledgement email, to the recruiter or a relay that forwards to
  * them (followups.py explains who qualifies). The next run finds the ones he sent and logs them in
  * data/follow-ups.md (channel Email), under the same lock as the other follow-up tools.
  *
- * Each draft: written by the first writer that answers (Codex first: the user finds its writing smoother,
- * 2026-10-08), from cv.md, the posting text, voice-dna.md and the acknowledgement; then checked like a short
+ * Each draft: written by the first writer that answers (the ChatGPT website first, then Gemini's, then Codex: the
+ * user wants ChatGPT for all writing, 2026-10-15), from cv.md, the posting text, voice-dna.md and the acknowledgement; then checked like a short
  * letter (lib/letter-check.mjs: thread language, 35–120 words, no number missing from the CV, no em dash,
  * no AI tells, no opening repeated from another draft). Refused twice: no draft for that application.
  */
@@ -22,7 +22,7 @@ import { spawnSync } from 'child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { chainWriter } from '../lib/doc-writers.mjs';
+import { chainWriter, isOut } from '../lib/doc-writers.mjs';
 import { isMainModule } from '../lib/is-main-module.mjs';
 import { checkLetter, openingOf, parseVoiceDna } from '../lib/letter-check.mjs';
 import { loadPostingTexts } from '../lib/posting-text.mjs';
@@ -115,7 +115,7 @@ async function main() {
   const voiceText = existsSync(voiceFile) ? (readFileSync(voiceFile, 'utf8').split(/^## 2\./m)[0]) : '';
   const voiceRules = existsSync(voiceFile) ? parseVoiceDna(voiceFile) : undefined;
   const texts = loadPostingTexts(ROOT, candidates.map((c) => c.url).filter(Boolean));
-  const write = chainWriter({ names: opt('--writers', 'codex,agy,sonnet1,copilot').split(',') });
+  const write = chainWriter({ names: opt('--writers', 'chatgpt-web,gemini-web,codex,agy,sonnet1,copilot').split(','), skip: (n) => isOut(n, ROOT) });
 
   const drafts = [];
   for (const c of candidates) {
