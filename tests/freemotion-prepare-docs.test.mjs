@@ -52,7 +52,7 @@ const check = (label, actual, expected) => {
 
 // ── writers ──────────────────────────────────────────────────────────────
 {
-  check('the two websites write first, then codex, whichever driver runs the job', WRITER_ORDER, ['gemini-web', 'chatgpt-web', 'codex', 'agy', 'sonnet1', 'copilot']);
+  check('ChatGPT writes first, then the Gemini website, then codex, whichever driver runs the job', WRITER_ORDER, ['chatgpt-web', 'gemini-web', 'codex', 'agy', 'sonnet1', 'copilot']);
 
   // A website writer: lib/web-llm.py's exit code decides what happens (0 answer, 2 signed out, 3 limit).
   const web = mkdtempSync(join(tmpdir(), 'fm-web-'));
