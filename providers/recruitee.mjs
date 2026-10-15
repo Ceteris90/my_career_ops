@@ -130,8 +130,6 @@ function withLanguage(url, language) {
  * untagged, are left out. An offer with no usable translation comes back once
  * from its top-level fields, with no `language`, either way.
  *
- * @param {any} j - One offer.
- * @param {boolean} allLanguages
  * A careers_url language (`entryLanguage`) decides alone for that entry when
  * `allLanguages` is off: the offer comes back once, in that translation
  * wherever the offer has it, else as it would with no preferred language.
