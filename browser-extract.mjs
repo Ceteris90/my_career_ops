@@ -49,6 +49,7 @@ import * as yaml from 'js-yaml';
 import { LIVENESS_CONTEXT_OPTIONS, rejectPrivateOrInvalid } from './liveness-browser.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { resolveAtsApi, JD_TEXT_API_ATS } from './liveness-api.mjs';
+import { classifyLiveness } from './liveness-core.mjs';
 import { decodeEntities } from './providers/_html-entities.mjs';
 import { isWorkModelOnly } from './providers/greenhouse.mjs';
 import { DEFAULT_USER_AGENT } from './user-agent.mjs';
@@ -71,18 +72,6 @@ const WORKDAY_TIMEOUT_MS = 10_000;
 // Only jd mode gets this guard: an empty `listing` result is legitimate — a
 // company with no open roles.
 const MIN_JD_TEXT_CHARS = 200;
-const EXPLICITLY_UNAVAILABLE_PAGE = /no longer available|job unavailable|(?:position|job) has been filled|posting closed|no longer accepting applications|the page you are looking for doesn'?t exist|job post no longer exists|page not found|role does not exist/i;
-
-/**
- * True when the text carries explicit "this posting is gone" copy. Pure —
- * exported for tests. Only meaningful for a page too short to be a JD: a real
- * posting can mention these phrases in its body ("we are no longer accepting
- * applications from agencies"), so callers must not apply it to a full JD.
- * @param {unknown} text
- */
-export function isExplicitlyUnavailablePage(text) {
-  return EXPLICITLY_UNAVAILABLE_PAGE.test(String(text || ''));
-}
 
 // Anchor labels that are navigation chrome, not job postings. Kept small and
 // lowercase; matched against the trimmed label.
@@ -154,7 +143,7 @@ export function normalizeJd(raw, finalUrl, textCap = JD_TEXT_CAP) {
     // For the liveness check in jdFailure() only. `text` has had nav/header/footer
     // stripped, and an expired-posting banner often sits in one of them. Never
     // emitted on the success path.
-    bodyText: compactText(raw?.bodyText || '', 4000),
+    bodyText: compactText(raw?.bodyText || '', 4100),
   };
 }
 
@@ -727,8 +716,18 @@ export async function fetchJdViaKnownApi(url, textCap = JD_TEXT_CAP, timeoutMs =
 export function jdFailure(result, maxChars) {
   const floor = Math.min(MIN_JD_TEXT_CHARS, maxChars);
   if (result.text.length >= floor) return null;
-  const gone = [result.text, result.bodyText].find((t) => isExplicitlyUnavailablePage(t));
-  if (gone) return { error: compactText(gone, 500), code: 'unavailable', url: result.url };
+  // The shared liveness classifier, not a second phrase list. Only its
+  // posting-specific expiry verdicts count: `insufficient_content` is what a
+  // page that has not rendered yet looks like (liveness-browser treats it the
+  // same way), so it stays empty_text and remains worth retrying.
+  const verdict = classifyLiveness({
+    requestedUrl: result.url,
+    finalUrl: result.url,
+    bodyText: `${result.text}\n${result.bodyText || ''}`,
+  });
+  if (verdict.result === 'expired' && (verdict.code === 'expired_body' || verdict.code === 'expired_body_soft')) {
+    return { error: `posting is no longer available (${verdict.reason})`, code: 'unavailable', url: result.url };
+  }
   return {
     error: `extracted ${result.text.length} chars of JD text (minimum ${floor}) — the page most likely renders its content client-side`,
     code: 'empty_text',
@@ -938,7 +937,10 @@ export async function readDom(page) {
 
     // The unstripped body: `text` above removes nav/header/footer, where an
     // expired-posting banner often lives.
-    const bodyText = (document.body?.innerText || '').slice(0, 4000);
+    // Head and tail, so a banner in the footer is still in the sample when the
+    // leading content fills the first 4000 characters.
+    const fullBody = document.body?.innerText || '';
+    const bodyText = fullBody.length > 4000 ? `${fullBody.slice(0, 2000)}\n…\n${fullBody.slice(-2000)}` : fullBody;
 
     return { title, text, anchors, jsonLdDescription, jsonLdTitle, bodyText };
   });
