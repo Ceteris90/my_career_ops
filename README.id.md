@@ -40,7 +40,7 @@ Saya pengguna pertamanya. Saya dapat pekerjaannya. Lalu&nbsp;saya&nbsp;jadikan&n
 
 <p align="center">
 Tempel info lowongan. Di komputer Anda, alat ini mengecek apakah lowongan masih&nbsp;buka dan cocok untuk&nbsp;Anda.<br>
-CV disesuaikan dan draf jawaban disiapkan. <strong>Anda&nbsp;yang&nbsp;tekan&nbsp;Submit.</strong>
+CV disesuaikan dan draf jawaban disiapkan. <strong>Anda&nbsp;yang&nbsp;menekan&nbsp;Submit.</strong>
 </p>
 
 <p align="center">
@@ -183,7 +183,7 @@ Alat ini menyusun ulang kalimat di CV Anda, tetapi pantang mengarang bebas. Peng
 | **Skrip Negosiasi** | Kerangka kerja negosiasi gaji, cara menanggapi potongan gaji berbasis lokasi geografis, serta pemanfaatan tawaran kerja lain (*competing offer*) |
 | **Draf Email Lamaran** | Draf email lamaran formal untuk jalur rekruter, *referral*, maupun *cold email* dari laporan atau teks JD, lengkap dengan subjek, daftar periksa lampiran, poin kecocokan berbasis sumber asli, dan blok kontak dari profil Anda. Hanya berupa draf -- career-ops tidak pernah mengirim, mengajukan, atau mengeklik apa pun. |
 | **Pemindai Portal** | Lebih dari 100 perusahaan sudah dikonfigurasi dari awal (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + kueri pencarian web kustom lintas Ashby, Greenhouse, Lever, Wellfound |
-| **Penemuan Perusahaan Baru Pendanaan** | Perintah `company:funded` yang mengutamakan peninjauan (*review-first*) menampilkan daftar perusahaan yang baru mendapat pendanaan beserta diagnostik sumber dari *feed* publik terstruktur tanpa mengubah data Anda |
+| **Penemuan Perusahaan yang Baru Mendapat Pendanaan** | Perintah `company:funded` yang mengutamakan peninjauan (*review-first*) menampilkan daftar perusahaan yang baru mendapat pendanaan beserta diagnostik sumber dari *feed* publik terstruktur tanpa mengubah data Anda |
 | **Pemrosesan Batch** | Evaluasi paralel menggunakan *worker* CLI *headless* (`claude -p` / `opencode run`) |
 | **Dashboard TUI** | Antarmuka terminal (TUI) untuk menjelajahi, memfilter, dan mengurutkan *pipeline* lamaran Anda |
 | **Integritas Pipeline** | Penggabungan (*merge*) otomatis, penghapusan duplikat, normalisasi status, dan pemeriksaan kesehatan data |
