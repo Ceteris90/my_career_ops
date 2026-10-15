@@ -359,7 +359,13 @@ function readableRuns(parts) {
   parts.forEach((p, k) => {
     if (p.op === "del") del += p.text;
     else if (p.op === "ins") ins += p.text;
-    else if ((del || ins) && k < parts.length - 1 && isShort(p.text)) {
+    else if (
+      (del || ins) &&
+      k < parts.length - 1 &&
+      isShort(p.text) &&
+      ((parts[k - 1]?.op === "del" && parts[k + 1]?.op === "ins") ||
+        (parts[k - 1]?.op === "ins" && parts[k + 1]?.op === "del"))
+    ) {
       del += p.text;
       ins += p.text;
     } else {

@@ -258,10 +258,21 @@ test("wordDiff keeps a trailing comma apart from its word", () => {
   ]);
 });
 
-test("wordDiff folds short unchanged words inside a rewrite into one removed and one inserted run", () => {
+test("wordDiff folds a short unchanged run only when it sits between a deletion and an insertion", () => {
   assert.deepEqual(wordDiff("built internal MLOps tooling: model registry", "as technical lead, mentoring the model registry"), [
-    { op: "del", text: "built internal MLOps tooling: " },
-    { op: "ins", text: "as technical lead, mentoring the " },
+    { op: "del", text: "built internal MLOps tooling:" },
+    { op: "ins", text: "as technical lead, mentoring" },
+    { op: "same", text: " " },
+    { op: "ins", text: "the " },
     { op: "same", text: "model registry" },
+  ]);
+});
+
+test("wordDiff keeps a short unchanged run between two insertions out of both change runs", () => {
+  assert.deepEqual(wordDiff("alpha gamma", "alpha beta, gamma delta"), [
+    { op: "same", text: "alpha " },
+    { op: "ins", text: "beta, " },
+    { op: "same", text: "gamma" },
+    { op: "ins", text: " delta" },
   ]);
 });
