@@ -19,7 +19,7 @@ import * as yaml from 'js-yaml';
 // EPERM/EACCES/EBUSY under contention while this file still treated anything
 // but EEXIST as fatal, killing a writer and losing its item.
 import {
-  isMkdirContention, isRmContention, rmLockArtifactSync, createLockWaitPolicy,
+  isMkdirContention, isRmContention, rmLockArtifactSync, createLockWaitPolicy, sameLockDirectory,
   lockRecoveryVerdict, RECOVER_STALE,
 } from './pipeline-lock.mjs';
 import { normalizeTextKey } from './tracker-parse.mjs';
@@ -400,11 +400,6 @@ function readLockOwner(lockDir) {
   } catch {
     return null;
   }
-}
-
-function sameLockDirectory(left, right) {
-  return left.dev === right.dev && left.ino === right.ino
-    && (left.ino !== 0 || left.birthtimeMs === right.birthtimeMs);
 }
 
 // The recovery judgment comes from pipeline-lock rather than a second copy of

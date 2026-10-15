@@ -74,11 +74,12 @@ test('gmail plugin gates saveProcessedIds behind !ctx.dryRun (#2354)', async () 
     log: () => {},
   };
   
-  // The plugin keeps its cursor at data/gmail-state.json under the working
-  // directory, so give it a working directory of its own. node:test runs this
-  // file in its own process, which makes the chdir private to it. This used to
-  // overwrite the checkout's live data/gmail-state.json and put it back in
-  // `finally`, which an interrupted run never reaches (#5113).
+  // The plugin keeps its cursor at data/gmail-state.json under ctx.dataRoot, and
+  // reads one under the working directory when the data root has none. Give it
+  // one scratch directory as both, so neither path can reach the checkout's live
+  // data/gmail-state.json. node:test runs this file in its own process, which
+  // makes the chdir private to it. This used to overwrite that file and put it
+  // back in `finally`, which an interrupted run never reaches (#5113).
   const workDir = mkdtempSync(join(tmpdir(), 'co-gmail-dryrun-'));
   const statePath = join(workDir, 'data', 'gmail-state.json');
   mkdirSync(join(workDir, 'data'));
@@ -91,7 +92,7 @@ test('gmail plugin gates saveProcessedIds behind !ctx.dryRun (#2354)', async () 
     process.chdir(workDir);
     // Run the ingest logic (suppress expected spoof warning)
     console.warn = () => {};
-    await gmailMod.default.ingest(mockCtx);
+    await gmailMod.default.ingest({ ...mockCtx, dataRoot: workDir });
 
     const newState = readFileSync(statePath, 'utf8');
     if (newState === preTestContent) {

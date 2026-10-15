@@ -6,6 +6,7 @@ import { Loader2, Radar, Wrench } from "lucide-react";
 import { CompanyLogo } from "@/components/company-logo";
 import { useJobs, type Job } from "@/components/jobs/job-store";
 import { cn } from "@/lib/cn";
+import type { WatchedCompany } from "@/lib/portals-config.mjs";
 
 type Company = { name: string; status: string; detail: string };
 type Result = { available: boolean; configured: boolean; companies: Company[]; error?: string };
@@ -18,7 +19,7 @@ const TONE: Record<string, { dot: string; label: string; chip: string }> = {
 };
 const ORDER: Record<string, number> = { broken: 0, empty: 1, live: 2, skipped: 3 };
 
-export function PortalsView() {
+export function PortalsView({ watched }: { watched: WatchedCompany[] }) {
   const [res, setRes] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
   const { jobs, startJob } = useJobs();
@@ -61,6 +62,8 @@ export function PortalsView() {
         </button>
         {loading && <span className="text-xs text-faint">Probing each company&apos;s ATS… (~30–60s)</span>}
       </div>
+
+      {!res && watched.length > 0 && <WatchedList watched={watched} />}
 
       {res && !res.available && !res.error && (
         <p className="mt-4 rounded-xl border border-dashed border-border bg-surface/30 p-4 text-sm text-muted">
@@ -145,5 +148,32 @@ function FixAffordance({ company, job, onFix }: { company: string; job?: Job; on
     >
       <Wrench className="size-3" /> Fix
     </button>
+  );
+}
+
+function WatchedList({ watched }: { watched: WatchedCompany[] }) {
+  const scanned = watched.filter((c) => c.enabled).length;
+  return (
+    <div className="mt-5">
+      <p className="text-sm text-muted">
+        <span className="tabular-nums text-foreground">{scanned}</span> scanned ·{" "}
+        <span className="tabular-nums">{watched.length - scanned}</span> paused · run a health check to see which boards
+        still answer
+      </p>
+      <ul className="mt-4 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface/40">
+        {watched.map((c, i) => (
+          <li key={`${i}-${c.name}`} className={cn("flex items-center gap-3 px-4 py-2.5", !c.enabled && "opacity-60")}>
+            <CompanyLogo name={c.name} size={20} />
+            <span className="shrink-0 text-sm font-medium">{c.name}</span>
+            <span className="truncate font-mono text-xs text-faint">{c.host}</span>
+            {!c.enabled && (
+              <span className="ml-auto shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                paused
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

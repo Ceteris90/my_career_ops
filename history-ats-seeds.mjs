@@ -1,8 +1,8 @@
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { atsVendorOf } from './ats-vendor.mjs';
 import { parseScanHistoryLine } from './lib/scan-history-columns.mjs';
-import { detectColumns, extractCellUrl, extractTrackerReportNumbers, isHeaderRow, isSeparatorRow } from './tracker-parse.mjs';
+import { detectColumns, extractCellUrl, extractTrackerReportNumbers, isHeaderRow, isSeparatorRow, reportUrlForNumbers as reportUrlFromReports } from './tracker-parse.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { resolveWorkspaceRoot } from './tracker-utils.mjs';
 
@@ -76,20 +76,7 @@ function linkedReportNumbers(reportCell, notesCell) {
 }
 
 export function reportUrlForNumbers(reportNumbers, reportsRoot, accept = atsVendorOf) {
-  if (!reportsRoot || !existsSync(reportsRoot) || reportNumbers.length === 0) return null;
-  let filenames;
-  try { filenames = readdirSync(reportsRoot); } catch { return null; }
-  for (const reportNum of reportNumbers) {
-    const reportName = filenames.find((name) => new RegExp(`^0*${reportNum}-.*\\.md$`, 'i').test(name));
-    if (!reportName) continue;
-    let report;
-    try { report = readFileSync(path.join(reportsRoot, reportName), 'utf-8'); } catch { continue; }
-    const match = report.match(/\*\*URL:\*\*[ \t]*(\S+)/);
-    if (!match) continue;
-    const url = match[1].replace(/[),.;]+$/, '').replace(/^<|>$/g, '');
-    if (accept(url)) return url;
-  }
-  return null;
+  return reportUrlFromReports(reportNumbers, reportsRoot, accept);
 }
 
 export function parseTrackerAtsSeeds(text, { reportsRoot } = {}) {
