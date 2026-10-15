@@ -22,6 +22,8 @@ When the candidate pastes a **URL** (not JD text), confirm the posting is still 
 
 Do not continue to Block A until this gate is resolved. The snapshot captured here is reused by Block G's freshness signals.
 
+**Session title:** once a real JD is read and the role and employer are known, apply the router's **Session Title** rule (`SKILL.md`, #5303): rename an interactive session to `{Role}, {Company}` when the host allows it. On an `auto-pipeline` handoff this already happened in its Step 0.
+
 ## Blacklist gate (#1742)
 
 If `data/blacklist.md` exists, check both the posting's company and posting URL against it before Block A. The file is the candidate's own do-not-apply list (user layer, opt-in): absent file = no gate, and nothing ever adds a company to it automatically. For `Scope: company` (also the default for blank or unsupported scopes), match the company case- and punctuation-insensitively. For `Scope: domain`, treat the Company cell as a hostname suffix: compare it with the posting URL's hostname, ignoring case and a trailing dot, and match only the exact host or a subdomain (`ibm.com` matches `jobs.ibm.com`, never `notibm.com`). Keep dots and hyphens distinct. If the URL is missing or invalid, domain rules cannot match; still check company rules.
