@@ -606,6 +606,7 @@ Then include:
 - `## Risk Summary`
 - `## Score Evidence`
 - `## Extracted Keywords`
+- `## Keyword Coverage`, the block `node keyword-match.mjs {report-path}` prints, pasted after the keyword list. A report without both sections leaves the coverage check in `modes/pdf.md` Step 22 with nothing to read.
 
 Translate these human-facing headings according to `language.output` when it is not English. Keep `## Machine Summary`, the `## Job Description (archived verbatim)` heading, and the YAML keys exact for downstream parsers: `check-jd-archive.mjs` matches the archive heading by its literal English `## Job Description` prefix, so a translated heading reports a real archive as missing.
 
