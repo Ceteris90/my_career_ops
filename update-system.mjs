@@ -1451,25 +1451,20 @@ function newestBackupBranch(branches) {
     .sort((a, b) => b.timestamp - a.timestamp);
 
   return timestamped[0]?.branch || branchList[0];
-} 
+}
 
 // A newer backup with no paired target (a retry that died before the fetch
 // pinned one) must not hide an older backup that still can name its release.
 function rollbackBackupBranch(branches) {
-  const branchList = branches.split('\n').map(b => b.trim()).filter(Boolean);
-  const timestamped = branchList
-    .map(branch => ({ branch, timestamp: backupTimestamp(branch) }))
-    .filter(entry => entry.timestamp > 0)
-    .sort((a, b) => b.timestamp - a.timestamp);
-  for (const { branch } of timestamped) {
+  const paired = newestBackupBranch(branches, (branch) => {
     try {
       git('show-ref', '--verify', '--quiet', targetRefForBackup(branch));
       return branch;
     } catch {
       // This backup has no paired target. Try the next older one.
     }
-  }
-  return newestBackupBranch(branches);
+  });
+  return paired || newestBackupBranch(branches);
 }
 
 export function parsePositiveInt(value, fallback) {
