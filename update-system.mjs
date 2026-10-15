@@ -614,6 +614,7 @@ const SYSTEM_PATHS = [
   'lib/freemotion-browser-mode.mjs',
   'lib/camoufox-page.mjs',
   'lib/doc-writers.mjs',
+  'lib/web-llm.py',
   'lib/freemotion-browser/',
   'freemotion-night/',
   'config/freemotion-candidate.example.md',

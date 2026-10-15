@@ -54,7 +54,7 @@ export const DOCS_END = '<!-- docs:end -->';
 export const CV_REVISIONS = 1;
 const shown = (p) => String(p).replace(/\\/g, '/');
 const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } };
-// The writers to try, in order (codex first): DOCS_WRITERS="agy codex" overrides.
+// The writers to try, in order (the two websites, then codex): DOCS_WRITERS="agy codex" overrides.
 const writerFor = () => {
   const env = (process.env.DOCS_WRITERS || '').split(/\s+/).filter(Boolean);
   return chainWriter({ names: env.length ? env : WRITER_ORDER, skip: (n) => isOut(n, REPO) });
