@@ -307,20 +307,27 @@ export function doctorState(snapshot?: Pick<PipelineSummary, "applications" | "i
       return false;
     }
   };
-  const hasPortals = () => {
-    try {
-      return fs.existsSync(portalsConfigPath(root));
-    } catch {
-      return false;
-    }
-  };
-  const prereqs: [string, string, () => boolean][] = [
-    ["cv.md", "cv.md", () => has("cv.md")],
-    ["config/profile.yml", "config/profile.yml", () => has("config/profile.yml")],
-    ["modes/_profile.md", "modes/_profile.md", () => has("modes/_profile.md")],
-    ["portals.yml", "portals.yml", hasPortals],
+  // Keep this list shaped like doctor.mjs USER_LAYER_PREREQS so the #2369
+  // freeze in test-all.mjs can grep the paths. portals.yml alone resolves
+  // through portalsConfigPath (CAREER_OPS_PORTALS when set).
+  const prereqs = [
+    ["cv.md", "cv.md"],
+    ["config/profile.yml", "config/profile.yml"],
+    ["modes/_profile.md", "modes/_profile.md"],
+    ["portals.yml", "portals.yml"],
   ];
-  const missing = prereqs.filter(([, , check]) => !check()).map(([, label]) => label);
+  const missing = prereqs
+    .filter(([rel]) => {
+      if (rel === "portals.yml") {
+        try {
+          return !fs.existsSync(portalsConfigPath(root));
+        } catch {
+          return true;
+        }
+      }
+      return !has(rel);
+    })
+    .map(([, label]) => label);
   const hasCv = has("cv.md");
   // Home already reads these files. Reuse that snapshot so its setup check
   // neither parses the tracker twice nor disagrees with the rendered queue.
