@@ -5,15 +5,19 @@
 // node freemotion-night/usage.mjs --cost [--since YYYY-MM-DD] — cost per SENT application (#7): per driver,
 // jobs, sent, tokens (Copilot: AI credits; Claude: list-price $) per sent application, and what writing the
 // CVs and letters cost (docs-<N>.json docTokens, written by prepare-docs.mjs since 2026-10-12).
+// node freemotion-night/usage.mjs --errors [--since YYYY-MM-DD] — per driver (and agy model): tool calls per
+// job, how many failed, jobs with 3+ failures, and the sent rate (tool-errors.mjs reads each driver's own log).
 // Defaults to the run id in tmp/fm/night/run-id (the last sheets make-jobs.mjs wrote).
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { jobToolStats } from './tool-errors.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..').replace(/\\/g, '/');
 const DRIVERS = process.argv.includes('--drivers');
 const COST = process.argv.includes('--cost');
+const ERRORS = process.argv.includes('--errors');
 const SINCE = (() => { const i = process.argv.indexOf('--since'); return i >= 0 ? process.argv[i + 1] : ''; })();
-const RUN = DRIVERS || COST ? null : process.argv[2] ?? readFileSync(`${ROOT}/tmp/fm/night/run-id`, 'utf8').trim();
+const RUN = DRIVERS || COST || ERRORS ? null : process.argv[2] ?? readFileSync(`${ROOT}/tmp/fm/night/run-id`, 'utf8').trim();
 const runsPath = `${ROOT}/tmp/fm/usage/night-runs.tsv`;
 const runs = existsSync(runsPath) ? readFileSync(runsPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => l.split('\t')) : [];
 const ledger = readFileSync(`${ROOT}/data/freemotion-submissions.tsv`, 'utf8').split('\n').map((l) => l.split('\t')).filter((c) => c[7] === RUN);
@@ -52,15 +56,17 @@ function jobUse(d, n) {
 const tot = { usd: 0, sent: 0, jobs: 0 };
 if (DRIVERS) { driverReport(); process.exit(0); }
 if (COST) { costReport(); process.exit(0); }
-console.log('job   driver  result             fresh in / cached in / out');
-for (const [n, , , d] of runs) {
+if (ERRORS) { errorReport(); process.exit(0); }
+console.log('job   driver  result             fresh in / cached in / out     tool calls (failed)');
+for (const [n, start, , d] of runs) {
   if (runOf(n) !== RUN) continue;   // this run's jobs only (#39)
   const url = urlOf(n);
   const res = ledger.filter((c) => c[1] === url).at(-1)?.[5] ?? '-';
   const { fin, cached, out, usd } = jobUse(d, n);
+  const t = jobToolStats(ROOT, d, n, start);
   tot.usd += usd;
   tot[d] = (tot[d] ?? 0) + fin + cached + out; tot.jobs++; if (res === 'submitted') tot.sent++;
-  console.log(`${n}  ${d.padEnd(10)}  ${res.padEnd(17)}  ${k(fin)} / ${k(cached)} / ${k(out)}`);
+  console.log(`${n}  ${d.padEnd(10)}  ${res.padEnd(17)}  ${`${k(fin)} / ${k(cached)} / ${k(out)}`.padEnd(26)}  ${t ? `${t.calls} (${t.failed})` : '-'}`);
 }
 const byDriver = Object.entries(tot).filter(([x]) => !['usd', 'sent', 'jobs'].includes(x)).map(([x, v]) => `${x} ${k(v)}`).join(' · ');
 console.log(`TOTAL ${tot.jobs} runs, ${tot.sent} sent · ${byDriver} (Claude ~$${tot.usd.toFixed(2)} list price)`);
@@ -90,6 +96,31 @@ function driverReport() {
     const since = s.starts.filter((x) => x > prev).length;
     console.log(`${d.padEnd(10)}  ${String(s.jobs).padStart(4)}  ${String(s.sent).padStart(4)}  ${per.join(', ') || '-'}${mine.length ? ` · ${since} since the last hit` : ''}`);
   }
+}
+
+function errorReport() {
+  // Latest outcome per posting URL and run, across every run.
+  const outcome = new Map();
+  for (const c of readFileSync(`${ROOT}/data/freemotion-submissions.tsv`, 'utf8').split('\n').map((l) => l.split('\t'))) {
+    if (c[1] && c[5] && c[5] !== 'in-progress') outcome.set(`${c[1]}|${c[7]}`, c[5]);
+  }
+  const by = {};
+  for (const [n, start, , d] of runs) {
+    if (SINCE && String(start).slice(0, 10) < SINCE) continue;
+    const t = jobToolStats(ROOT, d, n, start);
+    if (!t || !t.calls) continue;   // no log on this machine, or the driver never got going
+    const key = d.startsWith('agy') && t.model ? `${d} · ${t.model}` : d;
+    const s = (by[key] ??= { jobs: 0, sent: 0, calls: 0, failed: 0, bad: 0 });
+    s.jobs++; s.calls += t.calls; s.failed += t.failed; if (t.failed >= 3) s.bad++;
+    if (outcome.get(`${urlOf(n)}|${runOf(n)}`) === 'submitted') s.sent++;
+  }
+  const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '-');
+  console.log(`Tool calls and failures per job${SINCE ? ` since ${SINCE}` : ' (all runs)'} — jobs whose driver log is on this machine`);
+  console.log(`${'driver'.padEnd(44)} jobs  calls/job  failed  3+ failed  sent`);
+  for (const [key, s] of Object.entries(by).sort((a, b) => b[1].jobs - a[1].jobs)) {
+    console.log(`${key.padEnd(44)} ${String(s.jobs).padStart(4)} ${(s.calls / s.jobs).toFixed(0).padStart(10)} ${pct(s.failed, s.calls).padStart(7)} ${pct(s.bad, s.jobs).padStart(10)} ${pct(s.sent, s.jobs).padStart(5)}`);
+  }
+  if (!Object.keys(by).length) console.log('(no driver logs found)');
 }
 
 function costReport() {
