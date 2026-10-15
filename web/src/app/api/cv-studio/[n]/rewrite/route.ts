@@ -12,7 +12,7 @@ type RouteContext = { params: Promise<{ n: string }> };
 
 const MESSAGES = {
   "no-cli": "No AI CLI is set up. Choose one in Config, or edit the wording by hand.",
-  unfenced: "This AI CLI cannot be limited to read-only access, so the rewrite did not run. Choose Claude or Codex in Config, or edit the wording by hand.",
+  unfenced: "This AI CLI cannot be limited to read-only access, so the rewrite did not run. Choose Claude, Codex or Grok in Config, or edit the wording by hand.",
   refused: "The AI CLI could not be started with read-only access, so nothing ran.",
   failed: "The AI CLI did not finish. Check that it is signed in, then try again.",
   "no-answer": "The AI CLI replied without a usable bullet. Try a different instruction.",
@@ -42,5 +42,5 @@ export async function POST(req: Request, { params }: RouteContext) {
   if (!text) return NextResponse.json({ error: MESSAGES["no-answer"] }, { status: 422 });
   const claims = await unsupportedRewriteClaims(text, [bullet.base, bullet.tailored].filter((t) => t !== null).join("\n"));
   if (claims.length) return NextResponse.json({ error: `${MESSAGES.unsupported} ${claims.join(", ")}.`, claims }, { status: 422 });
-  return NextResponse.json({ text, keywords: (await keywordsInText(n, text)) ?? [] });
+  return NextResponse.json({ text, keywords: (await keywordsInText(n, text)) ?? [], warning: run.warning });
 }

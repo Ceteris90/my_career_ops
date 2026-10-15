@@ -4,20 +4,22 @@ import { CAPS } from "@/lib/worker-capabilities.mjs";
 import { scopeFrom } from "@/lib/claude-invocation.mjs";
 import { resolveCliOrFallback } from "@/lib/clis";
 import { careerOpsRoot } from "@/lib/career-ops";
+import { rewriteGate } from "@/lib/cv-studio/rewrite.mjs";
 
 // Deny list derived, never hand-written (#2185, #2507). The rewrite needs no
 // tools at all; Read is the narrowest scope the Claude argv accepts.
 const REWRITE_SCOPE = scopeFrom("Read");
 const KILL_MS = 120_000;
 
-export type RewriteRun = { ok: true; reply: string } | { ok: false; reason: "no-cli" | "unfenced" | "refused" | "failed"; detail?: string };
+export type RewriteRun = { ok: true; reply: string; warning: string | null } | { ok: false; reason: "no-cli" | "unfenced" | "refused" | "failed"; detail?: string };
 
 export function runRewrite(cliId: string, prompt: string): Promise<RewriteRun> {
   const resolved = resolveCliOrFallback(cliId);
   if (!resolved) return Promise.resolve({ ok: false, reason: "no-cli" });
   const { spec, binPath } = resolved;
   const fencing = fencingReport({ cliId: spec.id, cliName: spec.name, capabilities: CAPS.localReadOnly });
-  if (fencing.level !== "full") return Promise.resolve({ ok: false, reason: "unfenced", detail: fencing.notice ?? undefined });
+  const gate = rewriteGate(spec.id, fencing);
+  if (!gate.run) return Promise.resolve({ ok: false, reason: "unfenced", detail: fencing.notice ?? undefined });
   const args =
     spec.id === "claude"
       ? ["-p", prompt, "--permission-mode", "acceptEdits", "--strict-mcp-config", "--allowedTools", REWRITE_SCOPE.allowed, "--disallowedTools", REWRITE_SCOPE.disallowed]
@@ -40,7 +42,7 @@ export function runRewrite(cliId: string, prompt: string): Promise<RewriteRun> {
     }, KILL_MS);
     child.on("close", (code: number | null) => {
       clearTimeout(killer);
-      resolve(code === 0 ? { ok: true, reply: out } : { ok: false, reason: "failed", detail: err.trim().split("\n").filter(Boolean).at(-1)?.slice(0, 300) });
+      resolve(code === 0 ? { ok: true, reply: out, warning: gate.warning } : { ok: false, reason: "failed", detail: err.trim().split("\n").filter(Boolean).at(-1)?.slice(0, 300) });
     });
     child.on("error", (e: Error) => {
       clearTimeout(killer);

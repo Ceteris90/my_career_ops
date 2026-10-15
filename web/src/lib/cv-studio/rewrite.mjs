@@ -61,3 +61,13 @@ export function parseRewrite(reply) {
 export function unsupportedClaims(cv, bullet) {
   return [...new Set([...cv.invented, ...cv.unsupportedFacts.map((f) => f.value), ...cv.forbidden, ...bullet.invented])];
 }
+
+// Grok has no read-only mode career-ops can apply, but it may still rewrite
+// (#5234): the run goes ahead and the fencing notice is shown with the result.
+const RUNS_UNFENCED = new Set(["grok"]);
+
+/** @param {string} cliId @param {{level: string, notice: string|null}} report */
+export function rewriteGate(cliId, report) {
+  if (report.level === "full") return { run: true, warning: null };
+  return RUNS_UNFENCED.has(cliId) ? { run: true, warning: report.notice } : { run: false, warning: null };
+}

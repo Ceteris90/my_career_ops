@@ -224,7 +224,7 @@ function BulletRow({ n, bullet, parent, siblings, first, last, movable, edits, h
   );
 }
 
-type Proposal = { kind: "idle" } | { kind: "running" } | { kind: "ready"; text: string; keywords: string[] } | { kind: "failed"; error: string };
+type Proposal = { kind: "idle" } | { kind: "running" } | { kind: "ready"; text: string; keywords: string[]; warning: string | null } | { kind: "failed"; error: string };
 const QUICK = ["Shorter", "Lead with the result", "Plainer wording", "Use a job keyword only if it is true"];
 
 function RewritePanel({ n, bullet, current, onUse }: { n: string; bullet: StudioBullet; current: string; onUse: (text: string, keywords: string[]) => void }) {
@@ -237,8 +237,8 @@ function RewritePanel({ n, bullet, current, onUse }: { n: string; bullet: Studio
     setProposal({ kind: "running" });
     try {
       const r = await fetch(`/api/cv-studio/${encodeURIComponent(n)}/rewrite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bulletId: bullet.id, instruction: text, cliId }) });
-      const body = (await r.json()) as { text?: string; keywords?: string[]; error?: string };
-      setProposal(r.ok && body.text ? { kind: "ready", text: body.text, keywords: body.keywords ?? [] } : { kind: "failed", error: body.error ?? "The rewrite failed." });
+      const body = (await r.json()) as { text?: string; keywords?: string[]; warning?: string | null; error?: string };
+      setProposal(r.ok && body.text ? { kind: "ready", text: body.text, keywords: body.keywords ?? [], warning: body.warning ?? null } : { kind: "failed", error: body.error ?? "The rewrite failed." });
     } catch {
       setProposal({ kind: "failed", error: "The rewrite failed. Is the dashboard still running?" });
     }
@@ -278,6 +278,7 @@ function RewritePanel({ n, bullet, current, onUse }: { n: string; bullet: Studio
           <p className="leading-relaxed text-foreground" aria-label="Suggested rewrite">
             <Diff before={current} after={proposal.text} />
           </p>
+          {proposal.warning && <p role="status" className="mt-1.5 text-xs text-amber-800 dark:text-amber-300">{proposal.warning}. It could read or change files while drafting this.</p>}
           <div className="mt-1.5 flex gap-2">
             <button onClick={() => onUse(proposal.text, proposal.keywords)} className="rounded-full bg-brand px-3 py-0.5 text-xs font-medium text-brand-foreground">Accept</button>
             <button onClick={() => setProposal({ kind: "idle" })} className="rounded-full px-3 py-0.5 text-xs text-muted hover:text-foreground">Reject</button>
