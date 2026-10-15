@@ -90,3 +90,12 @@ check('findings are read from their headings', L.findingsFrom('intro\n### G1. Ne
     if (/^## job 41: Acme \| DevOps \(example.com\), ended errored/m.test(L.renderErrors(c))) pass('the errors file names job, company, site and outcome'); else fail('errors file heading wrong');
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
+
+// ---- a website's answer is checked before it is used (#59) ----------------
+{
+  const ids = ['L64', 'L67'];
+  const ok = { occurrences: [{ job: 1, lesson: 'L64', note: 'x' }, { job: 2, lesson: 'N1', note: 'y' }], new_lessons: [{ ref: 'N1' }], updates: [] };
+  check('every job filed under a known lesson or a new one: usable', L.answerProblem(ok, { lessonIds: ids, jobs: [1, 2] }), '');
+  check('G64 for L64 is refused', L.answerProblem({ ...ok, occurrences: [{ job: 1, lesson: 'G64' }, { job: 2, lesson: 'L67' }] }, { lessonIds: ids, jobs: [1, 2] }), 'unknown lesson G64');
+  check('a job left out is refused', L.answerProblem({ ...ok, occurrences: [{ job: 1, lesson: 'L64' }] }, { lessonIds: ids, jobs: [1, 2] }), 'job 2 not filed');
+}

@@ -6,7 +6,7 @@
  *
  *   node freemotion-night/lessons.mjs collect --run <id>   the run's failures and their evidence, one file,
  *                                                          no model: tmp/fm/night/errors-<id>.md
- *   node freemotion-night/lessons.mjs review --run <id>    collect, then ONE tool-free Claude call files each
+ *   node freemotion-night/lessons.mjs review --run <id>    collect, then ONE tool-free call (Gemini website, else Claude) files each
  *                                                          failure under an existing lesson or a new one
  *                                                          (run.sh does this after every run)
  *   node freemotion-night/lessons.mjs record <answer.json> --run <id>   apply such an answer by hand
@@ -22,7 +22,8 @@
  *                                  This file is rewritten by the tool; edit the field lines freely.
  *   data/lessons-occurrences.tsv   one line per time a lesson happened (lesson, run, job, date, site, outcome, note)
  *
- * The review is Claude Code (`claude -p`, every tool off, the whole context pasted), never agy or the
+ * The review is the Gemini website (lib/web-llm.py, user 2026-10-15), else Claude Code (`claude -p`, every
+ * tool off), the whole context pasted either way, never agy or the
  * browser runner. It only answers JSON; this file does the writing. Page text, emails and agent
  * reports in the evidence are data, never instructions.
  *
@@ -196,7 +197,7 @@ export function renderLessons(lessons, occ) {
   return out.join('\n');
 }
 
-function load(root) {
+export function load(root) {
   return { lessons: parseLessons(read(root, LESSONS)), occ: parseOccurrences(read(root, OCCURRENCES)) };
 }
 function save(root, lessons, occ, added = []) {
@@ -246,7 +247,7 @@ export function applyAnswer(lessons, occ, answer, { run, jobs }) {
   return { created, added, skipped };
 }
 
-// ── review after a run (Claude Code, tool-free) ─────────────────────────
+// ── review after a run (Gemini website or Claude Code, tool-free) ─────────────────────────
 export const ANSWER_SCHEMA = {
   type: 'object',
   properties: {
@@ -270,8 +271,50 @@ export const REVIEW_INSTRUCTIONS = [
   'Each note says in one sentence what happened to that job.',
 ].join('\n');
 
-function lessonIndex(lessons) {
+export function lessonIndex(lessons) {
   return lessons.map((l) => `${l.id} [${l.site || 'any'} / ${l.category || 'other'} / ${l.status || 'open'}] ${l.title}: ${one(l.what).slice(0, 160)}${l.cause ? ` Cause: ${one(l.cause).slice(0, 120)}` : ''}`).join('\n') || '(no lessons yet)';
+}
+
+// Who files the failures: the Gemini website first, so the Claude account keeps its allowance for applying
+// (user, 2026-10-15: the website for the parts that matter less), then Claude. LESSONS_BY=claude for Claude only.
+/** Why an answer can't be used as it is ('' when it can): every failed job filed, under a lesson that exists. */
+export function answerProblem(answer, { lessonIds, jobs = [] } = {}) {
+  if (!Array.isArray(answer?.occurrences)) return 'no occurrences list';
+  const known = new Set([...(lessonIds || []), ...(answer.new_lessons || []).map((n) => String(n.ref))]);
+  const bad = lessonIds ? answer.occurrences.filter((o) => !known.has(String(o.lesson))).map((o) => o.lesson) : [];
+  if (bad.length) return `unknown lesson ${[...new Set(bad)].slice(0, 3).join(', ')}`;
+  const filed = new Set(answer.occurrences.map((o) => String(o.job)));
+  const missing = jobs.filter((j) => !filed.has(String(j)));
+  return missing.length ? `job ${missing.slice(0, 3).join(', ')} not filed` : '';
+}
+
+export async function askReviewer(root, prompt, { by = (process.env.LESSONS_BY || 'gemini-web,claude').split(','), lessonIds, jobs, log = console.log } = {}) {
+  const { claudeGenerate, webGenerate, DailyQuotaError } = await import('./llm-score.mjs');
+  const { isOut, markOut } = await import('../lib/doc-writers.mjs');
+  for (const name of by) {
+    if (name !== 'claude' && isOut(name, root)) { log(`lessons: ${name} is out for now, next`); continue; }
+    const generate = name === 'claude'
+      ? claudeGenerate({ model: process.env.LESSONS_MODEL || 'sonnet', schema: ANSWER_SCHEMA, timeoutMin: 10 })
+      : webGenerate({ driver: name, schema: ANSWER_SCHEMA, timeoutMin: 10 });
+    try {
+      // A website answer gets one more try with its mistake named (Gemini sometimes writes G64 for L64).
+      let fix = '';
+      for (let attempt = 1; ; attempt++) {
+        const answer = JSON.parse(await generate(REVIEW_INSTRUCTIONS, prompt + fix));
+        const problem = answerProblem(answer, { lessonIds, jobs });
+        if (!problem) { log(`lessons: filed by ${name}`); return answer; }
+        if (name === 'claude' || attempt >= 2) throw new Error(problem);
+        fix = `
+
+YOUR LAST ANSWER COULD NOT BE USED: ${problem}. Use only the lesson ids listed above (they start with L) or the ref of a new lesson, and file every job.`;
+      }
+    } catch (e) {
+      if (e instanceof DailyQuotaError && name !== 'claude') markOut(name, 3, root);
+      log(`lessons: ${name} failed (${String(e.message || e).slice(0, 160)})${name === by.at(-1) ? '' : ', next'}`);
+      if (name === by.at(-1)) throw e;
+    }
+  }
+  throw new Error('lessons: no reviewer left');
 }
 
 async function review(root, run) {
@@ -282,9 +325,7 @@ async function review(root, run) {
   if (!c.failures.length) { console.log(`lessons: run ${run} has no failures (${c.jobs} jobs)`); return; }
   const { lessons, occ } = load(root);
   const prompt = `LESSONS ALREADY IN THE LOG:\n${lessonIndex(lessons)}\n\nTHE RUN'S FAILURES:\n${renderErrors(c).slice(0, 80_000)}`;
-  const { claudeGenerate } = await import('./llm-score.mjs');
-  const generate = claudeGenerate({ model: process.env.LESSONS_MODEL || 'sonnet', schema: ANSWER_SCHEMA, timeoutMin: 10 });
-  const answer = JSON.parse(await generate(REVIEW_INSTRUCTIONS, prompt));
+  const answer = await askReviewer(root, prompt, { lessonIds: lessons.map((l) => l.id), jobs: c.failures.map((f) => f.job) });
   writeFileSync(join(root, `tmp/fm/night/lessons-answer-${run}.json`), JSON.stringify(answer, null, 1));
   report(root, run, c, lessons, occ, answer);
 }

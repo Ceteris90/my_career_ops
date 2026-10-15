@@ -348,7 +348,7 @@ python freemotion-night/inbox-replies.py && python freemotion-night/inbox-replie
 # Nothing is sent: he reads and sends each draft from Gmail (followups.mjs; issue #19). NO_FOLLOWUPS=1 skips it.
 [ -z "$NO_FOLLOWUPS" ] && { node freemotion-night/followups.mjs || true; }
 # Always: what went wrong in this run, filed as lessons (data/lessons-learned.md) by one tool-free
-# Claude Code call on the second account (lessons.mjs; issue #27). Never agy or a browser runner.
+# Gemini website call, else Claude Code on the second account (lessons.mjs; issues #27, #59). Never agy or a browser runner.
 CLAUDE_CONFIG_DIR="${LESSONS_CLAUDE_DIR:-$CLAUDE1_DIR}" node freemotion-night/lessons.mjs review --run "$RUN" || true
 # Always: what is waiting in the agent inbox (data/agent-inbox.md) for a person or a later session.
 if grep -q '^- \[ \]' data/agent-inbox.md 2>/dev/null; then
