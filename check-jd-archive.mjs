@@ -243,7 +243,7 @@ const NON_CONTENT_MARKERS = [
     // "paraphrase" or "restate", which a real JD can use as a duty ("you will
     // paraphrase source material") or in finance prose ("restated financials").
     reason: 'says it is a paraphrase or restatement, not the verbatim posting',
-    re: /(\(paraphras(?:e|ed)\b[^)\n]*\)\s*(?::|$)|\b(?:what follows|the following|(?:the )?(?:text|passages?|content) below|this(?: (?:description|section|posting|text|summary|document))?) (?:is|are) (?:a |an )?(?:(?:close|detailed|faithful|complete|non-fabricated|full|accurate)[ ,]+)*(?:paraphrase|restatement)\b|\bthis section restates\b|\bthis (?:description|section|posting|text|summary|document) (?:was|has been|is) (?:paraphrased|restated)\b|^[\s*_>#-]*(?:paraphrased|restated) (?:from|version)\b|[—–-]\s*paraphras(?:e|ed)\s*$|\b(?:what follows|the following|(?:the )?(?:text|passages?|content) below|this (?:is|description|section|posting|text|summary|document))[^.\n]{0,60}?\bnot (?:a |the )?(?:literal|verbatim) (?:copy|quote|text|reproduction|archive|posting)\b|\bparaphrase,? not (?:a |the )?(?:literal|verbatim)\b|\b(?:tool|fetcher|evaluator|scraper)\b[^.\n]{0,30}?\b(?:could|would|did|can) ?not (?:be )?(?:reproduc|quot|return|captur|copi)\w*[^.\n]{0,40}\b(?:literal|verbatim)\b)/im,
+    re: /(\(paraphras(?:e|ed)\b[^)\n]*\)\s*(?::|$)|\b(?:what follows|the following|(?:the )?(?:text|passages?|content) below|this(?: (?:description|section|posting|text|summary|document))?) (?:is|are) (?:a |an )?(?:(?:close|detailed|faithful|complete|non-fabricated|full|accurate)[ ,]+)*(?:paraphrase|paraphrased|restatement|restated)\b|\bthis section restates\b|\bthis (?:description|section|posting|text|summary|document) (?:was|has been|is) (?:paraphrased|restated)\b|^[\s*_>#-]*(?:paraphrased|restated) (?:from|version)\b|[—–-]\s*paraphras(?:e|ed)\s*$|\b(?:what follows|the following|(?:the )?(?:text|passages?|content) below|this (?:is|description|section|posting|text|summary|document))[^.\n]{0,60}?\bnot (?:a |the )?(?:literal|verbatim) (?:copy|quote|text|reproduction|archive|posting)\b|\bparaphrase,? not (?:a |the )?(?:literal|verbatim)\b|\b(?:tool|fetcher|evaluator|scraper)\b[^.\n]{0,30}?\b(?:could|would|did|can) ?not (?:be )?(?:reproduc|quot|return|captur|copi)\w*[^.\n]{0,40}\b(?:literal|verbatim)\b)/im,
   },
   {
     category: 'bot-challenge',
@@ -838,6 +838,12 @@ function runSelfTest() {
   check(!hasEmbeddedJdArchive(
     '## Job Description (archived verbatim)\n\nThis is a paraphrase of the original posting. Director of Marketing, owns demand generation and reports to the CMO.\n\n## Machine Summary'),
     'hasEmbeddedJdArchive rejects a bare "This is a paraphrase" disclosure (#5179 review)');
+  check(!hasEmbeddedJdArchive(
+    '## Job Description (archived verbatim)\n\nWhat follows is paraphrased from the original posting. Director of Marketing, owns demand generation and reports to the CMO.\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive rejects "What follows is paraphrased" (#5179 review)');
+  check(!hasEmbeddedJdArchive(
+    '## Job Description (archived verbatim)\n\nThis section is restated from the original posting. Director of Marketing, owns demand generation and reports to the CMO.\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive rejects "This section is restated" (#5179 review)');
   check(hasEmbeddedJdArchive(
     '## Job Description (archived verbatim)\n\nCandidates need not verbatim-copy source text. Survey answers are not literal quotes, and you will review them for tone across three regional teams.\n\n## Machine Summary'),
     'hasEmbeddedJdArchive does not false-positive on real JD prose that says "not literal" or "verbatim" as a duty (#5179 review)');
