@@ -307,7 +307,12 @@ export function detectJdSectionMarker(content) {
   const stripped = extractStrippedJdSection(content);
   if (stripped === null) return null;
   const heading = JD_HEADING_RE.exec(String(content ?? ''))[0];
-  return detectNonContentMarker(stripped) ?? detectNonContentMarker(heading);
+  // The heading is evaluator-written, never JD text, so a plain "not verbatim"
+  // there is a disclosure ("(not verbatim)", ", not verbatim").
+  const headingDisclosure = /\bnot (?:a |the )?(?:literal|verbatim)\b/i.test(heading)
+    ? NON_CONTENT_MARKERS.find((m) => m.category === 'paraphrase')
+    : null;
+  return detectNonContentMarker(stripped) ?? detectNonContentMarker(heading) ?? headingDisclosure;
 }
 
 export function hasEmbeddedJdArchive(content) {
@@ -844,6 +849,12 @@ function runSelfTest() {
   check(!hasEmbeddedJdArchive(
     '## Job Description (archived verbatim)\n\nThis section is restated from the original posting. Director of Marketing, owns demand generation and reports to the CMO.\n\n## Machine Summary'),
     'hasEmbeddedJdArchive rejects "This section is restated" (#5179 review)');
+  check(!hasEmbeddedJdArchive(
+    '## Job Description (not verbatim)\n\nDirector of Marketing. Owns demand generation, reports to the CMO, manages a team of eight.\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive rejects a heading with a parenthetical "not verbatim" (#5179 review)');
+  check(!hasEmbeddedJdArchive(
+    '## Job Description, not verbatim\n\nDirector of Marketing. Owns demand generation, reports to the CMO, manages a team of eight.\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive rejects a comma-separated "not verbatim" heading (#5179 review)');
   check(hasEmbeddedJdArchive(
     '## Job Description (archived verbatim)\n\nCandidates need not verbatim-copy source text. Survey answers are not literal quotes, and you will review them for tone across three regional teams.\n\n## Machine Summary'),
     'hasEmbeddedJdArchive does not false-positive on real JD prose that says "not literal" or "verbatim" as a duty (#5179 review)');
