@@ -130,8 +130,14 @@ try {
   // The try//catch around yamlLoad cannot help — the throw would happen in the walk.
   try {
     const cyclic = yamlValueText('root: &a\n  self: *a\n  skill: Kafka\n');
-    if (cyclic.includes('Kafka')) pass('yamlValueText walks a cyclic YAML alias graph without recursing forever');
-    else fail(`yamlValueText cyclic alias => ${JSON.stringify(cyclic)}`);
+    if (cyclic.includes('Kafka')) {
+      pass('yamlValueText walks a cyclic YAML alias graph without recursing forever');
+      if (extractSkills(cyclic).has('Kafka')) {
+        pass('extractSkills retains a skill from cyclic yamlValueText output');
+      } else {
+        fail(`extractSkills cyclic YAML => ${JSON.stringify(cyclic)}`);
+      }
+    } else fail(`yamlValueText cyclic alias => ${JSON.stringify(cyclic)}`);
   } catch (e) {
     fail(`yamlValueText threw on a cyclic alias graph: ${e.message}`);
   }
