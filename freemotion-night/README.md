@@ -35,6 +35,8 @@ node freemotion-night/make-pool.mjs --top 25                      # rules + quic
                                                                   #   --scorer agy: quick check + fit score through agy's Claude allowance
                                                                   #   (claude-sonnet-4-6, 10 jobs per call, --parallel 3) when the Gemini quota is gone
                                                                   #   --scorer claude: the same through Haiku on the Claude plan, every tool off, 20 per call (--batch)
+                                                                  #   --scorer gemini-web | chatgpt-web: the fit score only, on the website (lib/web-llm.py, #59);
+                                                                  #   the quick check stays on the API. 2026-10-15: 30 jobs in 18 s, same keep/drop as the API on 28/30
                                                                   #   --score-since today|YYYY-MM-DD: new fit scores only for jobs first found from that day
 node freemotion-night/make-jobs.mjs tmp/fm/night/list.json <firstNumber>   # writes tmp/fm/night/job-<N>.md
 bash freemotion-night/run.sh <firstNumber> <secondNumber> ...     # applies, one job at a time
