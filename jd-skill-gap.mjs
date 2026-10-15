@@ -261,7 +261,8 @@ function scanJd(jdText) {
   let inRequirementsBlock = false;
   let sawRequirementSection = false;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     // Header-classification only, never bullet extraction below: a bolded
     // heading ("**Benefits**") must match these two regexes as if the bold
     // wrapper weren't there, but a bolded SKILL inside a bullet
@@ -279,6 +280,11 @@ function scanJd(jdText) {
     if (REQUIREMENT_HEADER_RE.test(headerLine)) {
       inRequirementsBlock = true;
       sawRequirementSection = true;
+      // "Requirements: SQL; dbt; Tableau" puts the whole list on the header
+      // line, with no bullets under it. A separator is required so a sentence
+      // such as "About you: Curious and kind" is not read as a list.
+      const inline = headerLine.includes(':') ? headerLine.slice(headerLine.indexOf(':') + 1) : '';
+      if (/[;,]/.test(inline)) addSkillTokens(inline, skills);
       continue;
     }
     if (inRequirementsBlock && line.trim() === '') continue;
@@ -286,20 +292,39 @@ function scanJd(jdText) {
       inRequirementsBlock = false;
     }
 
+    if (!inRequirementsBlock) continue;
     const bulletMatch = BULLET_LINE_RE.exec(line);
-    if (inRequirementsBlock && bulletMatch) {
-      const bulletText = bulletMatch[1];
-      let m;
-      SKILL_TOKEN_RE.lastIndex = 0;
-      while ((m = SKILL_TOKEN_RE.exec(bulletText)) !== null) {
-        const token = m[1].trim();
-        if (!STOPWORDS.has(token.toLowerCase()) && token.length > 1) {
-          skills.add(token);
-        }
-      }
+    if (bulletMatch) {
+      addSkillTokens(bulletMatch[1], skills);
+      continue;
     }
+    // Text copied from a rendered posting page loses its list markers, so each
+    // requirement arrives as a bare line. A bare line with blank lines on both
+    // sides is a heading neither regex knows ("Core values"), and it closes the
+    // block. A bare line next to other lines is a requirement.
+    const isolated = (lines[i - 1] ?? '').trim() === '' && (lines[i + 1] ?? '').trim() === '';
+    if (isolated) {
+      inRequirementsBlock = false;
+      continue;
+    }
+    // A bare line is a sentence, so its first word is capitalized as grammar
+    // ("Possess a curiosity"). Drop it unless the vocabulary knows it as a skill.
+    const opener = /^\s*([A-Z][a-z]+)\s+[a-z]/.exec(line);
+    const unknownOpener = opener && extractSkills(opener[1]).size === 0;
+    addSkillTokens(unknownOpener ? line.slice(opener[0].length - 1) : line, skills);
   }
   return { skills: [...skills], sawRequirementSection };
+}
+
+function addSkillTokens(text, skills) {
+  let m;
+  SKILL_TOKEN_RE.lastIndex = 0;
+  while ((m = SKILL_TOKEN_RE.exec(text)) !== null) {
+    const token = m[1].trim();
+    if (!STOPWORDS.has(token.toLowerCase()) && token.length > 1) {
+      skills.add(token);
+    }
+  }
 }
 
 /**
@@ -392,12 +417,13 @@ const ANY_HEADING_RE = /^#{1,6}\s/;
 
 // Which headings open a named skills section (#4879). The heading is read
 // through lib/cv-markdown.mjs first, so `## **[Skills]{.smallcaps}**` counts.
-// "Skills" anywhere in the heading counts at any level ("Technical Skills",
-// "Skills & Tools"). "Tools" / "Technologies" / "Tech Stack" only count on a
+// "Skills" or "Competencies" anywhere in the heading counts at any level
+// ("Technical Skills", "Core Competencies", the title build-cv-html.mjs
+// renders for the competency grid). "Tools" / "Technologies" / "Tech Stack" only count on a
 // level-1 or level-2 heading: at level 3 they would also match an employer
 // such as "### Acme Technologies — Remote" and promote that job's prose into
 // named skills.
-const SKILLS_WORD_RE = /\bskills\b/i;
+const SKILLS_WORD_RE = /\b(?:skills|competenc(?:y|ies))\b/i;
 const TOOLS_WORD_RE = /\b(?:tools|technologies|tech\s+stack)\b/i;
 
 function isSkillsHeading(line) {
@@ -596,6 +622,12 @@ Python, Docker, Zookeeper
     eq(`"${heading}" opens a named skills section`,
       classifySkillGaps(['Python'], `${heading}\nPython\n`).existing, ['Python']);
   }
+  for (const heading of ['## Core Competencies', '## Competencies', '## Skills & Competencies', '### Key Competency Areas']) {
+    eq(`"${heading}" opens a named skills section`,
+      classifySkillGaps(['Python'], `${heading}\nPython\n`).existing, ['Python']);
+  }
+  eq('a "Competition Wins" heading is not a skills section',
+    classifySkillGaps(['Python'], '## Competition Wins\nPython\n').existing, []);
   const twoSectionsCv = '## Skills\nPython\n\n## Experience\nUsed Docker daily.\n\n## Tools\nTerraform\n';
   const twoSectionsResult = classifySkillGaps(['Python', 'Terraform', 'Docker'], twoSectionsCv);
   eq('every skills section counts, not just the first', twoSectionsResult.existing.sort(), ['Python', 'Terraform']);
@@ -932,6 +964,34 @@ Shipped a support assistant on Llama 3.
     false
   );
 
+  // Text copied from a rendered posting page has no list markers. Each
+  // requirement is a bare line, and the next section is a bare heading
+  // between blank lines.
+  const unbulletedJd = `
+Qualifications
+
+3+ years experience in a business analyst role
+Experience working in Jira or Azure DevOps within an Agile framework
+Strong analytical skills
+Possess a curiosity around new technology
+Python scripting for data pipelines
+
+Core values for Acme employees
+
+Have a strong work ethic
+Be a flexible thinker
+`;
+  eq(
+    'bare requirement lines under a bare heading are extracted',
+    extractJdSkills(unbulletedJd).sort().join(','),
+    'Agile,Azure,DevOps,Jira,Python'
+  );
+  eq(
+    'an unbulleted extraction is conclusive',
+    diagnoseExtraction(unbulletedJd, extractJdSkills(unbulletedJd)),
+    null
+  );
+
   // An empty file is its own cause and should not be blamed on header matching.
   eq(
     'an empty JD is reported as empty-jd',
@@ -1021,7 +1081,7 @@ if (selfTestMode) {
     // did not recognize (#4879).
     if (!splitSkillsSection(cvText).namedSkillsText.trim()) {
       console.log('');
-      console.log('  ℹ️  No skills section recognized in cv.md (a heading containing "Skills", or a top-level');
+      console.log('  ℹ️  No skills section recognized in cv.md (a heading containing "Skills" or "Competencies", or a top-level');
       console.log('     "Tools" / "Technologies" / "Tech Stack" heading), so nothing can be "already in Skills section".');
     }
 

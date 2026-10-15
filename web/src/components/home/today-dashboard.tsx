@@ -11,10 +11,12 @@ import type { DiscoveredOffer } from "@/lib/explore";
 import { DiscoveryCard } from "@/components/explore/discovery-card";
 import { FollowUpCard, type FollowUp } from "@/components/home/follow-up-card";
 import { DecisionCard } from "@/components/home/decision-card";
+import type { CardReason } from "@/lib/machine-summary.mjs";
 import { QuickEvaluate } from "@/components/quick-evaluate";
 import { FollowupsDueSectionSkeleton } from "@/components/page-loading-skeletons";
 import { scoreNum } from "@/lib/format";
-import { pickAwaitingDecision } from "@/lib/home/awaiting.mjs";
+import { pickAwaitingDecision, groupAwaiting } from "@/lib/home/awaiting.mjs";
+import { companyPresentation } from "@/lib/company-presentation.mjs";
 import { resolveHeroState, mayClaimAllClear, showsQueue, missingSourceLabel, displayCounts } from "@/lib/home/hero-state.mjs";
 
 // The retention "Today": a dual-loop action queue (the maintainer's
@@ -24,10 +26,12 @@ import { resolveHeroState, mayClaimAllClear, showsQueue, missingSourceLabel, dis
 // canonical files — every action dispatches a real registry action / route.
 export function TodayDashboard({
   applications,
+  reasons,
   inbox,
   inBetween,
 }: {
   applications: Application[];
+  reasons: Record<string, CardReason>;
   inbox: Pick<InboxJob, "url" | "done">[];
   inBetween: boolean;
 }) {
@@ -36,6 +40,7 @@ export function TodayDashboard({
   const [followupsLoading, setFollowupsLoading] = useState(true);
   const [followupsError, setFollowupsError] = useState(false);
   const [nextUpcoming, setNextUpcoming] = useState<FollowUp | null>(null);
+  const [followupsEnabled, setFollowupsEnabled] = useState(true);
   const [fresh, setFresh] = useState<DiscoveredOffer[]>([]);
   const [freshCount, setFreshCount] = useState(0);
   const [freshLoading, setFreshLoading] = useState(true);
@@ -66,6 +71,7 @@ export function TodayDashboard({
         setFollowups(Array.isArray(d.entries) ? d.entries : []);
         setOverdue((d.metadata?.overdue ?? 0) + (d.metadata?.urgent ?? 0));
         setNextUpcoming(d.nextUpcoming ?? null);
+        setFollowupsEnabled(d.followupsEnabled !== false);
       })
       .catch(() => { if (isLatest()) setFollowupsError(true); })
       .finally(() => { if (isLatest()) setFollowupsLoading(false); });
@@ -107,6 +113,8 @@ export function TodayDashboard({
   // ordering lives in lib/home/awaiting.mjs so it can be tested — see the file
   // for why "first six in the array" was a bug waiting for #3529.
   const awaiting = useMemo(() => pickAwaitingDecision(applications, scoreNum), [applications]);
+  const awaitingGroups = useMemo(() => groupAwaiting(awaiting), [awaiting]);
+  const recommended = awaitingGroups.find(([label]) => label === "Recommended")?.[1] ?? [];
 
   const newThisWeek = freshCount;
   const dataLoading = followupsLoading || freshLoading;
@@ -177,7 +185,9 @@ export function TodayDashboard({
                 ? `${missingSources} could not be read, so this may be missing work. What loaded is below.`
                 : allClear
                   ? "I'll keep scanning the market in the background and surface anything that fits."
-                  : "Your action queue for today — discovery and follow-ups, in one place."}
+                  : followupsEnabled
+                    ? "Your action queue for today — discovery and follow-ups, in one place."
+                    : "Your action queue for today, in one place."}
           </p>
           <div className="mt-6 flex flex-wrap gap-2.5">
             <Link href="/explore" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-brand-foreground transition hover:bg-brand-200 max-sm:min-h-[44px]">
@@ -230,12 +240,25 @@ export function TodayDashboard({
 
       {/* B. Awaiting your decision */}
       {awaiting.length > 0 && (
-        <Section icon={CircleHelp} title="Awaiting your decision" hint="Scored — apply or skip">
-          <div className="grid gap-2.5 sm:grid-cols-2">
-            {awaiting.map((a) => (
-              <DecisionCard key={a.n} app={a} />
-            ))}
-          </div>
+        <Section icon={CircleHelp} title="Awaiting your decision" hint="Best score first">
+          {recommended.length > 0 && (
+            <Link
+              href={`/pipeline/${recommended[0].n}`}
+              className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-brand-foreground transition hover:bg-brand-200 max-sm:min-h-[44px]"
+            >
+              Apply next · {companyPresentation(recommended[0]).label} {recommended[0].score} <ArrowRight className="size-4" />
+            </Link>
+          )}
+          {awaitingGroups.map(([label, group]) => (
+            <div key={label} className="mb-3">
+              <h3 className="mb-2 text-xs font-medium text-faint">{label}</h3>
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                {group.map((a) => (
+                  <DecisionCard key={a.n} app={a} reason={reasons[a.n]} />
+                ))}
+              </div>
+            </div>
+          ))}
         </Section>
       )}
 

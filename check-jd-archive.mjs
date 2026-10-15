@@ -180,7 +180,9 @@ const UNFILLED_TEMPLATE_PLACEHOLDER =
 // round 4) — an earlier version of this check treated ANY jds/*.md
 // reference anywhere in the section as pointer-only, which wrongly rejected
 // real archived text alongside an incidental path mention.
-const JDS_PATH_RE = /jds\/[^\s()]+\.(?:md|pdf)/;
+// Tracker links also name PDF captures from archive-posting and plain text
+// captures. The embedded pointer sentence below accepts .md and .pdf.
+const JDS_PATH_RE = /jds\/[^\s()<>]+?\.(?:pdf|txt|md)(?=$|[\s)\]`>]|[.,;:!?](?=\s|$))/i;
 const POSTED_LINE_RE = /^Posted:.*$/im;
 const POINTER_SENTENCE_RE =
   /^See\s+jds\/[^\s()]+\.(?:md|pdf)\s+for the full archive(?:\s*\(archive-posting\.mjs\s+--report=\d+\))?\.?$/i;
@@ -426,6 +428,7 @@ export function mapTrackerCaptureLinks(trackerPath, jdsDir) {
     const cell = `${row.report ?? ''} ${row.notes ?? ''}`;
     const match = cell.match(JDS_PATH_RE);
     if (!match) continue;
+    if (match[0].split(/[\\/]/).includes('..')) continue;
     // The link is written root-relative (`jds/foo.md`), but the captures
     // directory is overridable with --jds-dir, so the literal `jds/` segment is
     // not guaranteed to be where they live. Try the root-relative path first,

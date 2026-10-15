@@ -16,7 +16,11 @@ export async function GET(req: Request) {
   const script = rootScript("followup-cadence");
   if (!fs.existsSync(script)) return Response.json({ available: false, metadata: null, entries: [], nextUpcoming: null });
   const stdout = await new Promise<string>((resolve) => {
-    execFile("node", [script, "--json"], { cwd: careerOpsRoot(), timeout: 12_000 }, (err, out) => resolve(err ? "" : out || ""));
+    // process.execPath + windowsHide: see api/doctor/route.ts — a stale inherited
+    // console kills every child with 0xC0000142 on Windows; never inherit one.
+    execFile(process.execPath, [script, "--json"], { cwd: careerOpsRoot(), timeout: 12_000, windowsHide: true }, (err, out) =>
+      resolve(err ? "" : out || ""),
+    );
   });
   try {
     const start = stdout.indexOf("{");
@@ -28,6 +32,7 @@ export async function GET(req: Request) {
         metadata: j.metadata ?? null,
         entries,
         cadenceConfig: j.cadenceConfig ?? null,
+        followupsEnabled: j.followupsEnabled !== false,
       });
     }
     // Due now (urgency 'urgent'/'overdue') — 'waiting'/'cold' are NOT due,
@@ -36,7 +41,7 @@ export async function GET(req: Request) {
     // to an unfiltered list.
     const due = selectDueFollowups(entries, 8);
     const nextUpcoming = due.length ? null : pickNextUpcoming(entries);
-    return Response.json({ available: true, metadata: j.metadata ?? null, entries: due, nextUpcoming });
+    return Response.json({ available: true, metadata: j.metadata ?? null, entries: due, nextUpcoming, followupsEnabled: j.followupsEnabled !== false });
   } catch {
     return Response.json({ available: false, metadata: null, entries: [], nextUpcoming: null });
   }
