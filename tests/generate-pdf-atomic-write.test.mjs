@@ -52,3 +52,37 @@ test('re-rendering replaces the previous PDF instead of rewriting it in place', 
     rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+test('a write that fails partway leaves the previous PDF in place', async () => {
+  const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'career-ops-pdf-atomic-')));
+  try {
+    const outDir = join(workspace, 'output');
+    mkdirSync(outDir);
+    const outPath = join(outDir, 'cv.pdf');
+    writeFileSync(outPath, 'previous good pdf');
+    const failingBrowser = async () => ({
+      async newPage() {
+        return {
+          async goto() {},
+          async evaluate() {},
+          async pdf() {
+            return (async function* () {
+              yield Buffer.from('%PDF-1.7\n');
+              throw new Error('disk full');
+            })();
+          },
+        };
+      },
+      async close() {},
+    });
+    await assert.rejects(renderHtmlToPdf('<!doctype html><html><body>cv</body></html>', outPath, {
+      workspaceRoot: workspace,
+      format: 'letter',
+      launchBrowser: failingBrowser,
+    }));
+    assert.equal(readFileSync(outPath, 'utf8'), 'previous good pdf');
+    assert.deepEqual(readdirSync(outDir).filter((name) => name.endsWith('.tmp')), []);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
