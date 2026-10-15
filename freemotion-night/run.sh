@@ -99,6 +99,9 @@ fi
 # Codex's last known windows. "allowance:" lines also go into night-mail.py's emails.
 CLAUDE1_DIR="$CLAUDE1_DIR" node freemotion-night/claude-usage.mjs || true
 node freemotion-night/codex-usage.mjs --allowance || true
+# agy's week and 5 hours per model group (`agy -p /usage`, no model call); the end of the run compares.
+AGY_T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+node freemotion-night/agy-usage.mjs || true
 [ -n "$AGY_ONLY" ] && DRIVER=agy
 [ -n "$DRIVER" ] && ORDER=$DRIVER
 # agy's browser comes from agy's own MCP list (~/.gemini/config/mcp_config.json), not from .mcp.json.
@@ -355,4 +358,6 @@ if grep -q '^- \[ \]' data/agent-inbox.md 2>/dev/null; then
   echo; echo "AGENT INBOX ($(grep -c '^- \[ \]' data/agent-inbox.md) open):"
   grep '^- \[ \]' data/agent-inbox.md | cut -c7-220 | sed 's/^/   /'
 fi
+# What this run's agy jobs cost of agy's week: % per job and jobs a week.
+node freemotion-night/agy-usage.mjs --since "$AGY_T0" || true
 echo "ALL DONE"
