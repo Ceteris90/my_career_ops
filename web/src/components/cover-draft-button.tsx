@@ -24,16 +24,30 @@ const fieldClass =
 export function CoverDraftButton({ n, company }: { n: string; company: string }) {
   const { jobs, startJob } = useJobs();
   const [open, setOpen] = useState(false);
+  const [savedBrief, setSavedBrief] = useState<Record<string, string> | null>(null);
   const job = useMemo(
     () => jobs.filter((j) => j.kind === "cover" && j.input === n).sort((a, b) => b.startedAt - a.startedAt)[0],
     [jobs, n],
   );
-  const state = pdfButtonState(job, false);
+  // A cover run can finish with VERDICT 1/5 and no letter. Only treat a real
+  // draft as ready; weak verdicts surface as a retry failure beside the form.
+  const base = pdfButtonState(job, false);
+  const weakDraft = job?.status === "done" && job.result?.score != null && job.result.score < 2;
+  const state = weakDraft
+    ? {
+        kind: "idle" as const,
+        failure: {
+          jobId: job.id,
+          reason: job.result?.summary || "The cover run finished without a usable draft.",
+        },
+      }
+    : base;
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const brief = Object.fromEntries(["why", "problem", "approach", "tone"].map((k) => [k, String(data.get(k) ?? "")]));
+    setSavedBrief(brief);
     startJob({ title: `Cover letter · ${company}`, subtitle: "draft for this role", kind: "cover", input: n, page: `/pipeline/${n}`, brief });
     setOpen(false);
   };
@@ -91,12 +105,12 @@ export function CoverDraftButton({ n, company }: { n: string; company: string })
             <label key={q.name} className="mb-3 block text-sm font-medium text-foreground">
               {q.label}
               <span className="block text-xs font-normal text-muted">{q.hint}</span>
-              <textarea name={q.name} required maxLength={1000} rows={2} className={fieldClass} />
+              <textarea name={q.name} required maxLength={1000} rows={2} defaultValue={savedBrief?.[q.name] ?? ""} className={fieldClass} />
             </label>
           ))}
           <label className="mb-4 block text-sm font-medium text-foreground">
             Tone
-            <select name="tone" defaultValue="mirror" className={fieldClass}>
+            <select name="tone" defaultValue={savedBrief?.tone ?? "mirror"} className={fieldClass}>
               {Object.entries(COVER_TONES).map(([id, label]) => (
                 <option key={id} value={id}>{label}</option>
               ))}
