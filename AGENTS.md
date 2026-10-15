@@ -429,7 +429,7 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 
   It scans once, then repeats the "apply" steps with `--top 50`. A round starts 5 hours after the one before started; rounds start as long as it is before 09:00, and the first 5-hour mark at or after 09:00 still starts one last round. Drivers, in order: agy, agy-sonnet, codex, copilot, the second Claude account (`sonnet1`), then this session's own Claude account (`sonnet`) with no cap, until it reports its limit. So say at the start that this session may have no allowance left by the morning, and that the log is `tmp/fm/night/full-night.log`. `touch tmp/fm/night/stop-night` ends it after the round in hand.
 
-- **"weekly review"** = `node freemotion-night/lessons.mjs weekly`, then read the report it writes (`data/lessons-weekly/<year>-W<week>.md`): for the top recurring lessons that are still open, look at the code and propose concrete fixes; the user decides. A fix commit says "fixes Lnn" in its message, which is how the next weekly review checks it. After each run, `run.sh` files that run's failures as lessons by itself (`lessons.mjs review`, one tool-free Claude Code call).
+- **"weekly review"** = `node freemotion-night/lessons.mjs weekly`, then read the report it writes (`data/lessons-weekly/<year>-W<week>.md`): for the top recurring lessons that are still open, look at the code and propose concrete fixes; the user decides. A fix commit says "fixes Lnn" in its message, which is how the next weekly review checks it. After each run, `run.sh` files that run's failures as lessons by itself (`lessons.mjs review`, one tool-free call: the Gemini website, else Claude Code).
 
 Personal rules on top of these (letter wording, CV rules) stay in `modes/_custom.md`.
 
