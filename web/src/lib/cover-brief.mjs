@@ -6,14 +6,9 @@
  * front and this module checks the request at the route boundary.
  */
 import path from "node:path";
+import { COVER_TONES } from "./cover-tones.mjs";
 
-/** Step 6D's tone choices, keyed by the id the form submits. */
-export const COVER_TONES = Object.freeze({
-  formal: "Formal",
-  direct: "Direct",
-  conversational: "Conversational",
-  mirror: "Mirror the JD",
-});
+export { COVER_TONES };
 
 const MAX_ANSWER = 1000;
 const ANSWER_FIELDS = ["why", "problem", "approach"];
@@ -27,12 +22,17 @@ const ANSWER_FIELDS = ["why", "problem", "approach"];
  * @returns {{ok: true, reportFile: string, brief: CoverBrief} | {ok: false, error: string}}
  */
 export function parseCoverRequest({ input, brief, root, findReportFile }) {
+  if (typeof input !== "string") {
+    return { ok: false, error: "Invalid report selector: expected a report number string." };
+  }
   if (!/^\d+$/.test(input)) return { ok: false, error: `Invalid report selector: "${input}"` };
 
   const incomplete = { ok: false, error: "Answer all four cover letter questions first." };
   if (brief === null || typeof brief !== "object") return incomplete;
   const answers = ANSWER_FIELDS.map((field) => (typeof brief[field] === "string" ? brief[field].trim() : ""));
-  if (answers.some((a) => !a) || !Object.hasOwn(COVER_TONES, brief.tone)) return incomplete;
+  if (answers.some((a) => !a) || typeof brief.tone !== "string" || !Object.hasOwn(COVER_TONES, brief.tone)) {
+    return incomplete;
+  }
   if (answers.some((a) => a.length > MAX_ANSWER)) return { ok: false, error: `Keep each answer to ${MAX_ANSWER} characters or fewer.` };
 
   const reportFile = findReportFile(input);

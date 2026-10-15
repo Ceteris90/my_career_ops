@@ -74,3 +74,25 @@ test("parseCoverRequest: a selector that is not a bare number never reaches the 
   assert.deepEqual(result, { ok: false, error: 'Invalid report selector: "41/../../etc/passwd"' });
   assert.deepEqual(seen, []);
 });
+
+test("parseCoverRequest: a non-string input is refused before the selector regex runs", () => {
+  const result = parseCoverRequest({
+    input: { toString: null },
+    brief: BRIEF,
+    root: ROOT,
+    findReportFile,
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Invalid report selector: expected a report number string/);
+});
+
+test("parseCoverRequest: a non-string tone is refused as incomplete", () => {
+  const result = parseCoverRequest({
+    input: "041",
+    brief: { ...BRIEF, tone: { toString: null } },
+    root: ROOT,
+    findReportFile,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "Answer all four cover letter questions first.");
+});

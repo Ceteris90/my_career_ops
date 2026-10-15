@@ -6,7 +6,7 @@ import { FileText, Loader2, Mail, RotateCcw, TriangleAlert } from "lucide-react"
 import { useJobs } from "@/components/jobs/job-store";
 import { CostBadge } from "@/components/cost/cost-badge";
 import { pdfButtonState } from "@/lib/pdf-button-state.mjs";
-import { COVER_TONES } from "@/lib/cover-brief.mjs";
+import { COVER_TONES } from "@/lib/cover-tones.mjs";
 
 // Fires the real career-ops `cover` mode (worker kind "cover") for THIS
 // application. cover.md will not draft until the candidate answers its four
@@ -41,7 +41,7 @@ export function CoverDraftButton({ n, company }: { n: string; company: string })
   if (state.kind === "running")
     return (
       <Link href={`/jobs/${state.jobId}`} className="inline-flex items-center justify-center gap-1.5 rounded-full border border-brand/40 bg-brand-soft px-3 py-1 text-xs font-medium text-brand max-sm:min-h-[44px]">
-        <Loader2 className="size-3.5 animate-spin" /> Drafting cover letter…
+        <Loader2 className="size-3.5 motion-safe:animate-spin" /> Drafting cover letter…
       </Link>
     );
 
