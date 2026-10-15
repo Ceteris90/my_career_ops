@@ -59,7 +59,8 @@ export default async function ApplyPage({
   if (indexPath) {
     try {
       indexText = fs.readFileSync(indexPath, "utf8");
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       indexText = "";
     }
   }

@@ -86,10 +86,11 @@ test("both tailored-CV lookups derive their key through this module", () => {
 
 test("cv-pdf refuses cover downloads that lack a report number before the CV fallbacks", () => {
   const src = readFileSync(join(HERE, "..", "..", "src", "app/api/cv-pdf/route.ts"), "utf8");
-  assert.match(
-    src,
-    /kind === "cover" && !n/,
-    "cover without n must 404 before application or company-slug CV fallbacks",
-  );
+  const guard = src.search(/kind === "cover" && !n/);
+  assert.ok(guard >= 0, "cover without n must 404");
+  const applicationBranch = src.search(/\bif \(application\)/);
+  const companyFallback = src.search(/companySlug\(/);
+  assert.ok(applicationBranch > guard, "cover guard must sit above the application CV path");
+  assert.ok(companyFallback > guard, "cover guard must sit above the company-slug CV fallback");
 });
 
