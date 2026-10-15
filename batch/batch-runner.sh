@@ -71,13 +71,15 @@ REPORTS_DIR="$DATA_ROOT/reports"
 export CAREER_OPS_BATCH_STATE="$PROJECT_DIR/batch/batch-state.tsv"
 LOCK_FILE="$BATCH_DIR/batch-runner.pid"
 PAUSE_FILE="$BATCH_DIR/batch-runner.paused"
+THROTTLE_FILE="$BATCH_DIR/batch-runner.throttled"
 STATE_LOCK_DIR="$BATCH_DIR/.batch-state.lock"
 STATE_LOCK_PID_FILE="$STATE_LOCK_DIR/pid"
 STATE_LOCK_TIMEOUT_SECONDS=30
 MAIN_PID="${BASHPID:-$$}"
 
 # Defaults
-PARALLEL=1
+PARALLEL=""
+DEFAULT_CLAUDE_PARALLEL=3
 DRY_RUN=false
 RETRY_FAILED=false
 RESUME_PAUSED=false
@@ -114,7 +116,8 @@ Options:
                        For claude, overrides the tier-resolved model (otherwise
                        config/profile.yml spend_tier: economy/standard/premium;
                        default standard).
-  --parallel N         Number of parallel workers (default: 1; claude only)
+  --parallel N         Number of parallel workers (default: 3 for claude, 1 otherwise).
+                       On a rate limit, the rest of the batch runs on 1 worker.
   --dry-run            Show what would be processed, don't execute
   --retry-failed       Only retry offers marked as "failed" in state
   --resume-paused      Resume offers paused by a Claude session/rate limit
@@ -197,6 +200,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ -z "$PARALLEL" ]]; then
+  if [[ "$CLI" == "claude" ]]; then PARALLEL=$DEFAULT_CLAUDE_PARALLEL; else PARALLEL=1; fi
+fi
 
 if ! [[ "$RATE_LIMIT_SLEEP" =~ ^[0-9]+$ ]]; then
   echo "ERROR: --rate-limit-sleep must be a non-negative integer (seconds)."
@@ -1058,6 +1065,31 @@ process_offer() {
       fi
   fi
 
+  # ATS API fallback (#4246). When the static fetch above left $jd_file empty
+  # (thin JS shell, curl failure, curl absent), ask the ATS's own public API
+  # through fetch-jd.mjs before the worker falls back to WebFetch, which hits
+  # the same unrendered shell on Ashby and embedded Greenhouse boards.
+  # The call lives here and not in the worker prompt on purpose: the offer URL
+  # is untrusted, and here it travels as one argv element ("$url"), never as
+  # text inside a shell command the worker composes. fetch-jd.mjs only talks to
+  # the known ATS API hosts it resolves from the URL, so a private or unknown
+  # host is a miss (exit 1), not a request.
+  local jd_api_words=0
+  if [[ ! -s "$jd_file" && -f "$PROJECT_DIR/fetch-jd.mjs" ]]; then
+    local jd_api_tmp
+    jd_api_tmp="$(mktemp "${TMPDIR:-/tmp}/batch-jd-api.XXXXXX")"
+    if node "$PROJECT_DIR/fetch-jd.mjs" "$url" > "$jd_api_tmp" 2>/dev/null; then
+      jd_api_words=$(wc -w < "$jd_api_tmp" 2>/dev/null) || jd_api_words=0
+      jd_api_words="${jd_api_words//[^0-9]/}"
+      jd_api_words="${jd_api_words:-0}"
+      if [[ "$jd_api_words" -ge "$prefetch_min_words" ]]; then
+        cat "$jd_api_tmp" > "$jd_file"
+        echo "    ℹ️  JD prefetch: ${jd_api_words} words from the ATS API (fetch-jd.mjs)"
+      fi
+    fi
+    rm -f "$jd_api_tmp"
+  fi
+
   echo "--- Processing offer #$id: $url (report $report_num, attempt $((retries + 1)))"
 
   # Build the prompt with placeholders replaced
@@ -1218,6 +1250,7 @@ process_offer() {
         terminal_failure_recorded=true
         break
       fi
+      : > "$THROTTLE_FILE"
       retries=$((retries + 1))
       local retry_completed_at
       retry_completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -1607,7 +1640,7 @@ main() {
 
   if [[ "$DRY_RUN" == "false" ]]; then
     acquire_lock
-    rm -f "$PAUSE_FILE"
+    rm -f "$PAUSE_FILE" "$THROTTLE_FILE"
   fi
 
   init_state
@@ -1762,6 +1795,11 @@ main() {
         break
       fi
 
+      if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
+        PARALLEL=1
+        echo "=== Rate limited: running the remaining offers on 1 worker. ==="
+      fi
+
       # Wait if we're at parallel limit
       while (( running >= PARALLEL )); do
         # Wait for any child to finish
@@ -1786,6 +1824,10 @@ main() {
         if [[ "$BATCH_PAUSED" == "true" || -f "$PAUSE_FILE" ]]; then
           echo "=== Batch paused: session/rate limit reached. Waiting for running workers, not scheduling new offers. ==="
           break
+        fi
+        if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
+          PARALLEL=1
+          echo "=== Rate limited: running the remaining offers on 1 worker. ==="
         fi
         sleep 1
       done
