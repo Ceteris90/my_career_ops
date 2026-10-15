@@ -189,6 +189,11 @@ try {
   } else {
     fail(`jibeapply fetch cap: expected a truncation warning, got ${JSON.stringify(jibeCapWarnings)}`);
   }
+  if (fetchedHuge.jibeapplyTruncated === true) {
+    pass('jibeapply.fetch() tags a cap-truncated board jibeapplyTruncated');
+  } else {
+    fail(`jibeapply cap-truncated board should carry jibeapplyTruncated, got ${fetchedHuge.jibeapplyTruncated}`);
+  }
 
   // fetch() pagination cap — entry.max_pages raises the cap for a genuinely
   // large tenant (e.g. a Workday-scale Deutsche Bank equivalent on JibeApply)

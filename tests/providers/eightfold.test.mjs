@@ -540,6 +540,25 @@ try {
       : fail(`truncation tag: partial=${jobs.eightfoldTruncated} complete=${complete.eightfoldTruncated}`);
   }
 
+  // The page cap cuts a board short exactly like a 429 does, so it is tagged the
+  // same way. A board that fits under the cap, or one the caller deliberately
+  // probes with ctx.maxPages beyond its end, must stay untagged.
+  {
+    const page = (start) => Array.from({ length: 10 }, (_, i) => position(String(start + i), `R${start + i}`));
+    const walk = (c) => {
+      const start = Number(new URL(c.url).searchParams.get('start') || 0);
+      return { positions: page(start), count: 45 };
+    };
+    const capped = await ef.fetch({ ...TENANT, max_pages: 2 }, recording(walk).ctx);
+    const roomy = await ef.fetch({ ...TENANT, max_pages: 10 }, recording((c) => {
+      const start = Number(new URL(c.url).searchParams.get('start') || 0);
+      return { positions: start < 40 ? page(start) : page(start).slice(0, 5), count: 45 };
+    }).ctx);
+    capped.length === 20 && capped.eightfoldTruncated === true && roomy.length === 45 && roomy.eightfoldTruncated === undefined
+      ? pass('eightfold tags a max_pages-truncated board eightfoldTruncated, and not a complete one')
+      : fail(`max_pages tag: capped=${capped.length}/${capped.eightfoldTruncated} roomy=${roomy.length}/${roomy.eightfoldTruncated}`);
+  }
+
   // PCSX pages are paced for PCSX: Microsoft's edge 429s a walk at the v2
   // spacing, so PCSX pages wait longer between requests than v2 pages do.
   {
