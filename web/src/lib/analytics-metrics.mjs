@@ -182,7 +182,8 @@ export function canonicalizeLocation(raw) {
   // Collapse known city variants ("Singapore, On-site", state/province
   // suffixes, and country-qualified labels) into the same TUI bucket.
   if (aliases[first]) return city;
-  if (["Req", "Job", "Id", "User", "Applicant"].some((bad) => city.toLowerCase().startsWith(bad.toLowerCase()))) return "";
+  // Whole words only: a prefix test also threw away real places like "Idaho Falls".
+  if (/^(?:req|requisition|jobs?|id|users?|applicants?)\b/i.test(city)) return "";
   if (parts.length === 1) {
     return city;
   }
@@ -191,7 +192,7 @@ export function canonicalizeLocation(raw) {
 
 export function deriveSeniority(role = "") {
   const value = String(role).toLowerCase();
-  if (/\b(chief|vp|vice president|director|head of|executive)\b/.test(value)) return "Executive";
+  if (/\b(chief|vp|vice president|director|head of)\b/.test(value)) return "Executive";
   if (/\b(staff|principal)\b/.test(value)) return "Staff / Principal";
   if (/\b(lead|manager|management)\b/.test(value)) return "Lead / Manager";
   if (/\b(senior|sr\.?|expert)\b/.test(value)) return "Senior";

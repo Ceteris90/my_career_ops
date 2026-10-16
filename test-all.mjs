@@ -100,6 +100,11 @@ function readFile(path) {
   return content;
 }
 
+function readOfertaMode() {
+  return readFile('modes/oferta.md')
+    .replace(/^\*\*\d+\. .+?\*\*\. Read `(modes\/oferta-signals\/[^`]+)` when .*$/gm, (_, file) => readFile(file));
+}
+
 /**
  * Normalize CRLF line endings to LF (#1771).
  *
@@ -2584,6 +2589,8 @@ const allowedFiles = [
 // the ones this PR actually intends to allow, so they get the tighter
 // check instead of loosening the shared one.
 const exactAllowedFiles = new Set([
+  // Exempt only the root Indonesian README, not similarly named files.
+  'README.id.md',
   // GitHub Sponsors funding target + Codex plugin manifest (#4131) — same
   // maintainer-credit shape as the .claude-plugin/.github/plugin ones above.
   'funding.json', '.codex-plugin/plugin.json',
@@ -2858,7 +2865,7 @@ try {
   if (
     generatePdfScript.includes('preferCSSPageSize: true') &&
     generatePdfScript.includes("right: '0'") &&
-    generatePdfScript.includes('injectPrintPageCss(html, format)') &&
+    generatePdfScript.includes('injectPrintPageCss(html, format, opts.country)') &&
     !/page\.pdf\(\{\s*format:/s.test(generatePdfScript)
   ) {
     pass('PDF renderer uses CSS @page margins instead of Playwright margins');
@@ -3787,7 +3794,7 @@ if (
   fail('application-answers CLI accepted a missing option value');
 }
 
-const ofertaMode = readFile('modes/oferta.md');
+const ofertaMode = readOfertaMode();
 const autoPipelineMode = readFile('modes/auto-pipeline.md');
 if (
   ofertaMode.includes('## Liveness gate (URL inputs)') &&
@@ -14423,8 +14430,8 @@ try {
   const env = { ...process.env, PATH: `${fakeBin}${delimiter}${process.env.PATH}`, BATCH_ARG_FILE: argFile };
   const out = run(getBash(), [toBashPath(join(batchDir, 'batch-runner.sh')), '--parallel', '1'], { cwd: tmp, env, stdio: ['pipe', 'pipe', 'pipe'] }) || '';
   const argv = existsSync(argFile) ? readFileSync(argFile, 'utf-8') : '';
-  if (argv.includes('--model') && argv.includes('claude-haiku-4-5') && out.includes('spend_tier=economy')) {
-    pass('economy spend_tier resolves to claude-haiku-4-5');
+  if (argv.includes('--model') && argv.includes('claude-haiku-5-5') && out.includes('spend_tier=economy')) {
+    pass('economy spend_tier resolves to claude-haiku-5-5');
   } else {
     fail(`economy spend_tier did not route to haiku: argv=${JSON.stringify(argv)}, out=${JSON.stringify(out.slice(-240))}`);
   }
@@ -19083,7 +19090,7 @@ console.log('\n68. Immigration-status requirement overreach (#2033)');
   // 2. Mode section structure: oferta signal (jurisdiction derivation,
   //    exceptions honesty, ITAR note) + apply step (status-vs-authorization
   //    rule, never-auto-answer guarantees).
-  const ofertaNow = readFile('modes/oferta.md');
+  const ofertaNow = readOfertaMode();
   const applyNow = readFile('modes/apply.md');
   const sigStart = ofertaNow.indexOf('**11. Immigration-Status Requirement Overreach**');
   const sigEnd = ofertaNow.indexOf('### Output format:', Math.max(sigStart, 0));

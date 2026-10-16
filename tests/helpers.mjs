@@ -136,7 +136,7 @@ export function realDataRootDrift() {
   if (!ownsSandbox || realRootChecked) return null;
   realRootChecked = true;
   const drift = diffSnapshots(realRootBefore, snapshotDataRoot(REAL_DATA_ROOT, ROOT));
-  return drift.length > 0 ? describeDrift(REAL_DATA_ROOT, drift) : null;
+  return drift.length > 0 ? describeDrift(REAL_DATA_ROOT, drift, ROOT) : null;
 }
 
 /**

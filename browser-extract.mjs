@@ -49,6 +49,7 @@ import * as yaml from 'js-yaml';
 import { LIVENESS_CONTEXT_OPTIONS, rejectPrivateOrInvalid } from './liveness-browser.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { resolveAtsApi, JD_TEXT_API_ATS } from './liveness-api.mjs';
+import { classifyLiveness } from './liveness-core.mjs';
 import { decodeEntities } from './providers/_html-entities.mjs';
 import { isWorkModelOnly } from './providers/greenhouse.mjs';
 import { DEFAULT_USER_AGENT } from './user-agent.mjs';
@@ -139,6 +140,10 @@ export function normalizeJd(raw, finalUrl, textCap = JD_TEXT_CAP) {
     url: finalUrl,
     title: compactText(raw?.title || raw?.jsonLdTitle || '', 300),
     text: compactText(text, textCap),
+    // For the liveness check in jdFailure() only. `text` has had nav/header/footer
+    // stripped, and an expired-posting banner often sits in one of them. Never
+    // emitted on the success path.
+    bodyText: compactText(raw?.bodyText || '', 4100),
   };
 }
 
@@ -697,18 +702,51 @@ export async function fetchJdViaKnownApi(url, textCap = JD_TEXT_CAP, timeoutMs =
  * A `--max-chars` below the floor is honored rather than made unsatisfiable: a
  * caller who asks for 50 chars gets 50, not a guaranteed failure.
  */
-function emitJd(result, maxChars) {
+/**
+ * Why a jd-mode result cannot be emitted, or null when it can. Pure — exported
+ * for tests.
+ *
+ * A page whose cleaned text is below the floor is either unreadable (a client-
+ * rendered shell: `empty_text`, worth another attempt) or gone (the posting
+ * was taken down: `unavailable`, terminal). Both produce the same empty text,
+ * because the "no longer available" banner usually sits in a header or footer
+ * that readDom() strips — so the unstripped body is checked too. A result at or
+ * above the floor is never reclassified: a full JD may quote such a phrase.
+ */
+export function jdFailure(result, maxChars) {
   const floor = Math.min(MIN_JD_TEXT_CHARS, maxChars);
-  if (result.text.length < floor) {
-    console.error(JSON.stringify({
-      error: `extracted ${result.text.length} chars of JD text (minimum ${floor}) — the page most likely renders its content client-side`,
-      code: 'empty_text',
-      url: result.url,
-    }));
+  if (result.text.length >= floor) return null;
+  // The shared liveness classifier, not a second phrase list. Only its
+  // posting-specific expiry verdicts count: `insufficient_content` is what a
+  // page that has not rendered yet looks like (liveness-browser treats it the
+  // same way), so it stays empty_text and remains worth retrying.
+  const verdict = classifyLiveness({
+    requestedUrl: result.url,
+    finalUrl: result.url,
+    bodyText: `${result.text}\n${result.bodyText || ''}`,
+  });
+  if (verdict.result === 'expired' && (verdict.code === 'expired_body' || verdict.code === 'expired_body_soft')) {
+    return { error: `posting is no longer available (${verdict.reason})`, code: 'unavailable', url: result.url };
+  }
+  return {
+    error: `extracted ${result.text.length} chars of JD text (minimum ${floor}) — the page most likely renders its content client-side`,
+    code: 'empty_text',
+    url: result.url,
+    body_text: String(result.bodyText || '').slice(0, 4000),
+  };
+}
+
+function emitJd(result, maxChars) {
+  const failure = jdFailure(result, maxChars);
+  if (failure) {
+    console.error(JSON.stringify(failure));
     process.exitCode = 1;
     return;
   }
-  process.stdout.write(JSON.stringify(result));
+  // bodyText exists only for jdFailure(); drop it so the documented success
+  // shape `{ url, title, text }` is unchanged.
+  const { bodyText: _bodyText, ...emitted } = result;
+  process.stdout.write(JSON.stringify(emitted));
 }
 
 /**
@@ -897,7 +935,14 @@ export async function readDom(page) {
       }
     }
 
-    return { title, text, anchors, jsonLdDescription, jsonLdTitle };
+    // The unstripped body: `text` above removes nav/header/footer, where an
+    // expired-posting banner often lives.
+    // Head and tail, so a banner in the footer is still in the sample when the
+    // leading content fills the first 4000 characters.
+    const fullBody = document.body?.innerText || '';
+    const bodyText = fullBody.length > 4000 ? `${fullBody.slice(0, 2000)}\n…\n${fullBody.slice(-2000)}` : fullBody;
+
+    return { title, text, anchors, jsonLdDescription, jsonLdTitle, bodyText };
   });
 }
 
