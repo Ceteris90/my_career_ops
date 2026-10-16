@@ -196,7 +196,7 @@ export function canonicalizeLocation(raw) {
 
 export function deriveSeniority(role = "") {
   const value = String(role).toLowerCase();
-  if (/\b(chief|vp|vice president|director|head of|executive)\b/.test(value)) return "Executive";
+  if (/\b(chief|vp|vice president|director|head of)\b/.test(value)) return "Executive";
   if (/\b(staff|principal)\b/.test(value)) return "Staff / Principal";
   if (/\b(lead|manager|management)\b/.test(value)) return "Lead / Manager";
   if (/\b(senior|sr\.?|expert)\b/.test(value)) return "Senior";

@@ -911,7 +911,7 @@ npm run company:funded -- --sources techcrunch,prnewswire,guardian,hn
 npm run company:funded -- --self-test
 ```
 
-Defaults: last 3 months, `--sort date`, sources `techcrunch,prnewswire,guardian,hn`. `--sort score` ranks by source and funding-detail confidence instead.
+Defaults: last 3 months, `--sort date`, sources `techcrunch,prnewswire,guardian,hn`. `siliconangle` is available opt-in via `--sources`. `--sort score` ranks by source and funding-detail confidence instead.
 
 Runs without `--dry-run` write JSON under `output/` and a Markdown report under `reports/`.
 
