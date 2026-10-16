@@ -51,7 +51,7 @@ export function WorkerPills() {
               </Link>
               <button
                 onClick={() => removeJob(j.id)}
-                className="absolute right-2 top-2 rounded text-faint opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                className="absolute right-2 top-2 rounded text-faint opacity-100 [@media(hover:hover)]:opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                 aria-label={`Dismiss worker: ${workerIdentity(j)}`}
               >
                 <X className="size-3" />
