@@ -742,8 +742,21 @@ console.log('\n--- data/blacklist.md is never resolved or written ---');
   eq('pre-probe: name and Workday-hint domain matches are split out', pre.blacklisted.map((b) => b.name), ['BannedCo', 'Hinted']);
   eq('pre-probe: the rest is kept', pre.allowed.map((c) => c.name), ['KeptCo']);
   eq('pre-probe: matched entry + reason are reported', pre.blacklisted[0], { name: 'BannedCo', entry: 'BannedCo', reason: 'culture' });
-  const post = partitionBlacklisted([{ name: 'Other', careers_url: 'https://banned.wd1.myworkdayjobs.com/X' }], bl, (r) => r.careers_url);
+  const post = partitionBlacklisted([{ name: 'Other', careers_url: 'https://banned.wd1.myworkdayjobs.com/X' }], bl, (r) => [r.careers_url]);
   eq('post-probe: a resolved board on a blacklisted host is dropped', post.allowed.length, 0);
+
+  // Review on #5333: the website must be checked even when a Workday hint is
+  // present, and a bare documented `website: example.com` must still match.
+  const bl2 = parseBlacklist('| Company | Since | Scope | Reason |\n|---|---|---|---|\n'
+    + '| banned-site.example | 2026-01-01 | domain | same |\n');
+  const both = partitionBlacklisted([
+    { name: 'BothFields', workday: 'https://ok.wd1.myworkdayjobs.com/Site', website: 'https://www.banned-site.example' },
+    { name: 'BareSite', website: 'banned-site.example' },
+    { name: 'BareSubdomain', website: 'careers.banned-site.example/jobs' },
+    { name: 'CleanSite', website: 'fine.example' },
+  ], bl2);
+  eq('pre-probe: website is checked even when a Workday hint is present', both.blacklisted.map((b) => b.name), ['BothFields', 'BareSite', 'BareSubdomain']);
+  eq('pre-probe: a bare website not on the list is kept', both.allowed.map((c) => c.name), ['CleanSite']);
 
   // End to end: every company blacklisted → nothing probed (no network) and
   // --write leaves portals.yml byte-for-byte unchanged.

@@ -827,22 +827,37 @@ export async function resolveCompany(company, { vendors = VENDOR_ORDER, ctx, inc
  * Split companies on the user's do-not-apply list (data/blacklist.md) away from
  * the rest, using scan.mjs's own findBlacklistEntry so discovery and scanning
  * agree on what is blacklisted. Before probing, a company is checked by name and
- * by whichever URL it carries (a Workday URL hint, else `website`); after
- * probing, `urlOf` lets the caller re-check a resolved board's careers_url
- * against domain-scope entries. A blacklisted company is never written to
- * portals.yml: scan.mjs would drop every posting from it anyway.
+ * by every URL it carries (a Workday URL hint AND `website`: either one can be
+ * the host a domain-scope entry names); after probing, `urlsOf` lets the caller
+ * re-check a resolved board's careers_url. A blacklisted company is never
+ * written to portals.yml: scan.mjs would drop every posting from it anyway.
  *
  * @returns {{allowed:any[], blacklisted:{name:string, entry:string, reason:string}[]}}
  */
-export function partitionBlacklisted(companies, blacklist, urlOf = (c) => (typeof c.workday === 'string' ? c.workday : c.website)) {
+export function partitionBlacklisted(companies, blacklist, urlsOf = (c) => [typeof c.workday === 'string' ? c.workday : null, c.website]) {
   const allowed = [];
   const blacklisted = [];
   for (const c of companies) {
-    const hit = findBlacklistEntry(blacklist, c.name, urlOf(c) || '');
+    const urls = urlsOf(c).filter(Boolean).map(asBlacklistUrl);
+    let hit = null;
+    for (const url of urls.length ? urls : ['']) {
+      hit = findBlacklistEntry(blacklist, c.name, url);
+      if (hit) break;
+    }
     if (hit) blacklisted.push({ name: c.name, entry: hit.company, reason: hit.reason });
     else allowed.push(c);
   }
   return { allowed, blacklisted };
+}
+
+/**
+ * The input format documents a bare `website: mollie.com`, which `new URL()`
+ * inside findBlacklistEntry rejects, so a scheme-less value would never reach a
+ * domain-scope entry. Give it one; a value that already has a scheme is kept.
+ */
+function asBlacklistUrl(value) {
+  const v = String(value).trim();
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`;
 }
 
 /** Bounded-concurrency map (mirrors scan-ats-full.mjs parallelEach; not exported there). */
@@ -1202,7 +1217,7 @@ async function main() {
   const unresolved = discovered.unresolved;
   // A resolved board's host can hit a domain-scope entry the name did not
   // (e.g. a company listed under a different name on a blacklisted host).
-  const post = partitionBlacklisted(discovered.resolved, blacklist, (r) => r.careers_url);
+  const post = partitionBlacklisted(discovered.resolved, blacklist, (r) => [r.careers_url]);
   const resolved = post.allowed;
   const blacklisted = [...pre.blacklisted, ...post.blacklisted];
   // Advisory only: resolution and exit codes are unchanged (#4772).
