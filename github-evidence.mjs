@@ -371,7 +371,9 @@ export function collect(user, runGh) {
 // ── report ──────────────────────────────────────────────────────────
 
 const fmtStars = (s) => (s == null ? '?' : s >= 1000 ? `${(s / 1000).toFixed(1)}K` : String(s));
-const cell = (s) => String(s).replace(/\|/g, '\\|');
+// Backslashes first, so a `\` already in the input cannot pair with the `\` added
+// before a pipe and turn it back into a column delimiter.
+const cell = (s) => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 
 /** The human-readable report the mode shows next to its confirm table. */
 export function renderMarkdown(result) {
@@ -387,10 +389,10 @@ export function renderMarkdown(result) {
   } else {
     md.push('### Named in cv.md, no merged PR', '');
     md.push('| Repo | Matched on | Stars | Open | Closed unmerged |', '|---|---|---:|---:|---:|');
-    for (const c of result.claimCheck.namedNoMerge) md.push(`| ${c.repo} | ${c.matchedOn} | ${fmtStars(c.stars)} | ${c.open} | ${c.closedUnmerged} |`);
+    for (const c of result.claimCheck.namedNoMerge) md.push(`| ${cell(c.repo)} | ${cell(c.matchedOn)} | ${fmtStars(c.stars)} | ${c.open} | ${c.closedUnmerged} |`);
     md.push('', '### Merged PRs, not named in cv.md', '');
     md.push('| Repo | Visibility | Stars | Merged |', '|---|---|---:|---:|');
-    for (const c of result.claimCheck.mergedNotNamed) md.push(`| ${c.repo} | ${c.visibility} | ${fmtStars(c.stars)} | ${c.merged} |`);
+    for (const c of result.claimCheck.mergedNotNamed) md.push(`| ${cell(c.repo)} | ${cell(c.visibility)} | ${fmtStars(c.stars)} | ${c.merged} |`);
     md.push('');
   }
   md.push('## Contributions (public + allowlisted private)', '');

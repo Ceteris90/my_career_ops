@@ -175,6 +175,71 @@ const CV = '# CV\n\n## Projects\n- Contributor to acme/widgets.\n- Merged fixes 
   check(md.includes('Pipe | and newline') && !md.includes('and\nnewline'), 'a title cannot break out of its Markdown line');
 }
 
+{
+  // An escaped pipe `\|`, a lone `\`, and a bare `|` in every value that lands in
+  // a table cell. Rows are split the way GFM does: `\` escapes the next
+  // character, any other `|` ends a cell.
+  seq = 0;
+  const HOSTILE = 'a\\|b\\c|d';
+  const repos = {
+    named: `${HOSTILE}-named/named-lib`,
+    merged: `${HOSTILE}-merged/merged-lib`,
+    secret: `${HOSTILE}-secret/secret-lib`,
+    fork: `${HOSTILE}-fork/fork-lib`,
+    own: `${USER}/${HOSTILE}`,
+  };
+  const openNamed = pr(repos.named, HOSTILE, { closedAt: '0001-01-01T00:00:00Z' });
+  const merged = [repos.merged, repos.secret, repos.fork, repos.own].map((r) => pr(r, HOSTILE));
+  const meta = (m) => ({ stars: 1, fork: false, private: false, ...m });
+  const result = buildEvidence({
+    user: USER, merged, open: [openNamed], closed: merged,
+    repoMeta: new Map([
+      [repos.named.toLowerCase(), meta({})],
+      [repos.merged.toLowerCase(), meta({})],
+      [repos.secret.toLowerCase(), meta({ private: true })],
+      [repos.fork.toLowerCase(), meta({ fork: true })],
+    ]),
+    cvText: `Worked on ${repos.named}.`,
+  });
+  const md = renderMarkdown(result);
+
+  const splitRow = (line) => {
+    const cells = [];
+    let cur = '';
+    for (let i = 0; i < line.length; i += 1) {
+      if (line[i] === '\\' && i + 1 < line.length) { cur += line[i] + line[i + 1]; i += 1; continue; }
+      if (line[i] === '|') { cells.push(cur); cur = ''; continue; }
+      cur += line[i];
+    }
+    cells.push(cur);
+    return cells.slice(1, -1).map((c) => c.trim());
+  };
+  const unescapeCell = (c) => c.replace(/\\(.)/g, '$1');
+
+  const tables = [];
+  let table = null;
+  for (const line of md.split('\n')) {
+    if (!line.startsWith('|')) { table = null; continue; }
+    if (!table) { table = { width: splitRow(line).length, rows: [] }; tables.push(table); continue; }
+    if (!/^\|[-:|]+\|$/.test(line)) table.rows.push(line);
+  }
+  const dataRows = tables.flatMap((t) => t.rows.map((line) => ({ width: t.width, cells: splitRow(line) })));
+  const misaligned = dataRows.filter((r) => r.cells.length !== r.width);
+  check(tables.length === 5 && dataRows.length === 5,
+    `every table row with \\|, \\ and | in it is rendered (got ${tables.length} tables, ${dataRows.length} rows)`);
+  check(misaligned.length === 0,
+    `\\|, a lone \\ and | in a cell keep the column count (misaligned: ${misaligned.map((r) => r.cells.length).join(', ') || 'none'})`);
+  const restored = new Set(dataRows.map((r) => unescapeCell(r.cells[0])));
+  check(Object.values(repos).every((r) => restored.has(r)),
+    `each repo cell unescapes back to the original name (got ${[...restored].join(' ; ')})`);
+  const named = dataRows.find((r) => unescapeCell(r.cells[0]) === repos.named);
+  const unnamed = dataRows.find((r) => unescapeCell(r.cells[0]) === repos.merged);
+  check(named && unescapeCell(named.cells[1]) === 'repo' && unnamed && unescapeCell(unnamed.cells[1]) === 'public',
+    'matchedOn and visibility cells sit in their own columns');
+  check(md.split('\n').some((line) => line.endsWith(`: ${HOSTILE}`) && line.startsWith('- merged #')),
+    'a title with \\|, \\ and | stays on its one list line, unchanged');
+}
+
 // ── 4. gh availability and the injected runner ──────────────────────
 
 const ok = (stdout = '') => ({ status: 0, stdout, stderr: '', notFound: false });
