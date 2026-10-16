@@ -14,7 +14,7 @@
  * verified on macOS and Linux too, not only on a Windows runner.
  */
 
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { pass, fail, makeUpdaterRepo } from './helpers.mjs';
 import { locallyModifiedSystemFiles, commitPathspecs } from '../update-system.mjs';
@@ -204,8 +204,8 @@ if (NAMES.join(' ').length > WINDOWS_ARGV_LIMIT) {
   } else {
     fail('#5 the unrelated staged file did not stay staged on its own');
   }
-  const listFile = resolve(repo.dir, repo.g('rev-parse', '--git-path', 'career-ops-update-pathspecs'));
-  if (!existsSync(listFile)) {
+  const gitDir = resolve(repo.dir, repo.g('rev-parse', '--git-dir'));
+  if (!readdirSync(gitDir).some((f) => f.startsWith('career-ops-update-pathspecs'))) {
     pass('the pathspec file is removed once the commit lands');
   } else {
     fail('#5 the pathspec file was left behind after a successful commit');
@@ -246,13 +246,28 @@ if (NAMES.join(' ').length > WINDOWS_ARGV_LIMIT) {
     if (args.includes('commit')) throw new Error('simulated commit failure');
     return repo.g(...args);
   };
+  let listFile = null;
   try {
     commitPathspecs('chore: auto-update system files to v2', NAMES, { git: failingCommit, root: repo.dir });
     fail('#7 the simulated failure did not surface');
-  } catch {
-    // Expected.
+  } catch (err) {
+    listFile = err.pathspecFile;
   }
-  const listFile = repo.g('rev-parse', '--git-path', 'career-ops-update-pathspecs');
+  // A second scoped commit that fails must not touch the first one's file,
+  // and one that lands must not delete it.
+  let otherFile = null;
+  try {
+    commitPathspecs('chore: other', ['mine.txt'], { git: failingCommit, root: repo.dir });
+  } catch (err) {
+    otherFile = err.pathspecFile;
+  }
+  if (listFile && otherFile && listFile !== otherFile
+      && readFileSync(resolve(repo.dir, listFile), 'utf8').split('\0').filter(Boolean).length === NAMES.length) {
+    pass('a later failed scoped commit gets its own file and leaves the first one intact');
+  } else {
+    fail(`#7 pathspec files collided: ${listFile} vs ${otherFile}`);
+  }
+  rmSync(resolve(repo.dir, otherFile), { force: true });
   // The hint's own command, with the same quoting apply() prints.
   const recovery = ['commit', '-m', 'chore: auto-update system files to v2', `--pathspec-from-file=${listFile}`, '--pathspec-file-nul'];
   let recovered = false;

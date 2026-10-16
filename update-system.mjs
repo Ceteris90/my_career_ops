@@ -3203,13 +3203,17 @@ const COMMIT_PATHSPEC_FILE = 'career-ops-update-pathspecs';
  * one the failure message points at, so the recovery command it prints stays
  * runnable on Windows too, where the argv form of it is not (#5103).
  *
+ * Each call gets its own file. A failed commit leaves its file for the
+ * recovery command, and a later scoped commit must not overwrite or delete it.
+ *
  * @param {string[]} paths
  * @param {{ git?: Function, root?: string }} [ctx]
  * @returns {string} The file's path as git printed it, relative to root.
  */
 export function writePathspecFile(paths, ctx = {}) {
   const runGit = ctx.git || git;
-  const file = runGit('rev-parse', '--git-path', COMMIT_PATHSPEC_FILE).trim();
+  const name = `${COMMIT_PATHSPEC_FILE}-${randomBytes(6).toString('hex')}`;
+  const file = runGit('rev-parse', '--git-path', name).trim();
   writeFileSync(resolve(ctx.root || ROOT, file), paths.map((p) => `${p}\0`).join(''));
   return file;
 }
@@ -3220,7 +3224,7 @@ export function writePathspecFile(paths, ctx = {}) {
  * Same commit, same `--only` semantics as the pathspec arguments it replaces:
  * git reads `--pathspec-from-file` as if each entry had been passed after
  * `--`. The file is removed on success and left in place on failure, where the
- * caller's recovery hint names it.
+ * caller's recovery hint names it: the thrown error carries it as `pathspecFile`.
  *
  * @param {string} message
  * @param {string[]} paths - Must be non-empty; an empty list would commit the whole index.
@@ -3230,10 +3234,15 @@ export function commitPathspecs(message, paths, ctx = {}) {
   if (paths.length === 0) throw new Error('commitPathspecs needs at least one path');
   const runGit = ctx.git || git;
   const file = writePathspecFile(paths, ctx);
-  runGit(
-    ...(ctx.literal ? ['--literal-pathspecs'] : []),
-    'commit', '-m', message, `--pathspec-from-file=${file}`, '--pathspec-file-nul',
-  );
+  try {
+    runGit(
+      ...(ctx.literal ? ['--literal-pathspecs'] : []),
+      'commit', '-m', message, `--pathspec-from-file=${file}`, '--pathspec-file-nul',
+    );
+  } catch (err) {
+    err.pathspecFile = file;
+    throw err;
+  }
   rmSync(resolve(ctx.root || ROOT, file), { force: true });
 }
 
@@ -4890,7 +4899,7 @@ async function apply() {
         // still the right command on a platform without the ceiling.
         let pathspecArgs;
         try {
-          pathspecArgs = `"--pathspec-from-file=${writePathspecFile(expandedPathsToStage)}" --pathspec-file-nul`;
+          pathspecArgs = `"--pathspec-from-file=${e.pathspecFile ?? writePathspecFile(expandedPathsToStage)}" --pathspec-file-nul`;
         } catch {
           pathspecArgs = `-- ${expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ')}`;
         }
@@ -5224,7 +5233,7 @@ function rollback() {
         if (scoped) {
           try {
             recovery = `Fix the cause, then run: git --literal-pathspecs commit -m "${message}" `
-              + `"--pathspec-from-file=${writePathspecFile(stagedRollbackPaths)}" --pathspec-file-nul`;
+              + `"--pathspec-from-file=${err.pathspecFile ?? writePathspecFile(stagedRollbackPaths)}" --pathspec-file-nul`;
           } catch {
             recovery = 'Fix the cause and commit only the rollback files; other staged work would go in with them.';
           }
