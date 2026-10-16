@@ -74,7 +74,7 @@ Eğer final puanı >= 4.5 ise, başvuru formu için yanıt taslakları oluşturu
 **Soru başına çerçeve:**
 - **Neden bu rol?** → "Sizin [belirli bir şeyiniz] doğrudan [benim inşa ettiğim belirli bir şeye] karşılık geliyor."
 - **Neden bu şirket?** → Şirketle ilgili spesifik bir şeyden bahsedin. "[Ürünü] [süre/amaç] için kullanıyorum."
-- **İlgili deneyim?** → Nicel bir kanıt noktası. "[Metrik] sağlayan [X]'i inşa ettim. Şirketi 2025'te sattım."
+- **İlgili deneyim?** → Nicel bir kanıt noktası. "[Metrik] sağlayan [X]'i inşa ettim." (Asla doğrulanmamış başarılar veya şirket satışı uydurmayın).
 - **Neden iyi uyum?** → "[A] ve [B]'nin kesişim noktasındayım, ki bu rol tam da burada yer alıyor."
 - **Nasıl duydunuz?** → Dürüstçe: "[Portal/tarama] aracılığıyla buldum, kriterlerime göre değerlendirdim ve en yüksek puanı aldı."
 

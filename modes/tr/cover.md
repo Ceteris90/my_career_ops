@@ -191,10 +191,10 @@ Adım 7'ye geçmeden önce dört cevabın da alınmasını bekle.
 
 ## Adım 7 — Başarı (Achievement) seçimi (yalnızca cv.md'den)
 
-SADECE `cv.md` dosyasından 4-5 başarı maddesi (achievement bullets) seç (`article-digest.md` bağlam (context) için okunabilir ancak başarı maddesi kaynağı değildir):
+SADECE `cv.md` dosyasından 4-5 başarı maddesi (achievement bullets) seç (eğer `cv.md` içinde daha az sayıda doğrulanmış metrik varsa, asla yeni metrik veya başarı uydurma — yalnızca doğrulanmış olanları al ve daha az madde ile devam et; `article-digest.md` bağlam (context) için okunabilir ancak başarı maddesi kaynağı değildir):
 1. cv.md içindeki tüm rollerin altında yer alan tüm madde işaretlerini (bullets) oku
 2. Her birini JD'nin ilk 3-4 gerekli yetkinliğine (required competencies) göre puanla
-3. Her maddede en az bir metrik olacak şekilde en yüksek puanlı 4-5 tanesini seç
+3. Her maddede en az bir metrik olacak şekilde en yüksek puanlı 4-5 tanesini seç (CV'de daha az sayıda doğrulanmış metrik varsa, sayıyı zorlama ve daha az madde kullan)
 4. Tam olarak cv.md'deki kelimeleri ve metrikleri kullan — asla kendi kelimelerinle özetleme (paraphrase) veya yeni bir şey uydurma
 5. Adım 4'teki anahtar kelime yansıtmasını (keyword mirroring) her maddenin etrafındaki kelime dağarcığına (metriklere değil) uygula
 

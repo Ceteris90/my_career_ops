@@ -40,7 +40,7 @@ Bu modun aynı persona motorunu (İK / İşe alım uzmanı → kesin gereksiniml
    ### İş Arkadaşı (Peer - referans)
    - **1. Cümle (İlgi)**: Çalışmalarına içten bir atıf -- blog yazısı, sunum, açık kaynak projesi veya yayın
    - **2. Cümle (Bağlantı)**: Adayın aynı alanda yaptığı bir şey (iş talebi DEĞİL)
-   - **3. Cümle (Eylem Çağrısı / CTA)**: "Ben de [şirket] bünyesinde benzer sorunlar üzerinde çalışıyorum, [konu] hakkındaki düşüncelerinizi duymayı çok isterim"
+   - **3. Cümle (Eylem Çağrısı / CTA)**: "Ben de benzer sorunlar üzerinde çalışıyorum, [konu] hakkındaki düşüncelerinizi duymayı çok isterim"
    - **Not**: İş İSTEME. Referans, sohbet akıcı bir şekilde ilerlerse doğal olarak gerçekleşir.
 
    ### Görüşmeci (Mülakat öncesi)

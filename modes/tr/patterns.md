@@ -195,7 +195,9 @@ Referans olarak sonuçlar şu şekilde sınıflandırılır:
 
 | Durum (Status) | Sonuç (Outcome) |
 |--------|---------|
-| Interview, Offer, Responded, Applied | **Olumlu (Positive)** (emek harcandı veya geri dönüş alındı) |
-| Rejected, Discarded | **Olumsuz (Negative)** (şirket hayır dedi veya teklif kapandı) |
+| Interview, Offer, Responded, Hired | **Olumlu (Positive)** (işveren süreci ilerletti) |
+| Applied | **Yanıt Bekleniyor (Awaiting)** (gönderildi, henüz yanıt yok — dönüşüm paydasında sayılır, asla bir başarı olarak sayılmaz) |
+| Rejected | **Olumsuz (Negative)** (işveren olumsuz dönüş yaptı) |
+| Discarded | **İptal Edildi (Discarded)** (siz geri çektiniz veya ilan kapandı — işveren kararı değildir, kanıtlanmış bir başvuru değildir; ne `submitted` ne de `decided` içinde sayılır) |
 | SKIP, NO APLICAR | **Aday Tarafından Elenen (Self-filtered)** (kullanıcı başvurmamaya karar verdi) |
 | Evaluated | **Beklemede (Pending)** (henüz herhangi bir işlem yapılmadı) |

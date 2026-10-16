@@ -249,7 +249,7 @@ Seviyeler eklenebilirdir (additive) — sırasıyla çalıştırılırlar ve son
 
 8. **For each new verified offer that passes filters**:
    a. `pipeline.md` "Pending" (Beklemede) bölümüne ekle: `- [ ] {url} | {company} | {title}`
-   b. `scan-history.tsv`'ye kaydet: `{url}\t{date}\t{query_name}\t{title}\t{company}\tadded\t{location}`
+   b. `scan.mjs` içindeki `formatScanHistoryRow` / `appendToScanHistory` ile `scan-history.tsv`'ye kaydet; satırı elle oluşturma. Kullanılabilir JD varsa SimHash 8. sütuna yazılır.
 
 9. **Offers filtered by title**: `scan-history.tsv`'ye `skipped_title` durumuyla kaydet.
 10. **Duplicate offers**: `skipped_dup` durumuyla kaydet.
@@ -277,8 +277,8 @@ Kamuya açık (publicly accessible) olmayan bir URL bulunursa:
 `data/scan-history.tsv` görülen TÜM URL'leri takip eder:
 
 ```tsv
-url	first_seen	portal	title	company	status	location
-https://...	2026-02-10	Ashby — AI PM	PM AI	Acme	added	Remote
+url	first_seen	portal	title	company	status	location	fingerprint
+https://...	2026-02-10	Ashby — AI PM	PM AI	Acme	added	Remote	a3f1c8d2e4b70592
 ```
 
 ## Çıktı Özeti (Output Summary)

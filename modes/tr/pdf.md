@@ -11,16 +11,16 @@
    - Dünyanın geri kalanı → `a4`
 6. Rol arketipini (archetype) tespit et → çerçevelemeyi (framing) uyarla.
 7. JD'yi kullanarak `modes/heuristics/recruiter-side.md` üzerinden şirket içi (internal) işe alımcıya (recruiter) yönelik bir risk haritası oluştur: olası şüpheler, eşleşen kanıtlar ve hangi doküman bölümünün hangi şüpheyi gidereceği.
-8. Profesyonel Özeti (Professional Summary) JD anahtar kelimeleri + çıkış anlatısı köprüsü ("Built and sold a business. Now applying systems thinking to [JD domain].") enjekte ederek yeniden yaz.
+8. Profesyonel Özeti (Professional Summary) JD anahtar kelimeleri + adayın `cv.md` ve `modes/_profile.md` dosyalarındaki doğrulanmış çıkış anlatısı köprüsünü enjekte ederek yeniden yaz (ASLA doğrulanmamış bir şirket satışı veya olgu uydurma).
 9. İş için en alakalı ilk 3-4 projeyi seç.
 10. Deneyim (experience) maddelerini JD ilgisine ve risk haritasına göre yeniden sırala: en güçlü eşleşme kanıtı en başa.
 11. JD gereksinimlerinden yetkinlik ızgarasını (competency grid) oluştur (6-8 anahtar kelime öbeği).
 12. Anahtar kelimeleri mevcut başarılara doğal bir şekilde enjekte et (ASLA yeni bir şey uydurma).
 13. `modes/heuristics/recruiter-side.md` içerisindeki altı saniyelik netlik kuralını (six-second clarity gate) uygula: üstteki üçte birlik kısım; hedef rolü, en güçlü uyumu ve kanıtı apaçık belli etmelidir.
 14. Şablon (template) + kişiselleştirilmiş içerik kullanarak tam HTML oluştur.
-15. `config/profile.yml` dosyasından `name` değerini oku → bunu kebab-case küçük harfe çevir (örn. "John Doe" → "john-doe") → `{candidate}`
+15. `config/profile.yml` dosyasından `name` değerini ve JD'den şirket adını oku → kabuk komut enjeksiyonunu ve geçersiz dosya adlarını önlemek için her ikisini de yalnızca alfanümerik karakterler ve kısa çizgi (`[a-z0-9-]+`) içerecek şekilde küçük harfe (kebab-case) dönüştürerek sanitize et (örn. "John Doe" → `{candidate}`, "Acme Corp." → `{company}`).
 16. HTML'i `output/cv-{candidate}-{company}.html` dosyasına yaz (geçici - temp - bir dizine DEĞİL — kaydedilen HTML, kontrol panelindeki `D` kısayol tuşunun yeniden oluşturma yaparken kullandığı asıl kaynaktır; bu nedenle geçici dizin temizliğinden sağ çıkmalıdır).
-17. Yürüt (Execute): `node generate-pdf.mjs output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}` — buradaki `{report number}`, takipçi (tracker) tablosundaki `#` sütunu DEĞİL, rapor dosya adı/bağlantısındaki NNN'dir (örn. `reports/008-acme-….md` için `008`). Başvurunun bir raporu varsa (veya olacaksa) bunu aktar; kontrol panelinin doğrudan aynı PDF'i açıp yeniden oluşturabilmesi için PDF↔rapor bağlantısını `data/pdf-index.tsv` içine kaydeder. Yalnızca takipçi girişi olmayan tek seferlik (one-off) CV'ler için bu argümanı dahil etme.
+17. Yürüt (Execute): Sanitize edilmiş her iki dosya adı parçasını kullanarak çalıştır: `node generate-pdf.mjs output/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4} --report={report number}` — buradaki `{report number}`, takipçi (tracker) tablosundaki `#` sütunu DEĞİL, rapor dosya adı/bağlantısındaki NNN'dir (örn. `reports/008-acme-….md` için `008`). Başvurunun bir raporu varsa (veya olacaksa) bunu aktar; kontrol panelinin doğrudan aynı PDF'i açıp yeniden oluşturabilmesi için PDF↔rapor bağlantısını `data/pdf-index.tsv` içine kaydeder. Yalnızca takipçi girişi olmayan tek seferlik (one-off) CV'ler için bu argümanı dahil etme.
 18. Report: PDF dosya yolu, sayfa sayısı, anahtar kelime kapsama (coverage) yüzdesi.
 
 ## ATS Kuralları (temiz ayrıştırma)
