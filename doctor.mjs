@@ -1098,8 +1098,12 @@ function unpersonalizedFiles(root) {
   const out = [];
   for (const { path, template, impact } of PERSONALIZATION_FILES) {
     const targetPath = join(root, ...path.split('/'));
-    const rootTemplatePath = join(root, ...template.split('/'));
-    const templatePath = existsSync(rootTemplatePath) ? rootTemplatePath : join(__dirname, ...template.split('/'));
+    // The checkout's template first, as the web reads it, so doctor and the web
+    // agree on which sections are still template text even when a separate data
+    // root holds an older copy. The data root's copy only covers a checkout
+    // that ships none (#5340).
+    const checkoutTemplatePath = join(__dirname, ...template.split('/'));
+    const templatePath = existsSync(checkoutTemplatePath) ? checkoutTemplatePath : join(root, ...template.split('/'));
     if (!existsSync(targetPath) || !existsSync(templatePath)) continue;
     let target, tpl;
     try {
@@ -1107,6 +1111,13 @@ function unpersonalizedFiles(root) {
       tpl = readFileSync(templatePath, 'utf-8');
     } catch {
       continue; // unreadable → let the existence checks speak
+    }
+    // An empty file is neither identical to the template nor carries a
+    // placeholder, so it would pass as personalized while the web asks for
+    // every section (#5340).
+    if (!target.trim()) {
+      out.push({ path, reason: 'is empty', impact });
+      continue;
     }
     if (path === 'modes/_profile.md') {
       // A _profile.md written in the user's own structure, without any of the
