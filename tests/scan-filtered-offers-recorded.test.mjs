@@ -185,6 +185,20 @@ const BLOCKED = 'https://boards.example.com/fixture/2002';
   }
 }
 
+// 1d. A skipped_no_apply_control row pins nothing, so a later --verify scan
+// drops the same posting again. That repeat must not append a second row.
+{
+  const header = 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n';
+  const history = header + 'https://a.example.com/4\t2026-09-01\tp\tRole\tCo\tskipped_no_apply_control\n';
+  const droppedAgain = [{ url: 'https://a.example.com/4' }, { url: 'https://a.example.com/5' }];
+  const kept = unrecordedOffers(droppedAgain, 'skipped_no_apply_control', history).map((o) => o.url);
+  if (JSON.stringify(kept) === JSON.stringify(['https://a.example.com/5'])) {
+    pass('a posting dropped again for no Apply control is not recorded twice');
+  } else {
+    fail(`repeat no-apply-control drop kept ${JSON.stringify(kept)}, want only the new URL`);
+  }
+}
+
 // 2. --dry-run writes nothing, the same as every other history write.
 {
   const { dir, portals } = makeLane();
