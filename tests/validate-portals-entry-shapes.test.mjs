@@ -11,7 +11,8 @@
 import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { pass, fail, run, NODE, rmSync } from './helpers.mjs';
+import { spawnSync } from 'child_process';
+import { pass, fail, run, NODE, ROOT, rmSync } from './helpers.mjs';
 
 console.log('\nvalidate-portals — entry shapes the scanner reads differently from how they look');
 
@@ -22,6 +23,12 @@ const writeYml = (name, body) => {
   return p;
 };
 const validate = (file) => run(NODE, ['validate-portals.mjs', '--file', file]);
+// run() maps every non-zero exit to null, so a crash would look like a reported error;
+// keep the exit status and the output to assert on the message itself.
+const validateWithOutput = (file) => {
+  const r = spawnSync(NODE, ['validate-portals.mjs', '--file', file], { cwd: ROOT, encoding: 'utf-8' });
+  return { status: r.status, output: `${r.stdout}${r.stderr}` };
+};
 
 try {
   for (const [label, value] of [['no', 'no'], ['off', 'off'], ['quoted "false"', '"false"'], ['0', '0']]) {
@@ -33,9 +40,12 @@ tracked_companies:
     careers_url: "https://jobs.lever.co/acme"
     enabled: ${value}
 `);
-    const out = validate(file);
-    if (out === null) pass(`enabled: ${value} is an error (the entry would still be scanned)`);
-    else fail(`enabled: ${value} passed validation:\n${out}`);
+    const { status, output } = validateWithOutput(file);
+    if (status === 1 && output.includes('tracked_companies[0].enabled')) {
+      pass(`enabled: ${value} is an error on tracked_companies[0].enabled (the entry would still be scanned)`);
+    } else {
+      fail(`enabled: ${value} was not reported on tracked_companies[0].enabled (exit ${status}):\n${output}`);
+    }
   }
 
   const booleans = writeYml('enabled-booleans.yml', `
