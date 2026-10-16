@@ -20,12 +20,13 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>@santifer</strong></a> द्वारा बनाया गया</p>
 
 <p align="center">
 <strong>महीनों तक CV भेजता रहा, जवाब में सिर्फ़&nbsp;खामोशी।</strong><br>
@@ -203,7 +204,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` [Node.js](https://nodejs.org) के साथ आता है: यह इंस्टॉलर एक बार चलाता है,
 > बिना कुछ ग्लोबली इंस्टॉल किए। अभी Node नहीं है? पहले उसे इंस्टॉल करें।
-> (पहले से Claude Code / Gemini / Codex CLI इस्तेमाल कर रहे हैं? तो आपके पास पहले से है।)
+> (पहले से Claude Code / Codex CLI इस्तेमाल कर रहे हैं? तो आपके पास पहले से है।)
 
 यह नवीनतम रिलीज़ को `./career-ops` में क्लोन करता है और डिपेंडेंसी इंस्टॉल करता है। फिर:
 

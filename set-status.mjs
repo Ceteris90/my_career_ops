@@ -902,14 +902,13 @@ if ((statusChanged || flags.repairFollowup) && newStatus === 'Applied') {
     const seed = await seedFollowup(target.num, {
       trackerPath: APPS_FILE,
       followupsPath: join(dirname(APPS_FILE), 'follow-ups.md'),
-      // --on is the day the transition REALLY happened, and for a transition
-      // into Applied that day is the day the application was sent. Nothing
-      // else carries it here: the tracker's date column is the evaluation
-      // date and this script never rewrites it, so without passing it on,
-      // seedFollowup falls back to that column or to today. Backdating a
-      // week-old application would then schedule its first follow-up a week
-      // late — from the wrong anchor, silently.
+      // --on is the day the user says the application was sent. Without it,
+      // a fresh transition passes today as the status-change date, which
+      // resolveAppliedDate ranks below an "Applied YYYY-MM-DD" in the notes and
+      // above the evaluation-date column. A repair retry passes neither,
+      // because the apply happened on an earlier run.
       date: flags.on,
+      statusChangeDate: statusChanged ? localToday() : undefined,
       dryRun: flags.dryRun,
       // assumeApplied on a DRY RUN only, and deliberately not `force`.
       // seedFollowup refuses a row that is not Applied, and on a dry run the
@@ -1076,7 +1075,7 @@ if (flags.json) {
   // Only when seeding did NOT happen. The advisory predates the seeding above
   // and asked the user to do by hand what now runs for them; leaving it
   // unconditional would read as a contradiction right under "Follow-up seeded".
-  if (statusChanged && !flags.dryRun && newStatus === 'Applied' && !followupSeeded?.seeded) {
+  if (statusChanged && !flags.dryRun && newStatus === 'Applied' && !followupSeeded?.seeded && followupSeeded?.reason !== 'disabled') {
     console.error('ℹ️  Status is Applied — consider seeding follow-ups in data/follow-ups.md (#1430: node followup-cadence.mjs)');
   }
 }
