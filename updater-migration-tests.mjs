@@ -519,7 +519,7 @@ const twoPassManifestChecks = [
     name: 'rollback commit is scoped to concrete restore/removal files under literal pathspecs (#3504)',
     // An index commit only when nothing unrelated is staged; otherwise scoped
     // to the staged rollback paths, read from a file. Never a path list on argv.
-    pattern: /stagedPathsOutside\(concreteRollbackPaths\)\.length === 0\)\s*\{\s*git\('commit',\s*'-m',\s*message\);\s*\}\s*else\s*\{\s*commitPathspecs\(message,\s*stagedRollbackPaths,\s*\{\s*literal:\s*true\s*\}\)/,
+    pattern: /const scoped = stagedPathsOutside\(concreteRollbackPaths\)\.length > 0;[\s\S]{0,40}if \(!scoped\)\s*\{\s*git\('commit',\s*'-m',\s*message\);\s*\}\s*else\s*\{\s*commitPathspecs\(message,\s*stagedRollbackPaths,\s*\{\s*literal:\s*true\s*\}\)/,
   },
   {
     name: 'apply captures uncommitted work via git stash create before branching (#915)',

@@ -5210,16 +5210,28 @@ function rollback() {
     // A second rollback has nothing staged, and so nothing to commit.
     if (stagedRollbackPaths.length > 0) {
       const message = `chore: rollback system files from ${latest}`;
+      const scoped = stagedPathsOutside(concreteRollbackPaths).length > 0;
       try {
-        if (stagedPathsOutside(concreteRollbackPaths).length === 0) {
+        if (!scoped) {
           git('commit', '-m', message);
         } else {
           commitPathspecs(message, stagedRollbackPaths, { literal: true });
         }
       } catch (err) {
+        // Something unrelated is staged on the scoped path, so a bare
+        // `git commit` would sweep it in. Name the file commitPathspecs left.
+        let recovery = 'Fix the cause and commit the staged files.';
+        if (scoped) {
+          try {
+            recovery = `Fix the cause, then run: git --literal-pathspecs commit -m "${message}" `
+              + `"--pathspec-from-file=${writePathspecFile(stagedRollbackPaths)}" --pathspec-file-nul`;
+          } catch {
+            recovery = 'Fix the cause and commit only the rollback files; other staged work would go in with them.';
+          }
+        }
         throw new Error(
           `the files were restored and staged, but the rollback commit failed (${err.message}). `
-          + 'Fix the cause and commit the staged files.',
+          + recovery,
         );
       }
     }
