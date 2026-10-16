@@ -22,9 +22,19 @@
 // becomes 104, stays > 0, and every assertion passes.
 //
 // All 105 load today with no warnings, measured, so this is a ratchet.
+//
+// Review (#4981) found an assertion in the first version of this file that
+// could not fail:
+//
+//   - The duplicate-id block could not fail. It iterated the `providers` Map,
+//     whose keys are unique by construction, so `seen.has(id)` was unreachable.
+//     An assertion that cannot fail is worse than none, because the next reader
+//     trusts it. It now reads each module's declared id BEFORE the loader
+//     dedups, which is the only place a collision is still visible.
 
 import { readdirSync } from 'fs';
 import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { pass, fail, ROOT } from '../helpers.mjs';
 import { loadProviders } from '../../providers/_registry.mjs';
 
@@ -86,20 +96,60 @@ if (warnings.length === 0) {
   fail(`loadProviders() skipped ${warnings.length} module(s): ${warnings.join(' | ')}`);
 }
 
-// Asserted separately from the count because it fails differently: a duplicate
-// id keeps the FIRST file and drops the second, so two providers can collide
-// while the id set still looks healthy in isolation.
-{
-  const seen = new Map();
-  const collisions = [];
-  for (const [id, p] of providers) {
-    if (seen.has(id)) collisions.push(id);
-    seen.set(id, p);
+// Every module's DECLARED id, read before the loader dedups.
+//
+// `loadProviders` drops a colliding module and keeps the first, so by the time
+// it returns, the collision is gone from its result — the Map it hands back
+// cannot be asked which ids collided. Reading each module directly is the only
+// way to see them. The import cache makes this free: the loader has already
+// imported these files, so these are the same module instances, not re-runs.
+const declared = [];
+const unreadable = [];
+for (const file of files) {
+  try {
+    const mod = await import(pathToFileURL(join(PROVIDERS_DIR, file)).href);
+    declared.push({ file, id: mod.default?.id });
+  } catch (err) {
+    // The loader already warned about this one and the warnings check above
+    // owns it; recorded so the id checks below report on a known-short list
+    // rather than silently covering fewer files than they claim.
+    unreadable.push(`${file}: ${err.message}`);
   }
+}
+
+// A guard on the guard, again: the id checks below iterate `declared`, so a
+// collection that silently came back short would make all of them vacuous.
+if (declared.length === files.length) {
+  pass(`read a declared id from all ${declared.length} provider modules`);
+} else {
+  fail(
+    `read ids from only ${declared.length} of ${files.length} modules, so the id checks below `
+    + `cover less than they claim: ${unreadable.join(' | ')}`,
+  );
+}
+
+// Collisions, from the declared ids rather than the deduped Map.
+//
+// The loader does warn here ("duplicate provider id — keeping first"), and the
+// warnings check above would catch it, so this is not the only net. It is the
+// one that names BOTH files: the warning names only the module that lost and
+// says "keeping first" without saying which file won, which is the thing the
+// reader needs in order to fix it.
+{
+  const byId = new Map();
+  for (const { file, id } of declared) {
+    if (!id) continue; // shape failure; the loader's own warning owns it
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id).push(file);
+  }
+  const collisions = [...byId.entries()].filter(([, fs]) => fs.length > 1);
   if (collisions.length === 0) {
-    pass(`${providers.size} provider ids are unique`);
+    pass(`${byId.size} declared provider ids are unique`);
   } else {
-    fail(`duplicate provider ids, so the later file is dropped: ${collisions.join(', ')}`);
+    fail(
+      'two modules declare the same provider id, so the later one is dropped and every board it '
+      + `claims is skipped: ${collisions.map(([id, fs]) => `"${id}" in ${fs.join(' and ')}`).join('; ')}`,
+    );
   }
 }
 
