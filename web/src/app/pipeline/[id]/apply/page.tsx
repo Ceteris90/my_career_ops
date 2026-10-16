@@ -35,12 +35,9 @@ export default async function ApplyPage({
 
   let answers: { label: string; text: string }[] = [];
   if (report?.content) {
-    try {
-      const mod = await import(/* webpackIgnore: true */ pathToFileURL(rootScript("application-answers")).href);
-      answers = answerCopyItems(mod.parseApplicationAnswersSection(report.content));
-    } catch {
-      answers = [];
-    }
+    const mod = await import(/* webpackIgnore: true */ pathToFileURL(rootScript("application-answers")).href);
+    const snapshot = mod.parseApplicationAnswersSection(report.content, { strict: true });
+    answers = answerCopyItems(snapshot);
   }
 
   const root = careerOpsRoot();
