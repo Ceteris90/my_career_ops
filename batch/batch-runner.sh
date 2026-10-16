@@ -1090,7 +1090,7 @@ process_offer() {
     rm -f "$jd_api_tmp"
   fi
 
-  echo "--- Processing offer #$id: $url (report $report_num, attempt $((retries + 1)))"
+  echo "--- Processing offer #$id${JOB_POS:+ ($JOB_POS)}: $url (report $report_num, attempt $((retries + 1)))"
 
   # Build the prompt with placeholders replaced
   local prompt
@@ -1461,6 +1461,10 @@ merge_tracker() {
   node "$PROJECT_DIR/verify-pipeline.mjs" || echo "⚠️  Verification found issues (see above)"
 }
 
+report_progress() {
+  echo "=== Progress: $1/$2 offers finished, $((SECONDS - BATCH_START))s elapsed ==="
+}
+
 # Print summary
 print_summary() {
   echo ""
@@ -1773,10 +1777,15 @@ main() {
   fi
 
   # Process offers
+  BATCH_START=$SECONDS
+  local done_jobs=0
   if (( PARALLEL <= 1 )); then
     # Sequential processing
     for i in "${!pending_ids[@]}"; do
+      JOB_POS="$((i + 1))/$pending_count"
       process_offer "${pending_ids[$i]}" "${pending_urls[$i]}" "${pending_sources[$i]}" "${pending_notes[$i]}"
+      done_jobs=$((done_jobs + 1))
+      report_progress "$done_jobs" "$pending_count"
       if [[ "$BATCH_PAUSED" == "true" || -f "$PAUSE_FILE" ]]; then
         echo "=== Batch paused: session/rate limit reached. Resume later with --resume-paused. ==="
         break
@@ -1813,6 +1822,8 @@ main() {
             unset 'pids[j]'
             unset 'pid_ids[j]'
             running=$((running - 1))
+            done_jobs=$((done_jobs + 1))
+            report_progress "$done_jobs" "$pending_count"
           fi
         done
         # Compact arrays
@@ -1837,6 +1848,7 @@ main() {
       fi
 
       # Launch worker in background
+      JOB_POS="$((i + 1))/$pending_count"
       process_offer "${pending_ids[$i]}" "${pending_urls[$i]}" "${pending_sources[$i]}" "${pending_notes[$i]}" &
       pids+=($!)
       pid_ids+=("${pending_ids[$i]}")
@@ -1850,6 +1862,8 @@ main() {
       if (( worker_rc != 0 )); then
         parallel_rc=$worker_rc
       fi
+      done_jobs=$((done_jobs + 1))
+      report_progress "$done_jobs" "$pending_count"
     done
     if (( parallel_rc != 0 )); then
       echo "ERROR: a parallel worker failed fatally; tracker merge skipped. Inspect the worker log and repair state before rerunning." >&2
