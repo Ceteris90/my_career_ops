@@ -26,7 +26,7 @@ export type Job = {
   endedAt?: number;
 };
 
-type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string };
+type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string; brief?: Record<string, string> };
 
 type Ctx = {
   jobs: Job[];
@@ -173,7 +173,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           const res = await fetch("/api/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId }),
+            body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, brief: opts.brief }),
           });
           if (!res.ok || !res.body) {
             const e = await res.json().catch(() => ({}));

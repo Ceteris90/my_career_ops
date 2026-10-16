@@ -10,14 +10,17 @@ import {
   cleanHeading,
   isLeadSection,
   isVerdictHeading,
+  sectionPreview,
   splitSections,
   verdictReason,
 } from "@/lib/report-sections.mjs";
-import { isStarTableHeader, parsePipeTable } from "@/lib/report-tables.mjs";
 import { StatusSelect } from "@/components/status-select";
 import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
+import { ScoreLevers } from "@/components/score-levers";
+import { PrepPack } from "@/components/prep-pack";
 import { GeneratePdfButton } from "@/components/generate-pdf-button";
+import { CoverDraftButton } from "@/components/cover-draft-button";
 import { ApplyButton } from "@/components/apply-button";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
 import { ReportMarkdown } from "@/components/report-markdown";
@@ -41,22 +44,6 @@ function httpUrl(url?: string | null): string | undefined {
   return /^https?:\/\//i.test(url) ? url : undefined;
 }
 
-function preview(md: string): string {
-  const table = parsePipeTable(md);
-  if (table && isStarTableHeader(table.header)) {
-    const n = table.rows.length;
-    return `${n} interview stor${n === 1 ? "y" : "ies"}`;
-  }
-  const text = md
-    .replace(/^#+\s.*$/gm, "")
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/[*_`>#|]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const sentence = text.split(/(?<=[.!?])\s/)[0] ?? text;
-  return sentence.length > 96 ? sentence.slice(0, 96).trimEnd() + "…" : sentence;
-}
-
 export function ReportView({
   id,
   app,
@@ -75,8 +62,8 @@ export function ReportView({
   canDelete?: boolean;
   pdfReadyFromIndex?: boolean;
   /** A tailored cover letter for THIS application exists in output/ (resolved by
-   *  the page, see resolveTailoredCover). View only — covers are never generated
-   *  from here. */
+   *  the page, see resolveTailoredCover). The page drafts letters through the
+   *  cover run but does not render them, so this link only finds CLI PDFs. */
   coverReady?: boolean;
   backHref?: string;
 }) {
@@ -87,7 +74,7 @@ export function ReportView({
   const archetype = field("Archetype");
   const url = field("URL");
   const decision = field("Decision");
-  const line = applyLineLabel(score ?? "");
+  const line = applyLineLabel(score ?? "", meta?.legitimacy);
   const recommended = line === "Recommended";
   const quietApply = applyCtaQuiet({ score, legitimacy: meta?.legitimacy });
   const applyUrl = httpUrl(url);
@@ -117,6 +104,7 @@ export function ReportView({
         <div className="mt-4 flex flex-wrap items-center gap-2.5">
           {app && <StatusSelect n={id} current={app.status} />}
           <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={pdfReady} />
+          {app && report && <CoverDraftButton n={id} company={companyName} />}
           {coverReady && (
             <a
               href={`/api/cover-pdf?application=${encodeURIComponent(id)}`}
@@ -182,7 +170,7 @@ export function ReportView({
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {score && <Badge tone={scoreTone(score)}>{score}</Badge>}
-                  {line && <Badge tone={recommended ? "good" : "muted"}>{line}</Badge>}
+                  {line && <Badge tone={recommended ? "good" : line === "Below the apply line" ? "muted" : "warn"}>{line}</Badge>}
                   {decision && <Badge tone="info">{decision}</Badge>}
                   {meta?.legitimacy && <Badge tone={legitimacyTone(meta.legitimacy)}>{meta.legitimacy}</Badge>}
                 </div>
@@ -202,6 +190,7 @@ export function ReportView({
               return (
                 <div className="mt-8 max-w-4xl">
                   {callout}
+                  <ScoreLevers report={report} />
                   <article className="report-prose mt-6">
                     <ReportMarkdown>{meta?.body ?? report}</ReportMarkdown>
                   </article>
@@ -211,6 +200,7 @@ export function ReportView({
             return (
               <div className="mt-8 max-w-4xl">
                 {callout}
+                <ScoreLevers report={report} />
 
                 {mainSections.map((s, i) => {
                   const expanded = isLeadSection(s);
@@ -226,7 +216,7 @@ export function ReportView({
                     <details key={i} className="group mt-3 overflow-hidden rounded-xl border border-border bg-surface/30">
                       <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 px-4 py-3 transition-colors hover:bg-surface-hover">
                         <span className="text-sm font-medium">{cleanHeading(s.heading)}</span>
-                        <span className="hidden truncate text-xs text-faint sm:inline">{preview(s.content)}</span>
+                        <span className="hidden truncate text-xs text-faint sm:inline">{sectionPreview(s.content)}</span>
                         <ChevronDown className="ml-auto size-4 shrink-0 text-faint transition-transform group-open:rotate-180" />
                       </summary>
                       <div className="report-prose border-t border-border px-4 py-3">
@@ -235,6 +225,7 @@ export function ReportView({
                     </details>
                   );
                 })}
+                <PrepPack report={report} company={companyName} />
 
                 {machine.length > 0 && (
                   <>

@@ -196,3 +196,11 @@ test("archetype buckets match ai and pm as words, not inside other words", () =>
   assert.equal(canonicalizeArchetype("AI Product Manager"), "Technical AI PM");
   assert.equal(canonicalizeArchetype("Senior PM, Payments"), "Product & Program Mgmt");
 });
+
+test("location junk filter drops form labels but keeps places that share a prefix", () => {
+  assert.equal(canonicalizeLocation("Req 12345"), "");
+  assert.equal(canonicalizeLocation("Job ID 99"), "");
+  assert.equal(canonicalizeLocation("Applicant location"), "");
+  assert.equal(canonicalizeLocation("Idaho Falls, ID"), "Idaho Falls, ID");
+  assert.equal(canonicalizeLocation("Jobner, India"), "Jobner, India");
+});

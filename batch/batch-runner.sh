@@ -71,13 +71,15 @@ REPORTS_DIR="$DATA_ROOT/reports"
 export CAREER_OPS_BATCH_STATE="$PROJECT_DIR/batch/batch-state.tsv"
 LOCK_FILE="$BATCH_DIR/batch-runner.pid"
 PAUSE_FILE="$BATCH_DIR/batch-runner.paused"
+THROTTLE_FILE="$BATCH_DIR/batch-runner.throttled"
 STATE_LOCK_DIR="$BATCH_DIR/.batch-state.lock"
 STATE_LOCK_PID_FILE="$STATE_LOCK_DIR/pid"
 STATE_LOCK_TIMEOUT_SECONDS=30
 MAIN_PID="${BASHPID:-$$}"
 
 # Defaults
-PARALLEL=1
+PARALLEL=""
+DEFAULT_CLAUDE_PARALLEL=3
 DRY_RUN=false
 RETRY_FAILED=false
 RESUME_PAUSED=false
@@ -114,7 +116,8 @@ Options:
                        For claude, overrides the tier-resolved model (otherwise
                        config/profile.yml spend_tier: economy/standard/premium;
                        default standard).
-  --parallel N         Number of parallel workers (default: 1; claude only)
+  --parallel N         Number of parallel workers (default: 3 for claude, 1 otherwise).
+                       On a rate limit, the rest of the batch runs on 1 worker.
   --dry-run            Show what would be processed, don't execute
   --retry-failed       Only retry offers marked as "failed" in state
   --resume-paused      Resume offers paused by a Claude session/rate limit
@@ -197,6 +200,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ -z "$PARALLEL" ]]; then
+  if [[ "$CLI" == "claude" ]]; then PARALLEL=$DEFAULT_CLAUDE_PARALLEL; else PARALLEL=1; fi
+fi
 
 if ! [[ "$RATE_LIMIT_SLEEP" =~ ^[0-9]+$ ]]; then
   echo "ERROR: --rate-limit-sleep must be a non-negative integer (seconds)."
@@ -1083,7 +1090,7 @@ process_offer() {
     rm -f "$jd_api_tmp"
   fi
 
-  echo "--- Processing offer #$id: $url (report $report_num, attempt $((retries + 1)))"
+  echo "--- Processing offer #$id${JOB_POS:+ ($JOB_POS)}: $url (report $report_num, attempt $((retries + 1)))"
 
   # Build the prompt with placeholders replaced
   local prompt
@@ -1243,6 +1250,7 @@ process_offer() {
         terminal_failure_recorded=true
         break
       fi
+      : > "$THROTTLE_FILE"
       retries=$((retries + 1))
       local retry_completed_at
       retry_completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -1453,6 +1461,10 @@ merge_tracker() {
   node "$PROJECT_DIR/verify-pipeline.mjs" || echo "⚠️  Verification found issues (see above)"
 }
 
+report_progress() {
+  echo "=== Progress: $1/$2 offers finished, $((SECONDS - BATCH_START))s elapsed ==="
+}
+
 # Print summary
 print_summary() {
   echo ""
@@ -1632,7 +1644,7 @@ main() {
 
   if [[ "$DRY_RUN" == "false" ]]; then
     acquire_lock
-    rm -f "$PAUSE_FILE"
+    rm -f "$PAUSE_FILE" "$THROTTLE_FILE"
   fi
 
   init_state
@@ -1765,10 +1777,15 @@ main() {
   fi
 
   # Process offers
+  BATCH_START=$SECONDS
+  local done_jobs=0
   if (( PARALLEL <= 1 )); then
     # Sequential processing
     for i in "${!pending_ids[@]}"; do
+      JOB_POS="$((i + 1))/$pending_count"
       process_offer "${pending_ids[$i]}" "${pending_urls[$i]}" "${pending_sources[$i]}" "${pending_notes[$i]}"
+      done_jobs=$((done_jobs + 1))
+      report_progress "$done_jobs" "$pending_count"
       if [[ "$BATCH_PAUSED" == "true" || -f "$PAUSE_FILE" ]]; then
         echo "=== Batch paused: session/rate limit reached. Resume later with --resume-paused. ==="
         break
@@ -1787,6 +1804,11 @@ main() {
         break
       fi
 
+      if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
+        PARALLEL=1
+        echo "=== Rate limited: running the remaining offers on 1 worker. ==="
+      fi
+
       # Wait if we're at parallel limit
       while (( running >= PARALLEL )); do
         # Wait for any child to finish
@@ -1800,6 +1822,8 @@ main() {
             unset 'pids[j]'
             unset 'pid_ids[j]'
             running=$((running - 1))
+            done_jobs=$((done_jobs + 1))
+            report_progress "$done_jobs" "$pending_count"
           fi
         done
         # Compact arrays
@@ -1812,6 +1836,10 @@ main() {
           echo "=== Batch paused: session/rate limit reached. Waiting for running workers, not scheduling new offers. ==="
           break
         fi
+        if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
+          PARALLEL=1
+          echo "=== Rate limited: running the remaining offers on 1 worker. ==="
+        fi
         sleep 1
       done
 
@@ -1820,6 +1848,7 @@ main() {
       fi
 
       # Launch worker in background
+      JOB_POS="$((i + 1))/$pending_count"
       process_offer "${pending_ids[$i]}" "${pending_urls[$i]}" "${pending_sources[$i]}" "${pending_notes[$i]}" &
       pids+=($!)
       pid_ids+=("${pending_ids[$i]}")
@@ -1833,6 +1862,8 @@ main() {
       if (( worker_rc != 0 )); then
         parallel_rc=$worker_rc
       fi
+      done_jobs=$((done_jobs + 1))
+      report_progress "$done_jobs" "$pending_count"
     done
     if (( parallel_rc != 0 )); then
       echo "ERROR: a parallel worker failed fatally; tracker merge skipped. Inspect the worker log and repair state before rerunning." >&2
