@@ -159,8 +159,8 @@ try {
     ? pass('doctor names CAREER_OPS_PROFILE and the file it points at, instead of advising a copy that would change nothing')
     : fail('doctor advice for a missing override target does not name the variable and path, or still says to copy the example');
 
-  // Only scan.mjs (data root), the evaluators (cwd) and openrouter-runner (code
-  // root) load a .env; generate-pdf, cv-sync-check, upskill, salary-gap and the
+  // Only scan.mjs (data root), the evaluators (cwd), openai-tailor.mjs (cwd) and
+  // openrouter-runner (code root) load a .env; generate-pdf, cv-sync-check, upskill, salary-gap and the
   // rest read the process environment alone. Doctor reports what those readers
   // see, so an override set only in .env is NOT a found profile, and the advice
   // says why instead of leaving the user with a green doctor and a failing tool.

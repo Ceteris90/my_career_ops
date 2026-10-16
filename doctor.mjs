@@ -68,7 +68,7 @@ const projectRoot = explicitTarget || getCareerOpsRoot();
 // loads the root's whole .env later, and a CAREER_OPS_ROOT in it must not move
 // this one check to another root.
 const profilePathFor = (root) => (explicitTarget || !hasProfileOverride() ? getProfilePath(root) : getProfilePath());
-// Only scan.mjs, the evaluators and openrouter-runner load a .env; most readers
+// Only scan.mjs, the evaluators, openai-tailor.mjs and openrouter-runner load a .env; most readers
 // of the profile see the process environment alone. Doctor reports what they see,
 // so an override set only in the root's .env is looked up for the advice below
 // but never counted as a found profile.
