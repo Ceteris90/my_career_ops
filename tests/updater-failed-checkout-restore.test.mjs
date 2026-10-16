@@ -15,7 +15,7 @@
  * upstream, so section 5 asserts against its source that both catches call
  * the helper before rethrowing. Sections 8 to 11 cover what the restore must
  * leave alone: the user's own files in a directory the update created, and a
- * preserved file's uncommitted edit; section 12, a cleanup that fails.
+ * preserved file's uncommitted edit; sections 12 and 13, a cleanup that fails.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -322,6 +322,33 @@ console.log('\n🧪 Testing that a failed update restores what it had checked ou
         && /Could not restore the system path\(s\) \(could not remove 1 file\(s\) the update added: sys\/dir\/new\.md\)/.test(text)
         && /node update-system\.mjs rollback/.test(text) && !/^Restored /m.test(text)) {
       pass('a stranded addition fails the restore after the other paths are back, and names the file and `rollback`');
+    } else {
+      fail(`result ${result}, sys/a.md ${JSON.stringify(read(dir, 'sys/a.md'))}, messages ${JSON.stringify(errors)}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 13. additions that could not even be listed fail the restore too ──
+//    A failed `git diff --cached` used to read as "the update added nothing",
+//    so the restore reported success without having looked.
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    g('checkout', target, '--', 'sys/dir/');
+    g('checkout', target, '--', 'sys/a.md');
+    const brokenDiff = (...args) => {
+      if (args[0] === 'diff' && args.includes('sys/dir')) throw new Error('index file corrupt');
+      return g(...args);
+    };
+    const { result, errors } = await captureConsoleErrors(() =>
+      restoreAfterFailedUpdate(['sys/dir/', 'sys/a.md'], new Set(), { what: 'system path(s)', git: brokenDiff, root: ctx.root }));
+    const text = errors.join('\n');
+    if (result === false && read(dir, 'sys/a.md') === 'a v1\n'
+        && /Could not restore the system path\(s\) \(could not list what the update added under sys\/dir\/\)/.test(text)
+        && /node update-system\.mjs rollback/.test(text) && !/^Restored /m.test(text)) {
+      pass('an unreadable additions list fails the restore after the other paths are back, and names `rollback`');
     } else {
       fail(`result ${result}, sys/a.md ${JSON.stringify(read(dir, 'sys/a.md'))}, messages ${JSON.stringify(errors)}`);
     }

@@ -2943,6 +2943,7 @@ export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {
   const exclude = ctx.exclude || [];
   if (paths.length === 0) return;
   const stranded = [];
+  const unchecked = [];
   // A file the update kept out is never one of its additions either.
   if (exclude.length > 0) protectedPaths = new Set([...protectedPaths, ...exclude]);
   // Must restore from HEAD, not from the index (#915 bug 1). After
@@ -2985,14 +2986,20 @@ export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {
     // HEAD already knows about. Files the update introduced *under* that
     // directory are not in HEAD, so they survive the rollback as staged
     // additions and the tree is left dirtier than before the update (#2015).
-    stranded.push(...removeAdditionsNotInHead(p, protectedPaths, ctx));
+    try {
+      stranded.push(...removeAdditionsNotInHead(p, protectedPaths, ctx));
+    } catch {
+      unchecked.push(p);
+    }
   }
-  // An addition that could not be unstaged leaves the tree short of HEAD. The
-  // other paths are restored first; then the caller hears it failed, so it does
-  // not report a full restore and points at `rollback` instead.
-  if (stranded.length > 0) {
-    throw new Error(`could not remove ${stranded.length} file(s) the update added: ${stranded.join(', ')}`);
-  }
+  // An addition that could not be unstaged, or a path whose additions could not
+  // even be listed, leaves the tree possibly short of HEAD. The other paths are
+  // restored first; then the caller hears it failed, so it does not report a
+  // full restore and points at `rollback` instead.
+  const problems = [];
+  if (stranded.length > 0) problems.push(`could not remove ${stranded.length} file(s) the update added: ${stranded.join(', ')}`);
+  if (unchecked.length > 0) problems.push(`could not list what the update added under ${unchecked.join(', ')}`);
+  if (problems.length > 0) throw new Error(problems.join('; '));
 }
 
 /**
@@ -3094,6 +3101,7 @@ export function restoreBootstrapBackups(backups, ctx = {}) {
  *   root used for filesystem deletes. Production always uses the defaults; only
  *   the behavioral rollback test overrides them to drive a throwaway repo.
  * @returns {string[]} Additions that could not be unstaged, left in place.
+ * @throws When the additions cannot be listed: that is not proof there are none.
  */
 export function removeAdditionsNotInHead(pathspec, protectedPaths = new Set(), ctx = {}) {
   const runGit = ctx.git || git;
@@ -3104,9 +3112,10 @@ export function removeAdditionsNotInHead(pathspec, protectedPaths = new Set(), c
     // -z: NUL-delimited, unquoted output, so paths containing spaces or even
     // newlines survive intact — `split('\n').trim()` would mangle them.
     added = runGit('diff', '--cached', '-z', '--name-only', '--diff-filter=A', 'HEAD', '--', spec);
-  } catch {
-    // No HEAD yet, or an unreadable pathspec — nothing safe to clean up.
-    return [];
+  } catch (err) {
+    // Nothing is deleted without the list, but an unreadable index or HEAD is
+    // not "the update added nothing": the caller has to know it was not checked.
+    throw new Error(`could not list the additions under ${spec} (${err.message})`, { cause: err });
   }
   const stranded = [];
   for (const file of added.split('\0').filter(Boolean)) {
