@@ -199,7 +199,7 @@ try {
   }
 
   // A data-root profile that exists does not make the .env override harmless:
-  // scan.mjs and the evaluators read the file the .env names, the other readers read this one.
+  // scan.mjs, the evaluators, openai-tailor.mjs and openrouter-runner.mjs read the file the .env names, the other readers read this one.
   const bothRoot = join(scratch, 'both-root');
   mkdirSync(join(bothRoot, 'config'), { recursive: true });
   writeFileSync(join(bothRoot, 'config', 'profile.yml'), 'candidate:\n  full_name: Root\n', 'utf-8');

@@ -752,16 +752,17 @@ function prereqPresent(root, prereq) {
 }
 
 // The root's .env names a profile. scan.mjs, the evaluators, openai-tailor.mjs and
-// openrouter-runner.mjs load a .env, and the evaluators and openai-tailor.mjs
-// follow CAREER_OPS_PROFILE after a working-directory config(). The other readers
-// load none. That is a split whether or not a data-root profile exists, so it is
+// openrouter-runner.mjs load a .env, and all four follow CAREER_OPS_PROFILE once
+// it is loaded (scan.mjs from the data root, the evaluators and openai-tailor.mjs
+// from a working-directory config(), openrouter-runner.mjs from the code root).
+// The other readers load none. That is a split whether or not a data-root profile exists, so it is
 // reported either way. A shell value shadows the .env, so it is not a split then.
 function checkEnvFileProfile(root) {
   const fromEnvFile = explicitTarget || hasProfileOverride() ? null : profileFromEnvFile(root);
   if (!fromEnvFile) return null;
   return {
     warn: true,
-    label: `.env sets CAREER_OPS_PROFILE=${fromEnvFile}, but only scan.mjs, the evaluators, openai-tailor.mjs and openrouter-runner.mjs load .env; cv-sync-check, generate-pdf, upskill and the other readers use ${profilePathFor(root)}`,
+    label: `.env sets CAREER_OPS_PROFILE=${fromEnvFile}, but of the profile readers, only scan.mjs, the evaluators, openai-tailor.mjs and openrouter-runner.mjs load .env; cv-sync-check, generate-pdf, upskill and the other readers use ${profilePathFor(root)}`,
     fix: [`Export CAREER_OPS_PROFILE=${fromEnvFile} in your shell so every command reads the same file, or remove it from .env`],
   };
 }
