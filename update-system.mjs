@@ -2942,6 +2942,7 @@ export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {
   const root = ctx.root || ROOT;
   const exclude = ctx.exclude || [];
   if (paths.length === 0) return;
+  const stranded = [];
   // A file the update kept out is never one of its additions either.
   if (exclude.length > 0) protectedPaths = new Set([...protectedPaths, ...exclude]);
   // Must restore from HEAD, not from the index (#915 bug 1). After
@@ -2984,7 +2985,13 @@ export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {
     // HEAD already knows about. Files the update introduced *under* that
     // directory are not in HEAD, so they survive the rollback as staged
     // additions and the tree is left dirtier than before the update (#2015).
-    removeAdditionsNotInHead(p, protectedPaths, ctx);
+    stranded.push(...removeAdditionsNotInHead(p, protectedPaths, ctx));
+  }
+  // An addition that could not be unstaged leaves the tree short of HEAD. The
+  // other paths are restored first; then the caller hears it failed, so it does
+  // not report a full restore and points at `rollback` instead.
+  if (stranded.length > 0) {
+    throw new Error(`could not remove ${stranded.length} file(s) the update added: ${stranded.join(', ')}`);
   }
 }
 
@@ -3086,6 +3093,7 @@ export function restoreBootstrapBackups(backups, ctx = {}) {
  *   runner (defaults to the module `git`, bound to ROOT) and the working-tree
  *   root used for filesystem deletes. Production always uses the defaults; only
  *   the behavioral rollback test overrides them to drive a throwaway repo.
+ * @returns {string[]} Additions that could not be unstaged, left in place.
  */
 export function removeAdditionsNotInHead(pathspec, protectedPaths = new Set(), ctx = {}) {
   const runGit = ctx.git || git;
@@ -3098,8 +3106,9 @@ export function removeAdditionsNotInHead(pathspec, protectedPaths = new Set(), c
     added = runGit('diff', '--cached', '-z', '--name-only', '--diff-filter=A', 'HEAD', '--', spec);
   } catch {
     // No HEAD yet, or an unreadable pathspec — nothing safe to clean up.
-    return;
+    return [];
   }
+  const stranded = [];
   for (const file of added.split('\0').filter(Boolean)) {
     // Never touch something the user already had staged before the update —
     // only additions THIS update introduced (#2015 review: no data loss).
@@ -3113,11 +3122,13 @@ export function removeAdditionsNotInHead(pathspec, protectedPaths = new Set(), c
       // the worktree file in place and keep rolling back the rest — deleting
       // the worktree copy now would strand a staged addition with no file.
       console.error(`Rollback: could not unstage ${file}; leaving it untouched.`);
+      stranded.push(file);
     }
     if (removed) {
       try { rmSync(join(root, file), { force: true }); } catch { /* already gone */ }
     }
   }
+  return stranded;
 }
 
 /**

@@ -13,9 +13,9 @@
  * Sections 1 to 4 drive restoreAfterFailedUpdate() against a throwaway repo
  * through the git-runner seam. apply() is not exported and needs a real
  * upstream, so section 5 asserts against its source that both catches call
- * the helper before rethrowing. Sections 8 to 10 cover what the restore must
+ * the helper before rethrowing. Sections 8 to 11 cover what the restore must
  * leave alone: the user's own files in a directory the update created, and a
- * preserved file's uncommitted edit.
+ * preserved file's uncommitted edit; section 12, a cleanup that fails.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -297,6 +297,33 @@ console.log('\n🧪 Testing that a failed update restores what it had checked ou
       pass('with every HEAD file under it preserved, the directory keeps the edit and drops the update\'s addition');
     } else {
       fail(`result ${result}, old.md ${JSON.stringify(read(dir, 'sys/dir/old.md'))}, new.md ${existsSync(join(dir, 'sys/dir/new.md')) ? 'kept' : 'removed'}, messages ${JSON.stringify(errors)}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 12. an addition that cannot be unstaged makes the restore report failure ──
+//    removeAdditionsNotInHead() leaves such a file in place and goes on; the
+//    restore used to print "Restored ..." anyway and never mention `rollback`.
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    g('checkout', target, '--', 'sys/dir/');
+    g('checkout', target, '--', 'sys/a.md');
+    const lockedRm = (...args) => {
+      if (args[0] === 'rm' && args.includes('sys/dir/new.md')) throw new Error('Unable to create index.lock: File exists');
+      return g(...args);
+    };
+    const { result, errors } = await captureConsoleErrors(() =>
+      restoreAfterFailedUpdate(['sys/dir/', 'sys/a.md'], new Set(), { what: 'system path(s)', git: lockedRm, root: ctx.root }));
+    const text = errors.join('\n');
+    if (result === false && read(dir, 'sys/a.md') === 'a v1\n'
+        && /Could not restore the system path\(s\) \(could not remove 1 file\(s\) the update added: sys\/dir\/new\.md\)/.test(text)
+        && /node update-system\.mjs rollback/.test(text) && !/^Restored /m.test(text)) {
+      pass('a stranded addition fails the restore after the other paths are back, and names the file and `rollback`');
+    } else {
+      fail(`result ${result}, sys/a.md ${JSON.stringify(read(dir, 'sys/a.md'))}, messages ${JSON.stringify(errors)}`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
