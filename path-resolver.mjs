@@ -42,13 +42,27 @@ export function getCareerOpsRoot() {
  */
 export function canonicalizeTrackerPath(path) {
   const absolutePath = resolve(path);
-  let real;
   try {
-    real = realpathSync(absolutePath);
+    return realpathSync(absolutePath);
   } catch {
     return absolutePath;
   }
-  return process.platform === 'win32' ? namesAsStoredOnWindows(real) : real;
+}
+
+/**
+ * The spelling the Go dashboard canonicalizes a path to, for the tracker lock.
+ *
+ * Only the lock may use it. Every other path in the repository is compared with
+ * realpathSync() spellings, so returning it from canonicalizeTrackerPath() made
+ * a short %TEMP% fail containment and backup-path checks across the tracker
+ * scripts.
+ *
+ * @param {string} path - An absolute path, already through realpathSync.
+ * @returns {string} The path with each component as the filesystem stores it on
+ *   Windows; unchanged elsewhere.
+ */
+export function storedSpelling(path) {
+  return process.platform === 'win32' ? namesAsStoredOnWindows(path) : path;
 }
 
 /**

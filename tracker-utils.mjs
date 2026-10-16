@@ -369,7 +369,7 @@ export function resolvePdfIndexPath(trackerPath) {
  * @param {string} path - Raw tracker path from config, env, or the default.
  * @returns {string} Absolute canonical path when the file exists, else resolved path.
  */
-import { canonicalizeTrackerPath, rawTrackerPath } from './path-resolver.mjs';
+import { canonicalizeTrackerPath, rawTrackerPath, storedSpelling } from './path-resolver.mjs';
 export { canonicalizeTrackerPath };
 
 /**
@@ -467,18 +467,22 @@ export function pathIsInsideCanonical(childPath, parentDir) {
  * @returns {string} Safe lock directory path.
  */
 export function trackerLockDirFor(appsFile) {
-  const lockKey = createHash('sha256').update(appsFile).digest('hex').slice(0, 16);
-  // Canonicalized the way the tracker path is, not with a bare realpathSync:
-  // %TEMP% is often an 8.3 short name, and the Go dashboard's copy of this
-  // function spells it long (#4957).
-  const tmpRoot = canonicalizeTrackerPath(tmpdir());
+  // The Go dashboard's copy of this function canonicalizes with EvalSymlinks,
+  // which on Windows writes every component as the filesystem stores it: the
+  // long name for an 8.3 alias such as a short %TEMP%, and the stored case. The
+  // lock name hashes the path string, so it is computed on that spelling too,
+  // or the two languages lock different directories (#4957).
+  const lockKey = createHash('sha256').update(storedSpelling(appsFile)).digest('hex').slice(0, 16);
+  const tmpRoot = storedSpelling(realpathSync(tmpdir()));
   const fallback = join(tmpRoot, `career-ops-merge-tracker-${lockKey}.lock`);
   const envValue = process.env.CAREER_OPS_TRACKER_LOCK;
   if (!envValue || !isAbsolute(envValue)) return fallback;
 
   const candidate = resolve(envValue);
   const parentDir = dirname(candidate);
-  const canonicalParent = canonicalizeTrackerPath(parentDir);
+  // A parent that does not exist yet is taken as written, as Go does when
+  // EvalSymlinks fails.
+  const canonicalParent = existsSync(parentDir) ? storedSpelling(realpathSync(parentDir)) : resolve(parentDir);
   if (!pathIsInside(canonicalParent, tmpRoot)) return fallback;
   if (!basename(candidate).startsWith('career-ops-merge-tracker-')) return fallback;
   return candidate;
