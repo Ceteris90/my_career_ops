@@ -76,14 +76,16 @@ export function storedSpelling(path) {
  * (#4957). realpathSync.native() would expand the short name, but it also
  * resolves a `subst` drive to the directory behind it, which Go keeps as
  * written, so it would trade this divergence for another. Only each
- * component's own name is taken from it; the drive or share stays as given.
+ * component's own name is taken from it; the drive or share stays as given,
+ * except that a drive letter is upper-cased, as EvalSymlinks writes it
+ * (realpathSync keeps `c:\` as it was typed).
  *
  * @param {string} path - An absolute path with no links left in it.
  * @returns {string}
  */
 function namesAsStoredOnWindows(path) {
   const { root } = parse(path);
-  let out = root;
+  let out = /^[a-z]:/.test(root) ? root[0].toUpperCase() + root.slice(1) : root;
   for (const part of path.slice(root.length).split(sep).filter(Boolean)) {
     let name = part;
     try {

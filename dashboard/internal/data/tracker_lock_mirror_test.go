@@ -202,12 +202,19 @@ func TestLockDirectoryMatchesNodeWhateverTheCaseOfThePath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("CAREER_OPS_TRACKER_LOCK", "")
-	for _, spelled := range []string{
+	spellings := []string{
 		stored,
 		filepath.Join(base, "mixedcase", "applications.md"),
 		filepath.Join(base, "MIXEDCASE", "APPLICATIONS.MD"),
-	} {
+	}
+	// A drive letter typed in lower case: EvalSymlinks upper-cases it, while
+	// Node's realpath keeps `c:` as given.
+	if vol := filepath.VolumeName(stored); len(vol) == 2 && vol[1] == ':' {
+		spellings = append(spellings, strings.ToLower(vol)+stored[len(vol):])
+	}
+
+	t.Setenv("CAREER_OPS_TRACKER_LOCK", "")
+	for _, spelled := range spellings {
 		got, err := trackerLockDirFor(spelled)
 		if err != nil {
 			t.Fatalf("go trackerLockDirFor(%q): %v", spelled, err)
