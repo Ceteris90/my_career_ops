@@ -186,3 +186,11 @@ test("archetype IT operations bucket matches admin as a word", () => {
   assert.equal(canonicalizeArchetype("Database Administrator"), "Data & Analytics");
   assert.equal(canonicalizeArchetype("Systems Administrator"), "IT & Technical Operations");
 });
+
+test("location junk filter drops form labels but keeps places that share a prefix", () => {
+  assert.equal(canonicalizeLocation("Req 12345"), "");
+  assert.equal(canonicalizeLocation("Job ID 99"), "");
+  assert.equal(canonicalizeLocation("Applicant location"), "");
+  assert.equal(canonicalizeLocation("Idaho Falls, ID"), "Idaho Falls, ID");
+  assert.equal(canonicalizeLocation("Jobner, India"), "Jobner, India");
+});
