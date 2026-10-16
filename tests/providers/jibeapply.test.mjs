@@ -263,6 +263,11 @@ try {
   } else {
     fail(`jibeapply fetch page failure: expected a fetch-failed warning, got ${JSON.stringify(jibeFlakyWarnings)}`);
   }
+  if (fetchedFlaky.jibeapplyTruncated === true) {
+    pass('jibeapply.fetch() tags a failed-page board jibeapplyTruncated');
+  } else {
+    fail(`jibeapply failed-page board should carry jibeapplyTruncated, got ${fetchedFlaky.jibeapplyTruncated}`);
+  }
 
   // fetch() with explicit entry.api (non-jibeapply.com host)
   let explicitApiUrl = null;

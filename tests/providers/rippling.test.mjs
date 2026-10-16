@@ -343,6 +343,11 @@ try {
   } else {
     fail(`rippling.fetch() should not warn "raise max_pages" on a fetch-error stop, got: ${JSON.stringify(laterFailErrors)}`);
   }
+  if (laterFail.ripplingTruncated === true) {
+    pass('rippling.fetch() tags a fetch-error stop ripplingTruncated');
+  } else {
+    fail(`rippling fetch-error stop should carry ripplingTruncated, got ${laterFail.ripplingTruncated}`);
+  }
 
 } catch (e) {
   fail(`rippling provider tests crashed: ${e.message}`);
