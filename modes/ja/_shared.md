@@ -34,7 +34,7 @@
 | _profile.md | `modes/_profile.md` | 常に（ユーザー固有のアーキタイプ、ナラティブ、交渉） |
 | writing-samples/ | `writing-samples/` | 候補者が外部に出す文章を生成する場合。まず `_profile.md` のキャッシュ済み `## Writing Style` を確認し、存在しない場合だけファイルを読む |
 | voice-dna.md | `voice-dna.md`（プロジェクトルート、存在する場合） | 候補者が外部に出す文章を生成する場合。AI っぽさを避ける guardrail + voice。下の Voice DNA precedence を参照 |
-| interview-prep | `interview-prep/story-bank.md`, `interview-prep/{company}-{role}.md` | ATS フォーム回答 / 面接コンテンツを生成する場合。ユーザー自身の STAR stories と prep notes（`cv.md` と同じ信頼レベル）。`apply` / `match-star` と interview modes が使用 |
+| interview-prep | `interview-prep/story-bank.md`, `interview-prep/{company}-{role}.md` | ATS フォーム回答 / 面接コンテンツを生成する場合。ユーザー自身の STAR stories と prep notes。ナラティブと表現には使ってよいが、数値の claim は自動的には `cv.md` と同等ではない — AGENTS.md の Source-of-Truth Boundary の階層化（#2947）と `story-provenance-check.mjs` を参照。`apply` / `match-star` と interview modes が使用 |
 
 **ルール：proof point のメトリクスを絶対にハードコードしない。** 評価時に `cv.md` と `article-digest.md` から読み取ること。
 **ルール：記事・プロジェクトのメトリクスは、`article-digest.md` が `cv.md` より優先される。**
