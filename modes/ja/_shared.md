@@ -149,7 +149,7 @@ Archetype を検出した後、`modes/_profile.md` を読み、該当 archetype 
 3. マッチング時、CV の exact lines を引用する
 4. comp と company data のために WebSearch を使う
 5. 評価後に tracker に登録する
-6. 求人の言語で生成する（EN default）
+6. ユーザー向けの内容は求人の言語に関係なく `config/profile.yml` の `{language.output}` で生成する（未設定なら EN）。この市場の用語は残し、必要ならその言語で説明する
 7. 直接的で actionable に書く。fluff を避ける
 8. 日本語で生成する場合は、自然な tech Japanese を使う。短い文、action verbs、不要な受動態を避ける
 8b. PDF Professional Summary に case study URLs を含める（recruiter はそこだけ読む可能性がある）
