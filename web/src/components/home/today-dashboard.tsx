@@ -39,8 +39,8 @@ export function TodayDashboard({
   const [overdue, setOverdue] = useState(0);
   const [followupsLoading, setFollowupsLoading] = useState(true);
   const [followupsError, setFollowupsError] = useState(false);
-  const [nextUpcoming, setNextUpcoming] = useState<FollowUp | null>(null);
   const [followupsEnabled, setFollowupsEnabled] = useState(true);
+  const [upcoming, setUpcoming] = useState<FollowUp[]>([]);
   const [fresh, setFresh] = useState<DiscoveredOffer[]>([]);
   const [freshCount, setFreshCount] = useState(0);
   const [freshLoading, setFreshLoading] = useState(true);
@@ -70,8 +70,8 @@ export function TodayDashboard({
         // is overdue" (the old `?? d.entries?.length` fallback).
         setFollowups(Array.isArray(d.entries) ? d.entries : []);
         setOverdue((d.metadata?.overdue ?? 0) + (d.metadata?.urgent ?? 0));
-        setNextUpcoming(d.nextUpcoming ?? null);
         setFollowupsEnabled(d.followupsEnabled !== false);
+        setUpcoming(Array.isArray(d.upcoming) ? d.upcoming : []);
       })
       .catch(() => { if (isLatest()) setFollowupsError(true); })
       .finally(() => { if (isLatest()) setFollowupsLoading(false); });
@@ -217,25 +217,32 @@ export function TodayDashboard({
         <Section icon={Bell} title="Follow-ups due" hint="Keep your applications alive — a nudge beats silence">
           <div className="grid gap-2.5">
             {followups.map((f) => (
-              // Refetch (not a local decrement) so the parent's followups/nextUpcoming
-              // stay in sync with the server — logging the LAST due item must flip this
-              // section over to "Next follow-up" instead of leaving it empty.
+              // Refetch (not a local decrement) so the parent's followups/upcoming
+              // stay in sync with the server. Logging the LAST due item must flip this
+              // section over to "Upcoming" instead of leaving it empty.
               <FollowUpCard key={`${f.num}-${f.company}`} followup={f} onLogged={refetch} />
             ))}
           </div>
         </Section>
-      ) : (
-        nextUpcoming && (
-          // Nothing is due — say so honestly instead of an empty "due" block,
-          // but still surface what's next so the queue isn't silent (#86).
-          <Section icon={Bell} title="Next follow-up" hint="Nothing due yet">
-            <p className="text-sm text-muted">
-              <span className="font-medium text-foreground">{nextUpcoming.company}</span>
-              {nextUpcoming.role && <span> · {nextUpcoming.role}</span>}
-              {nextUpcoming.nextFollowupDate && <span className="text-faint"> — upcoming {nextUpcoming.nextFollowupDate}</span>}
-            </p>
-          </Section>
-        )
+      ) : null}
+
+      {!followupsLoading && !followupsError && upcoming.length > 0 && (
+        <Section icon={Bell} title="Upcoming" hint="Not due yet">
+          <ul className="grid gap-2">
+            {upcoming.map((item) => (
+              <li key={`${item.num ?? item.company}-${item.nextFollowupDate ?? ""}`}>
+                <Link
+                  href={item.num != null ? `/pipeline/${item.num}` : "/followups"}
+                  className="text-sm text-muted hover:text-brand"
+                >
+                  <span className="font-medium text-foreground">{item.company}</span>
+                  {item.role ? <span> · {item.role}</span> : null}
+                  {item.nextFollowupDate ? <span className="text-faint"> · {item.nextFollowupDate}</span> : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
       {/* B. Awaiting your decision */}
@@ -278,7 +285,7 @@ export function TodayDashboard({
         </Section>
       )}
 
-      {allClear && (
+      {allClear && upcoming.length === 0 && (
         <div className="mt-8 rounded-2xl border border-border bg-surface/30 px-6 py-10 text-center">
           <Sparkles className="mx-auto size-6 text-brand" />
           <p className="mx-auto mt-3 max-w-md text-sm text-muted">

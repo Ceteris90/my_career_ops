@@ -684,8 +684,8 @@ export async function mergeTracker(options = {}) {
    * @returns {number} Parsed score, or 0 when no numeric value is present.
    */
   function parseScore(s) {
-    const m = s.replace(/\*\*/g, '').match(/([\d.]+)/);
-    return m ? parseFloat(m[1]) : 0;
+    const m = s.replace(/\*\*/g, '').match(/(\d+(?:[.,]\d+)?)/);
+    return m ? parseFloat(m[1].replace(',', '.')) : 0;
   }
 
   /**

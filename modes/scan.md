@@ -180,8 +180,8 @@ Levels are additive — they are executed in order, and results are merged and d
 ## Workflow
 
 1. **Read Configuration**: `portals.yml`
-2. **Read History**: `data/scan-history.tsv` → already seen URLs
-3. **Read Dedup Sources**: `data/applications.md` + `data/pipeline.md`
+2. **Do not read the history whole**: `data/scan-history.tsv` holds every URL ever seen and reaches megabytes. `node scan.mjs` dedups its own results against it. For a candidate from Level 1 to 3, search the file with your Grep tool for the URL's host and path, case-insensitive, without the query string or fragment. That way a spelling with tracking parameters, a fragment, a trailing slash, or a different path case still shows up. A row counts only when its first column and the candidate give the same key under `normalizeUrlForDedup` in `scan.mjs`, which drops exactly those parts. A row whose URL only starts with the candidate's is a different posting. Step 7 says which statuses count.
+3. **Do not read the dedup sources whole**: search `data/pipeline.md` for the URL the same way, with the same key rule, and `data/applications.md` for the company name.
 
 3.5. **Level 0 — Local Parser** (`scan.mjs`, zero-token):
    Initialize `local_parser_ok = []`.
