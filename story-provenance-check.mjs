@@ -219,6 +219,11 @@ const CLAIM_PATTERNS = [
 ];
 
 const HOUR_UNITS = new Set(['h', 'hr', 'hrs', 'hour', 'hours']);
+// Units that say how much but not of what (see hasScopedNumberMatch()), and
+// the words that spell them, which are never context.
+const UNITS_WITHOUT_METRIC = new Set(['%', 'hour']);
+const UNIT_WORDS = new Set([...HOUR_UNITS, 'percent', 'cent']);
+const METRIC_CONTEXT_WORDS = 2;
 const PERSON_UNITS = new Set(['person', 'persons', 'people', 'member', 'members']);
 
 /**
@@ -565,11 +570,19 @@ function hasContextOverlap(words, cvText) {
 
 /**
  * Whether cv.md has the claim's numbers in ONE sentence, each counting the
- * claim's unit, with context words shared with the claim — the scoping check
- * that keeps the `existing` bucket from firing on a digit-string coincidence
- * (see buildCvNumberContexts() above). One sentence for all of a range's
- * endpoints: "8 hours of on-call" in one bullet and "a 2 hours workshop" in
- * another are two facts, not an 8-to-2-hours reduction.
+ * claim's unit, with enough shared context words to be the same metric — the
+ * scoping check that keeps the `existing` bucket from firing on a digit-string
+ * coincidence (see buildCvNumberContexts() above). One sentence for all of a
+ * range's endpoints: "8 hours of on-call" in one bullet and "a 2 hours
+ * workshop" in another are two facts, not an 8-to-2-hours reduction.
+ *
+ * How much context is "enough" depends on whether the unit names what is
+ * measured. "40 people" or "500+ customers" does, so one shared word placing
+ * it ("team", "onboarded") is enough. "40%" and "8 hours" do not: a percentage
+ * or a duration of what? There one shared word is not evidence. "The team cut
+ * deploy time 40%" and "The team reduced incident rate 40%" share "team" and
+ * nothing about the metric, so these need METRIC_CONTEXT_WORDS shared words,
+ * and the unit's own words ("hours", "percent") never count toward them.
  * @param {{values: number[], units: string[]}} claim
  * @param {string[]} claimWords
  * @param {ReturnType<typeof buildCvNumberContexts>} cvNumberContexts
@@ -578,7 +591,9 @@ function hasContextOverlap(words, cvText) {
 function hasScopedNumberMatch(claim, claimWords, cvNumberContexts) {
   const occurrences = (i) => (cvNumberContexts.get(claim.values[i]) || [])
     .filter((o) => o.unit === claim.units[i]);
-  return occurrences(0).some((first) => first.words.some((w) => claimWords.includes(w))
+  const needed = claim.units.every((u) => UNITS_WITHOUT_METRIC.has(u)) ? METRIC_CONTEXT_WORDS : 1;
+  const shared = (words) => words.filter((w) => claimWords.includes(w) && !UNIT_WORDS.has(w)).length;
+  return occurrences(0).some((first) => shared(first.words) >= needed
     && claim.values.every((_, i) => occurrences(i).some((o) => o.sentence === first.sentence)));
 }
 

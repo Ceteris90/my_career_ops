@@ -91,6 +91,17 @@ test('the same number and unit in context still verifies', () => {
   assert.equal(bucketOf(classifyStoryBank(SCALING, cv), '40-person'), 'existing');
 });
 
+test('a percentage needs shared words about the metric, not one shared word', () => {
+  // Same number, same unit, same sentence shape; "team" is the only word the
+  // two have in common, and it says nothing about what the 40% measures.
+  const bank = '### Story\n**A (Action):** The team reduced incident rate 40%.\n';
+  const cv = '- The team cut deploy time 40%.\n';
+  assert.notEqual(bucketOf(classifyStoryBank(bank, cv), '40%'), 'existing');
+  // A unit that names the metric needs only one placing word.
+  const people = classifyStoryBank('### Story\n**A (Action):** Grew the team to 40 people.\n', '- Led a team of 40 people.\n');
+  assert.equal(bucketOf(people, '40 people'), 'existing');
+});
+
 test('both endpoints of an hour range must sit in one cv.md sentence', () => {
   const bank = REPORTING.replace('**Provenance:** user-cannot-confirm\n', '');
   assert.notEqual(bucketOf(classifyStoryBank(bank, CV), '8 hours to 2 hours'), 'existing',
@@ -131,6 +142,19 @@ test('match-star replaces the figures of a user-cannot-confirm story', () => {
   assert.doesNotMatch(out, /8 hours to 2 hours/);
   assert.match(out, /\[unconfirmed figure\]/);
   assert.match(out, /user-cannot-confirm/);
+});
+
+test('match-star masks every number of a user-cannot-confirm story, in every field it prints', () => {
+  const bank = REPORTING
+    .replace('### [Automation] Weekly reporting', '### [Automation] Weekly reporting, 8h saved')
+    .replace('at $60/hr.', 'at $60/hr, saving $40K and 1,200+ tickets, 3x faster in Q3.')
+    .replace('automation, process improvement', 'automation, 10x wins');
+  const [story] = parseStories(bank);
+  const out = formatAts({ ...story, provenance: 'user-cannot-confirm' }, 'automation', { cvText: CV });
+  for (const figure of ['8h', '$60/hr', '$40K', '1,200+', '3x', '10x', '8 hours', '2 hours']) {
+    assert.ok(!out.includes(figure), `"${figure}" survived the mask:\n${out}`);
+  }
+  assert.match(out, /in Q3\./, 'a quarter name is not a figure');
 });
 
 test('match-star warns once per unverified figure and stays quiet for a verified one', () => {
