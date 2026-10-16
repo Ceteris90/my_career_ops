@@ -101,15 +101,21 @@ console.log("\x1b[1m\x1b[36m====================================================
 const dataRoot = getCareerOpsRoot();
 console.log("\x1b[32m✓\x1b[0m Data root resolved: " + dataRoot);
 
+// Unbracketed host for socket binding (net.listen and Next.js -H)
+const bindHost = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+
+// Bracketed host for HTTP URL if it is an IPv6 literal
+const urlHost = bindHost.includes(":") && !bindHost.startsWith("[") ? `[${bindHost}]` : bindHost;
+
 // Verify target port is not already occupied by an unrelated service
-const isAvailable = await checkPortAvailable(port, host);
+const isAvailable = await checkPortAvailable(port, bindHost);
 if (!isAvailable) {
   console.error(`\x1b[31mError:\x1b[0m Port ${port} is already in use by another process.`);
   console.error(`Please specify an alternate port using --port=<number>.\n`);
   process.exit(1);
 }
 
-const url = `http://${host}:${port}`;
+const url = `http://${urlHost}:${port}`;
 
 console.log("\n\x1b[1mStarting Career-ops Web Server...\x1b[0m");
 console.log(`\x1b[32mWeb UI:\x1b[0m \x1b[4m\x1b[34m${url}\x1b[0m\n`);
@@ -160,7 +166,7 @@ function pollReady() {
 const childEnv = {
   ...process.env,
   PORT: String(port),
-  HOSTNAME: host,
+  HOSTNAME: bindHost,
   CAREER_OPS_ROOT: dataRoot,
 };
 
@@ -168,8 +174,8 @@ const childEnv = {
 const isWindows = process.platform === "win32";
 const serverScript = path.join(webDir, "server.mjs");
 const serverArgs = [serverScript, "dev", "-p", String(port)];
-if (host !== "127.0.0.1") {
-  serverArgs.push("-H", host);
+if (bindHost !== "127.0.0.1") {
+  serverArgs.push("-H", bindHost);
 }
 
 const child = spawn(process.execPath, serverArgs, {
