@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractWithAI } from '../scan-hn.mjs';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 test('Hacker News AI Extraction Logic', async (t) => {
   const mockModel = {
@@ -137,7 +138,7 @@ test('scan-hn --help prints usage and an unknown flag is refused, neither runs t
 
     const help = runScanHn(dir, preload, ['--help']);
     assert.equal(help.error, undefined, `scan-hn failed to spawn: ${help.error?.message}`);
-    assert.equal(help.status, 0, `expected --help to exit 0, got ${help.status}\n${help.stderr}`);
+    assert.equal(help.status, 0, describeSpawn(help, `expected --help to exit 0, got ${help.status}\n`));
     assert.match(help.stdout, /Usage:\n\s+node scan-hn\.mjs/);
     assert.match(help.stdout, /data\/pipeline\.md/, 'usage should say what the scan writes');
 
@@ -168,7 +169,7 @@ test('scan-hn refuses a portals.yml that does not parse instead of scanning with
     writeFileSync(portals, keywords);
     const valid = runScanHn(dir, served.preload, [], { GEMINI_API_KEY: '' });
     assert.equal(valid.error, undefined, `scan-hn failed to spawn: ${valid.error?.message}`);
-    assert.equal(valid.status, 0, `expected a valid portals.yml to exit 0, got ${valid.status}\n${valid.stderr}`);
+    assert.equal(valid.status, 0, describeSpawn(valid, `expected a valid portals.yml to exit 0, got ${valid.status}\n`));
     assert.match(valid.stdout, /Postings fetched:\s+2/);
     assert.match(valid.stdout, /New offers:\s+0/, 'hn_hiring.keywords should replace the default');
 
@@ -200,11 +201,11 @@ test('scan-hn does not add a posting again when its URL is not already in normal
     ] });
 
     const first = runScanHn(dir, preload, [], { GEMINI_API_KEY: '' });
-    assert.equal(first.status, 0, `first run failed\n${first.stderr}`);
+    assert.equal(first.status, 0, describeSpawn(first, `first run failed\n`));
     assert.match(first.stdout, /New offers:\s+2/);
 
     const second = runScanHn(dir, preload, [], { GEMINI_API_KEY: '' });
-    assert.equal(second.status, 0, `second run failed\n${second.stderr}`);
+    assert.equal(second.status, 0, describeSpawn(second, `second run failed\n`));
     assert.match(second.stdout, /Postings fetched:\s+2/);
     assert.match(second.stdout, /New offers:\s+0/, `the second run re-added postings it had already recorded:\n${second.stdout}`);
 
