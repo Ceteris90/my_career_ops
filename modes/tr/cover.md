@@ -300,6 +300,10 @@ JSON yükünü (payload) birleştir:
 }
 ```
 
+Her `achievements[].lead` değeri, sonunda virgül veya başka bir noktalama işareti bulunmayan yalın bir ifade olmalıdır — `generate-cover-letter.mjs` render ederken virgülü otomatik olarak ekler (bkz. Adım 7).
+
+`{company-slug}` ve `{role-slug}` değerlerini yalnızca küçük harf, rakam ve kısa çizgi (`[a-z0-9-]+`) içerecek şekilde sanitize et (kabuk komut enjeksiyonunu önlemek için özel karakterleri kaldır).
+
 Yükü (Payload) `/tmp/cover-payload-{company-slug}.json` konumuna yaz.
 
 Çalıştır:

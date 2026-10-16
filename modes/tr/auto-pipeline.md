@@ -84,4 +84,4 @@ Eğer final puanı >= 4.5 ise, başvuru formu için yanıt taslakları oluşturu
 
 Takipçiyi güncellemek için doğrudan `data/applications.md` dosyasına yazmayın. Değişiklikleri bir TSV satırı olarak `batch/tracker-additions/` içine ekleyin ve `node merge-tracker.mjs` komutunu kullanarak takipçiyi güncelleyin.
 
-**Herhangi bir adım başarısız olursa**, sonrakilerle devam edin ve başarısız olan adımı takipçide beklemede (pending) olarak işaretleyin. <!-- resolve-cr-87 -->
+**JD ve kapılar çözüldükten sonra bir yapay ürün (artifact) oluşturma adımı başarısız olursa**, bağımsız sonraki adımlarla devam edin ve başarısız olan adımı takipçide beklemede (pending) olarak işaretleyin. Ancak ulaşılamayan bir JD veya çözülememiş geçerlilik (liveness)/onay kapısı, değerlendirmeden ve tüm yapay ürün/takipçi yazımlarından önce süreci durdurur; girdisi eksik olan bağımlı adımları çalıştırmayın.
