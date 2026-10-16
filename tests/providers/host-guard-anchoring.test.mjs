@@ -135,33 +135,54 @@ const sources = new Map(
 }
 
 // ── 3. endsWith() suffix guards ────────────────────────────────────────────
+//
+// Matched on the RECEIVER being any identifier, not on the literal word
+// `hostname` appearing nearby. The first version required `hostname` within 40
+// characters of `endsWith(`, and the dominant idiom aliases first:
+//
+//   const host = u.host.toLowerCase();
+//   if (host !== 'csod.com' && !host.endsWith('.csod.com')) return null;
+//
+// so it saw 3 of the 17 suffix guards in the tree and 14 were invisible —
+// amazon, avature, beesite, csod, dassault, deutschebahn, eploy, gupy,
+// hecklerkoch, rheinmetall, softgarden among them. Review proved the gap by
+// dropping the leading dot from csod.mjs's aliased guard, a real dotless-suffix
+// bug that would let `evilcsod.com` through, with the suite staying green
+// (#4979).
+//
+// What makes it a host guard here is the ARGUMENT's shape — a dotted domain
+// suffix — rather than the receiver's name, so `s.endsWith('.json')` and
+// `path.endsWith('/')` are not in scope.
 {
-  const endsWithRe = /hostname[^\n;]{0,40}endsWith\(\s*['"]([^'"]+)['"]/g;
+  const endsWithRe = /([A-Za-z_$][\w$]*)\s*\.endsWith\(\s*['"]([^'"]+)['"]/g;
   let examined = 0;
   const dotless = [];
 
   for (const [file, code] of sources) {
     for (const m of code.matchAll(endsWithRe)) {
-      const value = m[1];
+      const [, receiver, value] = m;
       if (!/^\.?[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(value)) continue; // not a domain suffix
       examined += 1;
       if (!value.startsWith('.')) {
-        dotless.push(`${file}: endsWith('${value}')`);
+        dotless.push(`${file}: ${receiver}.endsWith('${value}')`);
       }
     }
   }
 
-  if (examined >= 1) {
-    pass(`${examined} hostname.endsWith() suffix guards examined`);
+  if (examined >= 12) {
+    pass(`${examined} endsWith() suffix guards examined`);
   } else {
-    fail('no hostname.endsWith() guards found — the suffix detection has rotted');
+    fail(
+      `only ${examined} endsWith() suffix guards found — the suffix detection has rotted. It found `
+      + '17 when written, and 14 of those were invisible to the version before it.',
+    );
   }
 
   if (dotless.length === 0) {
-    pass('every hostname.endsWith() guard keeps its leading dot');
+    pass('every endsWith() suffix guard keeps its leading dot');
   } else {
     fail(
-      "these suffix guards omit the leading dot, so evilvendordomain.com passes: "
+      'these suffix guards omit the leading dot, so evilvendordomain.com passes: '
       + dotless.join(' | '),
     );
   }
