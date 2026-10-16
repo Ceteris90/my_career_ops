@@ -14,10 +14,10 @@
  * verified on macOS and Linux too, not only on a Windows runner.
  */
 
-import { mkdirSync, writeFileSync, rmSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { join, resolve } from 'path';
 import { pass, fail, makeUpdaterRepo } from './helpers.mjs';
-import { locallyModifiedSystemFiles } from '../update-system.mjs';
+import { locallyModifiedSystemFiles, commitPathspecs } from '../update-system.mjs';
 
 const WINDOWS_ARGV_LIMIT = 32767;
 
@@ -167,5 +167,111 @@ if (NAMES.join(' ').length > WINDOWS_ARGV_LIMIT) {
     pass('content upstream never shipped is still reported among 400 adopted files');
   } else {
     fail(`#4 expected [${edited}], got ${atRisk.length} file(s)`);
+  }
+}
+
+// ── 5. The scoped update commit: 400 paths, an unrelated file already staged ──
+//    apply() takes this form exactly when the user has something else staged,
+//    and that is the call azizibilel's run hit with 1,593 paths (#5103).
+{
+  const repo = makeRepo();
+  writeAll(repo, 'v2');
+  repo.g('add', '--', ...NAMES);
+  writeFileSync(join(repo.dir, 'mine.txt'), 'user work\n');
+  repo.g('add', 'mine.txt');
+
+  const calls = [];
+  let error = null;
+  try {
+    commitPathspecs('chore: auto-update system files to v2', NAMES, { git: limitedRunner(repo.g, calls), root: repo.dir });
+  } catch (err) {
+    error = err;
+  }
+  const over = calls.filter((c) => c.chars > WINDOWS_ARGV_LIMIT);
+  if (!error && over.length === 0) {
+    pass('a scoped commit of 400 paths stays under the Windows ceiling');
+  } else {
+    fail(`#5 ${error ? error.message : `${over.length} call(s) over the ceiling`}`);
+  }
+  const committed = repo.g('show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean);
+  if (committed.length === NAMES.length && !committed.includes('mine.txt')) {
+    pass('the commit holds exactly the 400 named paths');
+  } else {
+    fail(`#5 expected the 400 named paths only, commit holds ${committed.length} (mine.txt ${committed.includes('mine.txt') ? 'swept in' : 'absent'})`);
+  }
+  if (repo.g('diff', '--cached', '--name-only') === 'mine.txt') {
+    pass('the unrelated staged file is left staged, outside the commit (#915 bug 2)');
+  } else {
+    fail('#5 the unrelated staged file did not stay staged on its own');
+  }
+  const listFile = resolve(repo.dir, repo.g('rev-parse', '--git-path', 'career-ops-update-pathspecs'));
+  if (!existsSync(listFile)) {
+    pass('the pathspec file is removed once the commit lands');
+  } else {
+    fail('#5 the pathspec file was left behind after a successful commit');
+  }
+}
+
+// ── 6. literal: a glob-shaped name commits only itself ──
+//    rollback() commits with --literal-pathspecs; the file must not undo it.
+{
+  const repo = makeRepo();
+  writeFileSync(join(repo.dir, 'bulk', '[ab].md'), 'v1\n');
+  writeFileSync(join(repo.dir, 'bulk', 'a.md'), 'v1\n');
+  repo.g('add', '--', 'bulk/[ab].md', 'bulk/a.md');
+  repo.g('commit', '-qm', 'base 2');
+  writeFileSync(join(repo.dir, 'bulk', '[ab].md'), 'v2\n');
+  writeFileSync(join(repo.dir, 'bulk', 'a.md'), 'v2\n');
+  repo.g('add', '--', 'bulk/a.md');
+  repo.g('--literal-pathspecs', 'add', '--', 'bulk/[ab].md');
+
+  commitPathspecs('chore: rollback system files', ['bulk/[ab].md'], { git: repo.g, root: repo.dir, literal: true });
+  const committed = repo.g('show', '--name-only', '--format=', 'HEAD');
+  if (committed === 'bulk/[ab].md') {
+    pass('a literal pathspec file does not glob `[ab].md` onto `a.md`');
+  } else {
+    fail(`#6 expected only bulk/[ab].md, commit holds: ${committed.replace(/\n/g, ', ')}`);
+  }
+}
+
+// ── 7. A failed commit leaves the file the recovery hint names, and it works ──
+{
+  const repo = makeRepo();
+  writeAll(repo, 'v2');
+  repo.g('add', '--', ...NAMES);
+  writeFileSync(join(repo.dir, 'mine.txt'), 'user work\n');
+  repo.g('add', 'mine.txt');
+
+  const failingCommit = (...args) => {
+    if (args.includes('commit')) throw new Error('simulated commit failure');
+    return repo.g(...args);
+  };
+  try {
+    commitPathspecs('chore: auto-update system files to v2', NAMES, { git: failingCommit, root: repo.dir });
+    fail('#7 the simulated failure did not surface');
+  } catch {
+    // Expected.
+  }
+  const listFile = repo.g('rev-parse', '--git-path', 'career-ops-update-pathspecs');
+  // The hint's own command, with the same quoting apply() prints.
+  const recovery = ['commit', '-m', 'chore: auto-update system files to v2', `--pathspec-from-file=${listFile}`, '--pathspec-file-nul'];
+  let recovered = false;
+  try {
+    repo.g(...recovery);
+    recovered = true;
+  } catch {
+    recovered = false;
+  }
+  const committed = repo.g('show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean);
+  if (recovered && committed.length === NAMES.length && !committed.includes('mine.txt')) {
+    pass('the printed recovery command commits the update paths and nothing else');
+  } else {
+    fail(`#7 recovery ${recovered ? `committed ${committed.length} path(s)` : 'failed'}`);
+  }
+  const hintChars = ['git', ...recovery].join(' ').length;
+  if (hintChars < WINDOWS_ARGV_LIMIT) {
+    pass(`the recovery command is ${hintChars} chars, runnable under the Windows ceiling`);
+  } else {
+    fail(`#7 recovery command is ${hintChars} chars`);
   }
 }

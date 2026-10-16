@@ -3191,6 +3191,52 @@ export function addPaths(paths, ctx = {}) {
   }
 }
 
+/** Where a scoped update commit reads its pathspecs from, under the git dir. */
+const COMMIT_PATHSPEC_FILE = 'career-ops-update-pathspecs';
+
+/**
+ * Write `paths` NUL-delimited to a file in the git dir, for
+ * `git commit --pathspec-from-file=<file> --pathspec-file-nul`.
+ *
+ * A scoped commit cannot be split into batches — one commit per batch is a
+ * different history — so the list leaves argv instead. The file is the same
+ * one the failure message points at, so the recovery command it prints stays
+ * runnable on Windows too, where the argv form of it is not (#5103).
+ *
+ * @param {string[]} paths
+ * @param {{ git?: Function, root?: string }} [ctx]
+ * @returns {string} The file's path as git printed it, relative to root.
+ */
+export function writePathspecFile(paths, ctx = {}) {
+  const runGit = ctx.git || git;
+  const file = runGit('rev-parse', '--git-path', COMMIT_PATHSPEC_FILE).trim();
+  writeFileSync(resolve(ctx.root || ROOT, file), paths.map((p) => `${p}\0`).join(''));
+  return file;
+}
+
+/**
+ * `git commit -m <message> -- <paths>`, without putting <paths> on argv.
+ *
+ * Same commit, same `--only` semantics as the pathspec arguments it replaces:
+ * git reads `--pathspec-from-file` as if each entry had been passed after
+ * `--`. The file is removed on success and left in place on failure, where the
+ * caller's recovery hint names it.
+ *
+ * @param {string} message
+ * @param {string[]} paths - Must be non-empty; an empty list would commit the whole index.
+ * @param {{ git?: Function, root?: string, literal?: boolean }} [ctx]
+ */
+export function commitPathspecs(message, paths, ctx = {}) {
+  if (paths.length === 0) throw new Error('commitPathspecs needs at least one path');
+  const runGit = ctx.git || git;
+  const file = writePathspecFile(paths, ctx);
+  runGit(
+    ...(ctx.literal ? ['--literal-pathspecs'] : []),
+    'commit', '-m', message, `--pathspec-from-file=${file}`, '--pathspec-file-nul',
+  );
+  rmSync(resolve(ctx.root || ROOT, file), { force: true });
+}
+
 /**
  * Refuse anything that would make `git add -f` recurse.
  *
@@ -4817,7 +4863,7 @@ async function apply() {
       if (usedIndexCommit) {
         git('commit', '-m', `chore: auto-update system files to v${remote}`);
       } else {
-        git('commit', '-m', `chore: auto-update system files to v${remote}`, '--', ...expandedPathsToStage);
+        commitPathspecs(`chore: auto-update system files to v${remote}`, expandedPathsToStage);
       }
     } catch (e) {
       let commitFailed = false;
@@ -4834,14 +4880,23 @@ async function apply() {
       }
 
       if (commitFailed) {
-        const pathspec = expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ');
         // Print the command matching the path actually taken. Suggesting the
         // pathspec form after the index form was selected would tell the user to
         // run the very thing that drops the staged mode bits — a recovery step
         // that quietly reintroduces the bug it is recovering from.
+        // The pathspec form reads its list from a file: printed inline, 1,593
+        // paths ran to 55,564 characters, a command no Windows shell can run
+        // (#5103). Should even that file be unwritable, the inline list is
+        // still the right command on a platform without the ceiling.
+        let pathspecArgs;
+        try {
+          pathspecArgs = `"--pathspec-from-file=${writePathspecFile(expandedPathsToStage)}" --pathspec-file-nul`;
+        } catch {
+          pathspecArgs = `-- ${expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ')}`;
+        }
         const recovery = usedIndexCommit
           ? `git commit -m "chore: auto-update system files to v${remote}"`
-          : `git commit -m "chore: auto-update system files to v${remote}" -- ${pathspec}`;
+          : `git commit -m "chore: auto-update system files to v${remote}" ${pathspecArgs}`;
         throw new Error(
           `Update commit failed (files may be staged but not committed).\n` +
           `    Error: ${e.message.split('\n')[0]}\n` +
@@ -5159,7 +5214,7 @@ function rollback() {
         if (stagedPathsOutside(concreteRollbackPaths).length === 0) {
           git('commit', '-m', message);
         } else {
-          git('--literal-pathspecs', 'commit', '-m', message, '--', ...stagedRollbackPaths);
+          commitPathspecs(message, stagedRollbackPaths, { literal: true });
         }
       } catch (err) {
         throw new Error(
