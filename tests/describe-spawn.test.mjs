@@ -44,7 +44,12 @@ test('a timeout kill is named, where the old message was empty', () => {
 
 test('a child that ran and complained still shows what it said', () => {
   // The case the old form handled, which must not regress.
-  const result = spawnSync(process.execPath, ['-e', 'console.error("boom"); process.exit(3)'], { encoding: 'utf8' });
+  // `process.exitCode = 3` rather than process.exit(3): test-all.mjs lints
+  // discovered suites for /\bprocess\.exit\s*\(/ after stripping COMMENT lines
+  // but not string literals, so the child's own code in a string trips a guard
+  // meant for the suite itself. Setting exitCode and falling off the end exits
+  // with the same status and keeps the guard's intent intact.
+  const result = spawnSync(process.execPath, ['-e', 'console.error("boom"); process.exitCode = 3'], { encoding: 'utf8' });
   const described = describeSpawn(result, 'failing child');
   assert.match(described, /exit status 3/);
   assert.match(described, /stderr:\n\s*boom/);
