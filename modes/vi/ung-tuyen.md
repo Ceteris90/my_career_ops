@@ -234,7 +234,7 @@ node application-answers.mjs --report reports/NNN-company-role-date.md --input a
 ## Bước 9 — Sau khi nộp (tùy chọn)
 
 Nếu ứng viên xác nhận đã nộp đơn:
-1. Cập nhật trạng thái sang Applied bằng CLI chuẩn: `node set-status.mjs <report#> Applied` (không bao giờ sửa tay bảng). Nếu ứng viên nộp vào ngày khác hôm nay, thêm `--on YYYY-MM-DD` với ngày nộp thực tế.
+1. Cập nhật trạng thái sang Applied bằng CLI chuẩn: `node set-status.mjs --report <report#> Applied` (không bao giờ sửa tay bảng). Nếu ứng viên nộp vào ngày khác hôm nay, thêm `--on YYYY-MM-DD` với ngày nộp thực tế.
 2. Gieo lịch follow-up: chạy `node followup-seed.mjs {num} --json` (`{num}` là số dòng tracker). Nếu ứng viên nộp vào ngày khác hôm nay, truyền `--date YYYY-MM-DD` với ngày nộp thực tế. Lệnh idempotent, chạy lại an toàn.
 3. Làm mới mục `## Application Answers` của báo cáo với giá trị trường cuối cùng và `**State:** submitted`
 4. Gợi ý bước tiếp theo: chạy mode `contacto` (`/career-ops contacto` nếu có) để nhắn LinkedIn cho hiring manager

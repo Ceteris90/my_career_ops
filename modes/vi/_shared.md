@@ -201,7 +201,7 @@ Quyết định điểm toàn cục một lần từ các chiều này, áp dụ
 **Diễn giải điểm:**
 - 4.5+ → Match mạnh, nên ứng tuyển ngay
 - 4.0-4.4 → Match tốt, đáng ứng tuyển
-- 3.5-3.9 → Tạm được, chưa lý tưởng; chỉ ứng tuyển khi có lý do cụ thể
+- 3.5-3.9 → Tạm được, chưa lý tưởng; khuyên không ứng tuyển trừ khi người dùng nêu lý do cụ thể (Ethical Use trong AGENTS.md đặt ngưỡng 4.0)
 - Dưới 3.5 → Khuyến nghị không ứng tuyển
 
 > **Ngưỡng chuẩn (Ethical Use):** AGENTS.md đặt ngưỡng **4.0/5** -- dưới 4.0, agent khuyến nghị mạnh không ứng tuyển. Khoảng 3.5-3.9 chỉ khi có lý do rõ ràng và cần quyết định tường minh của người dùng.
@@ -254,7 +254,7 @@ Trước khi gán `confidence`, phân loại bằng chứng cho từng chiều (
 3. Trích dẫn đúng dòng trong CV khi match
 4. Dùng WebSearch cho dữ liệu đãi ngộ và công ty
 5. Ghi vào tracker sau mỗi lần đánh giá
-6. Tạo nội dung bằng ngôn ngữ của JD (tiếng Việt nếu tin bằng tiếng Việt, tiếng Anh nếu không)
+6. Tạo nội dung cho người dùng bằng `{language.output}` trong `config/profile.yml` (tiếng Anh nếu chưa đặt), bất kể ngôn ngữ của JD. Giữ thuật ngữ của thị trường này và giải thích bằng ngôn ngữ đó khi cần
 7. Thẳng thắn và cụ thể -- không rào đón
 8. Tiếng Việt kỹ thuật tự nhiên cho văn bản được tạo. Câu ngắn, động từ chủ động, tránh câu bị động. Không ép dịch thuật ngữ kỹ thuật (stack, pipeline, deployment, embedding)
 8b. **URL case study trong Professional Summary của PDF:** nếu PDF nhắc đến case study hoặc demo, URL phải xuất hiện ở đoạn đầu tiên. Nhà tuyển dụng thường chỉ đọc phần summary. Mọi URL trong HTML dùng `white-space: nowrap`
