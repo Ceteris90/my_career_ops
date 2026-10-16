@@ -31,7 +31,7 @@ import { normalizeReportLink as normalizeLink } from './tracker-links.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { parsePdfIndex, livePdfIndex, normNum } from './find.mjs';
-import { LEGACY_COLMAP, TSV_REQUIRED_FIELDS, detectColumns, isHeaderRow, resolveScoreStatus, looksLikeTsvHeaderRow, resolveTsvColumns, looksLikeScoreCell, normalizeVia, normalizeTextKey, SEPARATOR_ROW_RE, extractReqNumber, extractCellUrl, parseMarkdownLinks, unwrapReportUrlToken } from './tracker-parse.mjs';
+import { LEGACY_COLMAP, TSV_REQUIRED_FIELDS, detectColumns, isHeaderRow, resolveScoreStatus, looksLikeTsvHeaderRow, resolveTsvColumns, looksLikeScoreCell, parseScore, normalizeVia, normalizeTextKey, SEPARATOR_ROW_RE, extractReqNumber, extractCellUrl, parseMarkdownLinks, unwrapReportUrlToken } from './tracker-parse.mjs';
 // The ATS vendor table shared with analyze-patterns.mjs and the scanners, so
 // the URL cell's label and the per-vendor analysis name a board identically.
 import { atsVendorOf } from './ats-vendor.mjs';
@@ -609,21 +609,6 @@ export async function mergeTracker(options = {}) {
       .some(c => c === incomingClause || c.endsWith(`: ${incomingClause}`));
     const tail = incoming && !isRepeat ? `${marker}: ${incoming}` : marker;
     return prev ? `${prev}. ${tail}` : tail;
-  }
-
-  /**
-   * Parse a score cell into a numeric value for score-upgrade decisions.
-   *
-   * The merge path compares old and new scores to decide whether to update an
-   * existing duplicate row. Markdown bolding and `/5` suffixes are presentation
-   * details, so only the first numeric value is used.
-   *
-   * @param {string} s - Raw score cell such as `4.2/5`.
-   * @returns {number} Parsed score, or 0 when no numeric value is present.
-   */
-  function parseScore(s) {
-    const m = s.replace(/\*\*/g, '').match(/(\d+(?:[.,]\d+)?)/);
-    return m ? parseFloat(m[1].replace(',', '.')) : 0;
   }
 
   /**

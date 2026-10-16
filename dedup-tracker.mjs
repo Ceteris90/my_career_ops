@@ -20,7 +20,7 @@ import {
   openTrackerTransaction, rebuildRow, normalizeCompany, companiesMatchIgnoringCorporateForm,
   MIN_STEM_CHARS, loadCanonicalStates, resolveCanonicalStateId,
 } from './tracker-utils.mjs';
-import { resolveColumns, parseTrackerRow, normalizeVia, extractReqNumber } from './tracker-parse.mjs';
+import { resolveColumns, parseTrackerRow, normalizeVia, extractReqNumber, parseScore } from './tracker-parse.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
@@ -301,20 +301,6 @@ function roleMatch(a, b) {
   }
 
   return true;
-}
-
-/**
- * Parse a tracker score cell into a numeric value for keeper selection.
- *
- * Scores may include Markdown bolding or a `/5` suffix. Dedup only needs the
- * numeric part so it can keep the highest-scored duplicate row in a cluster.
- *
- * @param {string} s - Raw score cell such as `4.3/5` or `**4.3/5**`.
- * @returns {number} Parsed score, or 0 when no number is present.
- */
-function parseScore(s) {
-  const m = s.replace(/\*\*/g, '').match(/(\d+(?:[.,]\d+)?)/);
-  return m ? parseFloat(m[1].replace(',', '.')) : 0;
 }
 
 /**

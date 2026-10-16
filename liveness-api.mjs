@@ -39,6 +39,7 @@ import { DEFAULT_USER_AGENT } from './user-agent.mjs';
 import { parseWwrFeed } from './providers/weworkremotely.mjs';
 import { isZohoRecordClosed, parseZohoDetailPage } from './providers/zoho-recruit.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
+import { linkedInJobId, linkedInGuestUrl } from './lib/linkedin-url.mjs';
 
 const TIMEOUT_MS = 8_000;
 // Strict path-segment charset. Anything with a slash, dot-dot, or other char is
@@ -340,13 +341,10 @@ const ATS_PROVIDERS = [
     // ones, so liveness has to come from the body (`interpret`), never from the
     // status code alone.
     match(u) {
-      if (!/(^|\.)linkedin\.com$/.test(u.hostname)) return null;
-      const path = u.pathname.match(/^\/jobs\/view\/(?:.*-)?(\d+)\/?$/);
-      if (path) return { id: path[1] };
-      const current = u.searchParams.get('currentJobId');
-      return current && /^\d+$/.test(current) ? { id: current } : null;
+      const id = linkedInJobId(u);
+      return id ? { id } : null;
     },
-    api: ({ id }) => `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`,
+    api: ({ id }) => linkedInGuestUrl(id),
     // The endpoint is unauthenticated and rate-limited. Space our calls; the
     // interval sits on the provider so it holds for every caller rather than only
     // the loop in check-liveness.mjs.
