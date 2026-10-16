@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -203,7 +204,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` følger med [Node.js](https://nodejs.org): det kører installationen én gang
 > uden at installere noget globalt. Ingen Node endnu? Installer den først.
-> (Bruger du allerede en Claude Code / Gemini / Codex CLI? Så har du den allerede.)
+> (Bruger du allerede en Claude Code / Codex CLI? Så har du den allerede.)
 
 Det kloner den seneste udgivelse ind i `./career-ops` og installerer afhængigheder. Derefter:
 

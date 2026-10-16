@@ -188,6 +188,7 @@ const SYSTEM_PATHS = [
   'modes/_brief.template.md',
   'voice-dna.template.md',
   'modes/oferta.md',
+  'modes/oferta-signals/',
   'modes/master-profile.md',
   'modes/pdf.md',
   'modes/ats.md',
@@ -268,6 +269,7 @@ const SYSTEM_PATHS = [
   'modes/tr/',
   'modes/ua/',
   'modes/ua/interview/',
+  'modes/vi/',
   'modes/heuristics/',
   'modes/regional/',
   'modes/zh/',
@@ -298,6 +300,7 @@ const SYSTEM_PATHS = [
   'lib/node-floor.mjs',
   'lib/local-today.mjs',
   'lib/parse-date.mjs',
+  'lib/personalization.mjs',
   'lib/reply-proposals.mjs',
   'lib/placeholder-cell.mjs',
   'lib/tracker-addition.mjs',
@@ -329,6 +332,8 @@ const SYSTEM_PATHS = [
   // Ships alongside doctor.mjs, which imports it: an upgraded install whose
   // updater had no entry for it would check out a doctor that cannot load.
   'lib/title-filter-conflicts.mjs',
+  // Ships alongside liveness-api.mjs, which imports it.
+  'lib/linkedin-url.mjs',
   // Retired 2026-09-05: the suite moved to tests/context-budget.test.mjs. The
   // entry stays so staleSystemFiles() prunes the orphan on an upgraded install;
   // drop it once a release has shipped past that move.
@@ -387,6 +392,7 @@ const SYSTEM_PATHS = [
   'cv-title-check.mjs',
   'prepare-application.mjs',
   'application-artifacts.mjs',
+  'evaluation-cache.mjs',
   'batch-evaluate-gemini.mjs',
   'providers/',
   'data-static/',
@@ -574,6 +580,7 @@ const SYSTEM_PATHS = [
   'README.zh-TW.md',
   'README.tr.md',
   'README.vi.md',
+  'README.id.md',
   'CHANGELOG.md',
   'CODE_OF_CONDUCT.md',
   'CONTRIBUTORS.md',
@@ -1439,7 +1446,7 @@ function backupTimestamp(branchName) {
   ) || 0;
 }
 
-function newestBackupBranch(branches) {
+function newestBackupBranch(branches, accept = () => true) {
   const branchList = branches.split('\n').map(b => b.trim()).filter(Boolean);
   if (branchList.length === 0) return null;
 
@@ -1450,7 +1457,25 @@ function newestBackupBranch(branches) {
     .filter(entry => entry.timestamp > 0)
     .sort((a, b) => b.timestamp - a.timestamp);
 
-  return timestamped[0]?.branch || branchList[0];
+  const ordered = timestamped.length > 0
+    ? timestamped.map(entry => entry.branch)
+    : branchList;
+
+  return ordered.find(accept) || null;
+}
+
+// A newer backup with no paired target (a retry that died before the fetch
+// pinned one) must not hide an older backup that still can name its release.
+function rollbackBackupBranch(branches) {
+  const paired = newestBackupBranch(branches, (branch) => {
+    try {
+      git('show-ref', '--verify', '--quiet', targetRefForBackup(branch));
+      return branch;
+    } catch {
+      // This backup has no paired target. Try the next older one.
+    }
+  });
+  return paired || newestBackupBranch(branches);
 }
 
 export function parsePositiveInt(value, fallback) {
@@ -2617,7 +2642,11 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
     }
     for (const [commit, files] of byCommit) {
       try {
-        const stat = runGit('diff', '--ignore-cr-at-eol', '--numstat', commit, '--', ...files);
+        // Batched: one update commit can deliver over a thousand files, and
+        // naming them all in one call overflows a Windows command line (#5103).
+        const stat = argvBatches(files)
+          .map((batch) => runGit('diff', '--ignore-cr-at-eol', '--numstat', commit, '--', ...batch))
+          .join('\n');
         const stillDiffers = new Set(
           stat.split('\n').map((l) => l.trim()).filter(Boolean)
             .map((l) => l.split('\t')[2]).filter(Boolean),
@@ -2658,15 +2687,20 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
       };
       let worktreeShas = null;
       let publishedShas = null;
+      // Both dumps are batched for the same reason as the numstat above
+      // (#5103); rawShas accumulates per path, so joined output parses whole.
+      const batches = argvBatches(undelivered);
       try {
-        worktreeShas = rawShas(runGit('diff', '--raw', '--no-abbrev', '--no-renames', upstreamRef, '--', ...undelivered));
+        worktreeShas = rawShas(batches.map((batch) => runGit(
+          'diff', '--raw', '--no-abbrev', '--no-renames', upstreamRef, '--', ...batch,
+        )).join('\n'));
       } catch {
         worktreeShas = null;
       }
       try {
-        publishedShas = rawShas(runGit(
-          'log', '--raw', '--no-abbrev', '--no-renames', '--format=%x1e%H', publishedRange, '--', ...undelivered,
-        ));
+        publishedShas = rawShas(batches.map((batch) => runGit(
+          'log', '--raw', '--no-abbrev', '--no-renames', '--format=%x1e%H', publishedRange, '--', ...batch,
+        )).join('\n'));
       } catch {
         publishedShas = null;
       }
@@ -3083,7 +3117,7 @@ export function manifestTreeFiles(paths, ref, userPaths = USER_PATHS, ctx = {}) 
 }
 
 /**
- * Cap on the argv bytes handed to one `git add`.
+ * Cap on the argv bytes of file paths handed to one git call.
  *
  * Expanding directories multiplies the pathspec count (283 manifest entries →
  * 817 files, ~22 KB of argv today), and Windows caps a whole command line at
@@ -3092,7 +3126,32 @@ export function manifestTreeFiles(paths, ref, userPaths = USER_PATHS, ctx = {}) 
  * release — failing, eventually, inside the one tool a user cannot easily
  * repair by hand. Batching is a consequence of the expansion, not a flourish.
  */
-const ADD_ARGV_BUDGET = 8000;
+const ARGV_BUDGET = 8000;
+
+/**
+ * Split file paths into runs whose joined length stays within ARGV_BUDGET, for
+ * any git call that names files one by one. A single path wider than the
+ * budget still goes out on its own.
+ *
+ * @param {string[]} paths
+ * @returns {string[][]}
+ */
+function argvBatches(paths) {
+  const batches = [];
+  let batch = [];
+  let budget = 0;
+  for (const path of paths) {
+    if (batch.length > 0 && budget + path.length + 1 > ARGV_BUDGET) {
+      batches.push(batch);
+      batch = [];
+      budget = 0;
+    }
+    batch.push(path);
+    budget += path.length + 1;
+  }
+  if (batch.length > 0) batches.push(batch);
+  return batches;
+}
 
 /**
  * Stage the update's own system-layer files.
@@ -3130,24 +3189,67 @@ export function addPaths(paths, ctx = {}) {
   // committed to.
   rejectDirectories(paths, ctx.root || ROOT);
   const runGit = ctx.git || git;
-  let batch = [];
-  let budget = 0;
   // --literal-pathspecs: these are filenames, and a name like `docs/[x].env`
   // read as a glob would force-add an ignored sibling `docs/x.env`. `--` ends
   // option parsing but does not stop pathspec interpretation.
-  const flush = () => {
-    if (batch.length === 0) return;
+  for (const batch of argvBatches(paths)) {
     runGit('--literal-pathspecs', 'add', '-f', '--', ...batch);
-    batch = [];
-    budget = 0;
-  };
-  for (const path of paths) {
-    // A single path wider than the budget still goes out on its own.
-    if (batch.length > 0 && budget + path.length + 1 > ADD_ARGV_BUDGET) flush();
-    batch.push(path);
-    budget += path.length + 1;
   }
-  flush();
+}
+
+/** Where a scoped update commit reads its pathspecs from, under the git dir. */
+const COMMIT_PATHSPEC_FILE = 'career-ops-update-pathspecs';
+
+/**
+ * Write `paths` NUL-delimited to a file in the git dir, for
+ * `git commit --pathspec-from-file=<file> --pathspec-file-nul`.
+ *
+ * A scoped commit cannot be split into batches — one commit per batch is a
+ * different history — so the list leaves argv instead. The file is the same
+ * one the failure message points at, so the recovery command it prints stays
+ * runnable on Windows too, where the argv form of it is not (#5103).
+ *
+ * Each call gets its own file. A failed commit leaves its file for the
+ * recovery command, and a later scoped commit must not overwrite or delete it.
+ *
+ * @param {string[]} paths
+ * @param {{ git?: Function, root?: string }} [ctx]
+ * @returns {string} The file's path as git printed it, relative to root.
+ */
+export function writePathspecFile(paths, ctx = {}) {
+  const runGit = ctx.git || git;
+  const name = `${COMMIT_PATHSPEC_FILE}-${randomBytes(6).toString('hex')}`;
+  const file = runGit('rev-parse', '--git-path', name).trim();
+  writeFileSync(resolve(ctx.root || ROOT, file), paths.map((p) => `${p}\0`).join(''));
+  return file;
+}
+
+/**
+ * `git commit -m <message> -- <paths>`, without putting <paths> on argv.
+ *
+ * Same commit, same `--only` semantics as the pathspec arguments it replaces:
+ * git reads `--pathspec-from-file` as if each entry had been passed after
+ * `--`. The file is removed on success and left in place on failure, where the
+ * caller's recovery hint names it: the thrown error carries it as `pathspecFile`.
+ *
+ * @param {string} message
+ * @param {string[]} paths - Must be non-empty; an empty list would commit the whole index.
+ * @param {{ git?: Function, root?: string, literal?: boolean }} [ctx]
+ */
+export function commitPathspecs(message, paths, ctx = {}) {
+  if (paths.length === 0) throw new Error('commitPathspecs needs at least one path');
+  const runGit = ctx.git || git;
+  const file = writePathspecFile(paths, ctx);
+  try {
+    runGit(
+      ...(ctx.literal ? ['--literal-pathspecs'] : []),
+      'commit', '-m', message, `--pathspec-from-file=${file}`, '--pathspec-file-nul',
+    );
+  } catch (err) {
+    err.pathspecFile = file;
+    throw err;
+  }
+  rmSync(resolve(ctx.root || ROOT, file), { force: true });
 }
 
 /**
@@ -4776,7 +4878,7 @@ async function apply() {
       if (usedIndexCommit) {
         git('commit', '-m', `chore: auto-update system files to v${remote}`);
       } else {
-        git('commit', '-m', `chore: auto-update system files to v${remote}`, '--', ...expandedPathsToStage);
+        commitPathspecs(`chore: auto-update system files to v${remote}`, expandedPathsToStage);
       }
     } catch (e) {
       let commitFailed = false;
@@ -4793,14 +4895,23 @@ async function apply() {
       }
 
       if (commitFailed) {
-        const pathspec = expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ');
         // Print the command matching the path actually taken. Suggesting the
         // pathspec form after the index form was selected would tell the user to
         // run the very thing that drops the staged mode bits — a recovery step
         // that quietly reintroduces the bug it is recovering from.
+        // The pathspec form reads its list from a file: printed inline, 1,593
+        // paths ran to 55,564 characters, a command no Windows shell can run
+        // (#5103). Should even that file be unwritable, the inline list is
+        // still the right command on a platform without the ceiling.
+        let pathspecArgs;
+        try {
+          pathspecArgs = `"--pathspec-from-file=${e.pathspecFile ?? writePathspecFile(expandedPathsToStage)}" --pathspec-file-nul`;
+        } catch {
+          pathspecArgs = `-- ${expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ')}`;
+        }
         const recovery = usedIndexCommit
           ? `git commit -m "chore: auto-update system files to v${remote}"`
-          : `git commit -m "chore: auto-update system files to v${remote}" -- ${pathspec}`;
+          : `git commit -m "chore: auto-update system files to v${remote}" ${pathspecArgs}`;
         throw new Error(
           `Update commit failed (files may be staged but not committed).\n` +
           `    Error: ${e.message.split('\n')[0]}\n` +
@@ -4906,7 +5017,7 @@ function rollback() {
   assertOwnGitToplevel();
   try {
     const branches = git('for-each-ref', '--sort=-committerdate', '--format=%(refname:short)', 'refs/heads/backup-pre-update-*');
-    const latest = newestBackupBranch(branches);
+    const latest = rollbackBackupBranch(branches);
     if (!latest) {
       console.error('No backup branches found. Nothing to rollback.');
       process.exit(1);
@@ -5114,16 +5225,28 @@ function rollback() {
     // A second rollback has nothing staged, and so nothing to commit.
     if (stagedRollbackPaths.length > 0) {
       const message = `chore: rollback system files from ${latest}`;
+      const scoped = stagedPathsOutside(concreteRollbackPaths).length > 0;
       try {
-        if (stagedPathsOutside(concreteRollbackPaths).length === 0) {
+        if (!scoped) {
           git('commit', '-m', message);
         } else {
-          git('--literal-pathspecs', 'commit', '-m', message, '--', ...stagedRollbackPaths);
+          commitPathspecs(message, stagedRollbackPaths, { literal: true });
         }
       } catch (err) {
+        // Something unrelated is staged on the scoped path, so a bare
+        // `git commit` would sweep it in. Name the file commitPathspecs left.
+        let recovery = 'Fix the cause and commit the staged files.';
+        if (scoped) {
+          try {
+            recovery = `Fix the cause, then run: git --literal-pathspecs commit -m "${message}" `
+              + `"--pathspec-from-file=${err.pathspecFile ?? writePathspecFile(stagedRollbackPaths)}" --pathspec-file-nul`;
+          } catch {
+            recovery = 'Fix the cause and commit only the rollback files; other staged work would go in with them.';
+          }
+        }
         throw new Error(
           `the files were restored and staged, but the rollback commit failed (${err.message}). `
-          + 'Fix the cause and commit the staged files.',
+          + recovery,
         );
       }
     }

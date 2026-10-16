@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -203,7 +204,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` [Node.js](https://nodejs.org)-உடன் வருகிறது: எதையும் global-ஆக நிறுவாமல்
 > நிறுவியை ஒரு முறை இயக்குகிறது. Node இன்னும் இல்லையா? முதலில் அதை நிறுவுங்கள்.
-> (ஏற்கனவே Claude Code / Gemini / Codex CLI பயன்படுத்துகிறீர்களா? அப்படியானால் ஏற்கனவே உங்களிடம் உள்ளது.)
+> (ஏற்கனவே Claude Code / Codex CLI பயன்படுத்துகிறீர்களா? அப்படியானால் ஏற்கனவே உங்களிடம் உள்ளது.)
 
 இது சமீபத்திய வெளியீட்டை `./career-ops`-இல் clone செய்து dependencies-ஐ நிறுவுகிறது. பிறகு:
 
