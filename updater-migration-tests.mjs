@@ -500,7 +500,8 @@ const twoPassManifestChecks = [
   },
   {
     name: 'apply commit is scoped to expanded update files, not directories (#3504)',
-    pattern: /git\('commit',\s*'-m',[^)]+'--',\s*\.\.\.expandedPathsToStage\)/,
+    // Through commitPathspecs, which keeps the list off argv (#5103).
+    pattern: /commitPathspecs\(`chore: auto-update system files to v\$\{remote\}`,\s*expandedPathsToStage\)/,
   },
   {
     name: 'rollback expands backup and target manifests to safe concrete tree files',
@@ -517,8 +518,8 @@ const twoPassManifestChecks = [
   {
     name: 'rollback commit is scoped to concrete restore/removal files under literal pathspecs (#3504)',
     // An index commit only when nothing unrelated is staged; otherwise scoped
-    // to the staged rollback paths. Never the full concrete list as one argv.
-    pattern: /stagedPathsOutside\(concreteRollbackPaths\)\.length === 0\)\s*\{\s*git\('commit',\s*'-m',\s*message\);\s*\}\s*else\s*\{\s*git\('--literal-pathspecs',\s*'commit',\s*'-m',\s*message,\s*'--',\s*\.\.\.stagedRollbackPaths\)/,
+    // to the staged rollback paths, read from a file. Never a path list on argv.
+    pattern: /const scoped = stagedPathsOutside\(concreteRollbackPaths\)\.length > 0;[\s\S]{0,40}if \(!scoped\)\s*\{\s*git\('commit',\s*'-m',\s*message\);\s*\}\s*else\s*\{\s*commitPathspecs\(message,\s*stagedRollbackPaths,\s*\{\s*literal:\s*true\s*\}\)/,
   },
   {
     name: 'apply captures uncommitted work via git stash create before branching (#915)',

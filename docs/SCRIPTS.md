@@ -1168,6 +1168,14 @@ Action are listed on stderr as unreadable rather than silently dropped;
 `story-provenance-check.mjs` reports the same entries under `malformed`
 while still checking their figures.
 
+The answer is checked with that classifier before it prints, because it is
+meant to be pasted as-is. A story marked `**Provenance:** user-cannot-confirm`
+has every number in its answer, title and tags replaced with
+`[unconfirmed figure]`. In any other story, a figure that
+does not trace to `cv.md` gets a ⚠️ line naming it and its bucket
+(`derived-unverified` or `supportedByResume`), so you can confirm it before
+pasting.
+
 ---
 
 ## archive
@@ -1228,7 +1236,7 @@ These have no `npm run` binding — modes and agents call them with
 | `node agent-inbox.mjs add "..."` | Append a request to the queue the agent drains at the next session start |
 | `node agent-inbox.mjs list [--all]` | List pending (or all) queued items by stable number — gaps mean already resolved |
 | `node agent-inbox.mjs resolve <n> [--expect "..."] [--result "..."]` | Tick item `n` and stamp a one-line result; `--expect` aborts unless the item contains that substring |
-| `node generate-latex.mjs <input.tex> [output.pdf] [--compile-only] [--help]` | Validate and compile a generated `.tex` CV via tectonic or pdflatex; `--compile-only` skips career-ops template validation so a user-owned `.tex` compiles as-is (`latex-tex` mode) |
+| `node generate-latex.mjs <input.tex> [output.pdf] [--compile-only] [--source <path>] [--skip-fact-check] [--help]` | Fact-check, validate and compile a generated `.tex` CV via tectonic or pdflatex. The CV fact gate runs first whenever the data root has a `cv.md`, and a blocked document is not compiled; `--source` adds an evidence file (repeatable; `latex-tex` passes the user's own `.tex`). `--compile-only` skips career-ops template validation so a user-owned `.tex` compiles as-is (`latex-tex` mode) |
 | `node install-latex-engine.mjs [--check] [--force] [--json] [--help]` | Opt-in local LaTeX engine: downloads a pinned tectonic release for this platform, verifies its SHA-256 before extracting, and places it in the repo root (gitignored) where `generate-latex.mjs` looks first. Downloads are bounded by a timeout and a size cap. No-op when tectonic is already available (a pdflatex-only host still gets tectonic, which the CJK template needs); `--check` never downloads |
 | `node classify-tier.mjs` | Classify a job title into intern / entry / mid / senior |
 | `node ats-payload.mjs <payload.json> [--summary]` | ATS payload transform: folds `competencies[]` into `skills[]` (one safe, idempotent transform) and reports three judgement calls it deliberately does not apply. Payload on stdout, findings on stderr |

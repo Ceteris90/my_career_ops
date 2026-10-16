@@ -11,6 +11,7 @@ import { useJobs } from "@/components/jobs/job-store";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { useApply } from "@/components/apply/apply-provider";
 import { useExplore } from "@/components/explore/explore-provider";
+import { workerBatchSummary, workerDetailsLabel } from "@/lib/worker-feedback.mjs";
 import { WorkerCard } from "@/components/jobs/worker-card";
 import { Button } from "@/components/ui/button";
 import { dispatch, type ActionCtx, type DoneInfo } from "@/app/actions/registry";
@@ -981,7 +982,7 @@ function PartView({
         job={job}
         variant="inline"
         trailing={
-          <Link href={`/jobs/${job.id}`} className="text-faint transition-colors hover:text-brand" aria-label="Open worker">
+          <Link href={`/jobs/${job.id}`} className="text-faint transition-colors hover:text-brand" aria-label={workerDetailsLabel(job)}>
             <ArrowUpRight className="size-3.5" />
           </Link>
         }
@@ -989,25 +990,24 @@ function PartView({
     );
   }
   if (part.type === "batch") {
-    const children = part.jobIds.map((id) => jobs.find((j) => j.id === id)).filter(Boolean);
-    const done = children.filter((j) => j!.status === "done").length;
+    const children = part.jobIds.map((id) => jobs.find((j) => j.id === id)).filter((j) => j != null);
     return (
       <div className="rounded-xl border border-border bg-surface/40 p-2.5">
         <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
           <Sparkles className="size-3.5 text-brand" />
           {part.jobIds.length} evaluations
           <span className="ml-auto tabular-nums text-faint">
-            {done}/{part.jobIds.length} done
+            {workerBatchSummary(children, part.jobIds.length)}
           </span>
         </div>
         <div className="space-y-1.5">
           {children.map((j) => (
             <WorkerCard
-              key={j!.id}
-              job={j!}
+              key={j.id}
+              job={j}
               variant="inline"
               trailing={
-                <Link href={`/jobs/${j!.id}`} className="text-faint transition-colors hover:text-brand" aria-label="Open worker">
+                <Link href={`/jobs/${j.id}`} className="text-faint transition-colors hover:text-brand" aria-label={workerDetailsLabel(j)}>
                   <ArrowUpRight className="size-3.5" />
                 </Link>
               }
