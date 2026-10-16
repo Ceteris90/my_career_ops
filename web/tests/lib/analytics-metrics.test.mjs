@@ -187,6 +187,16 @@ test("archetype IT operations bucket matches admin as a word", () => {
   assert.equal(canonicalizeArchetype("Systems Administrator"), "IT & Technical Operations");
 });
 
+test("archetype buckets match ai and pm as words, not inside other words", () => {
+  assert.equal(canonicalizeArchetype("Supply Chain Product Manager"), "Product & Program Mgmt");
+  assert.equal(canonicalizeArchetype("GenAI Product Manager"), "Technical AI PM");
+  assert.equal(canonicalizeArchetype("Software Development"), "Other / Cross-Functional");
+  assert.equal(canonicalizeArchetype("Domain Expert"), "Other / Cross-Functional");
+  assert.equal(canonicalizeArchetype("AI PM"), "Technical AI PM");
+  assert.equal(canonicalizeArchetype("AI Product Manager"), "Technical AI PM");
+  assert.equal(canonicalizeArchetype("Senior PM, Payments"), "Product & Program Mgmt");
+});
+
 test("executive in a title is not an executive level on its own", () => {
   assert.equal(deriveSeniority("Account Executive"), "Mid-Level");
   assert.equal(deriveSeniority("Senior Account Executive"), "Senior");

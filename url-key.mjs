@@ -40,6 +40,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { linkedInPathJobId } from './lib/linkedin-url.mjs';
 
 // Query params that identify a click/campaign, never the posting itself. Keep
 // this list literal and board-specific; see the RFC note above on why generic
@@ -195,17 +196,9 @@ function foldHostname(host) {
 // Extractors are keyed on the DOMAIN, never on the path: `/jobs/view/{id}` is
 // also Workable's employer-board shape, where it means something else.
 const AGGREGATOR_POSTING_ID = {
-  // linkedin.com/jobs/view/{id} · .../jobs/view/{title-slug}-{id} · any page
-  // that carries the posting in ?currentJobId= (search and collection views) ·
-  // /comm/jobs/view/{id}, the link in every LinkedIn email. Verified against
-  // linkedin.com itself: `/comm/jobs/view/{id}?trk=…` answers 307 with
-  // `session_redirect=/jobs/view/{id}?trk=…`, the same id with `/comm` dropped.
-  'linkedin.com': (u) => {
-    const path = u.pathname.match(/^\/(?:jobs\/view\/(?:.*-)?|comm\/jobs\/view\/)(\d+)\/?$/);
-    if (path) return path[1];
-    const current = u.searchParams.get('currentJobId');
-    return current && /^\d+$/.test(current) ? current : null;
-  },
+  // The shapes and the /comm/ email link are documented in lib/linkedin-url.mjs.
+  // parseAggregator has already matched the folded host, so only the path is read.
+  'linkedin.com': linkedInPathJobId,
   // indeed.com/viewjob?jk={id}; a results page carries the focused posting as
   // ?vjk={id}. The job key is the requisition, so region hosts (uk./www./de.)
   // and the two page shapes all reduce to it.

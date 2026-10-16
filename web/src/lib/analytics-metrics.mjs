@@ -139,11 +139,15 @@ export function canonicalizeArchetype(raw) {
   if (!value || ["unknown", "none", "n/a", "—", "-"].includes(value) || value.startsWith("none ")) return "Unclassified";
   if (value.includes("agentic") || value.includes("automation")) return "Agentic & Automation";
   if (value.includes("solutions architect") || value.includes("forward deployed") || value.includes("deployment architect")) return "AI Solutions & FDE";
-  if (value.includes("technical ai pm") || (value.includes("ai") && value.includes("pm")) || (value.includes("ai") && value.includes("product manager"))) return "Technical AI PM";
+  // "ai" and "pm" are whole words here: as substrings they match "supply chain"
+  // and "development", which sent unrelated roles into the PM buckets.
+  const hasAi = /\b(gen)?ai\b/.test(value);
+  const hasPm = /\bpm\b/.test(value);
+  if (value.includes("technical ai pm") || (hasAi && hasPm) || (hasAi && value.includes("product manager"))) return "Technical AI PM";
   if (value.includes("llmops") || value.includes("mlops") || value.includes("platform") || value.includes("infrastructure")) return "AI Platform & LLMOps";
   if (value.includes("ai/ml") || value.includes("ml engineer") || value.includes("ai engineer") || value.includes("ki- entwickler") || value.includes("genai") || value.includes("applied ai")) return "AI & ML Engineering";
   if (value.includes("transformation") || value.includes("strategy") || value.includes("consultant") || value.includes("governance") || value.includes("policy")) return "AI Transformation & Governance";
-  if (value.includes("product") || value.includes("project") || value.includes("program") || value.includes("pm") || value.includes("projektkoordin")) return "Product & Program Mgmt";
+  if (value.includes("product") || value.includes("project") || value.includes("program") || hasPm || value.includes("projektkoordin")) return "Product & Program Mgmt";
   if (value.includes("data") || value.includes("analytics") || value.includes("business intelligence")) return "Data & Analytics";
   if (value.includes("support") || value.includes("helpdesk") || value.includes("service desk") || value.includes("customer service") || value.includes("onboarding") || value.includes("administrator") || value.includes("operations") || /\badmin\b/.test(value)) return "IT & Technical Operations";
   if (value.includes("research") || value.includes("wissenschaft") || value.includes("universit") || value.includes("bildung")) return "Research & Academia";

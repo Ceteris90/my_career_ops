@@ -68,6 +68,11 @@ const HARD_EXPIRED_PATTERNS = [
   // VDAB keeps a closed vacancy's page, "Solliciteer nu" button and all, under
   // this banner.
   /deze vacature is niet meer gepubliceerd/i,
+  // getManfred keeps a closed posting's page up without its Apply button and
+  // dates the closure above the title. Postings written in English often have
+  // an FAQ button such as "Can I apply from anywhere?", which reads as an Apply
+  // control, so this has to be a hard pattern.
+  /\boferta cerrada el \d{1,2}\/\d{1,2}\/\d{4}/i,
   // French closure banners. Spelled accent-free on purpose: normalizeForMatch
   // strips diacritics, so "expiree" here matches "expirée" on the page.
   /offre (expiree|n'est plus disponible)/i,
@@ -150,6 +155,10 @@ const APPLY_PATTERNS = [
   /wyslij (cv|aplikacj)/i,
   // Dutch (VDAB, Recruitee career sites in Dutch): "Solliciteer nu", "Solliciteren".
   /\bsollicit(?:eer|eren)\b/i,
+  // Spanish (getManfred): "¡Apúntame!", "sign me up". Not the verb "aplicar":
+  // most getManfred postings, closed ones too, have an FAQ button such as
+  // "¿Puedo aplicar si vivo fuera de España?".
+  /\bapuntame\b/i,
   // Chinese MokaHR and Feishu Jobs detail pages use these exact control texts.
   // Keep them narrow: bare “申请” appears in descriptive prose, while longer
   // labels containing “投递” can be status/history controls rather than Apply.
