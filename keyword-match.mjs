@@ -273,11 +273,15 @@ const LIST_SEPARATOR_RE = /[,、，،]|\s·\s/;
 const TRAILING_PUNCT_RE = /[.。．।]+$/;
 
 // The line a fence opened at `start` closes on, or -1 when it never closes.
-// A closer carries the same character and nothing but whitespace after it.
+// A closer carries the same character, is AT LEAST as long as the opener, and
+// has nothing but whitespace after it (CommonMark 0.31.2 §4.5). The length test
+// is what keeps a shorter run of the same character — common inside a block
+// that quotes code — from closing the fence early and letting the rest of the
+// report leak into the keyword list.
 function indexOfFenceClose(lines, start, open) {
   for (let i = start + 1; i < lines.length; i++) {
     const m = FENCE_RE.exec(lines[i].trim());
-    if (m && m[1][0] === open && !m[2].trim()) return i;
+    if (m && m[1][0] === open[0] && m[1].length >= open.length && !m[2].trim()) return i;
   }
   return -1;
 }
@@ -305,6 +309,11 @@ export function extractKeywords(reportText) {
 
   const collect = (line) => {
     if (!line || /^\(.*\)$/.test(line)) return;
+    // Tested before BULLET_RE, or `- - -` would lose its first `- ` and become
+    // the keyword "- -". Checked here rather than at the call site so a
+    // thematic break inside a fenced list is skipped on the same terms as one
+    // outside it — both are a keyword list an agent wrote, not a separator.
+    if (THEMATIC_BREAK_RE.test(line)) return;
     const body = line.replace(BULLET_RE, '').replace(CJK_MARKER_RE, '');
     for (const part of body.split(LIST_SEPARATOR_RE)) {
       const kw = part.trim().replace(TRAILING_PUNCT_RE, '').trim();
@@ -328,7 +337,7 @@ export function extractKeywords(reportText) {
       // report never closes cannot swallow every section after it: with no
       // closer the opener stays an ordinary line and the section still ends at
       // the next heading, as it did before.
-      const close = indexOfFenceClose(lines, i, marker[1][0]);
+      const close = indexOfFenceClose(lines, i, marker[1]);
       if (close > i) {
         for (let k = i + 1; k < close; k++) collect(lines[k].trim());
         i = close;

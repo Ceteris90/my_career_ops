@@ -93,6 +93,32 @@ check('a fenced keyword block is content, and its delimiters are not keywords', 
   assert.deepEqual(extractKeywords(unclosed), ['```', 'SQL', 'Tableau']);
 });
 
+check('a thematic break inside a fenced list is skipped too', () => {
+  // Found by CodeRabbit review. Fenced lines went straight to collect(), which
+  // is where the thematic-break test used to live — so a `---` written inside
+  // the fence became a keyword and moved the coverage total.
+  const fenced = '## Keywords extracted\n\n```\nSQL\n---\nTableau\n```\n\n## Next\n';
+  assert.deepEqual(extractKeywords(fenced), ['SQL', 'Tableau']);
+
+  const spaced = '## Keywords extracted\n\n```\nSQL\n- - -\nTableau\n```\n\n## Next\n';
+  assert.deepEqual(extractKeywords(spaced), ['SQL', 'Tableau']);
+});
+
+check('a shorter run of the same fence character does not close the fence', () => {
+  // Also found by CodeRabbit review. CommonMark 0.31.2 §4.5: the closer is the
+  // same character AND at least as long as the opener. Matching on the character
+  // alone let a 3-backtick line close a 4-backtick fence, and every line after it
+  // became ordinary content — which is how the rest of a report can leak into the
+  // keyword list. The discriminating marker is the "## " line below: inside the
+  // fence it is content, outside it would end the section.
+  const quoted = '## Keywords extracted\n\n````\nSQL\n```\n## not a heading\n````\n\n## Next\n';
+  assert.deepEqual(extractKeywords(quoted), ['SQL', '```', '## not a heading']);
+
+  // A longer closer still closes it, which is the CommonMark direction.
+  const longer = '## Keywords extracted\n\n```\nSQL, Tableau\n`````\n\n## Next\n';
+  assert.deepEqual(extractKeywords(longer), ['SQL', 'Tableau']);
+});
+
 check('a thematic break under the list is skipped, not read as keywords', () => {
   for (const rule of ['---', '***', '___', '- - -', '*****']) {
     assert.deepEqual(extractKeywords(block(`SQL, Tableau\n${rule}`)), ['SQL', 'Tableau'], rule);
