@@ -176,7 +176,7 @@ if (NAMES.join(' ').length > WINDOWS_ARGV_LIMIT) {
 {
   const repo = makeRepo();
   writeAll(repo, 'v2');
-  repo.g('add', '--', ...NAMES);
+  repo.g('add', '--', 'bulk/');
   writeFileSync(join(repo.dir, 'mine.txt'), 'user work\n');
   repo.g('add', 'mine.txt');
 
@@ -238,7 +238,7 @@ if (NAMES.join(' ').length > WINDOWS_ARGV_LIMIT) {
 {
   const repo = makeRepo();
   writeAll(repo, 'v2');
-  repo.g('add', '--', ...NAMES);
+  repo.g('add', '--', 'bulk/');
   writeFileSync(join(repo.dir, 'mine.txt'), 'user work\n');
   repo.g('add', 'mine.txt');
 
