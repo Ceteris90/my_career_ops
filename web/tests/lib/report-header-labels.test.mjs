@@ -7,7 +7,8 @@
 // Portuguese one Archetype and Date, for as long as those modes have existed.
 //
 // The fixture below is the set of labels the localized `oferta.md` modes
-// actually dictate, extracted from this repo on 2026-09-02. It is a fixture
+// actually dictate, extracted from this repo on 2026-09-02 (tr, it, id, de
+// and nl added on 2026-10-16 from their report templates on main). It is a fixture
 // rather than a live read of `modes/` on purpose: the point is to pin the
 // forms already in circulation in USERS' existing reports, which no future
 // change to the modes can alter.
@@ -28,6 +29,11 @@ const DICTATED = {
   "modes/da": { Dato: "Date", URL: "URL", Arketype: "Archetype", Score: "Score", PDF: "PDF" },
   "modes/ru": { "Дата": "Date", URL: "URL", "Архетип": "Archetype", "Балл": "Score", PDF: "PDF" },
   "modes/ua": { "Дата": "Date", URL: "URL", "Архетип": "Archetype", "Бал": "Score", "Легітимність": "Legitimacy", PDF: "PDF" },
+  "modes/tr": { Tarih: "Date", "Arketip": "Archetype", Puan: "Score", URL: "URL", PDF: "PDF", "Meşruiyet": "Legitimacy" },
+  "modes/it": { Data: "Date", Archetipo: "Archetype", Punteggio: "Score", URL: "URL", PDF: "PDF" },
+  "modes/id": { Tanggal: "Date", Arketipe: "Archetype", Score: "Score", URL: "URL", PDF: "PDF" },
+  "modes/de": { Datum: "Date", Archetyp: "Archetype", Score: "Score", URL: "URL", PDF: "PDF" },
+  "modes/nl": { Datum: "Date", Archetype: "Archetype", Score: "Score", URL: "URL", PDF: "PDF" },
 };
 
 const report = (labels) =>
@@ -72,4 +78,17 @@ test("an unknown label is dropped rather than rendered raw", () => {
 test("a label with no value is dropped, not rendered empty", () => {
   const meta = parseReport(["# T", "**Date:**", "", "---", "", "## A) x", "y"].join("\n"));
   assert.deepEqual(meta.fields, []);
+});
+
+test("the Spanish title prefix is stripped: Evaluación, not only Evaluation", () => {
+  // `Evaluat?i[oó]n` could not match `Evaluación` (a c, not a t, before the i),
+  // so `# Evaluación: Acme` kept its prefix as the page title.
+  for (const heading of ["# Evaluation: Acme", "# Evaluación: Acme", "# Evaluacion: Acme"]) {
+    assert.equal(parseReport([heading, "**Date:** 2026-01-01", "", "---", "", "## A) x", "y"].join("\n")).title, "Acme", heading);
+  }
+});
+
+test("Decision reaches the header fields", () => {
+  const meta = parseReport(report({ Decision: "Apply" }));
+  assert.deepEqual(meta.fields, [{ label: "Decision", value: "Apply" }]);
 });

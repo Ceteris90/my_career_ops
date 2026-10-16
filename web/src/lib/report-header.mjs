@@ -36,6 +36,9 @@ const FIELD_KEYS = {
   fecha: "Date", // es
   data: "Date", // pl, pt
   dato: "Date", // da
+  datum: "Date", // de, nl
+  tarih: "Date", // tr
+  tanggal: "Date", // id
   дата: "Date", // ru, ua
   // URL — identical in every mode
   url: "URL",
@@ -43,17 +46,25 @@ const FIELD_KEYS = {
   archetype: "Archetype",
   arquetipo: "Archetype", // es
   "arquétipo": "Archetype", // pt
-  archetyp: "Archetype", // pl
+  archetyp: "Archetype", // pl, de
+  archetipo: "Archetype", // it
+  arketip: "Archetype", // tr
+  arketipe: "Archetype", // id
   arketype: "Archetype", // da
   архетип: "Archetype", // ru, ua
   // Score
   score: "Score",
   балл: "Score", // ru
   бал: "Score", // ua
+  puan: "Score", // tr
+  punteggio: "Score", // it
   // Legitimacy
   legitimacy: "Legitimacy",
   legitimidad: "Legitimacy", // es, legacy reports
   "легітимність": "Legitimacy", // ua
+  "meşruiyet": "Legitimacy", // tr
+  // Decision
+  decision: "Decision",
   // PDF — identical in every mode
   pdf: "PDF",
 };
@@ -82,7 +93,7 @@ export function parseReport(md) {
   for (const l of headerLines) {
     const h = l.match(/^#\s+(.+)/);
     if (h) {
-      title = h[1].replace(/^Evaluat?i[oó]n:?\s*/i, "").trim();
+      title = h[1].replace(/^Evalua[tc]i[oó]n:?\s*/i, "").trim();
       continue;
     }
     const m = l.match(/^\s*\*\*(.+?):\*\*\s*(.*)$/);
