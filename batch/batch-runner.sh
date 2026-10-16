@@ -558,8 +558,15 @@ update_state_unlocked() {
   # Write header
   head -1 "$STATE_FILE" > "$tmp"
 
-  # Process existing lines
-  while IFS=$'\t' read -r sid surl sstatus sstarted scompleted sreport sscore serror sretries; do
+  # Process existing lines. Don't split a row with `IFS=$'\t' read`: tab is IFS
+  # whitespace, so the two tabs around an empty cell (an empty error from a
+  # worker that died without output, or an empty completed_at/score written by
+  # reconcile_recovery_records) collapse into one and every later cell shifts
+  # left -- `retries` became the error text and the retry counter was lost.
+  # Read the line raw and split on \x1f after translating the tabs, as
+  # reconcile_recovery_records does.
+  while IFS= read -r sline; do
+    IFS=$'\x1f' read -r sid surl sstatus sstarted scompleted sreport sscore serror sretries <<< "${sline//$'\t'/$'\x1f'}"
     [[ "$sid" == "id" ]] && continue  # skip header
     if [[ "$sid" == "$id" ]]; then
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
