@@ -196,6 +196,8 @@ try {
   } else fail(`default fetch calls=${JSON.stringify(calls)}, jobs=${fetched.length}`);
 
   // ── fetch(): opt-in detail enrichment ──
+  // The detail fixture's record, re-keyed to the posting the URL asks for.
+  const detailFor = (url) => fixture('zoho-recruit-detail.html').replace('100000000001853029', url.split('/').pop());
   const detailCalls = [];
   const sleeps = [];
   let firstDetail = true;
@@ -211,7 +213,7 @@ try {
           throw Object.assign(new Error('HTTP 503'), { status: 503 });
         }
         if (url.endsWith('/100000000006043358')) throw Object.assign(new Error('HTTP 404'), { status: 404 });
-        return fixture('zoho-recruit-detail.html');
+        return detailFor(url);
       },
     },
   );
@@ -234,12 +236,24 @@ try {
     { name: 'ExampleCo', careers_url: BOARD_URL, zohoRecruit: { fetchDetails: true, detailLimit: 3 } },
     {
       sleep: async () => {},
-      fetchText: async (url) => (url === BOARD_URL ? fixture('zoho-recruit-list.html') : fixture('zoho-recruit-detail.html')),
+      fetchText: async (url) => (url === BOARD_URL ? fixture('zoho-recruit-list.html') : detailFor(url)),
     },
   );
   if (keepDate[1].postedAt === Date.parse('2026-10-15') && keepDate[0].postedAt === Date.parse('2026-05-14')) {
     pass('detail Date_Opened fills postedAt only when the list row has none');
   } else fail(`postedAt=${JSON.stringify(keepDate.map((j) => j.postedAt))}`);
+
+  // A posting page that carries another posting's record enriches nothing.
+  const wrongId = await zoho.fetch(
+    { name: 'ExampleCo', careers_url: BOARD_URL, zohoRecruit: { fetchDetails: true, detailLimit: 1 } },
+    {
+      sleep: async () => {},
+      fetchText: async (url) => (url === BOARD_URL ? fixture('zoho-recruit-list.html') : fixture('zoho-recruit-detail.html')),
+    },
+  );
+  if (wrongId[0].externalId === '100000000048333021' && !wrongId[0].description && !wrongId[0].salary && !('postedAt' in wrongId[0])) {
+    pass('a detail record whose id is not the posting\'s own leaves the list row unchanged');
+  } else fail(`wrong-id detail=${JSON.stringify(wrongId[0])}`);
 
   // detailLimit bounds the loop however many postings the board holds.
   const many = Array.from({ length: 40 }, (_, i) => ({

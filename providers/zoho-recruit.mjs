@@ -282,7 +282,8 @@ function parseZohoConfig(entry) {
 
 /**
  * Fill description, postedAt and salary from each posting's own page.
- * Best-effort: a failed or unreadable detail fetch keeps the list row.
+ * Best-effort: a failed or unreadable detail fetch, or a page whose record is
+ * not this posting's, keeps the list row.
  * @param {Array<{ job: import('./_types.js').Job, record: any }>} rows
  * @param {any} ctx
  */
@@ -293,7 +294,7 @@ async function enrichFromDetails(rows, ctx) {
     try {
       const html = await fetchTextWithRetry(ctx, job.url, { redirect: 'error' });
       const detail = parseZohoDetailPage(html);
-      if (!detail) continue;
+      if (!detail || String(detail.id) !== job.externalId) continue;
       const description = htmlToText(detail.Job_Description);
       if (description) job.description = description;
       if (job.postedAt === undefined) {
