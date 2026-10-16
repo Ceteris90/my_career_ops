@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { pass, fail, makeUpdaterRepo, captureConsoleErrors, rmSync, ROOT } from './helpers.mjs';
-import { restoreAfterFailedUpdate } from '../update-system.mjs';
+import { restoreAfterFailedUpdate, restoreBootstrapBackups, backupSystemFiles } from '../update-system.mjs';
 
 function write(dir, rel, text) {
   mkdirSync(join(dir, rel, '..'), { recursive: true });
@@ -151,5 +151,59 @@ console.log('\n🧪 Testing that a failed update restores what it had checked ou
     const child = /if \(!checkoutErrorIsBenign\(err, \{ absentUpstream, preservedState \}\)\) \{[\s\S]*?restoreAfterFailedUpdate\(updated, initialStatusPaths,[^\n]*\n\s*restoreAfterFailedUpdate\(\[path\], initialStatusPaths,[^\n]*\n\s*throw err;\s*\n\s*\}/;
     if (child.test(body)) pass('a non-benign checkout error restores the paths already updated, then rethrows');
     else fail('the step-3 checkout loop rethrows without restoring what it had updated');
+
+    // The parent again: each successful bootstrap backup is recorded where it is
+    // reported, and copied back after the files return to HEAD, not before.
+    const recorded = /console\.log\(`  \$\{result\.file\}  \(local copy saved: \$\{result\.backup\}\)`\);\s*\n\s*bootstrapBackups\.push\(result\);/;
+    const putBack = /restoreAfterFailedUpdate\(checkedOutForReexec, initialStatusPaths,[^\n]*\n\s*restoreBootstrapBackups\(bootstrapBackups\);[\s\S]*?throw err;/;
+    if (recorded.test(body) && putBack.test(body)) {
+      pass('the self-reexec catch puts the saved local versions back after restoring from HEAD');
+    } else {
+      fail(`self-reexec catch: backups recorded ${recorded.test(body)}, put back after the HEAD restore ${putBack.test(body)}`);
+    }
+  }
+}
+
+// ── 6. an updater file this install had edited comes back as edited ──
+//    The self-bootstrap backs the edit up to .bak, checks the target's version
+//    out over it, and the child then fails. Restoring from HEAD alone gives back
+//    the committed file, not the user's.
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    write(dir, 'sys/a.md', 'a v1 with my local fix\n');
+    const backups = backupSystemFiles(['sys/a.md'], { root: dir });
+    g('checkout', target, '--', 'sys/a.md');
+    await captureConsoleErrors(() => restoreAfterFailedUpdate(['sys/a.md'], new Set(), { what: 'updater file(s)', ...ctx }));
+    // The state this section is about: HEAD's version, the edit only in the .bak.
+    const afterHead = read(dir, 'sys/a.md');
+    const { result, errors } = await captureConsoleErrors(() => restoreBootstrapBackups(backups, { root: dir }));
+    const restored = read(dir, 'sys/a.md');
+    const bak = existsSync(join(dir, 'sys/a.md.bak')) ? read(dir, 'sys/a.md.bak') : null;
+    if (afterHead === 'a v1\n' && restored === 'a v1 with my local fix\n' && bak === 'a v1 with my local fix\n' && result.length === 0) {
+      pass('after a failed self-reexec an edited updater file is the user\'s again, and its .bak stays');
+    } else {
+      fail(`after HEAD restore ${JSON.stringify(afterHead)}, after put-back ${JSON.stringify(restored)}, .bak ${JSON.stringify(bak)}, failed ${JSON.stringify(result)}`);
+    }
+    if (errors.some((line) => String(line) === 'Put back your local version of sys/a.md (the copy in sys/a.md.bak stays).')) {
+      pass('the put-back says which file and where the copy is');
+    } else {
+      fail(`unexpected messages: ${JSON.stringify(errors)}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 7. a copy that cannot be put back is named, with where the edit still is ──
+{
+  const failing = () => { throw new Error('EBUSY: resource busy or locked'); };
+  const { result, errors } = await captureConsoleErrors(() =>
+    restoreBootstrapBackups([{ file: 'update-system.mjs', backup: 'update-system.mjs.bak' }], { root: ROOT, copyFile: failing }));
+  if (JSON.stringify(result) === '["update-system.mjs"]'
+      && errors.some((line) => /^Could not put back your local version of update-system\.mjs \(EBUSY: resource busy or locked\); it is in update-system\.mjs\.bak\.$/.test(String(line)))) {
+    pass('a failed put-back is returned and points at the .bak');
+  } else {
+    fail(`failed put-back: ${JSON.stringify(result)}, messages ${JSON.stringify(errors)}`);
   }
 }

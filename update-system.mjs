@@ -2979,6 +2979,35 @@ export function restoreAfterFailedUpdate(paths, protectedPaths, { what, ...ctx }
 }
 
 /**
+ * Put an install's own edits to updater files back after a failed self-reexec.
+ *
+ * The self-bootstrap overwrites updater files this install had changed, after
+ * saving each one as a .bak (backupSystemFiles). When the update then fails,
+ * restoreAfterFailedUpdate() returns them to HEAD, which is not what the user
+ * had: their edit would survive only in the .bak. Copy each saved backup back
+ * over its file. The .bak stays, as the update promised it would.
+ *
+ * @param {{file: string, backup: string}[]} backups - Successful backupSystemFiles() results.
+ * @param {{root?: string, copyFile?: Function}} [ctx] - Test seams.
+ * @returns {string[]} Files whose local version could not be put back.
+ */
+export function restoreBootstrapBackups(backups, ctx = {}) {
+  const root = ctx.root || ROOT;
+  const copyFile = ctx.copyFile || copyFileSync;
+  const failed = [];
+  for (const { file, backup } of backups) {
+    try {
+      copyFile(join(root, ...backup.split('/')), join(root, ...file.split('/')));
+      console.error(`Put back your local version of ${file} (the copy in ${backup} stays).`);
+    } catch (err) {
+      failed.push(file);
+      console.error(`Could not put back your local version of ${file} (${err.message}); it is in ${backup}.`);
+    }
+  }
+  return failed;
+}
+
+/**
  * Delete files staged as additions relative to HEAD under a pathspec.
  *
  * Complements `git checkout HEAD -- <path>`, which restores tracked content but
@@ -4298,6 +4327,9 @@ async function apply() {
 
     if (!isReexec) {
       const timeout = reexecTimeoutMs();
+      // The .bak copies of updater files this install had edited, for the catch:
+      // restoring from HEAD alone would leave those edits only in the .bak.
+      const bootstrapBackups = [];
       // What this process checked out for the child, declared outside the try so
       // the catch can put it back: a child that fails would otherwise leave the
       // target's updater files in place over the old system files.
@@ -4346,6 +4378,7 @@ async function apply() {
               console.log(`  ${result.file}  (could not write ${result.backup}: ${result.error})`);
             } else {
               console.log(`  ${result.file}  (local copy saved: ${result.backup})`);
+              bootstrapBackups.push(result);
             }
           }
           console.log('Self-bootstrap must load the upstream versions; the local versions remain in the backups above.');
@@ -4392,6 +4425,7 @@ async function apply() {
         // The child restores what it checked out itself; the files it was
         // loaded from are this process's to put back.
         restoreAfterFailedUpdate(checkedOutForReexec, initialStatusPaths, { what: 'updater file(s) loaded to run the new version' });
+        restoreBootstrapBackups(bootstrapBackups);
         if (timedOut) {
           // A killed child may have stopped between two checkouts without
           // restoring anything of its own.
