@@ -186,3 +186,19 @@ test("archetype IT operations bucket matches admin as a word", () => {
   assert.equal(canonicalizeArchetype("Database Administrator"), "Data & Analytics");
   assert.equal(canonicalizeArchetype("Systems Administrator"), "IT & Technical Operations");
 });
+
+test("executive in a title is not an executive level on its own", () => {
+  assert.equal(deriveSeniority("Account Executive"), "Mid-Level");
+  assert.equal(deriveSeniority("Senior Account Executive"), "Senior");
+  assert.equal(deriveSeniority("Executive Assistant"), "Mid-Level");
+  assert.equal(deriveSeniority("Executive Director, Engineering"), "Executive");
+  assert.equal(deriveSeniority("Chief Executive Officer"), "Executive");
+});
+
+test("location junk filter drops form labels but keeps places that share a prefix", () => {
+  assert.equal(canonicalizeLocation("Req 12345"), "");
+  assert.equal(canonicalizeLocation("Job ID 99"), "");
+  assert.equal(canonicalizeLocation("Applicant location"), "");
+  assert.equal(canonicalizeLocation("Idaho Falls, ID"), "Idaho Falls, ID");
+  assert.equal(canonicalizeLocation("Jobner, India"), "Jobner, India");
+});

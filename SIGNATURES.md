@@ -199,3 +199,4 @@ public commit with a stated reason.
 - @hibakahack-cell | 2026-10-13 | id:283028898 | src:https://github.com/career-ops-hq/career-ops/discussions/5151 | n:151
 - @echooolin00 | 2026-10-14 | id:286250255 | src:https://github.com/career-ops-hq/career-ops/discussions/5243 | n:152
 - @mwangiiharun | Harun Mwangi | 2026-10-14 | "Hiring should be about showcasing skills. Not which LLM knows how to parse resume's better" | id:20253651 | src:https://github.com/career-ops-hq/career-ops/discussions/5252 | n:153
+- @Michos12 | Michael Veliz | 2026-10-15 | id:129358905 | src:https://github.com/career-ops-hq/career-ops/discussions/5328 | n:154

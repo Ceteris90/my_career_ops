@@ -27,6 +27,8 @@
  *   - Per-job HTML (LinkedIn): the guest endpoint returns the rendered posting as
  *     HTML and answers 200 for closed postings too, so `interpret` reads two
  *     independent signals out of the body and only concludes when they agree.
+ *     Zoho Recruit is the same shape: its posting page embeds the record and
+ *     answers 200 for a removed posting too, so `interpret` reads the body.
  *
  * SSRF-safe by construction: the request URL is built from a FIXED, hard-coded API
  * host plus path segments extracted from the posting URL with a strict charset
@@ -35,6 +37,7 @@
 
 import { DEFAULT_USER_AGENT } from './user-agent.mjs';
 import { parseWwrFeed } from './providers/weworkremotely.mjs';
+import { isZohoRecordClosed, parseZohoDetailPage } from './providers/zoho-recruit.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
 
 const TIMEOUT_MS = 8_000;
@@ -268,6 +271,27 @@ const ATS_PROVIDERS = [
     },
   },
   {
+    id: 'zoho-recruit',
+    // {tenant}.zohorecruit.com/jobs/{portal}/{id}[/{slug}]. Zoho Recruit has no
+    // JSON endpoint; the posting page itself embeds the record (see
+    // providers/zoho-recruit.mjs), so `api` is that page and `interpret` reads
+    // it. Zoho answers 200 for a removed posting too, so liveness comes from
+    // the body, never from the status.
+    match(u) {
+      const host = u.hostname.match(/^([a-z0-9][a-z0-9-]*)\.zohorecruit\.com$/);
+      if (!host) return null;
+      const m = u.pathname.match(/^\/jobs\/([^/]+)\/(\d+)(?:\/[^/]*)?\/?$/);
+      return m ? { tenant: host[1], portal: m[1], id: m[2] } : null;
+    },
+    api: ({ tenant, portal, id }) => `https://${tenant}.zohorecruit.com/jobs/${portal}/${id}`,
+    accept: 'text/html',
+    async interpret(res, { id }) {
+      let html;
+      try { html = await res.text(); } catch { return null; }
+      return classifyZohoPostingPage(html, id);
+    },
+  },
+  {
     id: 'arbeitsagentur',
     match(u) {
       if (u.hostname !== 'www.arbeitsagentur.de') return null;
@@ -469,6 +493,35 @@ export function classifyWorkablePosting(posting) {
 }
 
 /**
+ * Decide liveness for one Zoho Recruit posting from its own page.
+ * Pure + deterministic (no I/O), mirroring classifyAshbyBoard.
+ *
+ * A live posting page embeds its record; a record for THIS id marked
+ * `Is_Locked` or unpublished is a posting the career site shows as filled
+ * (expired), any other record for it is live. A removed posting is a 200 page
+ * with no record and Zoho's "This job posting is no longer available." notice.
+ * Anything else (a record for another id, an error page, a markup change)
+ * returns null so the browser rung decides.
+ *
+ * @param {any} html - the posting page's body
+ * @param {string} id - the {id} path segment from the posting URL
+ * @returns {{ result: 'active' | 'expired', code: string, reason: string } | null}
+ */
+export function classifyZohoPostingPage(html, id) {
+  if (typeof html !== 'string' || !html) return null;
+  const record = parseZohoDetailPage(html);
+  if (record) {
+    if (String(record.id) !== String(id)) return null;
+    return isZohoRecordClosed(record)
+      ? { result: 'expired', code: 'zoho_recruit_filled', reason: 'Zoho Recruit marks the posting locked or unpublished (filled)' }
+      : { result: 'active', code: 'zoho_recruit_page_ok', reason: 'Zoho Recruit posting page carries the open posting (live)' };
+  }
+  return /This job posting is no longer available/i.test(html)
+    ? { result: 'expired', code: 'zoho_recruit_unavailable', reason: 'Zoho Recruit shows "This job posting is no longer available."' }
+    : null;
+}
+
+/**
  * Decide liveness for one Workday posting from the body of a 403 on its per-job
  * CXS endpoint. Pure + deterministic (no I/O), mirroring classifyAshbyBoard.
  *
@@ -538,11 +591,13 @@ export function isAtsPosting(url) {
 // full text for free in the same payload resolveAtsApi() already points at.
 // greenhouse-embedded (a company careers page carrying only `?gh_jid=`) reaches
 // the same per-job Greenhouse endpoint once its embed redirect names the board.
+// Zoho Recruit has no JSON API; the posting page resolveAtsApi() points at
+// embeds the record with its HTML `Job_Description`.
 // Microsoft and LinkedIn are on ATS_PROVIDERS
 // for liveness only — their public endpoints answer search/status, never body
 // text — so they are deliberately excluded here; see fetch-jd.mjs / the
 // fetch*Jd() family in browser-extract.mjs for the per-provider fetchers.
-export const JD_TEXT_API_ATS = new Set(['greenhouse', 'greenhouse-embedded', 'lever', 'ashby', 'workday', 'smartrecruiters']);
+export const JD_TEXT_API_ATS = new Set(['greenhouse', 'greenhouse-embedded', 'lever', 'ashby', 'workday', 'smartrecruiters', 'zoho-recruit']);
 
 /**
  * Zero-token liveness check via the posting's ATS API.
