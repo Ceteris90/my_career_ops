@@ -24,6 +24,15 @@ import (
 // Shelling out to `go build` from a test is unusual, but it is the only thing
 // that actually answers the question, and it keeps the check inside the
 // existing `go test ./...` step rather than adding a workflow one.
+// Running it after a change: this test shells out to `go build`, so Go's own
+// test cache does not see edits under internal/ as inputs to THIS package's
+// test binary. A cached PASS is therefore reused across a mutation, and the
+// mutation looks survived when it was never re-run. Use
+//
+//	go test ./... -count=1
+//
+// whenever the point is to observe a change here. (Thanks to the review on
+// #4968 for catching that this bites anyone trying to verify the guard.)
 func TestEveryPlatformVariantCompiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("cross-compiling is slower than a unit test; skipped under -short")
