@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listTree } from '../lib/walk-tree.mjs';
 
@@ -36,16 +36,18 @@ const GATE_RE = /node (?:verify-cv-facts|generate-pdf|generate-latex)\.mjs/;
 // claim a renderer gates when it does not.
 const GATED_RENDERERS = ['generate-pdf.mjs', 'generate-latex.mjs', 'generate-cover-letter.mjs'];
 
+// Forward slashes on every platform: relative() gives `modes\pdf.md` on Windows.
+const repoPath = (path) => relative(ROOT, path).split(sep).join('/');
 const modeFiles = () => listTree(join(ROOT, 'modes'), { match: /\.md$/ });
 
 test('every mode that builds or writes a CV runs the fact gate', () => {
   const producers = modeFiles().filter(path => PRODUCER_RE.test(readFileSync(path, 'utf-8')));
-  const names = producers.map(path => relative(ROOT, path));
+  const names = producers.map(repoPath);
   for (const expected of ['modes/pdf.md', 'modes/latex.md', 'modes/latex-tex.md', 'modes/text.md', 'modes/ats.md']) {
     assert.ok(names.includes(expected), `the producer scan no longer finds ${expected}; fix PRODUCER_RE before trusting this test`);
   }
   const ungated = producers.filter(path => !GATE_RE.test(readFileSync(path, 'utf-8')));
-  assert.deepEqual(ungated.map(path => relative(ROOT, path)), [], 'these modes produce a CV with no fact gate step');
+  assert.deepEqual(ungated.map(repoPath), [], 'these modes produce a CV with no fact gate step');
 });
 
 // Scripts that render a PDF of something that is not a candidate-facing
@@ -103,6 +105,12 @@ function workspace({ withCv = true } = {}) {
   return root;
 }
 
+// Windows spells it `Path`, and its environment keys are case-insensitive, so
+// adding `PATH` beside the inherited one leaves which of the two wins undefined.
+function envWithoutPath() {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PATH'));
+}
+
 function runLatex(root, ...args) {
   const result = spawnSync(process.execPath, [join(ROOT, 'generate-latex.mjs'), ...args], {
     cwd: root,
@@ -110,7 +118,7 @@ function runLatex(root, ...args) {
     timeout: 30_000,
     // No engine on PATH: the gate must decide before compilation is attempted,
     // and a passing document then stops at "No LaTeX engine found".
-    env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '', PATH: dirname(process.execPath) },
+    env: { ...envWithoutPath(), CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '', PATH: dirname(process.execPath) },
   });
   let report = null;
   try { report = JSON.parse(result.stdout); } catch { /* asserted by the caller */ }
@@ -150,6 +158,17 @@ test('generate-latex --source counts the user\'s own .tex as evidence', (t) => {
     const result = runLatex(root, 'output/cv.tex', '--compile-only', ...flag);
     assert.equal(result.report?.factCheck?.verdict, 'pass', `${flag.join(' ')}: ${result.stdout}${result.stderr}`);
   }
+});
+
+test('generate-latex names a --source file that does not exist', (t) => {
+  const root = workspace();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'output', 'cv.tex'), tex('Acme Corp', 'Led a team of 4 engineers.'));
+  const result = runLatex(root, 'output/cv.tex', '--compile-only', '--source', 'no-such.tex');
+  assert.equal(result.status, 1);
+  assert.equal(result.report?.factCheck?.verdict, 'block', result.stdout + result.stderr);
+  assert.match(result.report.factCheck.reason, /--source file not found: .*no-such\.tex/);
+  assert.equal(result.report.compileError, undefined, 'compilation was attempted after a missing --source');
 });
 
 test('generate-latex --skip-fact-check and a missing cv.md skip the gate', (t) => {
