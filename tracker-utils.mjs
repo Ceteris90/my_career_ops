@@ -468,14 +468,17 @@ export function pathIsInsideCanonical(childPath, parentDir) {
  */
 export function trackerLockDirFor(appsFile) {
   const lockKey = createHash('sha256').update(appsFile).digest('hex').slice(0, 16);
-  const tmpRoot = realpathSync(tmpdir());
+  // Canonicalized the way the tracker path is, not with a bare realpathSync:
+  // %TEMP% is often an 8.3 short name, and the Go dashboard's copy of this
+  // function spells it long (#4957).
+  const tmpRoot = canonicalizeTrackerPath(tmpdir());
   const fallback = join(tmpRoot, `career-ops-merge-tracker-${lockKey}.lock`);
   const envValue = process.env.CAREER_OPS_TRACKER_LOCK;
   if (!envValue || !isAbsolute(envValue)) return fallback;
 
   const candidate = resolve(envValue);
   const parentDir = dirname(candidate);
-  const canonicalParent = existsSync(parentDir) ? realpathSync(parentDir) : resolve(parentDir);
+  const canonicalParent = canonicalizeTrackerPath(parentDir);
   if (!pathIsInside(canonicalParent, tmpRoot)) return fallback;
   if (!basename(candidate).startsWith('career-ops-merge-tracker-')) return fallback;
   return candidate;
