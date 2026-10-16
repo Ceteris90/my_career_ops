@@ -52,6 +52,7 @@ import { resolveAtsApi, JD_TEXT_API_ATS } from './liveness-api.mjs';
 import { classifyLiveness } from './liveness-core.mjs';
 import { decodeEntities } from './providers/_html-entities.mjs';
 import { isWorkModelOnly } from './providers/greenhouse.mjs';
+import { isZohoRecordClosed, parseZohoDetailPage } from './providers/zoho-recruit.mjs';
 import { DEFAULT_USER_AGENT } from './user-agent.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -637,6 +638,60 @@ async function fetchSmartRecruitersJd(apiUrl, postingUrl, textCap, timeoutMs) {
 }
 
 /**
+ * Shape one Zoho Recruit posting page into a jd-mode result. Pure, same
+ * contract as the other normalizers. The page embeds the posting record
+ * (providers/zoho-recruit.mjs parseZohoDetailPage); its `Job_Description` is
+ * HTML. The record must be THIS posting's: a page carrying another id, or no
+ * record (a removed posting), returns null so the caller falls through.
+ *
+ * @param {any} html - the posting page's body
+ * @param {string} id - the {id} path segment from the posting URL
+ * @param {string} postingUrl
+ * @param {number} [textCap]
+ */
+export function normalizeZohoJob(html, id, postingUrl, textCap = JD_TEXT_CAP) {
+  const record = parseZohoDetailPage(html);
+  if (!record || String(record.id) !== String(id)) return null;
+  const body = jdHtmlToText(record.Job_Description);
+  if (!body) return null;
+
+  const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+  const meta = [];
+  const location = [str(record.City), str(record.State), str(record.Country)].filter(Boolean).join(', ');
+  if (location) meta.push(`Location: ${location}`);
+  if (record.Remote_Job === true) meta.push('Work model: Remote');
+  if (str(record.Job_Type)) meta.push(`Job type: ${str(record.Job_Type)}`);
+  if (str(record.Salary)) meta.push(`Salary: ${str(record.Salary)}`);
+  if (str(record.Date_Opened)) meta.push(`Posted: ${str(record.Date_Opened)}`);
+  if (isZohoRecordClosed(record)) meta.push('Applications closed (the career site shows the posting as filled)');
+
+  return {
+    url: postingUrl,
+    title: compactText(str(record.Posting_Title) || str(record.Job_Opening_Name), 300),
+    text: compactText([meta.join('\n'), body].filter(Boolean).join('\n\n'), textCap),
+  };
+}
+
+async function fetchZohoJd(apiUrl, id, postingUrl, textCap, timeoutMs) {
+  if (rejectPrivateOrInvalid(apiUrl)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(apiUrl, {
+      headers: { accept: 'text/html', 'user-agent': DEFAULT_USER_AGENT },
+      redirect: 'error',
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    return normalizeZohoJob(await res.text(), id, postingUrl, textCap);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * ats id → fetcher. THE routing table `fetchJdViaKnownApi` dispatches through,
  * exported so the owned test can assert its key set IS `JD_TEXT_API_ATS`.
  *
@@ -646,8 +701,9 @@ async function fetchSmartRecruitersJd(apiUrl, postingUrl, textCap, timeoutMs) {
  * same deletion reddens it.
  *
  * Every entry takes the same `(resolved, url, textCap, timeoutMs)` shape so
- * dispatch stays a lookup; Ashby's extra `parts.jobId` argument is unpacked
- * inside its own entry rather than widening the shared signature.
+ * dispatch stays a lookup; the extra `parts` arguments (Ashby's `jobId`, Zoho
+ * Recruit's `id`) are unpacked inside their own entries rather than widening
+ * the shared signature.
  */
 export const JD_FETCHERS = {
   workday: (resolved, url, textCap, timeoutMs) =>
@@ -662,6 +718,8 @@ export const JD_FETCHERS = {
     fetchGreenhouseEmbeddedJd(resolved, url, textCap, timeoutMs),
   smartrecruiters: (resolved, url, textCap, timeoutMs) =>
     fetchSmartRecruitersJd(resolved.apiUrl, url, textCap, timeoutMs),
+  'zoho-recruit': (resolved, url, textCap, timeoutMs) =>
+    fetchZohoJd(resolved.apiUrl, resolved.parts.id, url, textCap, timeoutMs),
 };
 
 /**

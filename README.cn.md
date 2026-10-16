@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <p align="center"><a href="https://career-ops.org/zh/docs?utm_source=readme&utm_content=zh">完整中文文档：career-ops.org/zh/docs</a></p>
@@ -205,7 +206,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` 随 [Node.js](https://nodejs.org) 一起提供：它只运行一次安装程序，
 > 不会全局安装任何东西。还没有 Node？先安装它。
-> （已经在用 Claude Code / Gemini / Codex CLI？那你已经有了。）
+> （已经在用 Claude Code / Codex CLI？那你已经有了。）
 
 这会把最新版本克隆到 `./career-ops` 并安装依赖。然后：
 

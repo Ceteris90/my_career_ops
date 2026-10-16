@@ -200,3 +200,4 @@ public commit with a stated reason.
 - @echooolin00 | 2026-10-14 | id:286250255 | src:https://github.com/career-ops-hq/career-ops/discussions/5243 | n:152
 - @mwangiiharun | Harun Mwangi | 2026-10-14 | "Hiring should be about showcasing skills. Not which LLM knows how to parse resume's better" | id:20253651 | src:https://github.com/career-ops-hq/career-ops/discussions/5252 | n:153
 - @Michos12 | Michael Veliz | 2026-10-15 | id:129358905 | src:https://github.com/career-ops-hq/career-ops/discussions/5328 | n:154
+- @Gwilymm | 2026-10-16 | "Real people applying for real jobs deserve real human consideration, not applications screened by AI and answered with automated replies." | id:22996166 | src:https://github.com/career-ops-hq/career-ops/discussions/5359 | n:155

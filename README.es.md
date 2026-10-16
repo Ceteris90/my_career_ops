@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <p align="center"><a href="https://career-ops.org/es/docs?utm_source=readme&utm_content=es">Documentación completa en español: career-ops.org/es/docs</a></p>
@@ -205,7 +206,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` viene con [Node.js](https://nodejs.org): ejecuta el instalador una vez,
 > sin instalar nada de forma global. ¿Aún no tienes Node? Instálalo primero.
-> (¿Ya usas un CLI de Claude Code / Gemini / Codex? Entonces ya lo tienes.)
+> (¿Ya usas un CLI de Claude Code / Codex? Entonces ya lo tienes.)
 
 Esto clona la última versión en `./career-ops` e instala las dependencias. Después:
 

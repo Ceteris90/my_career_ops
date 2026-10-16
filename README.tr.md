@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -203,7 +204,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx`, [Node.js](https://nodejs.org) ile birlikte gelir: yükleyiciyi bir kez çalıştırır,
 > global olarak hiçbir şey kurmaz. Node henüz yok mu? Önce onu kur.
-> (Zaten bir Claude Code / Gemini / Codex CLI kullanıyor musun? O zaman zaten var.)
+> (Zaten bir Claude Code / Codex CLI kullanıyor musun? O zaman zaten var.)
 
 Bu, en son sürümü `./career-ops` içine klonlar ve bağımlılıkları kurar. Sonra:
 

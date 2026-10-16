@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -203,7 +204,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` は [Node.js](https://nodejs.org) に同梱されています：グローバルに何もインストールせず、
 > インストーラーを 1 回だけ実行します。Node がまだ？ 先にインストールしてください。
-> （すでに Claude Code / Gemini / Codex の CLI を使っている？ ならもう入っています。）
+> （すでに Claude Code / Codex の CLI を使っている？ ならもう入っています。）
 
 これで最新リリースが `./career-ops` にクローンされ、依存関係がインストールされます。次に：
 

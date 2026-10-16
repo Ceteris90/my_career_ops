@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -203,7 +204,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` يأتي مع [Node.js](https://nodejs.org): يشغّل المثبّت مرة واحدة
 > دون تثبيت أي شيء بشكل عام. لا يوجد Node بعد؟ ثبّته أولًا.
-> (تستخدم بالفعل واجهة Claude Code / Gemini / Codex؟ إذن لديك بالفعل.)
+> (تستخدم بالفعل واجهة Claude Code / Codex؟ إذن لديك بالفعل.)
 
 يستنسخ هذا أحدث إصدار في `./career-ops` ويثبّت الاعتماديات. ثم:
 

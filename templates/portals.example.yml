@@ -1223,6 +1223,7 @@ search_queries:
 #                   recruiting.ultipro.(ca|com) / recruiting2/3.ultipro.com variants, matched by pattern —
 #                   whichever host the tenant's own board URL uses is preserved, not normalized)
 #   adp-workforcenow  workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=...&ccId=...
+#   zoho-recruit    <tenant>.zohorecruit.com  (any path; the board is always read from /jobs/Careers)
 #
 # When the public careers URL is a branded custom domain (e.g.
 # careers.adyen.com), set `provider: smartrecruiters` explicitly to
@@ -1352,6 +1353,13 @@ search_queries:
 #   adpWorkforcenow:
 #     fetchDetails: true    # optional: fetch each posting's detail JSON for a description (off by default — the list payload carries no JD text)
 #     detailLimit: 25       # optional: max detail calls per sweep when fetchDetails is true
+#   enabled: true
+#
+# - name: Example Zoho Recruit Co
+#   careers_url: https://exampleco.zohorecruit.com/jobs/Careers   # any <tenant>.zohorecruit.com URL
+#   zohoRecruit:
+#     fetchDetails: false   # optional: fetch each posting's page for its full description, date and salary (one extra request per posting)
+#     detailLimit: 25       # optional: max detail fetches per sweep when fetchDetails is true (max 100)
 #   enabled: true
 
 #
@@ -2408,7 +2416,12 @@ tracked_companies:
 
   - name: Channable
     careers_url: https://channable.recruitee.com
-    notes: "Utrecht. Product feed management for e-commerce. Recruitee board."
+    notes: "Utrecht. Product feed management for e-commerce."
+    enabled: true
+
+  - name: Shiji Group
+    careers_url: https://shijigroup.zohorecruit.com/jobs/Careers
+    notes: "Katowice / Barcelona. International hubs of a Beijing-based hospitality technology group."
     enabled: true
 
   # -- DACH & European AI ecosystem --

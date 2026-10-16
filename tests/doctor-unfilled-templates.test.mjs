@@ -225,6 +225,50 @@ try {
       fail(`profile with all empty bodies not flagged: ${JSON.stringify(hit)}`);
     }
   }
+
+  // 10. An empty or whitespace-only file is unpersonalized, not "customized" (#5340).
+  for (const [label, file, body] of [
+    ['empty-profile', '_profile.md', ''],
+    ['blank-profile', '_profile.md', '\n  \n'],
+    ['empty-brief', '_brief.md', ''],
+  ]) {
+    const dir = fixture(label);
+    const other = file === '_profile.md' ? '_brief.md' : '_profile.md';
+    writeFileSync(join(dir, 'modes', file), body);
+    writeFileSync(join(dir, 'modes', other),
+      other === '_brief.md'
+        ? '# Jane Smith — Triage Brief\n\n## Identity\nSenior Backend Engineer, US remote.\n'
+        : SECTIONS.map((x) => `${x.heading}\nFilled in by Jane.\n\n`).join(''));
+    const s = runDoctor(dir);
+    const hit = (s.unpersonalized || []).find((u) => u.path === `modes/${file}`);
+    if (s._error) fail(`${label}: doctor crashed: ${s._error}`);
+    else if (hit && hit.reason === 'is empty' && !flagged(s, `modes/${other}`)) {
+      pass(`${label}: empty ${file} is flagged as empty, the filled one is not`);
+    } else {
+      fail(`${label}: not flagged as empty: ${JSON.stringify(s.unpersonalized)}`);
+    }
+  }
+
+  // 11. Doctor compares against the checkout's template, not a stale data-root copy (#5340).
+  //     The data root holds an OLD template; the profile matches the checkout's real
+  //     one section for section, so every section is still template text. Against the
+  //     stale copy it would read as customized.
+  {
+    const dir = fixture('stale-template');
+    const real = readFileSync(join(ROOT, 'modes', '_profile.template.md'), 'utf-8');
+    writeFileSync(join(dir, 'modes', '_profile.template.md'), '# Old template\n\n## Your Target Roles\nsomething else\n');
+    writeFileSync(join(dir, 'modes', '_profile.md'), real);
+    writeFileSync(join(dir, 'modes', '_brief.md'),
+      '# Jane Smith — Triage Brief\n\n## Identity\nSenior Backend Engineer, US remote.\n');
+    const s = runDoctor(dir);
+    const hit = (s.unpersonalized || []).find((u) => u.path === 'modes/_profile.md');
+    if (s._error) fail(`stale-template: doctor crashed: ${s._error}`);
+    else if (hit && /on template/.test(hit.reason) && !/0 on template/.test(hit.reason)) {
+      pass('profile equal to the checkout template is flagged even when the data root holds a stale template');
+    } else {
+      fail(`stale data-root template masked the checkout template: ${JSON.stringify(hit)}`);
+    }
+  }
 } finally {
   for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }); } catch { /* temp dir */ } }
 }
