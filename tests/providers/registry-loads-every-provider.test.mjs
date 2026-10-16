@@ -23,9 +23,16 @@
 //
 // All 105 load today with no warnings, measured, so this is a ratchet.
 //
-// Review (#4981) found an assertion in the first version of this file that
-// could not fail:
+// Review (#4981) found the first version of this file blind to the very case
+// its title names, and both gaps are now covered here:
 //
+//   - A misspelled id VALUE sailed through. `id: 'greenhous'` still loads, the
+//     count stays at 105 and no warning is printed, so every assertion passed
+//     while `provider: greenhouse` in portals.yml resolved to "unknown
+//     provider" and that board was skipped on every scan. Counting modules can
+//     never catch this: the module is there, it is registered under the wrong
+//     name. Something has to pin the name from OUTSIDE the module, which is
+//     what the two id checks below do.
 //   - The duplicate-id block could not fail. It iterated the `providers` Map,
 //     whose keys are unique by construction, so `seen.has(id)` was unreachable.
 //     An assertion that cannot fail is worse than none, because the next reader
@@ -149,6 +156,53 @@ if (declared.length === files.length) {
     fail(
       'two modules declare the same provider id, so the later one is dropped and every board it '
       + `claims is skipped: ${collisions.map(([id, fs]) => `"${id}" in ${fs.join(' and ')}`).join('; ')}`,
+    );
+  }
+}
+
+// A provider's id must match its filename.
+//
+// This is what catches a misspelled id value. The count cannot: the module
+// loads fine and registers, just under a name nothing refers to. The filename
+// is the external pin — it is what the reader, the docs and `portals.yml`
+// entries all spell, and it does not change when someone edits the id string.
+//
+// True for all 105 today, measured, so this is a ratchet with no allowlist. A
+// provider that genuinely needs an id different from its filename is a
+// deliberate decision, and belongs here as a named exception rather than as a
+// silently loosened rule.
+{
+  const mismatched = declared
+    .filter(({ id }) => id)
+    .filter(({ file, id }) => id !== file.replace(/\.mjs$/, ''))
+    .map(({ file, id }) => `${file} declares id "${id}"`);
+  if (mismatched.length === 0) {
+    pass(`all ${declared.length} provider ids match their filenames`);
+  } else {
+    fail(
+      'provider id does not match its filename, so every portals.yml entry naming the file\'s '
+      + `spelling resolves to "unknown provider" and is skipped on every scan: ${mismatched.join(', ')}`,
+    );
+  }
+}
+
+// The ids the shipped configuration cannot work without, pinned by name.
+//
+// Not redundant with the filename rule above: renaming BOTH the file and the
+// id keeps them matching, and the whole registry would still load, while every
+// `provider: greenhouse` entry in every user's portals.yml stops resolving.
+// These three are the high-traffic ATS boards, so this is the check that fails
+// loudly if one is ever renamed without a migration.
+{
+  const CRITICAL_IDS = ['greenhouse', 'lever', 'ashby'];
+  const absent = CRITICAL_IDS.filter((id) => !providers.has(id));
+  if (absent.length === 0) {
+    pass(`the critical provider ids are registered under their exact names: ${CRITICAL_IDS.join(', ')}`);
+  } else {
+    fail(
+      `critical provider id(s) absent from the registry: ${absent.join(', ')}. Every portals.yml `
+      + 'entry naming one resolves to "unknown provider", and those boards are skipped on every '
+      + 'run while the scan still reports success.',
     );
   }
 }
