@@ -16,8 +16,10 @@ import { pass, fail, ROOT, rmSync } from './helpers.mjs';
 console.log('\nfollowup-sweep.sh honors follow_ups.enabled: false');
 
 const zshProbe = spawnSync('zsh', ['-c', 'exit 0'], { encoding: 'utf8' });
-if (zshProbe.error || zshProbe.status !== 0) {
+if (zshProbe.error?.code === 'ENOENT') {
   pass('sweep off-check skipped: zsh is not available (launchd sweep is macOS-only)');
+} else if (zshProbe.error || zshProbe.status !== 0) {
+  fail(`zsh probe failed before the sweep could run: error=${zshProbe.error} status=${zshProbe.status} stderr=${zshProbe.stderr}`);
 } else {
   const dir = mkdtempSync(join(tmpdir(), 'co-followup-sweep-'));
   try {
