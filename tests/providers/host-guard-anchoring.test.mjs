@@ -62,7 +62,11 @@ const sources = new Map(
 // ── 1. redirect: 'follow' ──────────────────────────────────────────────────
 {
   const offenders = [...sources]
-    .filter(([, code]) => /redirect:\s*['"]follow['"]/.test(code))
+    // `\s*` on BOTH sides of the colon: without the first one,
+    // `redirect : 'follow'` passed. The formatter normalizes it, so this is a
+    // one-character hole rather than a live miss, but a check that can be
+    // evaded by whitespace is not a check (#4979).
+    .filter(([, code]) => /redirect\s*:\s*['"]follow['"]/.test(code))
     .map(([f]) => f);
 
   if (offenders.length === 0) {
