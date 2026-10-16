@@ -91,6 +91,7 @@ function splitEnv(extra = {}) {
 // the network.
 const FETCH_STUB = `
 import { writeFileSync } from 'node:fs';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 globalThis.fetch = async (url, init = {}) => {
   if (!String(url).endsWith('/chat/completions')) throw new Error('split-root fixture: unexpected fetch ' + url);
   writeFileSync(process.env.SPLIT_ROOT_CAPTURE, String(init.body));
@@ -117,7 +118,7 @@ function sentSystemPrompt(base, dataRoot, args) {
     }),
   });
   assert.equal(r.error, undefined, `spawn failed: ${r.error?.message}`);
-  assert.equal(r.status, 0, `openrouter-runner ${args[0]} exited ${r.status}: ${r.stderr}`);
+  assert.equal(r.status, 0, describeSpawn(r, `openrouter-runner ${args[0]} exited ${r.status}`));
   assert.ok(existsSync(capture), `openrouter-runner ${args[0]} sent no model request:\n${r.stdout}\n${r.stderr}`);
   const request = JSON.parse(readFileSync(capture, 'utf8'));
   return request.messages[0].content[0].text;
@@ -268,7 +269,7 @@ test('batch-runner: personalization, spend_tier, reports and tracker additions f
     const r = runBatch(checkout, { CAREER_OPS_ROOT: dataRoot });
     const output = `${r.stdout}\n${r.stderr}`;
     assert.equal(r.error, undefined, `spawn failed: ${r.error?.message}`);
-    assert.equal(r.status, 0, `batch-runner exited ${r.status}:\n${output}`);
+    assert.equal(r.status, 0, describeSpawn(r, `batch-runner exited ${r.status}:\n${output}`));
 
     // 1. The worker was briefed with the data root's personalization.
     const promptPath = join(checkout.captureDir, 'system-prompt.md');
