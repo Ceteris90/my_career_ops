@@ -8,7 +8,7 @@
  * copies — and every writer excludes every other writer through the same lock.
  */
 
-import { readFileSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, lstatSync, existsSync, realpathSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, lstatSync, existsSync, realpathSync, chmodSync } from 'fs';
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -19,7 +19,7 @@ import * as yaml from 'js-yaml';
 // EPERM/EACCES/EBUSY under contention while this file still treated anything
 // but EEXIST as fatal, killing a writer and losing its item.
 import {
-  isMkdirContention, isRmContention, rmLockArtifactSync, createLockWaitPolicy,
+  isMkdirContention, isRmContention, rmLockArtifactSync, createLockWaitPolicy, sameLockDirectory,
   lockRecoveryVerdict, RECOVER_STALE,
 } from './pipeline-lock.mjs';
 import { normalizeTextKey } from './tracker-parse.mjs';
@@ -56,6 +56,50 @@ export function rebuildRow(parts) {
 }
 
 /**
+ * The ONE rule for "this Report cell links to a report that is not on disk",
+ * shared by verify-pipeline.mjs (Check 3), merge-tracker.mjs (merge-time
+ * warning, #4748) and fix-report-links.mjs (#4750) so the three can never
+ * disagree about which rows are broken.
+ *
+ * The link is the first markdown `](target)` in the cell. It resolves when it
+ * names a REGULAR FILE from the tracker's own directory (markdown links are
+ * relative to the file holding them, see #760) or, for legacy root-relative
+ * links, from the data root. A directory is not a report. A cell with no link
+ * (`—`, `N/A`, empty) is the documented "no report" convention and is never
+ * broken.
+ *
+ * @param {string} reportCell - Raw Report cell value.
+ * @param {string} trackerDir - Directory containing the tracker file.
+ * @param {string} dataRoot - Data root (getCareerOpsRoot()).
+ * @param {{onInspectionError?: Function, stat?: Function}} [options]
+ * @returns {string|null} The unresolved link target, or null when there is no link,
+ *   it resolves, or its targets could not be inspected conclusively.
+ */
+export function findDeadReportLink(reportCell, trackerDir, dataRoot, options = {}) {
+  const match = String(reportCell ?? '').match(/\]\(([^)]+)\)/);
+  if (!match) return null;
+  const link = match[1];
+  const inspect = options.stat ?? statSync;
+  const errors = [];
+  const candidates = [...new Set([join(trackerDir, link), join(dataRoot, link)])];
+  for (const path of candidates) {
+    try {
+      if (inspect(path).isFile()) return null;
+    } catch (err) {
+      // ENOENT/ENOTDIR prove that this candidate is absent. Permission errors,
+      // transient I/O failures and every other error do not prove that, so an
+      // explicit repair must preserve the tracker cell instead of deleting it.
+      if (err?.code !== 'ENOENT' && err?.code !== 'ENOTDIR') errors.push({ path, error: err });
+    }
+  }
+  if (errors.length > 0) {
+    options.onInspectionError?.({ link, errors });
+    return null;
+  }
+  return link;
+}
+
+/**
  * Normalize company names for same-company lookups across tracker scripts.
  *
  * Company names can contain spaces, punctuation, or branding variants in the
@@ -78,6 +122,137 @@ export function normalizeCompany(name) {
   return normalizeTextKey(name);
 }
 
+// True legal-entity suffixes, stripped repeatedly (chained) since a name can
+// legitimately carry more than one ("Acme Holdings Inc." → "acme holdings").
+// These are unambiguous enough that removing several in a row is safe.
+//
+// Shared by invite-match.mjs's normalizeCompanyName() (which chain-strips them)
+// and companiesMatchIgnoringCorporateForm() below (which accepts them as a
+// corporate-form tail). Exported so both read one vocabulary: a private second
+// copy is exactly the identity drift #2445 set out to remove. International
+// forms are included because a company cell may quote the employer with its
+// local legal form ("Foo, GmbH", "Foo, APC"); keep every entry a single
+// space-free word so normalizeTextKey() tokenizes it to one token the tail
+// check can match and normalizeCompanyName()'s `\s<suffix>$` anchor stays
+// literal (no regex metacharacters to escape).
+export const LEGAL_SUFFIXES = [
+  // US / UK
+  'incorporated', 'inc', 'corporation', 'corp', 'company', 'co',
+  'limited', 'ltd', 'llc', 'llp', 'lp', 'plc', 'pc', 'apc',
+  // DE / AT / CH
+  'gmbh', 'ag', 'kgaa', 'mbh', 'ug',
+  // FR / BE / CH / LU
+  'sas', 'sarl', 'eurl', 'snc', 'scs', 'sca', 'sa',
+  // IT / ES / PT / LATAM
+  'spa', 'srl', 'ltda', 'saa', 'sl', 'sll', 'slu',
+  // NL / BE
+  'bv', 'nv', 'cv',
+  // Nordics / Baltics
+  'ab', 'as', 'oy', 'oyj', 'kf', 'sf', 'aps', 'se',
+  // Central / Eastern Europe
+  'jsc', 'pjsc', 'zao', 'ooo', 'doo', 'kft', 'rt', 'zrt',
+  // Commonwealth / Asia
+  'pty', 'pte', 'pvt', 'sdn', 'bhd',
+];
+
+// Generic business-descriptor words that vary between how a recruiter signs
+// an email and how the tracker recorded the company, but are common enough
+// as substantive parts of a name (e.g. "Data Solutions" vs "Data Corp") that
+// chaining their removal risks collapsing two different companies to the
+// same key. Stripped at most once, and only after legal suffixes are gone —
+// never chained with each other or with LEGAL_SUFFIXES.
+export const GENERIC_DESCRIPTORS = [
+  'group', 'holdings', 'technologies', 'technology', 'solutions',
+  'canada', 'international',
+];
+
+// Words that name a legal form or a generic business descriptor rather than the
+// employer. The union is safe here in a way chaining them in normalizeCompanyName
+// is not, because the prefix rule below never lets two names disagree on a
+// substantive token.
+const CORPORATE_FORM_WORDS = new Set([...LEGAL_SUFFIXES, ...GENERIC_DESCRIPTORS]);
+
+// A one-token stem carries almost no identity, and a two-letter one is usually
+// an initialism that several unrelated employers share. Refusing them costs the
+// duplicate row that exists today; accepting them risks deleting a real one.
+// Exported because it doubles as the narrowest bucket width a caller can be
+// certain of: every pair companiesMatchIgnoringCorporateForm() accepts shares at
+// least this many leading characters of its normalized form (the stem length
+// floor above), and an exact normalizeCompany() match shares the whole string —
+// so grouping on the first MIN_STEM_CHARS characters can never split a pair the
+// rule would join.
+export const MIN_STEM_CHARS = 3;
+
+/**
+ * True when two company cells are the same employer written with a different
+ * corporate suffix ("Acme" vs "Acme Technologies Inc.").
+ *
+ * normalizeCompany() folds case, punctuation and width but not corporate
+ * forms, so a suffix variant of one employer never matches the plain name and
+ * the same opening is written twice. This is the narrow rule that closes that:
+ * used where the role title already matches and neither a req-number nor an
+ * employer-board URL has proved the rows distinct. The exact tier above is
+ * untouched — callers OR this with an exact-key comparison, because two
+ * IDENTICAL names have equal token length and so return false here.
+ *
+ * The rule is a token PREFIX plus a corporate-form tail, not a stripped key.
+ * Stripping suffixes before comparing looks equivalent and is not: it maps
+ * "Acme Solutions" and "Acme Technologies" to the same "acme", which folds two
+ * genuinely different employers and deletes one row. Requiring the shorter name
+ * to be a prefix of the longer makes that structurally impossible, since
+ * neither of those is a prefix of the other. It also means an extra token that
+ * is NOT a corporate form ("Acme Robotics") still reads as a different
+ * employer, which is the conservative direction: over-merging is unrecoverable
+ * here (dedup-tracker.mjs drops the losing line, and applications.md is
+ * gitignored with no backup), while under-merging leaves a duplicate row the
+ * user can already see.
+ *
+ * Tokens come from normalizeTextKey(name, ' ') so this shares the Unicode,
+ * NFKC and Turkish dotted-I handling every other identity key uses (#2445,
+ * #2736) instead of a private strip. Scripts written without spaces produce a
+ * single token and never match here, so CJK corporate forms are unaffected and
+ * remain #2570's subject.
+ *
+ * @param {string} a - Company cell from one side of the comparison.
+ * @param {string} b - Company cell from the other side.
+ * @returns {boolean} True when the two cells name the same employer under a
+ *   different corporate form.
+ */
+export function companiesMatchIgnoringCorporateForm(a, b) {
+  const ta = normalizeTextKey(a, ' ').split(' ').filter(Boolean);
+  const tb = normalizeTextKey(b, ' ').split(' ').filter(Boolean);
+  const [stem, full] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  // Equal lengths are either the exact tier's business or a genuine
+  // disagreement on a substantive token. An empty stem is the blind-employer
+  // `?` marker and every other punctuation-only cell, which must never match a
+  // named employer.
+  if (stem.length === 0 || stem.length === full.length) return false;
+  if (stem.join('').length < MIN_STEM_CHARS) return false;
+  if (stem.some((token, i) => token !== full[i])) return false;
+  return full.slice(stem.length).every(token => CORPORATE_FORM_WORDS.has(token));
+}
+
+/**
+ * Control characters that are invisible in every rendered view of the tracker.
+ *
+ * C0 and DEL and C1, minus the three whitespace controls: `\t` is ordinary
+ * whitespace inside a cell, and `\r`/`\n` are folded to a single space by
+ * cell() before this runs — stripping any of the three would glue words
+ * together instead of separating them.
+ *
+ * Deliberately NOT shared with the plugin token/display sanitizer, which strips
+ * the same idea but a different range: it collapses all whitespace first and so
+ * can take `\t`/`\r`/`\n` with the rest, which here would destroy word breaks.
+ * Two ranges that must differ are two constants; only the ranges that must
+ * agree are shared, which is the single export below.
+ *
+ * Exported because verify-pipeline.mjs has to recognize exactly what cell()
+ * removes: stripping only stops NEW bytes entering, and a second copy of this
+ * range would let the write path and the detector disagree about what counts.
+ */
+// eslint-disable-next-line no-control-regex
+export const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g;
+
 /**
  * Neutralize characters that would corrupt the applications.md table.
  *
@@ -87,11 +262,26 @@ export function normalizeCompany(name) {
  * on the inner pipe. Additive — normal cells are unchanged; only values that
  * would already break the table get sanitized.
  *
+ * Control characters (#3892) get the same treatment for the same reason, and
+ * here rather than in each writer: this is the one sanitizer every tracker
+ * writer passes through — merge-tracker's buildRow (and so the web, which
+ * dictates its rows through the same merge path), set-status's note. A guard
+ * added per writer is a guard the next writer is free to reintroduce the bug
+ * around. They are DELETED, not replaced with a space: the byte renders as
+ * nothing in markdown, on GitHub and in the dashboard, so a substitution would
+ * change text a human has already read. The asymmetry is the point — a byte
+ * that costs one regex to reject costs an unrelated arithmetic discrepancy
+ * much later to find, because every view of the table hides it.
+ *
  * @param {*} v - Free-text value headed for a table cell.
  * @returns {string} Table-safe value.
  */
 export function cell(v) {
-  return String(v ?? '').replace(/[\r\n]+/g, ' ').replace(/\s*\|\s*/g, ' / ').trim();
+  return String(v ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(CONTROL_CHARS, '')
+    .replace(/\s*\|\s*/g, ' / ')
+    .trim();
 }
 
 /**
@@ -129,6 +319,27 @@ export function resolveWorkspaceRoot(trackerPath) {
 }
 
 /**
+ * Workspace root for a script started from `rootDir`, derived from the
+ * *uncanonicalized* tracker path. Unlike `resolveWorkspaceRoot(resolveTrackerPath(rootDir))`,
+ * this does not realpath the tracker first, so a workspace that only symlinks its
+ * `data/` directory (the natural workaround for #524) still resolves to the repo
+ * rather than the symlink's target (#3169). Pointing `CAREER_OPS_TRACKER` at a
+ * genuinely external workspace keeps moving the whole set together (#2471), since
+ * the raw path is then the external tracker itself.
+ *
+ * The returned root is left in its lexical form, exactly as
+ * `resolveWorkspaceRoot(resolveTrackerPath(rootDir))` was, so it keeps the same
+ * spelling the module's containment checks compare against (they realpath both
+ * sides themselves for the symlinked-ancestor case, e.g. /tmp -> /private/tmp).
+ *
+ * @param {string} rootDir - The career-ops data root directory.
+ * @returns {string} Absolute workspace root directory.
+ */
+export function resolveWorkspaceRootFor(rootDir) {
+  return resolveWorkspaceRoot(resolve(rawTrackerPath(rootDir)));
+}
+
+/**
  * Resolve the PDF manifest (`data/pdf-index.tsv`) for the workspace that owns
  * a tracker. `CAREER_OPS_PDF_INDEX` overrides it explicitly.
  *
@@ -158,7 +369,7 @@ export function resolvePdfIndexPath(trackerPath) {
  * @param {string} path - Raw tracker path from config, env, or the default.
  * @returns {string} Absolute canonical path when the file exists, else resolved path.
  */
-import { canonicalizeTrackerPath } from './path-resolver.mjs';
+import { canonicalizeTrackerPath, rawTrackerPath } from './path-resolver.mjs';
 export { canonicalizeTrackerPath };
 
 /**
@@ -301,11 +512,6 @@ function readLockOwner(lockDir) {
   }
 }
 
-function sameLockDirectory(left, right) {
-  return left.dev === right.dev && left.ino === right.ino
-    && (left.ino !== 0 || left.birthtimeMs === right.birthtimeMs);
-}
-
 // The recovery judgment comes from pipeline-lock rather than a second copy of
 // it. "Mirrors pipeline-lock" was the previous arrangement, and mirroring is
 // precisely what drifts: this copy still answered a bare boolean, so "the
@@ -349,10 +555,12 @@ export async function acquireTrackerLock(lockDir, options = {}) {
   // from the definition: waiters woke in lockstep and re-raced, and a caller
   // waiting on a healthy lock being handed round briskly was killed anyway.
   //
-  // There is no separate maxWaitMs knob here, so the ceiling is the same
-  // multiple of timeoutMs the definition defaults to.
+  // There is no separate maxWaitMs knob here, so no hardDeadline is passed and
+  // the policy applies its own ceiling. Writing one out here would put a fourth
+  // copy of that bound in the tree, and a copy that drifts changes retry timing
+  // silently — nothing fails, so nothing reports it (#3895).
   const { backoffMs, holderStillWedged, noteWaiting, ceilingReached } = createLockWaitPolicy(lockDir, {
-    timeoutMs, retryMs, deadline: Date.now() + timeoutMs, hardDeadline: Date.now() + timeoutMs * 10,
+    timeoutMs, retryMs, deadline: Date.now() + timeoutMs,
   });
   for (;;) {
     if (holderStillWedged() || ceilingReached()) break;
@@ -489,6 +697,26 @@ export async function acquireTrackerLock(lockDir, options = {}) {
       }
 
       if (hasRecoverGuard) {
+        // Test-only ordering signal for the cross-process writer-lock suite.
+        // It is emitted only after this process successfully creates the
+        // recover guard, and remains on disk after that short-lived directory
+        // is removed. The parent can therefore prove both contention and
+        // guard creation without sampling a sub-millisecond window. Production
+        // callers have no marker path and keep the existing lock behavior.
+        const testWaitingMarker = process.env.NODE_ENV === 'test'
+          ? process.env.CAREER_OPS_TRACKER_TEST_LOCK_WAIT_MARKER
+          : undefined;
+        if (testWaitingMarker) {
+          try {
+            writeFileSync(testWaitingMarker, JSON.stringify({
+              pid: process.pid, lockDir, guardCreated: true,
+            }), { flag: 'wx' });
+          } catch {
+            // The hook is observational only; the bounded test wait reports a
+            // marker-write failure without changing lock acquisition behavior.
+          }
+        }
+
         try {
           // STALE only. VANISHED means the lock was absent when we looked, and
           // by the time this line runs another acquirer may have won the mkdir
@@ -640,14 +868,27 @@ export function renameSyncWithRetry(tmpPath, path, rename = renameSync) {
  * `renameSyncWithRetry`). If the write or rename ultimately fails, the temporary
  * file is cleaned up before the original error is rethrown.
  *
+ * The replacement is a NEW file, so it takes the process umask rather than the
+ * original's permissions. Pass `mode` to carry them over: it is applied to the
+ * temporary file before the rename, so the destination is never observable with
+ * wider permissions than it had.
+ *
  * @param {string} path - Final file path to replace.
  * @param {string} content - Complete file content to write.
+ * @param {{mode?: number}} [options] - `mode`: permission bits for the replacement.
  * @returns {void}
  */
-export function writeFileAtomic(path, content) {
+export function writeFileAtomic(path, content, { mode } = {}) {
   const tmpPath = join(dirname(path), `.${basename(path)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`);
   try {
-    writeFileSync(tmpPath, content);
+    if (mode === undefined) {
+      writeFileSync(tmpPath, content);
+    } else {
+      // Creation honours the umask, so it can only narrow `mode`; chmod then
+      // sets it exactly.
+      writeFileSync(tmpPath, content, { mode });
+      chmodSync(tmpPath, mode);
+    }
     renameSyncWithRetry(tmpPath, path);
   } catch (err) {
     rmSync(tmpPath, { force: true });
@@ -658,12 +899,16 @@ export function writeFileAtomic(path, content) {
 /**
  * Load the canonical tracker states from `templates/states.yml`.
  *
- * states.yml is the single source of truth for the 8 canonical states and
+ * states.yml is the single source of truth for the canonical states and
  * their aliases. Parsing it here (instead of hardcoding the list) means a new
  * state or alias lands in one file and every consumer follows.
  *
+ * `description` and `terminal` are passed through for callers that EXPLAIN the
+ * states rather than list them (set-status.mjs --help). Both default rather
+ * than throw: an entry omitting them is still a usable state.
+ *
  * @param {string} statesPath - Path to templates/states.yml.
- * @returns {{id:string,label:string,aliases:string[]}[]} Parsed state entries.
+ * @returns {{id:string,label:string,aliases:string[],description:string,terminal:boolean}[]} Parsed state entries.
  */
 export function loadCanonicalStates(statesPath) {
   const doc = yaml.load(readFileSync(statesPath, 'utf-8'));
@@ -674,6 +919,8 @@ export function loadCanonicalStates(statesPath) {
     id: String(s.id ?? ''),
     label: String(s.label ?? ''),
     aliases: Array.isArray(s.aliases) ? s.aliases.map(String) : [],
+    description: String(s.description ?? ''),
+    terminal: s.terminal === true,
   }));
 }
 
@@ -736,6 +983,28 @@ export function resolveCanonicalState(input, states) {
 }
 
 /**
+ * Resolve a raw tracker status CELL to its canonical lowercase state id.
+ *
+ * The read-side twin of resolveCanonicalState(): scripts that bucket or compare
+ * tracker rows (analyze-patterns, tracker-sync-check) work in ids
+ * (`interview`), not labels (`Interview`), and read cells that legacy trackers
+ * left with a date appended (`Rejected 2026-06-01`). Both steps live here so no
+ * reader needs its own alias table. The hand-copied ones had drifted: a
+ * `Mülakat` row counted as "pending" in the pattern analysis and as an
+ * unrecognized status in the sync check.
+ *
+ * @param {*} input - Raw status cell from applications.md.
+ * @param {{id:string,label:string,aliases:string[]}[]} states - From loadCanonicalStates().
+ * @returns {string|null} Canonical id (e.g. "interview"), or null when unknown.
+ */
+export function resolveCanonicalStateId(input, states) {
+  const cell = String(input ?? '').replace(/\*\*/g, '').replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '');
+  const label = resolveCanonicalState(cell, states);
+  if (label === null) return null;
+  return states.find(s => s.label === label).id.toLowerCase();
+}
+
+/**
  * Canonical process-exit codes shared by every locked, single-purpose
  * tracker-writer CLI (set-status.mjs, mark-pdf-ready.mjs, ...) — one source
  * so a new script can't drift from the numbering an existing one already
@@ -761,6 +1030,41 @@ export function makeCliFailWith(json) {
     }
     console.error(`❌ ${message}`);
     process.exit(exitCode);
+  };
+}
+
+/**
+ * Build a failUsage(message) bound to raw argv and a USAGE string, shared by
+ * every canonical tracker-writer CLI so the usage-error contract can't drift
+ * between them. The copies differ only in defaultMessage.
+ *
+ * Print usage (plus an optional specific complaint) and exit CLI_EXIT.USAGE.
+ *
+ * With --json a structured usage-error payload goes to stdout (same shape as
+ * failWith) so machine callers always parse one stream. failUsage can fire
+ * mid-argv-parse — before flags.json is settled — so JSON mode is detected
+ * from the raw argv directly. JSON must be the last thing written to stdout;
+ * machine callers parse stdout as one JSON document. The human-readable
+ * `❌` line always goes to stderr.
+ *
+ * Without --json, a specific complaint is printed to stderr only when a
+ * message was given, then the USAGE text.
+ *
+ * @param {{argv: string[], usage: string, defaultMessage: string}} options
+ * @returns {(message?: string|null) => never}
+ */
+export function makeCliFailUsage({ argv, usage, defaultMessage }) {
+  return function failUsage(message) {
+    const msg = message ?? defaultMessage;
+    if (argv.includes('--json')) {
+      // JSON must be the last thing written to stdout; machine callers parse stdout as one JSON document.
+      console.log(JSON.stringify({ error: msg, code: 'usage' }));
+      console.error(`❌ ${msg}`);
+    } else {
+      if (message) console.error(`❌ ${message}\n`);
+      console.error(usage);
+    }
+    process.exit(CLI_EXIT.USAGE);
   };
 }
 
