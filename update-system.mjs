@@ -353,6 +353,7 @@ const SYSTEM_PATHS = [
   'reconcile-pipeline.mjs',
   'dedup-tracker.mjs',
   'add-entry.mjs',
+  'github-evidence.mjs',
   'role-matcher.mjs',
   'tracker-utils.mjs',
   'tracker-parse.mjs',
