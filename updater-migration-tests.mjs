@@ -619,8 +619,10 @@ const twoPassManifestChecks = [
     pattern: /if \(protectedPaths\.has\(file\)\) continue;/,
   },
   {
-    name: 'revertPaths receives the pre-update snapshot at its call sites (#2015)',
-    pattern: /revertPaths\(updated, initialStatusPaths\)/,
+    // The preserved files ride along: a bare `git checkout HEAD -- <dir>` would
+    // reset an uncommitted edit the update had kept out of its checkout (#2337).
+    name: 'revertPaths receives the pre-update snapshot and the preserved files at its call sites (#2015)',
+    pattern: /revertPaths\(updated, initialStatusPaths, \{ exclude: preservedPaths \}\)/,
   },
   {
     // -z output is NUL-delimited/unquoted, so a path with spaces or newlines is

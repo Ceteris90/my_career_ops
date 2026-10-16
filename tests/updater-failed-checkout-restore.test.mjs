@@ -13,7 +13,9 @@
  * Sections 1 to 4 drive restoreAfterFailedUpdate() against a throwaway repo
  * through the git-runner seam. apply() is not exported and needs a real
  * upstream, so section 5 asserts against its source that both catches call
- * the helper before rethrowing.
+ * the helper before rethrowing. Sections 8 to 10 cover what the restore must
+ * leave alone: the user's own files in a directory the update created, and a
+ * preserved file's uncommitted edit.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -26,8 +28,9 @@ function write(dir, rel, text) {
   writeFileSync(join(dir, rel), text);
 }
 
-// A repo at "v1" with a target commit "v2" that changes sys/a.md, sys/b.md and
-// adds sys/dir/new.md, then returns to v1 the way an update starts out.
+// A repo at "v1" with a target commit "v2" that changes sys/a.md, sys/b.md,
+// adds sys/dir/new.md and a whole new directory sys/fresh/, then returns to v1
+// the way an update starts out.
 function makeRepo() {
   const repo = makeUpdaterRepo({ prefix: 'co-failed-checkout-', includeRoot: true });
   const { dir, g } = repo;
@@ -40,6 +43,7 @@ function makeRepo() {
   write(dir, 'sys/a.md', 'a v2\n');
   write(dir, 'sys/b.md', 'b v2\n');
   write(dir, 'sys/dir/new.md', 'new v2\n');
+  write(dir, 'sys/fresh/up.md', 'up v2\n');
   g('add', '-A');
   g('commit', '-qm', 'v2');
   const target = g('rev-parse', 'HEAD').trim();
@@ -49,6 +53,9 @@ function makeRepo() {
 
 const status = (g) => g('status', '--porcelain', '--untracked-files=all').split('\n').filter(Boolean);
 const read = (dir, rel) => readFileSync(join(dir, rel), 'utf-8');
+// What `initialStatusPaths` holds: modified and untracked files, by path. g()
+// trims its output, so slicing porcelain lines would cut the first one short.
+const dirtyPaths = (g) => new Set(g('ls-files', '-m', '-o', '--exclude-standard').split('\n').filter(Boolean));
 
 console.log('\n🧪 Testing that a failed update restores what it had checked out...');
 
@@ -148,9 +155,10 @@ console.log('\n🧪 Testing that a failed update restores what it had checked ou
     else fail('the self-reexec catch does not restore the files it checked out before rethrowing');
 
     // The child: the non-benign branch of the step-3 checkout loop.
-    const child = /if \(!checkoutErrorIsBenign\(err, \{ absentUpstream, preservedState \}\)\) \{[\s\S]*?restoreAfterFailedUpdate\(updated, initialStatusPaths,[^\n]*\n\s*restoreAfterFailedUpdate\(\[path\], initialStatusPaths,[^\n]*\n\s*throw err;\s*\n\s*\}/;
-    if (child.test(body)) pass('a non-benign checkout error restores the paths already updated, then rethrows');
-    else fail('the step-3 checkout loop rethrows without restoring what it had updated');
+    // Both restores pass the preserved files, which the checkout excluded.
+    const child = /if \(!checkoutErrorIsBenign\(err, \{ absentUpstream, preservedState \}\)\) \{[\s\S]*?restoreAfterFailedUpdate\(updated, initialStatusPaths,[^\n]*exclude: preservedPaths \}\);\n\s*restoreAfterFailedUpdate\(\[path\], initialStatusPaths,[^\n]*exclude: preservedPaths \}\);\n\s*throw err;\s*\n\s*\}/;
+    if (child.test(body)) pass('a non-benign checkout error restores the paths already updated, preserved files excluded, then rethrows');
+    else fail('the step-3 checkout loop rethrows without restoring what it had updated, or restores without excluding the preserved files');
 
     // The parent again: each successful bootstrap backup is recorded where it is
     // reported, and copied back after the files return to HEAD, not before.
@@ -205,5 +213,92 @@ console.log('\n🧪 Testing that a failed update restores what it had checked ou
     pass('a failed put-back is returned and points at the .bak');
   } else {
     fail(`failed put-back: ${JSON.stringify(result)}, messages ${JSON.stringify(errors)}`);
+  }
+}
+
+// ── 8. a directory the update created keeps the user's own files in it ──
+//    sys/fresh/ is new upstream, but this install already had a file there. The
+//    restore used to delete the whole directory because HEAD lacks it.
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    write(dir, 'sys/fresh/mine.md', 'my own notes\n');
+    const protectedPaths = dirtyPaths(g);
+    g('checkout', target, '--', 'sys/fresh/');
+    const { result } = await captureConsoleErrors(() =>
+      restoreAfterFailedUpdate(['sys/fresh/'], protectedPaths, { what: 'system path(s)', ...ctx }));
+    const mine = existsSync(join(dir, 'sys/fresh/mine.md')) ? read(dir, 'sys/fresh/mine.md') : null;
+    const after = status(g);
+    if (result === true && mine === 'my own notes\n' && !existsSync(join(dir, 'sys/fresh/up.md'))
+        && JSON.stringify(after) === '["?? sys/fresh/mine.md"]') {
+      pass('a directory the update created loses only the update\'s files; the user\'s own file there stays');
+    } else {
+      fail(`result ${result}, mine.md ${JSON.stringify(mine)}, status ${JSON.stringify(after)}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 9. ...and with nothing of the user's in it, the directory goes entirely ──
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    g('checkout', target, '--', 'sys/fresh/');
+    const { result } = await captureConsoleErrors(() =>
+      restoreAfterFailedUpdate(['sys/fresh/'], new Set(), { what: 'system path(s)', ...ctx }));
+    if (result === true && !existsSync(join(dir, 'sys/fresh')) && status(g).length === 0) {
+      pass('a directory only the update had filled is gone after the restore');
+    } else {
+      fail(`result ${result}, sys/fresh ${existsSync(join(dir, 'sys/fresh')) ? 'left behind' : 'gone'}, status ${JSON.stringify(status(g))}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 10. a preserved file keeps its uncommitted edit through the restore ──
+//    apply() checks a directory out with `:(exclude)` for each preserved file
+//    (a system file this install changed), so the edit survives the checkout. A
+//    bare `git checkout HEAD -- sys/` in the restore reset it to HEAD.
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    write(dir, 'sys/dir/old.md', 'old v1 with my edit\n');
+    const protectedPaths = dirtyPaths(g);
+    const preserved = ['sys/dir/old.md'];
+    g('checkout', target, '--', 'sys/', ':(exclude)sys/dir/old.md');
+    const { result } = await captureConsoleErrors(() =>
+      restoreAfterFailedUpdate(['sys/'], protectedPaths, { what: 'system path(s)', exclude: preserved, ...ctx }));
+    const after = status(g);
+    if (result === true && read(dir, 'sys/dir/old.md') === 'old v1 with my edit\n' && read(dir, 'sys/a.md') === 'a v1\n'
+        && !existsSync(join(dir, 'sys/dir/new.md')) && JSON.stringify([...dirtyPaths(g)]) === '["sys/dir/old.md"]' && after.length === 1) {
+      pass('the restore puts the rest of a directory back and leaves a preserved file\'s edit in place');
+    } else {
+      fail(`result ${result}, old.md ${JSON.stringify(read(dir, 'sys/dir/old.md'))}, status ${JSON.stringify(after)}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 11. a directory whose only HEAD files are preserved still loses the additions ──
+//    Excluding every file HEAD has there makes `git checkout HEAD` match nothing
+//    and fail; the restore must not report that as a failure.
+{
+  const { dir, g, ctx, target } = makeRepo();
+  try {
+    write(dir, 'sys/dir/old.md', 'old v1 with my edit\n');
+    const protectedPaths = dirtyPaths(g);
+    g('checkout', target, '--', 'sys/dir/', ':(exclude)sys/dir/old.md');
+    const { result, errors } = await captureConsoleErrors(() =>
+      restoreAfterFailedUpdate(['sys/dir/'], protectedPaths, { what: 'system path(s)', exclude: ['sys/dir/old.md'], ...ctx }));
+    if (result === true && read(dir, 'sys/dir/old.md') === 'old v1 with my edit\n' && !existsSync(join(dir, 'sys/dir/new.md'))) {
+      pass('with every HEAD file under it preserved, the directory keeps the edit and drops the update\'s addition');
+    } else {
+      fail(`result ${result}, old.md ${JSON.stringify(read(dir, 'sys/dir/old.md'))}, new.md ${existsSync(join(dir, 'sys/dir/new.md')) ? 'kept' : 'removed'}, messages ${JSON.stringify(errors)}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
