@@ -23,7 +23,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { describeSpawn } from './helpers.mjs';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 test('a timeout kill is named, where the old message was empty', () => {
   const result = spawnSync(process.execPath, ['-e', 'while(true){}'], { timeout: 500, encoding: 'utf8' });
