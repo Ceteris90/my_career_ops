@@ -33,9 +33,9 @@ try {
       }
     `;
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, root], {
-    encoding: 'utf8',
-    timeout: 10_000,
-  });
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
 
     if (result.status === 0) {
       pass('tracker-utils loads after the pre-checkout path resolver was cached');
