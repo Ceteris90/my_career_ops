@@ -1459,7 +1459,7 @@ async function runFactGate(html, label) {
   // fixtures also ship no cv.md, so the gate is never entered there. If the
   // module is genuinely missing in a real workspace this throws and the render
   // fails, which is the correct direction to fail for a fact gate.
-  const { assertFacts, printAdvisoryFacts } = await import('./verify-cv-facts.mjs');
+  const { assertFacts, printFactWarnings } = await import('./verify-cv-facts.mjs');
   const factCheck = assertFacts(html, { label });
   // Ahead of the verdict, because it qualifies it: with no config the phrase
   // lists are empty, so a "passed" below covers metrics and facts only.
@@ -1468,8 +1468,7 @@ async function runFactGate(html, label) {
   }
   if (factCheck.verdict === 'warn') {
     console.warn(`⚠️  CV fact check warning: ${label}`);
-    for (const phrase of factCheck.warnings) console.warn(`  - advisory phrase: ${phrase}`);
-    printAdvisoryFacts(factCheck.advisoryFacts, console.warn);
+    printFactWarnings(factCheck, console.warn);
   } else {
     console.log(`✅ Fact check passed: ${label}`);
   }
