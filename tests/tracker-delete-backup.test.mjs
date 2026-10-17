@@ -39,7 +39,11 @@ function sandbox(fn) {
       timeout: 30_000,
       env: { ...process.env, CAREER_OPS_TRACKER: trackerPath, CAREER_OPS_TRACKER_DB: join(dir, 'applications.db') },
     });
-    return { status: r.status, all: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+    // Spread the real result so describeSpawn() can reach stdout, stderr, signal
+  // and error. Returning only { status, all } printed "(empty)" for both
+  // streams where r.all used to show the output (#5386), and it would also
+  // hide a kill from exitedNonZero(), which reads signal and error.
+  return { ...r, all: `${r.stdout ?? ''}${r.stderr ?? ''}` };
   };
   try { return fn({ dir, tracker, cli }); } finally { rmSync(dir, { recursive: true, force: true }); }
 }
