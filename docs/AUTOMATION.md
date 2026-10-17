@@ -44,7 +44,15 @@ Replace `/path/to/career-ops` with your checkout path, and make sure `node` is o
 the `PATH` the scheduler uses (schedulers often run with a minimal environment — use
 an absolute path to `node` if in doubt, e.g. `which node`).
 
-### macOS / Linux — cron
+Two ways to schedule, both local and token-free:
+
+- **A. A fixed scan** of `scan.mjs` on one cadence, with the OS scheduler.
+- **B. The Scheduled scans page** in the web UI, which saves several cadences and
+  needs one 15-minute queue worker installed in the OS scheduler.
+
+### A. Fixed scan with `scan.mjs`
+
+#### Linux — cron
 
 Edit your crontab with `crontab -e` and add one line. This runs at 9am on every
 3rd day **of the month** (the 1st, 4th, 7th, … 31st) — note that `*/3` in the
@@ -62,7 +70,9 @@ absorb the days you don't need — `0 9 * * *` — or on weekdays only, at 8am:
 0 8 * * 1-5 cd /path/to/career-ops && /usr/local/bin/node scan.mjs >> data/scan.log 2>&1
 ```
 
-### macOS — launchd (survives sleep better than cron)
+macOS also runs cron, but launchd below survives sleep better.
+
+#### macOS — launchd
 
 Save as `~/Library/LaunchAgents/io.career-ops.scan.plist`, then
 `launchctl load ~/Library/LaunchAgents/io.career-ops.scan.plist`:
@@ -102,42 +112,51 @@ replace the `StartCalendarInterval` block with an interval in seconds:
   <integer>259200</integer>
 ```
 
-### Scheduled scans page — Windows, macOS, Linux
-
-The Scheduled scans page runs due scans automatically on Windows, macOS and Linux.
-The page supports multiple saved cadences. Install its 15-minute queue worker from
-the repository root:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File web/scripts/install-scan-schedule.ps1
-```
-
-```sh
-sh web/scripts/install-scan-schedule.sh
-```
-
-The Windows task, the macOS launchd agent, and the Linux cron line each check for
-due jobs every 15 minutes and run at most one queued scan per check. The Windows
-task and the macOS agent need a logged-in session. Run the installer as your own
-user, never as root. Remove the worker with
-`web/scripts/uninstall-scan-schedule.ps1` or
-`sh web/scripts/uninstall-scan-schedule.sh`.
-
-The macOS and Linux worker records each check in `data/scheduled-jobs.json.tick`;
-the page reads that file for "Last OS check". A custom
-`CAREER_OPS_SCHEDULED_JOBS_PATH` does not move the tick file, as on Windows. For a
-single fixed daily scan without the web UI, use the lower-level recipes above and
-below.
-
-### Windows — Task Scheduler
-
-A fixed daily scan without the web UI:
+#### Windows — Task Scheduler
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "node.exe" -Argument "scan.mjs" -WorkingDirectory "C:\path\to\career-ops"
 $trigger = New-ScheduledTaskTrigger -Daily -At 9am
 Register-ScheduledTask -TaskName "career-ops scan" -Action $action -Trigger $trigger -Description "Recurring career-ops job scan"
 ```
+
+### B. Scheduled scans page (web UI)
+
+The Scheduled scans page runs due scans automatically on Windows, macOS and Linux.
+It supports multiple saved cadences. Install the 15-minute queue worker from the
+repository root, as your own user and never as root. The worker checks for due
+jobs every 15 minutes and runs at most one queued scan per check.
+
+#### Linux — cron
+
+```sh
+sh web/scripts/install-scan-schedule.sh    # adds one marked crontab line
+sh web/scripts/uninstall-scan-schedule.sh  # removes only that line
+```
+
+#### macOS — launchd
+
+```sh
+sh web/scripts/install-scan-schedule.sh    # installs a LaunchAgent
+sh web/scripts/uninstall-scan-schedule.sh  # removes it
+```
+
+The agent needs a logged-in GUI session.
+
+#### Windows — Task Scheduler
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File web/scripts/install-scan-schedule.ps1
+web/scripts/uninstall-scan-schedule.ps1
+```
+
+The task runs in the current user's interactive session, so you must be logged in.
+
+#### Last OS check
+
+The macOS and Linux worker records each check in `data/scheduled-jobs.json.tick`;
+the page reads that file for "Last OS check". A custom
+`CAREER_OPS_SCHEDULED_JOBS_PATH` does not move the tick file, as on Windows.
 
 After any of these, new postings land in `data/pipeline.md` under `## Pending` on
 each run. Next you decide which are worth your attention — cheaply.
