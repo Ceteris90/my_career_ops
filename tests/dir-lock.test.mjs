@@ -248,3 +248,27 @@ test('a stamp that stays unreadable falls back to the directory we created', asy
   assert.equal(ownerToken(lockDir), lock.token, 'and it really does carry our stamp');
   lock.release();
 });
+
+// The stamp write used to be a plain overwrite. If our directory was replaced
+// by another caller's between our mkdir and our write, our token landed in
+// THEIR lock, our read-back found it, and both processes held the lock: they
+// had stamped and checked before we overwrote. The write is exclusive now, so
+// a stamp already in the directory means it is not ours.
+test('a directory replaced before our stamp write keeps its holder\'s stamp', async (t) => {
+  const dir = scratch(t, 'dir-lock-replaced-');
+  const lockDir = join(dir, 'career-ops-merge-tracker-replaced.lock');
+  const fault = interceptOwnerWrite(lockDir, (realWrite, path, data, options) => {
+    rmSync(lockDir, { recursive: true, force: true });
+    plantPeerLock(realWrite, lockDir); // the new holder has stamped already
+    return realWrite(path, data, options); // ...and only then does our write land
+  });
+  t.after(() => fault.restore());
+
+  await assert.rejects(
+    acquireTrackerLock(lockDir, { ...FAST, tracker: join(dir, 'applications.md') }),
+    (err) => err.code === 'LOCK_TIMEOUT',
+    'the caller must wait on the new holder, not take its lock over',
+  );
+  assert.ok(fault.fired, 'the injected replacement was reached');
+  assert.equal(ownerToken(lockDir), 'peer', "the new holder's stamp was not overwritten");
+});
