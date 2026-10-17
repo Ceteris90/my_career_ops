@@ -8,7 +8,7 @@
  * copies — and every writer excludes every other writer through the same lock.
  */
 
-import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, chmodSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -705,6 +705,47 @@ export function writeFileAtomic(path, content, { mode } = {}) {
     rmSync(tmpPath, { force: true });
     throw err;
   }
+}
+
+/**
+ * Append whole rows to a line-oriented user file (status-log.tsv, scan-history.tsv,
+ * scan-runs.tsv, portal-health.tsv), first closing an unterminated last row.
+ *
+ * These ledgers are plain text a user may open and save by hand. An editor that
+ * drops the final newline leaves the last row unterminated, and a bare
+ * appendFileSync then writes the next row straight onto it: the old row's last
+ * cell grows by the new row's first, and the new row never exists. Every reader
+ * skips a malformed line quietly, so nothing reports the loss. Starting the
+ * append on a fresh line is the rule agent-inbox.mjs and assessment-log.mjs
+ * already apply to their own files.
+ *
+ * Only the last byte is read. A missing or empty file needs no leading newline.
+ *
+ * @param {string} path - Ledger file.
+ * @param {string} text - One or more complete rows, each ending in a newline.
+ * @returns {void}
+ */
+export function appendLedgerRows(path, text) {
+  let lead = '';
+  let fd;
+  try {
+    fd = openSync(path, 'r');
+  } catch {
+    fd = null; // no file yet: the append below creates it
+  }
+  if (fd !== null) {
+    try {
+      const { size } = fstatSync(fd);
+      if (size > 0) {
+        const last = Buffer.alloc(1);
+        readSync(fd, last, 0, 1, size - 1);
+        if (last[0] !== 0x0a) lead = '\n';
+      }
+    } finally {
+      closeSync(fd);
+    }
+  }
+  appendFileSync(path, lead + text, 'utf-8');
 }
 
 /**

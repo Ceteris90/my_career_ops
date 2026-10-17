@@ -259,7 +259,9 @@ export function appendMiss(file, posting, result, note, date) {
   });
   if (logged) return false;
   const row = [date, posting.url, posting.company, posting.title, result.gap, result.fix, note].map(clean).join('\t');
-  appendFileSync(file, (existing ? '' : MISSES_HEADER + '\n') + row + '\n');
+  // An unterminated last row (a hand edit) is closed first, or the new row fuses onto it.
+  const lead = existing ? (existing.endsWith('\n') ? '' : '\n') : MISSES_HEADER + '\n';
+  appendFileSync(file, lead + row + '\n');
   return true;
 }
 

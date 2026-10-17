@@ -99,7 +99,7 @@
  *     the note column.
  */
 
-import { readFileSync, existsSync, appendFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname, resolve, sep, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -110,6 +110,7 @@ import { localToday } from './lib/local-today.mjs';
 import {
   resolveTrackerPath, writeFileAtomic, loadCanonicalStates, resolveCanonicalState,
   normalizeCompany, cell, CLI_EXIT, makeCliFailWith, makeCliFailUsage, acquireTrackerLockForCli, resolveWorkspaceRoot,
+  appendLedgerRows,
 } from './tracker-utils.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { claimActivity, releaseActivity, describeActiveOwner } from './session-activity.mjs';
@@ -779,7 +780,7 @@ try {
     // measures rather than just looking odd in the file.
     const eventDate = flags.on ?? localToday();
     try {
-      appendFileSync(logPath, `${target.num}\t${eventDate}\t${oldStatus}\t${newStatus}\t${flags.source ?? 'set-status'}\t\n`);
+      appendLedgerRows(logPath, `${target.num}\t${eventDate}\t${oldStatus}\t${newStatus}\t${flags.source ?? 'set-status'}\t\n`);
       statusLogged = true;
     } catch (err) {
       console.error(`⚠ status-log append failed (status change itself succeeded): ${err.message}`);
@@ -836,7 +837,7 @@ try {
         console.error(`⚠ ${error}`);
       } else {
         try {
-          appendFileSync(logPath, `${target.num}\t${eventDate}\t-\tApplied\tcorrection\t\n`);
+          appendLedgerRows(logPath, `${target.num}\t${eventDate}\t-\tApplied\tcorrection\t\n`);
           statusLogged = true;
           statusLogRepaired = true;
           statusLogRepair = { attempted: true, repaired: true };
