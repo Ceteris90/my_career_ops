@@ -118,7 +118,7 @@ if (host !== "127.0.0.1" && plan.grantsNoNewHost) {
   process.exit(1);
 }
 
-const bindHost = plan.bindHost;
+const bindHost = plan.hostFlagSupplied ? host : plan.bindHost;
 
 // Verify target port is not already occupied by an unrelated service
 const isAvailable = await checkPortAvailable(port, bindHost);
