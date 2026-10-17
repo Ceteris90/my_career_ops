@@ -73,6 +73,7 @@ function runDocumentedStep(payload) {
   const env = { ...process.env, CAREER_OPS_ROOT: dataRoot };
 
   const fill = (cmd, atsTemplate) => cmd
+    .replaceAll('[-{report}]', '') // standalone run: no report number
     .replaceAll('{candidate}', 'jane-smith')
     .replaceAll('{company}', 'acme')
     .replaceAll('/tmp/', `${dir}/`)
