@@ -38,6 +38,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getBash, rmSync, ROOT, toBashPath } from './helpers.mjs';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const TRACKER_HEADER = [
   '# Applications Tracker',
@@ -91,7 +92,6 @@ function splitEnv(extra = {}) {
 // the network.
 const FETCH_STUB = `
 import { writeFileSync } from 'node:fs';
-import { describeSpawn } from './helpers/describe-spawn.mjs';
 globalThis.fetch = async (url, init = {}) => {
   if (!String(url).endsWith('/chat/completions')) throw new Error('split-root fixture: unexpected fetch ' + url);
   writeFileSync(process.env.SPLIT_ROOT_CAPTURE, String(init.body));
