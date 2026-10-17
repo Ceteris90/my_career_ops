@@ -570,8 +570,9 @@ as `github.com/janesmith/tool` is malformed), `2` a GitHub query failed (nothing
 installed or not logged in (nothing written; with `--json`, stdout carries
 `{"status":"gh-unavailable","reason":...}`). Only an auth error from `gh`
 counts as not logged in: a login check that fails any other way (no stderr,
-`gh` crashed or was killed) is a `2` naming the exit status. On any non-zero
-exit `expand` continues with its zero-key behaviour.
+`gh` crashed or was killed) is a `2` naming the exit status. On exit `2` or
+`3`, `expand` continues with its zero-key behaviour; on exit `1` it asks the
+user to fix `candidate.github` (its Input steps 2–4).
 
 ---
 

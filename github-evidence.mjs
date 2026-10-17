@@ -8,8 +8,9 @@
  * people's projects — and never checks what cv.md already claims against what
  * GitHub records. This script fills that gap through the user's existing,
  * already-authenticated `gh` CLI. No new token, no new dependency: when `gh` is
- * missing or not logged in it says so and exits 3, and the mode carries on
- * with its zero-key behaviour unchanged.
+ * missing or not logged in it says so and exits 3 (2 when a GitHub query
+ * fails), and on either the mode carries on with its zero-key behaviour
+ * unchanged.
  *
  * Read-only and metadata only. It never reads source code and never writes
  * cv.md or article-digest.md; candidates go through the mode's existing
