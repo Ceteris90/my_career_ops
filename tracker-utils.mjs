@@ -56,6 +56,26 @@ export function rebuildRow(parts) {
 }
 
 /**
+ * Directory the tracker file lives in, with no symlink along the path resolved.
+ *
+ * `resolveTrackerPath()` realpaths the tracker, which is what the lock key wants
+ * but not what link resolution wants: when `data/applications.md` is a symlink to
+ * a file kept somewhere else, a `../reports/NNN.md` link inside it is read by
+ * GitHub and by the user's editor from the folder the link lives in
+ * (`<repo>/data`), not from the target's folder (#5374).
+ *
+ * The same split #3169 fixed for workspace roots in resolveWorkspaceRootFor():
+ * keep the canonical path for every other use, and consult this lexical directory
+ * only when deciding whether a report link resolves.
+ *
+ * @param {string} rootDir - The career-ops data root directory.
+ * @returns {string} Absolute directory holding the tracker file, symlinks unresolved.
+ */
+export function trackerLinkDirFor(rootDir) {
+  return dirname(resolve(rawTrackerPath(rootDir)));
+}
+
+/**
  * The ONE rule for "this Report cell links to a report that is not on disk",
  * shared by verify-pipeline.mjs (Check 3), merge-tracker.mjs (merge-time
  * warning, #4748) and fix-report-links.mjs (#4750) so the three can never
@@ -64,14 +84,18 @@ export function rebuildRow(parts) {
  * The link is the first markdown `](target)` in the cell. It resolves when it
  * names a REGULAR FILE from the tracker's own directory (markdown links are
  * relative to the file holding them, see #760) or, for legacy root-relative
- * links, from the data root. A directory is not a report. A cell with no link
- * (`—`, `N/A`, empty) is the documented "no report" convention and is never
- * broken.
+ * links, from the data root. When the tracker itself is a symlink, it also
+ * resolves from the directory that symlink lives in, because that is the folder
+ * an editor and GitHub resolve `../reports/` against (#5374). A directory is not
+ * a report. A cell with no link (`—`, `N/A`, empty) is the documented "no
+ * report" convention and is never broken.
  *
  * @param {string} reportCell - Raw Report cell value.
  * @param {string} trackerDir - Directory containing the tracker file.
  * @param {string} dataRoot - Data root (getCareerOpsRoot()).
- * @param {{onInspectionError?: Function, stat?: Function}} [options]
+ * @param {{onInspectionError?: Function, stat?: Function, trackerLinkDir?: string}} [options]
+ *   `trackerLinkDir` is trackerLinkDirFor(rootDir): the tracker's lexical
+ *   directory, tried last and only when the caller supplies it.
  * @returns {string|null} The unresolved link target, or null when there is no link,
  *   it resolves, or its targets could not be inspected conclusively.
  */
@@ -81,7 +105,9 @@ export function findDeadReportLink(reportCell, trackerDir, dataRoot, options = {
   const link = match[1];
   const inspect = options.stat ?? statSync;
   const errors = [];
-  const candidates = [...new Set([join(trackerDir, link), join(dataRoot, link)])];
+  const bases = [trackerDir, dataRoot];
+  if (options.trackerLinkDir) bases.push(options.trackerLinkDir);
+  const candidates = [...new Set(bases.map((base) => join(base, link)))];
   for (const path of candidates) {
     try {
       if (inspect(path).isFile()) return null;

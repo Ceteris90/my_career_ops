@@ -35,7 +35,7 @@ import { LEGACY_COLMAP, TSV_REQUIRED_FIELDS, detectColumns, isHeaderRow, resolve
 // The ATS vendor table shared with analyze-patterns.mjs and the scanners, so
 // the URL cell's label and the per-vendor analysis name a board identically.
 import { atsVendorOf } from './ats-vendor.mjs';
-import { resolveTrackerPath, resolveWorkspaceRoot, resolvePdfIndexPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, companiesMatchIgnoringCorporateForm, cell, loadCanonicalStates, findDeadReportLink, rebuildRow } from './tracker-utils.mjs';
+import { resolveTrackerPath, resolveWorkspaceRoot, resolvePdfIndexPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, companiesMatchIgnoringCorporateForm, cell, loadCanonicalStates, findDeadReportLink, trackerLinkDirFor, rebuildRow } from './tracker-utils.mjs';
 // Canonical posting-URL key and URL comparison, shared with the other tracker
 // scripts and scan.mjs so the definitions cannot drift apart.
 import { normalizeUrl, isAggregatorUrl, aggregatorPostingId, postingUrlRelation } from './url-key.mjs';
@@ -1772,19 +1772,23 @@ export async function mergeTracker(options = {}) {
       // later in verify-pipeline. Warn, but still merge: the application record is
       // the user's data and must not be lost or rewritten because a report is
       // missing. Cells with no link (—, N/A, empty) are the documented "no report"
-      // convention and are not flagged. Checked against the same two bases
+      // convention and are not flagged. Checked against the same bases
       // verify-pipeline's Check 3 uses (the tracker's own directory, then the data
-      // root for legacy root-relative links), so a link warned about here is
-      // exactly one verify-pipeline would flag later. resolveReportPath() is NOT
-      // used: it strips leading `../` and so can accept a link verify-pipeline
-      // rejects (e.g. `../../stray.md`).
+      // root for legacy root-relative links, then the tracker's lexical directory
+      // so a symlinked tracker resolves the way an editor does, #5374), so a link
+      // warned about here is exactly one verify-pipeline would flag later.
+      // resolveReportPath() is NOT used: it strips leading `../` and so can
+      // accept a link verify-pipeline rejects (e.g. `../../stray.md`).
       // The rule itself lives in tracker-utils.mjs (findDeadReportLink), shared with
       // verify-pipeline's Check 3 and fix-report-links.mjs: a directory (e.g. a link
       // to `reports/`) is not a report, so a regular file is required.
-      const deadLink = findDeadReportLink(addition.report, TRACKER_DIR, DATA_ROOT);
+      const trackerLinkDir = trackerLinkDirFor(DATA_ROOT);
+      const deadLink = findDeadReportLink(addition.report, TRACKER_DIR, DATA_ROOT, {
+        trackerLinkDir,
+      });
       if (deadLink !== null) {
         const linked = deadLink.trim();
-        console.warn(`⚠️  ${file}: ${addition.company} — ${addition.role}: report link "${linked}" does not resolve to a file (checked from ${TRACKER_DIR} and ${DATA_ROOT}) — the row is not rewritten; verify-pipeline will flag it until the report exists`);
+        console.warn(`⚠️  ${file}: ${addition.company} — ${addition.role}: report link "${linked}" does not resolve to a file (checked from ${TRACKER_DIR}, ${DATA_ROOT} and ${trackerLinkDir}) — the row is not rewritten; verify-pipeline will flag it until the report exists`);
         missingReports++;
       }
 

@@ -32,7 +32,7 @@ import {
   looksLikeScoreCell, isSeparatorRow, isHeaderRow, resolveColumns,
   normalizeTextKey, normalizeVia, unwrapReportUrlToken,
 } from './tracker-parse.mjs';
-import { CONTROL_CHARS, findDeadReportLink } from './tracker-utils.mjs';
+import { CONTROL_CHARS, findDeadReportLink, trackerLinkDirFor } from './tracker-utils.mjs';
 import { normalizeUrl } from './url-key.mjs';
 import { checkTrackerSync } from './tracker-sync-check.mjs';
 import { normalizeStatus } from './followup-cadence.mjs';
@@ -179,10 +179,12 @@ let brokenReports = 0;
 let uninspectableReports = 0;
 for (const e of entries) {
   // Shared rule (tracker-utils.mjs): first link, regular file, tracker dir then
-  // data root; a directory is not a report (#4748). Also used by merge-tracker
+  // data root, plus the tracker's lexical directory when it is a symlink; a
+  // directory is not a report (#4748, #5374). Also used by merge-tracker
   // and fix-report-links so all three agree on which rows are broken.
   let inspectionFailure = null;
   const link = findDeadReportLink(e.report, TRACKER_DIR, CAREER_OPS, {
+    trackerLinkDir: trackerLinkDirFor(CAREER_OPS),
     onInspectionError: (failure) => { inspectionFailure = failure; },
   });
   if (inspectionFailure) {
