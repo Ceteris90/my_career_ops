@@ -35,7 +35,7 @@ import { LEGACY_COLMAP, TSV_REQUIRED_FIELDS, detectColumns, isHeaderRow, resolve
 // The ATS vendor table shared with analyze-patterns.mjs and the scanners, so
 // the URL cell's label and the per-vendor analysis name a board identically.
 import { atsVendorOf } from './ats-vendor.mjs';
-import { resolveTrackerPath, resolveWorkspaceRoot, resolvePdfIndexPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, companiesMatchIgnoringCorporateForm, cell, loadCanonicalStates, findDeadReportLink, rebuildRow } from './tracker-utils.mjs';
+import { resolveTrackerPath, resolveWorkspaceRoot, resolvePdfIndexPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, companiesMatchIgnoringCorporateForm, cell, loadCanonicalStates, findDeadReportLink, rebuildRow, trackerLinkDirsFor } from './tracker-utils.mjs';
 // Canonical posting-URL key and URL comparison, shared with the other tracker
 // scripts and scan.mjs so the definitions cannot drift apart.
 import { normalizeUrl, isAggregatorUrl, aggregatorPostingId, postingUrlRelation } from './url-key.mjs';
@@ -307,6 +307,10 @@ function formatUrlCell(raw, previousCell = '') {
  * @param {object} options
  * @param {string} options.appsFile - Tracker to merge into (canonical path, see resolveTrackerPath).
  * @param {string} [options.dataRoot] - Data root; defaults to the tracker's workspace root.
+ * @param {string[]} [options.trackerLinkDirs] - Directories the missing-report
+ *   check resolves report links from; defaults to the tracker's own directory.
+ *   The CLI passes trackerLinkDirsFor(), which adds a symlinked tracker's own
+ *   folder (#5374).
  * @param {string} [options.additionsDir] - Pending TSVs; defaults to `<dataRoot>/batch/tracker-additions`.
  * @param {string} [options.batchStateFile] - batch-state.tsv; defaults to `<dataRoot>/batch/batch-state.tsv`.
  * @param {string} [options.pdfIndexFile] - PDF manifest; defaults to `<workspace>/data/pdf-index.tsv`.
@@ -331,6 +335,7 @@ export async function mergeTracker(options = {}) {
   const APPS_FILE = appsFile;
   const DATA_ROOT = options.dataRoot ?? resolveWorkspaceRoot(APPS_FILE);
   const TRACKER_DIR = dirname(APPS_FILE);
+  const TRACKER_LINK_DIRS = options.trackerLinkDirs ?? [TRACKER_DIR];
   const ADDITIONS_DIR = options.additionsDir ?? join(DATA_ROOT, 'batch/tracker-additions');
   const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
   const BATCH_STATE_FILE = options.batchStateFile ?? join(DATA_ROOT, 'batch/batch-state.tsv');
@@ -1781,10 +1786,10 @@ export async function mergeTracker(options = {}) {
       // The rule itself lives in tracker-utils.mjs (findDeadReportLink), shared with
       // verify-pipeline's Check 3 and fix-report-links.mjs: a directory (e.g. a link
       // to `reports/`) is not a report, so a regular file is required.
-      const deadLink = findDeadReportLink(addition.report, TRACKER_DIR, DATA_ROOT);
+      const deadLink = findDeadReportLink(addition.report, TRACKER_LINK_DIRS, DATA_ROOT);
       if (deadLink !== null) {
         const linked = deadLink.trim();
-        console.warn(`⚠️  ${file}: ${addition.company} — ${addition.role}: report link "${linked}" does not resolve to a file (checked from ${TRACKER_DIR} and ${DATA_ROOT}) — the row is not rewritten; verify-pipeline will flag it until the report exists`);
+        console.warn(`⚠️  ${file}: ${addition.company} — ${addition.role}: report link "${linked}" does not resolve to a file (checked from ${[...TRACKER_LINK_DIRS, DATA_ROOT].join(', ')}) — the row is not rewritten; verify-pipeline will flag it until the report exists`);
         missingReports++;
       }
 
@@ -2351,6 +2356,7 @@ if (isMainModule(import.meta.url)) {
   const code = await mergeTracker({
     appsFile,
     dataRoot: DATA_ROOT,
+    trackerLinkDirs: trackerLinkDirsFor(DATA_ROOT),
     // CAREER_OPS_ADDITIONS overrides the additions dir (used by tests, mirrors CAREER_OPS_TRACKER).
     additionsDir: process.env.CAREER_OPS_ADDITIONS || join(DATA_ROOT, 'batch/tracker-additions'),
     // CAREER_OPS_BATCH_STATE overrides the batch-state.tsv path (used by tests).

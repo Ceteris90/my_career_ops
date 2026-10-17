@@ -18,7 +18,7 @@ import { readFileSync, existsSync, mkdirSync } from "fs";
 import { dirname, resolve, join, relative, isAbsolute } from "path";
 import { fileURLToPath } from "url";
 import { parseArgs } from "util";
-import { assertFacts, printAdvisoryFacts } from "./verify-cv-facts.mjs";
+import { assertFacts, printFactWarnings } from "./verify-cv-facts.mjs";
 import { resolveTemplate } from "./cv-templates.mjs";
 import { isMainModule } from "./lib/is-main-module.mjs";
 import { PAGE_FORMATS, normalizePageFormat, pageFormatForCountry } from "./lib/page-format.mjs";
@@ -477,10 +477,7 @@ Usage:
     }
     if (factCheck.verdict === "warn") {
       console.error(`CV fact check warning: cover letter`);
-      for (const phrase of factCheck.warnings) {
-        console.error(`  - advisory phrase: ${phrase}`);
-      }
-      printAdvisoryFacts(factCheck.advisoryFacts, console.error);
+      printFactWarnings(factCheck, console.error);
     }
     // Imported only after fact validation so a failed gate does not load
     // Playwright or create a PDF artifact.

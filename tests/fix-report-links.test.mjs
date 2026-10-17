@@ -343,3 +343,31 @@ test('a symlinked CAREER_OPS_TRACKER: the backup sits beside the real file and h
   assert.equal(readFileSync(`${real}.bak`, 'utf-8'), original, 'backup beside the real file, original bytes');
   assert.equal(existsSync(`${link}.bak`), false, 'no backup beside the link');
 }));
+
+test('a symlinked tracker FILE: links resolve from the link\'s own folder, not only the target\'s (#5374)', withRoot((root) => {
+  // The tracker lives in another repo and data/applications.md links to it;
+  // reports/ sits next to the link, not next to the target. Editors resolve
+  // ../reports/ from data/, so both scripts must too.
+  const privateData = join(root, 'private', 'data');
+  mkdirSync(privateData, { recursive: true });
+  const real = join(privateData, 'applications.md');
+  report(root, '001-acme-widgets-2026-07-15.md');
+  const original = [...HEADER, row(1, 'Acme Widgets', DEAD), row(2, 'Bolt Gadgets', '[2](../reports/gone.md)'), ''].join('\n');
+  writeFileSync(real, original);
+  try { symlinkSync(real, trackerPath(root)); } catch (e) {
+    if (e.code === 'EPERM' || e.code === 'EACCES') return; // symlinks need privileges on some Windows setups
+    throw e;
+  }
+  assert.equal(existsSync(join(privateData, '..', 'reports')), false, 'no reports/ next to the target');
+
+  const r = run(root);
+  assert.equal(r.status, 0, r.out);
+  assert.doesNotMatch(r.out, /#1 Acme Widgets/, 'the live link is not rewritten');
+  assert.match(r.out, /#2 Bolt Gadgets/, 'a genuinely dead link still is');
+  assert.match(r.out, /1 dead report link\(s\) fixed/);
+  assert.match(readFileSync(real, 'utf-8'), /\[1\]\(\.\.\/reports\/001-acme-widgets-2026-07-15\.md\)/);
+
+  const v = runVerify(root);
+  assert.doesNotMatch(v.out, /Report not found/, v.out);
+  assert.match(v.out, /All report links valid/, v.out);
+}));

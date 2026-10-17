@@ -68,8 +68,12 @@ export function rebuildRow(parts) {
  * (`—`, `N/A`, empty) is the documented "no report" convention and is never
  * broken.
  *
+ * "The tracker's own directory" has two answers when the tracker is a symlinked
+ * file: the folder the link lives in (where an editor resolves it from) and the
+ * folder of its target. Pass both, from trackerLinkDirsFor() (#5374).
+ *
  * @param {string} reportCell - Raw Report cell value.
- * @param {string} trackerDir - Directory containing the tracker file.
+ * @param {string|string[]} trackerDir - Directory (or directories) containing the tracker file.
  * @param {string} dataRoot - Data root (getCareerOpsRoot()).
  * @param {{onInspectionError?: Function, stat?: Function}} [options]
  * @returns {string|null} The unresolved link target, or null when there is no link,
@@ -81,7 +85,8 @@ export function findDeadReportLink(reportCell, trackerDir, dataRoot, options = {
   const link = match[1];
   const inspect = options.stat ?? statSync;
   const errors = [];
-  const candidates = [...new Set([join(trackerDir, link), join(dataRoot, link)])];
+  const trackerDirs = Array.isArray(trackerDir) ? trackerDir : [trackerDir];
+  const candidates = [...new Set([...trackerDirs.map((dir) => join(dir, link)), join(dataRoot, link)])];
   for (const path of candidates) {
     try {
       if (inspect(path).isFile()) return null;
@@ -340,6 +345,25 @@ export function resolveWorkspaceRootFor(rootDir) {
 }
 
 /**
+ * Directories a tracker's relative links can be resolved from, for
+ * findDeadReportLink(). The realpathed tracker's folder comes first, then the
+ * folder of the tracker path as given, deduplicated.
+ *
+ * They differ when the tracker is a symlinked FILE, e.g. `data/applications.md`
+ * linked into a private repo while `reports/` stays in the checkout. Editors
+ * resolve `../reports/...` from the link's own folder, so checking only the
+ * target's folder flagged every live link as missing (#5374). Same raw-path idea
+ * as resolveWorkspaceRootFor (#3169); the lock key keeps the canonical path.
+ *
+ * @param {string} rootDir - The career-ops data root directory.
+ * @returns {string[]} One or two absolute directories.
+ */
+export function trackerLinkDirsFor(rootDir) {
+  const raw = resolve(rawTrackerPath(rootDir));
+  return [...new Set([dirname(canonicalizeTrackerPath(raw)), dirname(raw)])];
+}
+
+/**
  * Resolve the PDF manifest (`data/pdf-index.tsv`) for the workspace that owns
  * a tracker. `CAREER_OPS_PDF_INDEX` overrides it explicitly.
  *
@@ -369,7 +393,7 @@ export function resolvePdfIndexPath(trackerPath) {
  * @param {string} path - Raw tracker path from config, env, or the default.
  * @returns {string} Absolute canonical path when the file exists, else resolved path.
  */
-import { canonicalizeTrackerPath, rawTrackerPath } from './path-resolver.mjs';
+import { canonicalizeTrackerPath, rawTrackerPath, storedSpelling } from './path-resolver.mjs';
 export { canonicalizeTrackerPath };
 
 /**
@@ -467,15 +491,22 @@ export function pathIsInsideCanonical(childPath, parentDir) {
  * @returns {string} Safe lock directory path.
  */
 export function trackerLockDirFor(appsFile) {
-  const lockKey = createHash('sha256').update(appsFile).digest('hex').slice(0, 16);
-  const tmpRoot = realpathSync(tmpdir());
+  // The Go dashboard's copy of this function canonicalizes with EvalSymlinks,
+  // which on Windows writes every component as the filesystem stores it: the
+  // long name for an 8.3 alias such as a short %TEMP%, and the stored case. The
+  // lock name hashes the path string, so it is computed on that spelling too,
+  // or the two languages lock different directories (#4957).
+  const lockKey = createHash('sha256').update(storedSpelling(appsFile)).digest('hex').slice(0, 16);
+  const tmpRoot = storedSpelling(realpathSync(tmpdir()));
   const fallback = join(tmpRoot, `career-ops-merge-tracker-${lockKey}.lock`);
   const envValue = process.env.CAREER_OPS_TRACKER_LOCK;
   if (!envValue || !isAbsolute(envValue)) return fallback;
 
   const candidate = resolve(envValue);
   const parentDir = dirname(candidate);
-  const canonicalParent = existsSync(parentDir) ? realpathSync(parentDir) : resolve(parentDir);
+  // A parent that does not exist yet is taken as written, as Go does when
+  // EvalSymlinks fails.
+  const canonicalParent = existsSync(parentDir) ? storedSpelling(realpathSync(parentDir)) : resolve(parentDir);
   if (!pathIsInside(canonicalParent, tmpRoot)) return fallback;
   if (!basename(candidate).startsWith('career-ops-merge-tracker-')) return fallback;
   return candidate;
