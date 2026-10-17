@@ -275,5 +275,5 @@ Raporu teslim ettikten sonra:
 - **ASLA mülakat sorusu icat etme ve bunları kaynaklara atfetme.** Çıkarılan sorular `[inferred from JD]` olarak etiketlenmelidir.
 - **ASLA Glassdoor derecelendirmeleri veya istatistikleri uydurma.** Veri yoksa, olmadığını söyle.
 - **Her Şeyi Alıntıla.** Her soru, her istatistik, her iddia bir kaynak veya bir `[inferred]` etiketi alır.
-- İş tanımının (JD) dilinde üret (Varsayılan olarak EN).
+- JD hangi dilde olursa olsun, `language.output` dilinde üret (ayarlanmamışsa EN).
 - Doğrudan ol. Bu bir moral konuşması değil, çalışan bir hazırlık belgesidir.

@@ -5,7 +5,7 @@
 1. `cv.md` dosyasını tek gerçek kaynak (source of truth) olarak oku.
 2. Eğer JD (İş Tanımı) bağlamda (metin veya URL olarak) yoksa, kullanıcıdan JD'yi iste.
 3. JD içerisinden 15-20 anahtar kelime çıkar.
-4. JD dilini tespit et → CV dilini ayarla (varsayılan EN).
+4. CV dili için `language.output` kullan. JD dili ve `language.modes_dir` pazar terminolojisi ve değerlendirme bağlamı sağlar, ancak yapılandırılmış çıktı dilini asla geçersiz kılmaz.
 5. Şirket lokasyonunu tespit et → kağıt boyutu (paper format):
    - ABD/Kanada → `letter`
    - Dünyanın geri kalanı → `a4`
