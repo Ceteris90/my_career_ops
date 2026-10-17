@@ -92,6 +92,7 @@ try {
   const requested = [];
   const ctx = {
     transport: 'http',
+    sleep: async () => {},
     fetchJson: async () => ({}),
     fetchText: async (url, opts) => {
       requested.push({ url, redirect: opts?.redirect });
@@ -103,6 +104,7 @@ try {
   const plainRequested = [];
   const plainJobs = await bwi.fetch({ name: 'BWI GmbH' }, {
     transport: 'http',
+    sleep: async () => {},
     fetchJson: async () => ({}),
     fetchText: async url => {
       plainRequested.push(url);
@@ -119,6 +121,7 @@ try {
   const capOnlyRequested = [];
   await bwi.fetch({ name: 'BWI GmbH', bwi: { detailLimit: 10 } }, {
     transport: 'http',
+    sleep: async () => {},
     fetchJson: async () => ({}),
     fetchText: async url => {
       capOnlyRequested.push(url);
@@ -169,6 +172,7 @@ try {
   // Detail enrichment must never be fatal — a failing detail fetch keeps the job.
   const flaky = {
     transport: 'http',
+    sleep: async () => {},
     fetchJson: async () => ({}),
     fetchText: async url => {
       if (url.endsWith('/stellenangebote')) return LISTING;
@@ -180,6 +184,51 @@ try {
     pass('bwi.fetch() survives a failing detail page and keeps the slug-derived title');
   } else {
     fail(`bwi.fetch() with failing detail page: ${JSON.stringify(resilient)}`);
+  }
+
+  // ── Pacing: every detail request waits INTER_REQUEST_DELAY_MS first ──────
+  const pauses = [];
+  let pacedDetails = 0;
+  const pacedCtx = {
+    transport: 'http',
+    sleep: async ms => { pauses.push(ms); },
+    fetchJson: async () => ({}),
+    fetchText: async url => {
+      if (url.endsWith('/stellenangebote')) return LISTING;
+      pacedDetails++;
+      return DETAIL;
+    },
+  };
+  await bwi.fetch(DETAILS_ON, pacedCtx);
+  if (pacedDetails === 1 && pauses.length === 1 && pauses[0] === 300) {
+    pass('bwi.fetch() pauses 300 ms through ctx.sleep before each detail request');
+  } else {
+    fail(`bwi.fetch() pacing: ${pacedDetails} detail requests, pauses ${JSON.stringify(pauses)}`);
+  }
+
+  // ── Retry: a transient detail failure is retried via fetchTextWithRetry ──
+  let attempts = 0;
+  const transientCtx = {
+    transport: 'http',
+    sleep: async () => {},
+    fetchJson: async () => ({}),
+    fetchText: async url => {
+      if (url.endsWith('/stellenangebote')) return LISTING;
+      attempts++;
+      if (attempts === 1) {
+        const err = new Error('HTTP 503');
+        err.status = 503;
+        throw err;
+      }
+      return DETAIL;
+    },
+  };
+  const retried = await bwi.fetch(DETAILS_ON, transientCtx);
+  const retriedAnalyst = retried.find(j => j.url.includes('security-analyst'));
+  if (attempts === 2 && retriedAnalyst && retriedAnalyst.location === 'Köln') {
+    pass('bwi.fetch() retries a transient detail failure and still enriches the posting');
+  } else {
+    fail(`bwi.fetch() retry: ${attempts} attempts, analyst ${JSON.stringify(retriedAnalyst)}`);
   }
 
   // ── SSRF fetch guard: detail URLs come out of remote page content ────────
@@ -222,6 +271,7 @@ try {
   const spoofRequested = [];
   const spoofCtx = {
     transport: 'http',
+    sleep: async () => {},
     fetchJson: async () => ({}),
     fetchText: async url => {
       spoofRequested.push(url);
@@ -253,6 +303,7 @@ try {
   let bigDetails = 0;
   const bigCtx = {
     transport: 'http',
+    sleep: async () => {},
     fetchJson: async () => ({}),
     fetchText: async url => {
       if (url.endsWith('/stellenangebote')) return BIG_LISTING;
@@ -279,6 +330,7 @@ try {
   const probeRequested = [];
   const probeCtx = {
     transport: 'http',
+    sleep: async () => {},
     maxPages: 1,
     fetchJson: async () => ({}),
     fetchText: async url => {

@@ -3,6 +3,7 @@
 /** @typedef {import('./_types.js').Job} Job */
 
 import { decodeEntities } from './_html-entities.mjs';
+import { fetchTextWithRetry, sleep } from './_http.mjs';
 
 // BWI provider — scrapes the self-hosted careers site of BWI GmbH (the German
 // armed forces' IT service provider). No third-party ATS is involved, so none
@@ -66,6 +67,9 @@ const LD_JSON_RE = /<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/
 // Wide on purpose — see the note above. Picks enrichment candidates only.
 const RELEVANT = /security|secops|sicherheit|soc|cyber|forensik|forensic|incident|detection|siem|analyst|defense|abwehr/i;
 const DETAIL_BUDGET = 45;
+// Pause between detail requests (providers/ADDING_A_PROVIDER.md, "A
+// `fetchDetails` loop counts too"); same pacing as peoplesoft.mjs.
+const INTER_REQUEST_DELAY_MS = 300;
 const DETAIL_LIMIT_MAX = 100;
 
 /**
@@ -170,8 +174,13 @@ export default {
       if (spent >= detailLimit) break;
       if (!RELEVANT.test(job.url)) continue;
       spent++;
+      await sleep(INTER_REQUEST_DELAY_MS, ctx);
       try {
-        const posting = parseJobPosting(await ctx.fetchText(assertBwiUrl(job.url), { redirect: 'error' }));
+        // assertBwiUrl() runs before the request is built, so a hostile URL
+        // throws here and is never fetched or retried.
+        const posting = parseJobPosting(
+          await fetchTextWithRetry(ctx, assertBwiUrl(job.url), { redirect: 'error' }),
+        );
         if (!posting) continue;
         if (typeof posting.title === 'string' && posting.title.trim()) {
           job.title = decodeEntities(posting.title);
