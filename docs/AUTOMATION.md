@@ -104,18 +104,30 @@ replace the `StartCalendarInterval` block with an interval in seconds:
 
 ### Windows — Task Scheduler
 
-Automatic recurring scans from the Scheduled scans page are Windows-only. On
-macOS and Linux, saved scans run only through **Run now**.
-The web UI's Scheduled scans page supports multiple saved cadences. Install its
-local queue worker from the repository root with:
+The Scheduled scans page runs due scans automatically on Windows, macOS and Linux.
+The page supports multiple saved cadences. Install its 15-minute queue worker from
+the repository root:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File web/scripts/install-scan-schedule.ps1
 ```
 
-The task checks for due jobs every 15 minutes and runs at most one queued scan per
-check in the current user's interactive session; you must be logged in. Use `web/scripts/uninstall-scan-schedule.ps1` to remove it. For a single fixed
-daily scan without the web UI, use the lower-level Task Scheduler recipe below.
+```sh
+sh web/scripts/install-scan-schedule.sh
+```
+
+The Windows task, the macOS launchd agent, and the Linux cron line each check for
+due jobs every 15 minutes and run at most one queued scan per check. The Windows
+task and the macOS agent need a logged-in session. Run the installer as your own
+user, never as root. Remove the worker with
+`web/scripts/uninstall-scan-schedule.ps1` or
+`sh web/scripts/uninstall-scan-schedule.sh`.
+
+The macOS and Linux worker records each check in `data/scheduled-jobs.json.tick`;
+the page reads that file for "Last OS check". A custom
+`CAREER_OPS_SCHEDULED_JOBS_PATH` does not move the tick file, as on Windows. For a
+single fixed daily scan without the web UI, use the lower-level Task Scheduler
+recipe below.
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "node.exe" -Argument "scan.mjs" -WorkingDirectory "C:\path\to\career-ops"

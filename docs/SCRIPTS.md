@@ -35,6 +35,8 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run scan:full` | `scan-ats-full.mjs` | Reverse ATS discovery scanner |
 | `node web/scripts/scheduled-jobs-runner.mjs` | `web/scripts/scheduled-jobs-runner.mjs` | Run one due local scheduled scan (normally invoked by Task Scheduler) |
 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File web/scripts/install-scan-schedule.ps1` | `web/scripts/install-scan-schedule.ps1` | Install the 15-minute Windows scheduled-jobs queue worker for the logged-in current user |
+| `sh web/scripts/install-scan-schedule.sh` | `web/scripts/install-scan-schedule.sh` | Install the 15-minute scheduled-jobs queue worker on macOS (launchd) or Linux (cron) for the current user |
+| `sh web/scripts/uninstall-scan-schedule.sh` | `web/scripts/uninstall-scan-schedule.sh` | Remove the macOS launchd agent or Linux cron line for the scheduled-jobs queue worker |
 | `npm run company:funded` | `company-funded.mjs` | Review-first discovery of recently funded companies |
 | `npm run validate:portals` | `validate-portals.mjs` | Validate portals.yml shape before scanning |
 | `npm run tracker` | `tracker.mjs` | SQLite derived index over applications.md — sync/query/history/export |
