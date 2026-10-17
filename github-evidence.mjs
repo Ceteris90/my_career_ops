@@ -73,20 +73,25 @@ const MAX_TITLE_LENGTH = 200;
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,38})$/i;
 
 /**
- * `candidate.github` as a bare username. Accepts the shapes profile.yml carries
- * in practice: `janesmith`, `@janesmith`, `github.com/janesmith`,
- * `https://www.github.com/janesmith/`, a URL with a repo path after the name.
+ * `candidate.github` as a bare username, by the same steps as modes/expand.md
+ * Input step 3: strip surrounding whitespace, a leading `https://` or `http://`,
+ * a leading `www.`, a leading `github.com/` (case-insensitive), any trailing `/`,
+ * and a leading `@`. So `janesmith`, `@janesmith`, `github.com/janesmith` and
+ * `https://www.github.com/janesmith/` all give `janesmith`.
+ *
+ * As in Input step 4, what is left must be a username. A repo link such as
+ * `github.com/janesmith/tool` is rejected, never truncated to its owner.
  *
  * @param {unknown} raw
- * @returns {string|null} The username, or null when nothing valid is there.
+ * @returns {string|null} The username, or null when the value is not one.
  */
 export function normalizeGithubUser(raw) {
-  const text = String(raw ?? '').trim()
+  const user = String(raw ?? '').trim()
     .replace(/^https?:\/\//i, '')
     .replace(/^www\./i, '')
     .replace(/^github\.com\//i, '')
+    .replace(/\/+$/, '')
     .replace(/^@/, '');
-  const user = text.split(/[/?#]/)[0];
   return USERNAME_RE.test(user) ? user : null;
 }
 
@@ -458,7 +463,7 @@ export function runCli({
   }
   const user = normalizeGithubUser(profile?.candidate?.github);
   if (!user) {
-    stderr('github-evidence: config/profile.yml → candidate.github is missing or is not a GitHub username or profile URL.\n');
+    stderr('github-evidence: config/profile.yml → candidate.github is missing or is not a GitHub username or profile link (a repo link is not accepted).\n');
     return 1;
   }
   const { allowlist, invalid } = readPrivateAllowlist(profile);

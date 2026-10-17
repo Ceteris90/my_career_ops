@@ -33,10 +33,19 @@ const userCases = [
   ['@janesmith', 'janesmith'],
   ['github.com/janesmith', 'janesmith'],
   ['https://www.github.com/Jane-Smith/', 'Jane-Smith'],
-  ['https://github.com/janesmith/some-repo', 'janesmith'],
+  ['https://github.com/janesmith/', 'janesmith'],
+  ['www.github.com/JaneSmith', 'JaneSmith'],
+  ['  HTTP://GitHub.com/janesmith//  ', 'janesmith'],
+  ['a'.repeat(39), 'a'.repeat(39)],
+  // Input step 4 of modes/expand.md: a repo link is rejected, not cut to its owner.
+  ['https://github.com/janesmith/some-repo', null],
+  ['github.com/janesmith/tool', null],
+  ['github.com/janesmith?tab=repositories', null],
   ['', null],
   [undefined, null],
   ['-leading-hyphen', null],
+  ['github.com/-janesmith', null],
+  ['a'.repeat(40), null],
   ['https://gitlab.com/janesmith', null],
 ];
 for (const [raw, want] of userCases) {
@@ -379,6 +388,16 @@ const outputFiles = (root) => (existsSync(join(root, 'output')) ? readdirSync(jo
     const { runner, calls } = fakeGh();
     const res = cli(root, runner);
     check(res.code === 1 && calls.length === 0, 'no candidate.github -> exit 1 before any gh call');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+{
+  const root = sandbox({ github: 'github.com/jane-doe/some-repo' });
+  try {
+    const { runner, calls } = fakeGh();
+    const res = cli(root, runner);
+    check(res.code === 1 && calls.length === 0 && outputFiles(root).length === 0,
+      `candidate.github is a repo link -> exit 1 before any gh call, nothing written (got ${res.code})`);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 

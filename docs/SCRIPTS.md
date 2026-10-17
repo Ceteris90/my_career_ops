@@ -565,7 +565,8 @@ node github-evidence.mjs --json   # same, and prints the JSON on stdout
   say when a list may be incomplete.
 
 **Exit codes:** `0` report written, `1` usage error or `candidate.github`
-missing/malformed, `2` a GitHub query failed (nothing written), `3` `gh` not
+missing/malformed (normalized as in `expand`'s Input step, so a repo link such
+as `github.com/janesmith/tool` is malformed), `2` a GitHub query failed (nothing written), `3` `gh` not
 installed or not logged in (nothing written; with `--json`, stdout carries
 `{"status":"gh-unavailable","reason":...}`). Only an auth error from `gh`
 counts as not logged in: a login check that fails any other way (no stderr,
