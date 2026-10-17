@@ -32,7 +32,7 @@ The server binds IPv4 loopback, so reach it as `localhost` or `127.0.0.1`;
 - **Explore** — the free reverse-ATS scan with an honest partial-dataset
   indicator, plus AI-assisted discovery (bring your own CLI/keys, including Grok Build CLI).
 - **Scheduled scans** — save local zero-token or full-dataset scans and run due
-  jobs through an optional Windows Task Scheduler worker.
+  jobs through an optional worker on Windows, macOS or Linux.
 - **Apply** — assisted form prefill with a hard rule inherited from the core:
   **it never submits for you** — you always press the button.
 - **Today / Analytics / CV / Config** — action queue, funnel + pipeline Sankey,
