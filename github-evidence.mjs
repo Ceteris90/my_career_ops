@@ -39,7 +39,8 @@
  * Exit codes:
  *   0  report written
  *   1  usage or configuration error (no candidate.github, malformed username)
- *   2  a GitHub query failed part-way (network, rate limit); nothing written
+ *   2  a GitHub query failed (network, rate limit, gh crashed or was killed);
+ *      nothing written
  *   3  gh is not installed or not authenticated; nothing written
  */
 
@@ -267,12 +268,13 @@ export function buildEvidence({
  * gh or reach the network.
  *
  * @param {string[]} args
- * @returns {{status: number|null, stdout: string, stderr: string, notFound: boolean}}
+ * @returns {{status: number|null, signal: string|null, stdout: string, stderr: string, notFound: boolean}}
  */
 export function defaultGhRunner(args) {
   const res = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   return {
     status: res.status,
+    signal: res.signal ?? null,
     stdout: res.stdout || '',
     stderr: res.stderr || '',
     notFound: res.error?.code === 'ENOENT',
@@ -283,6 +285,9 @@ class GhQueryError extends Error {}
 
 const AUTH_FAILURE = /auth login|not logged|bad credentials|HTTP 401|authentication/i;
 const firstLine = (s) => String(s ?? '').trim().split('\n')[0];
+/** Why a gh call failed: its first stderr line, else how the process ended. */
+const failureDetail = (res) => firstLine(res.stderr)
+  || (res.signal ? `killed by ${res.signal}` : `exit ${res.status}`);
 
 /**
  * Whether gh can be used: installed, and its active account can call the API.
@@ -291,9 +296,14 @@ const firstLine = (s) => String(s ?? '').trim().split('\n')[0];
  * when ANY stored account on the host is stale, even while the active one works,
  * which would push a working setup back to zero-key for no reason.
  *
+ * Only an stderr that reads as an auth failure means "not logged in". Any other
+ * failure (empty stderr, a crash, a signal kill) is a GhQueryError carrying the
+ * exit status, so the user is never sent to `gh auth login` for something auth
+ * did not cause.
+ *
  * @param {Function} runGh
  * @returns {{ok: true, login: string} | {ok: false, reason: 'not-installed'|'not-authenticated', detail: string}}
- * @throws {GhQueryError} When gh is logged in but the API could not be reached.
+ * @throws {GhQueryError} When the login probe fails for a reason other than auth.
  */
 export function checkGh(runGh) {
   const version = runGh(['--version']);
@@ -302,16 +312,16 @@ export function checkGh(runGh) {
   }
   const viewer = runGh(['api', 'user', '--jq', '.login']);
   if (viewer.status === 0) return { ok: true, login: String(viewer.stdout).trim() };
-  if (AUTH_FAILURE.test(viewer.stderr) || !String(viewer.stderr).trim()) {
+  if (AUTH_FAILURE.test(viewer.stderr)) {
     return { ok: false, reason: 'not-authenticated', detail: 'gh is installed but not logged in to github.com (run `gh auth login`)' };
   }
-  throw new GhQueryError(`gh api user failed: ${firstLine(viewer.stderr)}`);
+  throw new GhQueryError(`gh api user failed: ${failureDetail(viewer)}`);
 }
 
 function ghJson(runGh, args) {
   const res = runGh(args);
   if (res.status !== 0) {
-    throw new GhQueryError(`gh ${args.slice(0, 2).join(' ')} failed: ${firstLine(res.stderr) || `exit ${res.status}`}`);
+    throw new GhQueryError(`gh ${args.slice(0, 2).join(' ')} failed: ${failureDetail(res)}`);
   }
   try {
     return JSON.parse(res.stdout);

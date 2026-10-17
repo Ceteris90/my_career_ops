@@ -567,8 +567,10 @@ node github-evidence.mjs --json   # same, and prints the JSON on stdout
 **Exit codes:** `0` report written, `1` usage error or `candidate.github`
 missing/malformed, `2` a GitHub query failed (nothing written), `3` `gh` not
 installed or not logged in (nothing written; with `--json`, stdout carries
-`{"status":"gh-unavailable","reason":...}`). On any non-zero exit `expand`
-continues with its zero-key behaviour.
+`{"status":"gh-unavailable","reason":...}`). Only an auth error from `gh`
+counts as not logged in: a login check that fails any other way (no stderr,
+`gh` crashed or was killed) is a `2` naming the exit status. On any non-zero
+exit `expand` continues with its zero-key behaviour.
 
 ---
 

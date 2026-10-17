@@ -264,6 +264,31 @@ check(checkGh(loggedOutGh).reason === 'not-authenticated', 'checkGh: logged out 
   check(threw, 'checkGh: a network failure is a query failure, not "logged out"');
 }
 
+/** The probe's outcome: what checkGh returned, or the error it threw. */
+function probe(apiResult) {
+  try {
+    return { result: checkGh((args) => (args[0] === 'api' ? apiResult : ok('gh version 2'))) };
+  } catch (error) {
+    return { error };
+  }
+}
+{
+  const emptyStderr = probe({ status: 1, stdout: '', stderr: '', notFound: false });
+  check(emptyStderr.error?.constructor.name === 'GhQueryError' && /exit 1\b/.test(emptyStderr.error.message),
+    `checkGh: non-zero exit with empty stderr -> GhQueryError naming the exit status, not "logged out" (got ${emptyStderr.error?.message ?? JSON.stringify(emptyStderr.result)})`);
+
+  const killed = probe({ status: null, signal: 'SIGKILL', stdout: '', stderr: '', notFound: false });
+  check(killed.error?.constructor.name === 'GhQueryError' && /SIGKILL/.test(killed.error.message),
+    `checkGh: gh killed by a signal (status null) -> GhQueryError naming the signal (got ${killed.error?.message ?? JSON.stringify(killed.result)})`);
+
+  const noSignal = probe({ status: null, stdout: '', stderr: '', notFound: false });
+  check(noSignal.error?.constructor.name === 'GhQueryError' && /exit null/.test(noSignal.error.message),
+    'checkGh: status null with no signal recorded -> GhQueryError, not "logged out"');
+
+  const badToken = probe({ status: 1, stdout: '', stderr: 'gh: Bad credentials (HTTP 401)\n', notFound: false });
+  check(badToken.result?.reason === 'not-authenticated', 'checkGh: an auth-failure stderr (HTTP 401) is still not-authenticated');
+}
+
 /** A fake gh serving the fixture. Records every call. */
 function fakeGh(f = fixture(), { failSearch = false, failRepo = [] } = {}) {
   const calls = [];
@@ -363,6 +388,13 @@ const outputFiles = (root) => (existsSync(join(root, 'output')) ? readdirSync(jo
     const offline = (args) => (args[0] === 'api' ? { status: 1, stdout: '', stderr: 'error connecting to api.github.com', notFound: false } : ok('gh version 2'));
     const res = cli(root, offline);
     check(res.code === EXIT_GH_QUERY_FAILED && outputFiles(root).length === 0, 'gh logged in but offline -> exit 2, nothing written');
+
+    const silentCrash = (args) => (args[0] === 'api' ? { status: 1, stdout: '', stderr: '', notFound: false } : ok('gh version 2'));
+    const crash = cli(root, silentCrash);
+    const crashStatus = JSON.parse(crash.out);
+    check(crash.code === EXIT_GH_QUERY_FAILED && crashStatus.status === 'gh-query-failed' && /exit 1\b/.test(crashStatus.detail),
+      `gh api user exits non-zero with empty stderr -> exit 2 gh-query-failed with the exit status (got ${crash.code}: ${crash.out.trim()})`);
+    check(!/auth login/.test(crash.err) && outputFiles(root).length === 0, 'empty-stderr failure -> no `gh auth login` advice, nothing written');
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
