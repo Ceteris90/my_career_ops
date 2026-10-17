@@ -154,9 +154,12 @@ The task runs in the current user's interactive session, so you must be logged i
 
 #### Last OS check
 
-The macOS and Linux worker records each check in `data/scheduled-jobs.json.tick`;
-the page reads that file for "Last OS check". A custom
-`CAREER_OPS_SCHEDULED_JOBS_PATH` does not move the tick file, as on Windows.
+The macOS and Linux worker records each check in `<store>.tick`, next to the
+scheduled jobs store (`data/scheduled-jobs.json.tick` by default); the page reads
+that file for "Last OS check". The installer bakes `CAREER_OPS_ROOT`,
+`CAREER_OPS_DATA_DIR` and `CAREER_OPS_SCHEDULED_JOBS_PATH` into the job when they
+are set, so the worker, the tick file and the page all use the same store. Set them
+before you run the installer, and run it again if you change them.
 
 After any of these, new postings land in `data/pipeline.md` under `## Pending` on
 each run. Next you decide which are worth your attention — cheaply.

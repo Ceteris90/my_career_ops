@@ -30,16 +30,41 @@ if [ -z "$NODE" ]; then
   exit 1
 fi
 
+# Keep the runner on the same store as the web app: schedulers start with a minimal
+# environment, so bake in the path overrides that are set now.
+ENV_PREFIX=""
+for VAR in CAREER_OPS_ROOT CAREER_OPS_DATA_DIR CAREER_OPS_SCHEDULED_JOBS_PATH; do
+  eval "VALUE=\${$VAR:-}"
+  [ -n "$VALUE" ] || continue
+  case "$VALUE" in
+    *"'"*) echo "$VAR must not contain a single quote" >&2; exit 1 ;;
+  esac
+  ENV_PREFIX="$ENV_PREFIX$VAR='$VALUE' "
+done
+
+# The web app and the runner share this store path; the tick file and log live beside it.
+STORE=$("$NODE" --input-type=module -e '
+import { pathToFileURL } from "node:url";
+const root = process.argv[1];
+const { getCareerOpsRoot } = await import(pathToFileURL(root + "/path-resolver.mjs"));
+const { scheduledStorePath } = await import(pathToFileURL(root + "/web/src/lib/scheduled-runner-path.mjs"));
+console.log(scheduledStorePath(getCareerOpsRoot()));
+' "$ROOT")
+if [ -z "$STORE" ]; then
+  echo "could not resolve the scheduled jobs store path" >&2
+  exit 1
+fi
+
 # The command quotes paths with single quotes, so a quote in a path cannot be escaped.
-case "$ROOT$NODE" in
+case "$ROOT$NODE$STORE" in
   *"'"*) echo "paths containing a single quote are not supported" >&2; exit 1 ;;
 esac
 
-mkdir -p "$ROOT/data"
+mkdir -p "$(dirname "$STORE")"
 
 # The tick file records the last check time for the status banner.
-TICK="touch 'data/scheduled-jobs.json.tick'"
-RUN="'$NODE' 'web/scripts/scheduled-jobs-runner.mjs' >/dev/null 2>>'data/scheduled-jobs.log'"
+TICK="touch '$STORE.tick'"
+RUN="$ENV_PREFIX'$NODE' 'web/scripts/scheduled-jobs-runner.mjs' >/dev/null 2>>'$(dirname "$STORE")/scheduled-jobs.log'"
 CMD="cd '$ROOT' && $TICK && $RUN"
 
 xml_escape() {
@@ -75,7 +100,16 @@ if [ "$OS" = Darwin ]; then
 </plist>
 EOF
   launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-  if ! launchctl bootstrap "gui/$(id -u)" "$PLIST"; then
+  # bootout can return before launchd drops the old job, so retry bootstrap briefly.
+  BOOTSTRAPPED=0
+  for ATTEMPT in 1 2 3 4 5; do
+    if launchctl bootstrap "gui/$(id -u)" "$PLIST"; then
+      BOOTSTRAPPED=1
+      break
+    fi
+    [ "$ATTEMPT" -lt 5 ] && sleep 1
+  done
+  if [ "$BOOTSTRAPPED" -ne 1 ]; then
     echo "launchctl bootstrap failed; a logged-in GUI session is required" >&2
     exit 1
   fi

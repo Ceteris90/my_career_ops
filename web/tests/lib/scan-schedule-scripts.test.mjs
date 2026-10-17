@@ -43,10 +43,13 @@ function sandbox() {
   const launchctlLog = path.join(dir, "launchctl.log");
   const plist = path.join(home, "Library", "LaunchAgents", `${LABEL}.plist`);
   const run = (script, env = {}) => {
+    const base = { ...process.env };
+    // Keep the host's path overrides out of the install under test.
+    for (const key of ["CAREER_OPS_ROOT", "CAREER_OPS_DATA_DIR", "CAREER_OPS_SCHEDULED_JOBS_PATH"]) delete base[key];
     const result = spawnSync("sh", [script], {
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...base,
         HOME: home,
         PATH: `${bin}${path.delimiter}${process.env.PATH}`,
         FAKE_CRON: cron,
@@ -64,12 +67,22 @@ function sandbox() {
 
 function withSandbox(fn) {
   const sb = sandbox();
-  const tick = path.join(repo, "data", "scheduled-jobs.json.tick");
+  const dataDir = path.join(repo, "data");
+  const tick = path.join(dataDir, "scheduled-jobs.json.tick");
+  const dataExisted = fs.existsSync(dataDir);
   const tickExisted = fs.existsSync(tick);
   try {
     return fn(sb);
   } finally {
     if (!tickExisted) fs.rmSync(tick, { force: true });
+    // Leave a pre-existing data/ alone; remove the one the installer created if still empty.
+    if (!dataExisted) {
+      try {
+        fs.rmdirSync(dataDir);
+      } catch {
+        // Not empty: something else wrote there, so keep it.
+      }
+    }
     sb.cleanup();
   }
 }
@@ -83,7 +96,8 @@ test("linux install writes one marked cron line", { skip }, () => withSandbox((s
   assert.equal(lines.length, 1);
   assert.match(lines[0], new RegExp(`^\\*/15 \\* \\* \\* \\* cd '${escapeRe(repo)}' && .* ${escapeRe(MARKER)}$`));
   assert.ok(lines[0].includes("scheduled-jobs-runner.mjs"));
-  assert.ok(lines[0].includes("touch 'data/scheduled-jobs.json.tick'"));
+  assert.ok(lines[0].includes(`touch '${path.join(repo, "data", "scheduled-jobs.json.tick")}'`), lines[0]);
+  assert.ok(!lines[0].includes("CAREER_OPS_"), lines[0]);
 }));
 
 test("linux install is idempotent", { skip }, () => withSandbox((sb) => {
@@ -99,6 +113,25 @@ test("linux install keeps unrelated cron lines", { skip }, () => withSandbox((sb
   assert.equal(lines.length, 2);
   assert.equal(lines[0], "0 8 * * * echo hi");
   assert.ok(lines[1].endsWith(MARKER));
+}));
+
+test("linux install bakes path overrides into the command and moves the tick", { skip }, () => withSandbox((sb) => {
+  const store = path.join(sb.dir, "custom", "jobs.json");
+  const result = sb.run(installScript, { CAREER_OPS_SCHEDULED_JOBS_PATH: store, CAREER_OPS_DATA_DIR: sb.dir });
+  assert.equal(result.status, 0, result.out);
+  const [line] = sb.cronLines();
+  assert.ok(line.includes(`touch '${store}.tick'`), line);
+  assert.ok(line.includes(`CAREER_OPS_SCHEDULED_JOBS_PATH='${store}'`), line);
+  assert.ok(line.includes(`CAREER_OPS_DATA_DIR='${sb.dir}'`), line);
+  assert.ok(line.includes(`2>>'${path.dirname(store)}/scheduled-jobs.log'`), line);
+  assert.ok(fs.statSync(path.dirname(store)).isDirectory());
+}));
+
+test("install rejects a path override containing a single quote", { skip }, () => withSandbox((sb) => {
+  const result = sb.run(installScript, { CAREER_OPS_DATA_DIR: "/tmp/it's" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /single quote/);
+  assert.ok(!fs.existsSync(sb.cron));
 }));
 
 test("linux uninstall removes only the marked line", { skip }, () => withSandbox((sb) => {
