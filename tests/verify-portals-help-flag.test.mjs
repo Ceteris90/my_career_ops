@@ -74,7 +74,7 @@ function runVerify(...args) {
 
 test('--help prints usage and exits 0, without reaching the portals check', () => {
   const r = runVerify('--help');
-  assert.equal(r.status, 0, `expected exit 0, got ${r.status}: ${r.all}`);
+  assert.equal(r.status, 0, describeSpawn(r, `expected exit 0, got ${r.status}`));
   assert.match(r.stdout, /Usage:/);
   assert.match(r.stdout, /node verify-portals\.mjs/);
   assert.doesNotMatch(r.all, NOTHING_TO_VERIFY, '--help must exit before any sweep logic runs');
@@ -82,7 +82,7 @@ test('--help prints usage and exits 0, without reaching the portals check', () =
 
 test('-h prints usage and exits 0, without reaching the portals check', () => {
   const r = runVerify('-h');
-  assert.equal(r.status, 0, `expected exit 0, got ${r.status}: ${r.all}`);
+  assert.equal(r.status, 0, describeSpawn(r, `expected exit 0, got ${r.status}`));
   assert.match(r.stdout, /Usage:/);
   assert.doesNotMatch(r.all, NOTHING_TO_VERIFY);
 });

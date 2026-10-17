@@ -28,7 +28,7 @@ function doctor(dir, args = ['--json']) {
 
 function state(dir, args) {
   const result = doctor(dir, args);
-  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.status, 0, describeSpawn(result));
   assert.equal(result.stderr, '');
   return JSON.parse(result.stdout);
 }
