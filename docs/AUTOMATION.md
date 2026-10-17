@@ -102,7 +102,7 @@ replace the `StartCalendarInterval` block with an interval in seconds:
   <integer>259200</integer>
 ```
 
-### Windows — Task Scheduler
+### Scheduled scans page — Windows, macOS, Linux
 
 The Scheduled scans page runs due scans automatically on Windows, macOS and Linux.
 The page supports multiple saved cadences. Install its 15-minute queue worker from
@@ -126,8 +126,12 @@ user, never as root. Remove the worker with
 The macOS and Linux worker records each check in `data/scheduled-jobs.json.tick`;
 the page reads that file for "Last OS check". A custom
 `CAREER_OPS_SCHEDULED_JOBS_PATH` does not move the tick file, as on Windows. For a
-single fixed daily scan without the web UI, use the lower-level Task Scheduler
-recipe below.
+single fixed daily scan without the web UI, use the lower-level recipes above and
+below.
+
+### Windows — Task Scheduler
+
+A fixed daily scan without the web UI:
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "node.exe" -Argument "scan.mjs" -WorkingDirectory "C:\path\to\career-ops"
