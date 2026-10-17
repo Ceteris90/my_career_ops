@@ -169,17 +169,34 @@ export default {
     const probing = Number(ctx?.maxPages) > 0;
     if (!fetchDetails || probing) return jobs;
 
-    let spent = 0;
+    // detailLimit caps HTTP requests, retries included: fetchTextWithRetry may
+    // make several attempts per posting, so the budget is counted at the
+    // transport, not per candidate. Once it is spent the next attempt fails
+    // with a non-retryable error and the loop stops.
+    let requests = 0;
+    const detailCtx = {
+      ...ctx,
+      fetchText: async (url, opts) => {
+        if (requests >= detailLimit) {
+          const err = new Error('bwi: detail request budget exhausted');
+          // @ts-ignore — a 4xx status marks the error non-retryable in _http.mjs
+          err.status = 400;
+          throw err;
+        }
+        requests++;
+        return ctx.fetchText(url, opts);
+      },
+    };
+
     for (const job of jobs) {
-      if (spent >= detailLimit) break;
+      if (requests >= detailLimit) break;
       if (!RELEVANT.test(job.url)) continue;
-      spent++;
       await sleep(INTER_REQUEST_DELAY_MS, ctx);
       try {
         // assertBwiUrl() runs before the request is built, so a hostile URL
         // throws here and is never fetched or retried.
         const posting = parseJobPosting(
-          await fetchTextWithRetry(ctx, assertBwiUrl(job.url), { redirect: 'error' }),
+          await fetchTextWithRetry(detailCtx, assertBwiUrl(job.url), { redirect: 'error' }),
         );
         if (!posting) continue;
         if (typeof posting.title === 'string' && posting.title.trim()) {

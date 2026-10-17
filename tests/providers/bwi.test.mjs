@@ -326,6 +326,28 @@ try {
     fail(`bwi.fetch() detailLimit 3: ${cappedJobs.length} jobs, ${bigDetails} detail requests`);
   }
 
+  // Retries count against the budget: with every detail page answering 503,
+  // detailLimit 3 must mean 3 HTTP requests in total, not 3 postings x 3 attempts.
+  let failingDetails = 0;
+  const failingCtx = {
+    transport: 'http',
+    sleep: async () => {},
+    fetchJson: async () => ({}),
+    fetchText: async url => {
+      if (url.endsWith('/stellenangebote')) return BIG_LISTING;
+      failingDetails++;
+      const err = new Error('HTTP 503');
+      err.status = 503;
+      throw err;
+    },
+  };
+  const failingJobs = await bwi.fetch({ name: 'BWI GmbH', bwi: { fetchDetails: true, detailLimit: 3 } }, failingCtx);
+  if (failingJobs.length === 46 && failingDetails === 3) {
+    pass('bwi.fetch() counts retries against bwi.detailLimit (3 requests, not 3 postings x retries)');
+  } else {
+    fail(`bwi.fetch() budget under retries: ${failingJobs.length} jobs, ${failingDetails} detail requests`);
+  }
+
   // ── Health probe: ctx.maxPages means "listing only" ─────────────────────
   const probeRequested = [];
   const probeCtx = {
