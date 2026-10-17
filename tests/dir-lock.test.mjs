@@ -191,3 +191,60 @@ test('a timeout without a caller factory names the lock and its holder', async (
   await assert.rejects(acquireDirLock(lockDir, FAST), (err) => err instanceof DirLockTimeoutError
     && err.code === 'LOCK_TIMEOUT' && err.lockDir === lockDir);
 });
+
+/**
+ * Make fs.readFileSync fail with EPERM for the lock's owner.json, `times`
+ * times (Infinity for every read) — the momentary sharing violation Windows
+ * answers while waiters churn a live holder's directory.
+ */
+function failOwnerReads(lockDir, times) {
+  const realRead = fs.readFileSync;
+  let failed = 0;
+  fs.readFileSync = (path, options) => {
+    if (String(path) === join(lockDir, 'owner.json') && failed < times) {
+      failed++;
+      throw errno('EPERM', path);
+    }
+    return realRead(path, options);
+  };
+  syncBuiltinESMExports();
+  return {
+    get failed() { return failed; },
+    restore() {
+      fs.readFileSync = realRead;
+      syncBuiltinESMExports();
+    },
+  };
+}
+
+// The stamp read-back treated ANY unreadable stamp as a lost lock. A failed
+// read is not an absent stamp: the caller went back to wait on its own live
+// directory, timed out after the whole budget (60s for the tracker), and left
+// an orphan carrying its live pid that blocked every other writer.
+test('a stamp that is unreadable for a moment is re-read, not taken as lost', async (t) => {
+  const dir = scratch(t, 'dir-lock-readback-eperm-');
+  const lockDir = join(dir, 'career-ops-merge-tracker-eperm.lock');
+  const reads = failOwnerReads(lockDir, 2);
+  t.after(() => reads.restore());
+
+  const lock = await acquireTrackerLock(lockDir, { ...FAST, tracker: join(dir, 'applications.md') });
+  assert.equal(reads.failed, 2, 'the read-back met the injected failures');
+  assert.equal(lock.attempts, 1, 'acquired on the first attempt, not after competing with itself');
+  reads.restore();
+  lock.release();
+  assert.equal(existsSync(lockDir), false, 'and the lock it holds releases normally');
+});
+
+test('a stamp that stays unreadable falls back to the directory we created', async (t) => {
+  const dir = scratch(t, 'dir-lock-readback-stuck-');
+  const lockDir = join(dir, 'career-ops-merge-tracker-stuck.lock');
+  const reads = failOwnerReads(lockDir, Infinity);
+  t.after(() => reads.restore());
+
+  const lock = await acquireTrackerLock(lockDir, { ...FAST, tracker: join(dir, 'applications.md') });
+  assert.ok(reads.failed > 1, 'the read-back retried before falling back');
+  assert.equal(lock.attempts, 1, 'the same directory, untouched, is still ours');
+  reads.restore();
+  assert.equal(ownerToken(lockDir), lock.token, 'and it really does carry our stamp');
+  lock.release();
+});
