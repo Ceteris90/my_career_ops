@@ -38,6 +38,8 @@ Process multiple job offers in parallel via headless workers. Each worker runs t
 | `--limit N` | `0` | Max number of offers to process in this run (0 = no limit) |
 | `--max-retries N` | `2` | Max retry attempts per offer before giving up |
 | `--worker-timeout N` | `1800` | Stop a worker that runs longer than N seconds and mark the offer failed (0 = no limit) |
+| `--mode NAME` | `full` | Evaluation mode: `full` (multi-step A-G evaluation) or `match` (condensed single-pass CV match) |
+| `--single-pass` | off | Alias for `--mode match` |
 | `--rate-limit-sleep N` | `300` | Maximum adaptive retry delay in seconds (0–2147483647); use `0` to pause the batch immediately |
 
 ### Adaptive rate-limit retries (Claude only)
@@ -69,7 +71,8 @@ the `rate_limited` state note; the TSV schema is unchanged.
 ```
 batch/
   batch-runner.sh          # Orchestrator script
-  batch-prompt.md          # Prompt template sent to each worker
+  batch-prompt.md          # Full multi-step prompt template for workers
+  batch-prompt-match.md    # Condensed single-pass match prompt template
   batch-input.tsv          # Input offers (you create this)
   batch-state.tsv          # Processing state (auto-managed, resumable)
   logs/                    # Per-offer worker logs ({report_num}-{id}.log)

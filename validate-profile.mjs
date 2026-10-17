@@ -60,6 +60,8 @@ export const DEFAULT_PROFILE_PATH = getProfilePath();
 export const UNDOCUMENTED_KEYS = {
   rejection_latency: 'rejection-latency.mjs (courtesy_days)',
   table_freshness: 'check-table-freshness.mjs (max_age_months)',
+  'years-cap': 'batch/batch-runner.sh and batch-evaluate-gemini.mjs (#5297)',
+  years_cap: 'batch/batch-runner.sh and batch-evaluate-gemini.mjs (#5297)',
 };
 
 /**

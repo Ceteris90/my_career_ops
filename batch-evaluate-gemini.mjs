@@ -85,6 +85,36 @@ function readSpendTier() {
   return 'standard';
 }
 
+/**
+ * Read 'years-cap' setting from config/profile.yml (#5297).
+ * Allows candidates to cap evaluated experience years in single-pass match mode.
+ */
+export function readYearsCap() {
+  try {
+    if (existsSync(PATHS.profileYml)) {
+      const content = readFileSync(PATHS.profileYml, 'utf-8');
+      const match = content.match(/^[ \t]*(?:years[-_]cap)[ \t]*:[ \t]*(.+)$/m);
+      if (match) {
+        const val = match[1].trim().replace(/^['"](.*)['"]$/, '$1');
+        const num = parseInt(val, 10);
+        return isNaN(num) ? val : num;
+      }
+    }
+  } catch (err) {}
+  return null;
+}
+
+export function parseCliMode(args = process.argv.slice(2)) {
+  if (args.includes('--single-pass')) return 'match';
+  const modeArg = args.find(a => a.startsWith('--mode=') || a === '--mode');
+  if (modeArg) {
+    if (modeArg.startsWith('--mode=')) return modeArg.split('=')[1].trim();
+    const idx = args.indexOf('--mode');
+    if (idx !== -1 && args[idx + 1]) return args[idx + 1].trim();
+  }
+  return 'full';
+}
+
 function spendTierToModel(tier) {
   switch (tier) {
     case 'economy': return 'gemini-2.5-flash-lite';
@@ -127,8 +157,59 @@ async function nextReportNumber() { // outdate-bot
 }
 
 let systemPromptTemplate;
+let currentEvalMode = 'full';
 
-function loadContext() {
+export function loadContext(mode = 'full') {
+  currentEvalMode = mode;
+  if (mode === 'match' || mode === 'single-pass') {
+    console.log('📂 Loading context for single-pass CV-match mode...');
+    const cvContent = readFile(PATHS.cv, 'cv.md');
+    const profileContent = existsSync(PATHS.profile) ? readFileSync(PATHS.profile, 'utf-8').trim() : '';
+    const profileYml = existsSync(PATHS.profileYml) ? readFileSync(PATHS.profileYml, 'utf-8').trim() : '';
+    const yearsCap = readYearsCap();
+    const yearsCapInstruction = yearsCap !== null
+      ? `\nCANDIDATE EXPERIENCE CAP (issue #5297): config/profile.yml enforces years-cap: ${yearsCap}. Only count and evaluate the candidate's last ${yearsCap} years of relevant experience. Do not penalize for older unlisted history or require experience beyond this window.\n`
+      : '';
+
+    systemPromptTemplate = `You are career-ops, an AI job search assistant evaluating a job offer in single-pass CV match mode.
+Your objective is to extract candidate CV facts and evaluate candidate alignment with the Job Description in a single, fast inference call to minimize token overhead, bypassing the multi-step reasoning chain (Blocks A through G).
+
+═══════════════════════════════════════════════════════
+CANDIDATE RESUME (cv.md)
+═══════════════════════════════════════════════════════
+${cvContent}
+${yearsCapInstruction}
+═══════════════════════════════════════════════════════
+TARGET ROLES & PREFERENCES (config/profile.yml & _profile.md)
+═══════════════════════════════════════════════════════
+${profileYml}
+
+${profileContent}
+
+═══════════════════════════════════════════════════════
+INSTRUCTIONS (CONDENSED SINGLE-PASS EVALUATION)
+═══════════════════════════════════════════════════════
+1. Extract candidate technical competencies, core domain experience, and seniority from the CV.
+2. Extract the primary role requirements and must-have qualifications from the Job Description.
+3. Compare the candidate's verified background directly to the requirements in a single pass:
+   - Identify Strong Matches, Partial Matches, and Critical Gaps.
+   - Calculate an overall Match Score from 1.0 to 5.0 (5.0 = ideal fit, 4.0 = strong match, 3.0 = acceptable, <3.0 = major gap).
+   - Detect the closest role archetype.
+   - Assess role legitimacy (High Confidence | Proceed with Caution | Suspicious).
+4. Output a concise markdown report with executive match summary, requirements matrix, and strengths/gaps.
+5. End with the exact machine-readable summary block:
+
+---SCORE_SUMMARY---
+COMPANY: <company name>
+ROLE: <role title>
+SCORE: <global score as decimal, e.g. 3.8>
+ARCHETYPE: <detected archetype>
+LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
+---END_SUMMARY---
+`;
+    return systemPromptTemplate;
+  }
+
   console.log('📂 Loading context files...');
   const sharedContext  = readFile(PATHS.shared, '_shared.md');
   const ofertaLogic    = readFile(PATHS.oferta, 'oferta.md');
@@ -179,6 +260,7 @@ ARCHETYPE: <detected archetype>
 LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 ---END_SUMMARY---
 `;
+  return systemPromptTemplate;
 }
 
 async function scrapeUrl(browser, url) {
@@ -401,8 +483,9 @@ export async function finishPipelineBatch(pipelinePath, originals, results) {
 }
 
 async function main() {
+  const evalMode = parseCliMode();
   setupEnvironment();
-  loadContext();
+  loadContext(evalMode);
 
   const limitArg = process.argv.find(a => a.startsWith("--limit="));
   const limitCount = limitArg ? parseInt(limitArg.split("=")[1], 10) : 0;
