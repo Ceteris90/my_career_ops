@@ -29,6 +29,10 @@ Three independent pieces, smallest first. You can use any of them on their own.
 > local files. Evaluating a shortlisted role later (`/career-ops pipeline`) is the
 > only step that spends tokens.
 
+> Companion page: [Keeping portals.yml live](KEEPING_PORTALS_LIVE.md) covers the
+> house rule that keeps the scan list itself current (companies get auto-added as
+> they come up) and the zero-token commands to validate `portals.yml` afterwards.
+
 ---
 
 ## 1. Schedule the scan
@@ -192,7 +196,12 @@ so this piece runs `claude -p` (or your CLI's headless equivalent, see
    every overdue/urgent entry, and **write the drafts to a dated file**
    (`output/followup-drafts-{date}.md`) instead of trying to act on them.
 3. Logs start/end to `data/followup-sweep.log` (gitignored).
-4. Fires a native notification (`osascript display notification` on macOS)
+4. Exits before starting Claude when follow-ups are turned off: with
+   `follow_ups.enabled: false` in `config/profile.yml` the sweep calls
+   `loadFollowupsEnabled` from `followup-cadence.mjs`, writes a skip line to
+   `data/followup-sweep.log`, and exits 0. Unload the launchd job too if you
+   turned follow-ups off for good.
+5. Fires a native notification (`osascript display notification` on macOS)
    so you know a fresh batch of drafts is waiting.
 
 **It never sends or submits anything.** The draft-only file is the entire
