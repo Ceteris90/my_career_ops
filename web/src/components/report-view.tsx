@@ -52,6 +52,7 @@ export function ReportView({
   pdfReadyFromIndex = false,
   coverReady = false,
   backHref = "/pipeline",
+  applyHref,
 }: {
   id: string;
   app: Application | null;
@@ -66,6 +67,7 @@ export function ReportView({
    *  cover run but does not render them, so this link only finds CLI PDFs. */
   coverReady?: boolean;
   backHref?: string;
+  applyHref?: string;
 }) {
   const meta = report ? parseReport(report) : null;
   const field = (label: string) => meta?.fields.find((f) => f.label === label)?.value;
@@ -105,6 +107,14 @@ export function ReportView({
           {app && <StatusSelect n={id} current={app.status} />}
           <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={pdfReady} />
           {app && report && <CoverDraftButton n={id} company={companyName} />}
+          {applyHref && (
+            <Link
+              href={applyHref}
+              className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
+            >
+              Apply checklist
+            </Link>
+          )}
           {coverReady && (
             <a
               href={`/api/cover-pdf?application=${encodeURIComponent(id)}`}

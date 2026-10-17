@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { scoreTone } from "@/lib/format";
 import { resolveCliId } from "@/lib/saved-cli";
+import { createWorkerFeedback } from "@/lib/worker-feedback.mjs";
 import { readJobStream } from "@/lib/job-stream.mjs";
 
 export type JobStep = { kind: "tool" | "status"; label: string; ts: number };
@@ -60,6 +61,13 @@ function parseVerdict(text: string): JobResult {
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [announcement, setAnnouncement] = useState("");
+  const feedback = useRef<ReturnType<typeof createWorkerFeedback> | null>(null);
+  useEffect(() => {
+    const owner = createWorkerFeedback(setAnnouncement);
+    feedback.current = owner;
+    return () => { owner.dispose(); feedback.current = null; };
+  }, []);
   const seq = useRef(0);
   const loaded = useRef(false);
 
@@ -129,6 +137,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
           patch(id, (j) => ({ ...j, steps: [...j.steps, step] }));
         });
         if (!cliId) {
+          feedback.current?.push({ ...job, status: "error" });
           patch(id, (j) => ({
             ...j,
             status: "error",
@@ -142,7 +151,11 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         let doneTokens = 0; // per-run token cost, forwarded on the done event (#6)
         let doneCostUsd: number | null = null;
         let doneReportN: number | null = null;
+        let finished = false;
         const finish = (status: "done" | "error", lastLabel?: string) => {
+          if (finished) return;
+          finished = true;
+          feedback.current?.push({ ...job, status });
           const result = status === "done" ? parseVerdict(verdictLine || text) : undefined;
           const cost = status === "done" && doneTokens > 0 ? { tokens: doneTokens, usd: doneCostUsd ?? undefined } : undefined;
           patch(id, (j) => ({
@@ -216,5 +229,10 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const removeJob = useCallback((id: string) => setJobs((js) => js.filter((j) => j.id !== id)), []);
   const clearFinished = useCallback(() => setJobs((js) => js.filter((j) => j.status === "running")), []);
 
-  return <JobsContext.Provider value={{ jobs, startJob, removeJob, clearFinished }}>{children}</JobsContext.Provider>;
+  return (
+    <JobsContext.Provider value={{ jobs, startJob, removeJob, clearFinished }}>
+      {children}
+      <div role="status" aria-label="Worker task status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
+    </JobsContext.Provider>
+  );
 }

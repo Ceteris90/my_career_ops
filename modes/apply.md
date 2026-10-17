@@ -276,7 +276,7 @@ For every free-text field, inspect the **rendered form control** before drafting
 
 For each question, generate the response following:
 
-1. **Report context**: Use proof points from block B, STAR stories from block F
+1. **Report context**: Use proof points from block B, STAR stories from block F. Block F stories and story-bank entries supply narrative; a figure from one goes into an answer only if it appears in `cv.md` or `article-digest.md`, or `node story-provenance-check.mjs --summary` puts it in `existing`. Otherwise leave the number out, or ask the candidate with AGENTS.md's four outcomes (confirm as stated, give the correct figure, narrative only, "I don't know"). Never use a figure from a `user-cannot-confirm` story. An answer carrying an unconfirmed figure is not ready for copy-paste
 2. **Previous Section H / Application Answers**: If a draft or final response exists, use it as a base and refine
 3. **"I'm choosing you" tone**: Same auto-pipeline framework
 4. **Specificity**: Reference something specific from the JD visible on screen
