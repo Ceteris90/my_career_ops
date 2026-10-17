@@ -82,7 +82,7 @@ Save as `~/Library/LaunchAgents/io.career-ops.scan.plist`, then
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key>            <string>io.career-ops.scan</string>
+  <key>Label</key> <string>io.career-ops.scan</string>
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/node</string>
@@ -91,10 +91,10 @@ Save as `~/Library/LaunchAgents/io.career-ops.scan.plist`, then
   <key>WorkingDirectory</key> <string>/path/to/career-ops</string>
   <key>StartCalendarInterval</key>
   <dict>
-    <key>Hour</key>    <integer>9</integer>
-    <key>Minute</key>  <integer>0</integer>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>0</integer>
   </dict>
-  <key>StandardOutPath</key>   <string>/path/to/career-ops/data/scan.log</string>
+  <key>StandardOutPath</key> <string>/path/to/career-ops/data/scan.log</string>
   <key>StandardErrorPath</key> <string>/path/to/career-ops/data/scan.log</string>
 </dict>
 </plist>
