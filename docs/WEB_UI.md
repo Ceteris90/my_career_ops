@@ -23,7 +23,7 @@ You can pass command-line options directly to `npm run ui`:
 | Flag | Default | Description |
 |---|:---:|---|
 | `--port=<number>` or `--port <number>` | `3000` | Custom port to listen on. |
-| `--host=<ip>` or `--host <ip>` | `127.0.0.1` | Network interface host (default: `127.0.0.1`). |
+| `--host=<ip>` or `--host <ip>` | `127.0.0.1` | Network interface host (default: `127.0.0.1`; network exposure requires `CAREER_OPS_WEB_ALLOWED_HOSTS`). |
 | `--no-open` or `--noopen` | `false` | Start the server without opening the browser automatically. |
 
 ### Examples

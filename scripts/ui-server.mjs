@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getCareerOpsRoot } from "../path-resolver.mjs";
+import { isWildcardAddress, planNextRun } from "../web/src/lib/bind-host.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,11 +102,23 @@ console.log("\x1b[1m\x1b[36m====================================================
 const dataRoot = getCareerOpsRoot();
 console.log("\x1b[32m✓\x1b[0m Data root resolved: " + dataRoot);
 
-// Unbracketed host for socket binding (net.listen and Next.js -H)
-const bindHost = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+// Plan Next.js run and resolve bind host from CAREER_OPS_WEB_ALLOWED_HOSTS
+const plan = planNextRun({
+  command: "dev",
+  extra: host !== "127.0.0.1" ? ["-H", host, "-p", String(port)] : ["-p", String(port)],
+  envValue: process.env.CAREER_OPS_WEB_ALLOWED_HOSTS,
+});
+if (!plan.ok) {
+  console.error(`\x1b[31mError:\x1b[0m ${plan.error}`);
+  process.exit(1);
+}
+if (host !== "127.0.0.1" && plan.grantsNoNewHost) {
+  console.error(`\x1b[31mError:\x1b[0m --host cannot open the UI to the network without CAREER_OPS_WEB_ALLOWED_HOSTS opt-in.`);
+  console.error(`To allow network access, set CAREER_OPS_WEB_ALLOWED_HOSTS="${host}". See web/README.md.\n`);
+  process.exit(1);
+}
 
-// Bracketed host for HTTP URL if it is an IPv6 literal
-const urlHost = bindHost.includes(":") && !bindHost.startsWith("[") ? `[${bindHost}]` : bindHost;
+const bindHost = plan.bindHost;
 
 // Verify target port is not already occupied by an unrelated service
 const isAvailable = await checkPortAvailable(port, bindHost);
@@ -114,6 +127,10 @@ if (!isAvailable) {
   console.error(`Please specify an alternate port using --port=<number>.\n`);
   process.exit(1);
 }
+
+// Bracketed host for HTTP URL if IPv6 literal; use localhost for wildcard addresses
+const rawUrlHost = isWildcardAddress(bindHost) ? "localhost" : bindHost;
+const urlHost = rawUrlHost.includes(":") && !rawUrlHost.startsWith("[") ? `[${rawUrlHost}]` : rawUrlHost;
 
 const url = `http://${urlHost}:${port}`;
 
@@ -194,7 +211,7 @@ function cleanup() {
   shuttingDown = true;
   polling = false;
   console.log("\nShutting down Career-ops UI...");
-  if (child && !child.killed) {
+  if (child && !child.killed && child.exitCode === null) {
     if (isWindows) {
       try {
         spawnSync("taskkill", ["/pid", child.pid.toString(), "/f", "/t"], { stdio: "ignore" });
@@ -206,8 +223,9 @@ function cleanup() {
         child.kill("SIGTERM");
       }
     }
+  } else {
+    process.exit(0);
   }
-  process.exit(0);
 }
 
 process.on("SIGINT", cleanup);
