@@ -63,18 +63,6 @@ const MAX_PAGES_CAP = 500;
 const INTER_PAGE_DELAY_MS = 200;
 
 /**
- * Resolve a positive integer configuration value.
- *
- * Invalid values fall back to the default, while valid values are
- * clamped to the specified hard limit.
- *
- * @param {unknown} value - User-provided configuration value.
- * @param {number} fallback - Default used for invalid values.
- * @param {number} cap - Maximum accepted value.
- * @returns {number} The validated limit or fallback.
- */
-
-/**
  * Resolve a positive integer configuration value and clamp it to a safe limit.
  * Invalid values use the fallback; the source-reported total cannot raise the cap.
  * @param {unknown} value - Raw configuration value.
