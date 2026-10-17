@@ -52,14 +52,31 @@ test('a child that never started is NOT a non-zero exit either', () => {
   assert.match(describeSpawn(r), /ENOENT/);
 });
 
-test('a signal kill is not a decision the program made', () => {
-  // Explicit SIGTERM rather than a timeout, so the signal branch is covered on
-  // its own. Windows has no POSIX signal delivery, so assert on whichever
-  // outcome the platform actually produces — either way it is not a chosen exit.
+test('a signal kill is not a decision the program made (POSIX)', () => {
+  // Explicit SIGTERM rather than a timeout, so the `signal` branch is covered
+  // on its own.
   const r = spawnSync(process.execPath,
     ['-e', "process.kill(process.pid, 'SIGTERM'); setTimeout(() => {}, 5000);"],
     { timeout: 4000, encoding: 'utf8' });
-  assert.equal(exitedNonZero(r), false, `neither a signal nor a kill is a chosen exit: ${describeSpawn(r)}`);
+
+  if (process.platform === 'win32') {
+    // Windows has no POSIX signal delivery: Node emulates SIGTERM as forced
+    // termination with a non-zero NATIVE status and no signal, so nothing in
+    // the result tells it apart from a chosen non-zero exit — exitedNonZero
+    // answers true here, and cannot do better from a spawnSync result alone.
+    // web/tests/lib/server-launcher.test.mjs records the same platform limit.
+    //
+    // This is narrow: a `timeout:` kill still sets result.error to ETIMEDOUT on
+    // every platform, which is the case these 42 assertions were actually
+    // exposed to. Nothing in this suite sends a bare signal to its children.
+    assert.equal(r.signal, null, 'Windows reports no signal');
+    assert.notEqual(r.status, 0, 'but it does report a non-zero native status');
+    return;
+  }
+
+  assert.equal(r.signal, 'SIGTERM', 'premise: POSIX reports the signal');
+  assert.equal(r.status, null, 'premise: and no exit status');
+  assert.equal(exitedNonZero(r), false, `a signal kill is not a chosen exit: ${describeSpawn(r)}`);
 });
 
 test('a malformed result object is not a pass', () => {

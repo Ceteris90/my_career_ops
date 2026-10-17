@@ -76,6 +76,12 @@ export function describeSpawn(result, label = '') {
  * So the check is positive: no spawn error, no signal, and an integer status
  * that is not 0. An exit code is a decision the program made; a kill is not.
  *
+ * Platform limit: Windows has no POSIX signal delivery, so a child terminated
+ * by a signal reports a non-zero NATIVE status and no signal, and this cannot
+ * tell it apart from a chosen exit there. A `timeout:` kill is still caught on
+ * every platform, because spawnSync sets `error` to ETIMEDOUT — and that is
+ * the case these assertions were actually exposed to.
+ *
  * Pair it with describeSpawn for the message, which then names which of the
  * three happened:
  *
