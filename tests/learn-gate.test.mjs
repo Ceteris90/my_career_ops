@@ -75,12 +75,12 @@ function scratchRoot() {
   return root;
 }
 
-function run(root, args, extraEnv = {}) {
+function run(root, args, extraEnv = {}, cwd = root) {
   const env = { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '', ...extraEnv };
   for (const key of ['CAREER_OPS_HEADLESS', 'CAREER_OPS_BATCH_STATE']) {
     if (!(key in extraEnv)) delete env[key];
   }
-  return spawnSync(NODE, [join(ROOT, 'learn.mjs'), ...args], { cwd: root, env, encoding: 'utf8', timeout: 60_000 });
+  return spawnSync(NODE, [join(ROOT, 'learn.mjs'), ...args], { cwd, env, encoding: 'utf8', timeout: 60_000 });
 }
 
 const read = (root, rel) => readFileSync(join(root, rel), 'utf8');
@@ -317,6 +317,37 @@ test('check and apply refuse to run headless or inside a batch worker', () => {
     }
     assert(JSON.stringify(snapshot(root)) === JSON.stringify(before), 'a headless run changed a file');
     assert(readdirSync(join(root, 'data/learning/pending')).length === pendingCount, 'a headless check wrote a pending file');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('apply finds the pending path check printed when run from outside the data root', () => {
+  const root = scratchRoot();
+  const elsewhere = mkdtempSync(join(tmpdir(), 'learn-gate-cwd-'));
+  try {
+    const result = check(root, [FIRST_PERSON]);
+    const r = run(root, ['apply', result.pending, '--accept', '1', '--reply', 'accept 1'], {}, elsewhere);
+    assert(r.status === 0, describeSpawn(r, 'apply from another directory should succeed'));
+    assert(read(root, 'modes/_custom.md').includes('- Write the PDF summary in first person.'), 'the rule was not written');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(elsewhere, { recursive: true, force: true });
+  }
+});
+
+test('--help and -h print usage, exit 0, and write nothing', () => {
+  const root = scratchRoot();
+  try {
+    const before = snapshot(root);
+    for (const flag of ['--help', '-h']) {
+      for (const args of [[flag], ['check', writeCandidates(root, [FIRST_PERSON]), flag]]) {
+        const r = run(root, args);
+        assert(r.status === 0 && /^Usage:/m.test(r.stdout), describeSpawn(r, `${args.join(' ')} did not print usage`));
+      }
+    }
+    assert(JSON.stringify(snapshot(root)) === JSON.stringify(before), '--help changed a file');
+    assert(!existsSync(join(root, 'data/learning')), '--help wrote learning state');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
