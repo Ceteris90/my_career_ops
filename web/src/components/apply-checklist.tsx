@@ -263,7 +263,7 @@ function SeedButton({ trackerNum }: { trackerNum: string | null }) {
         setError(typeof body?.error === "string" ? body.error : "Could not seed the follow-up.");
         return;
       }
-      setNote(body?.seeded === false ? "Already seeded." : "Follow-up seeded.");
+      setNote(body?.seeded !== false ? "Follow-up seeded." : body?.reason === "disabled" ? "Follow-ups are turned off in your profile, so nothing was seeded." : "Already seeded.");
       router.refresh();
     } catch {
       setError("Could not seed the follow-up.");
