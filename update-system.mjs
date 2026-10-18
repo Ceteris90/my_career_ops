@@ -323,6 +323,8 @@ const SYSTEM_PATHS = [
   'lib/cv-markdown.mjs',
   'lib/page-format.mjs',
   'lib/template-manifest.mjs',
+  'lib/agent-cli.mjs',
+  'remember-cli.mjs',
   'scan-hn.mjs',
   'scripts/check-syntax.mjs',
   'scripts/export-ats-text.mjs',

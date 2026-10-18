@@ -38,6 +38,7 @@ import { sanitizeMarkdownField } from './scan.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+import { readRememberedCli } from './lib/agent-cli.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -319,7 +320,8 @@ async function main(args) {
     return 0;
   }
 
-  const active = CLI_CANDIDATES.find(c => c.bin === process.env.CAREER_OPS_CLI);
+  const remembered = readRememberedCli(DATA_ROOT);
+  const active = CLI_CANDIDATES.find(c => c.bin === remembered);
   const cli = forced
     ? CLI_CANDIDATES.find(c => c.bin === forced) ?? { bin: forced, args: p => ['-p', p] }
     : detectCli(active ? [active, ...CLI_CANDIDATES] : CLI_CANDIDATES);

@@ -286,7 +286,13 @@ Store insights in `config/profile.yml` (narrative), `modes/_profile.md`, or `art
 **After every evaluation, learn.** "This score is too high" or "you missed my experience in X" → update `modes/_profile.md`, `config/profile.yml`, or `article-digest.md`. The system gets smarter with every interaction without putting personalization into system-layer files.
 
 #### Step 6: Ready
-Once all files exist, confirm:
+Once all files exist, record the agent CLI you are running in, so `doctor.mjs`, `rank-pipeline.mjs` and the web UI use it instead of guessing:
+
+```bash
+node remember-cli.mjs <cli>   # claude, codex, opencode, gemini, grok, ...
+```
+
+It writes `CAREER_OPS_CLI=<cli>` to the data root's `.env` and keeps every other line. Skip it if the user already set `CAREER_OPS_CLI`. Then confirm:
 > "You're all set! You can now:
 > - Paste a job URL to evaluate it
 > - Run the scan entrypoint for your CLI to search portals: `/career-ops scan`, `/career-ops-scan`, or ask Codex to run `scan`
