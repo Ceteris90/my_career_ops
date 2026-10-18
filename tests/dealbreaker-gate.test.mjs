@@ -25,7 +25,9 @@ const gate = section(oferta, '## Dealbreaker gate');
 
 test('the gate runs after the blacklist gate and before any evaluation', () => {
   const at = oferta.indexOf('\n## Dealbreaker gate');
-  assert.ok(oferta.indexOf('\n## Blacklist gate') < at);
+  const blacklistAt = oferta.indexOf('\n## Blacklist gate');
+  assert.ok(blacklistAt >= 0, 'missing blacklist gate');
+  assert.ok(blacklistAt < at);
   assert.ok(at < oferta.indexOf('\n## Step 0'));
   assert.ok(at < oferta.indexOf('\n## Block A'));
 });
