@@ -69,6 +69,9 @@ REPORTS_DIR="$DATA_ROOT/reports"
 # for them: both skip report numbers this run recorded as failed. Built from
 # PROJECT_DIR, which is the form node can open under Git Bash (see above).
 export CAREER_OPS_BATCH_STATE="$PROJECT_DIR/batch/batch-state.tsv"
+# Workers run unattended, so nobody can confirm a change to the user's standing
+# rules. modes/_shared.md tells an agent that sees this flag not to write them.
+export CAREER_OPS_HEADLESS=1
 LOCK_FILE="$BATCH_DIR/batch-runner.pid"
 PAUSE_FILE="$BATCH_DIR/batch-runner.paused"
 THROTTLE_FILE="$BATCH_DIR/batch-runner.throttled"
