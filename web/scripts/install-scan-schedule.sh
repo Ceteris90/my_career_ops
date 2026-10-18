@@ -83,6 +83,17 @@ if [ "$OS" = Darwin ]; then
     BACKUP=$(mktemp)
     cp "$PLIST" "$BACKUP"
   fi
+  # Until bootstrap succeeds, any exit (failure, INT, TERM, HUP) restores the previous schedule.
+  rollback() {
+    if [ -n "$BACKUP" ]; then
+      mv "$BACKUP" "$PLIST"
+      launchctl bootstrap "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
+    else
+      rm -f "$PLIST"
+    fi
+  }
+  trap rollback EXIT
+  trap 'exit 1' INT TERM HUP
   cat >"$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -119,16 +130,10 @@ EOF
     [ "$ATTEMPT" -lt 5 ] && sleep 1
   done
   if [ "$BOOTSTRAPPED" -ne 1 ]; then
-    if [ -n "$BACKUP" ]; then
-      # Reinstall: put the previous schedule back so scans keep running.
-      mv "$BACKUP" "$PLIST"
-      launchctl bootstrap "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
-    else
-      rm -f "$PLIST"
-    fi
     echo "launchctl bootstrap failed; a logged-in GUI session is required" >&2
     exit 1
   fi
+  trap - EXIT
   rm -f "$BACKUP"
   echo "Installed $LABEL (launchd, every 15 minutes)."
 else
