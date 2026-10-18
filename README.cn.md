@@ -124,7 +124,11 @@ npx @santifer/career-ops init
 
 <br>
 
-招聘不会自己修好。正在经历它的人可以，而且他们已经在这个房间里，交换笔记，互相修各自的配置。[修复就是在这里写出来的](CONTRIBUTING.md)。是房间，不是俱乐部。**一起来建。**
+招聘不会自己修好。正在经历它的人可以，而且他们已经在这个房间里，交换笔记，互相修各自的配置。
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=cn" alt="贡献者 GitHub 头像组成的动态墙，自 2026年4月 起按加入顺序依次填满，下一个方格留空。" width="100%"></a></p>
+
+[修复就是在这里写出来的](CONTRIBUTING.md)。是房间，不是俱乐部。**一起来建。**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord：career-ops 服务器的实时成员数"></a></p>
 

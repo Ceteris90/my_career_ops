@@ -3304,7 +3304,7 @@ job_boards:
     searchKeywords: "data scientist"
     searchLocation: "Jakarta"
     pageSize: 30
-    maxPages: 3
+    # max_pages: 100                   # optional (default 100, hard max 500); warns if truncated
     enabled: false
     notes: "Indonesia's largest job board (SEEK group). Uses SEEK v5 JobSearch API — zero tokens."
 
