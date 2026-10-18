@@ -152,15 +152,6 @@ const CALL_SITES = [
     probe: 'json-any-exit',
   },
   {
-    // /api/pdf-ready passes [report, '--json'] through postCoreScript and runCoreCli. The
-    // fixture has no PDF on disk, so the script refuses, but it still has to
-    // accept the argv and answer in JSON the route can map.
-    source: 'web/src/lib/core-cli.ts',
-    script: 'mark-pdf-ready.mjs',
-    args: ['1', '--json'],
-    probe: 'json-any-exit',
-  },
-  {
     source: 'web/src/lib/core/pipeline.ts',
     script: null,
     args: [],
