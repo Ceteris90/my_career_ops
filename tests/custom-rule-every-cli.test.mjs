@@ -7,14 +7,23 @@
 // AGENTS.md is the one file every CLI loads, so the rule belongs there, and the
 // batch prompt lists the file with the other sources a worker reads.
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { fail, pass, ROOT } from './helpers.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = (rel) => readFileSync(join(ROOT, rel), 'utf8');
+console.log('\nThe _custom.md read rule reaches every agent');
+
+function test(name, fn) {
+  try {
+    fn();
+    pass(name);
+  } catch (error) {
+    fail(`${name}: ${error.message}`);
+  }
+}
+
+const read = (rel) => readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 
 test('AGENTS.md tells every agent to read _custom.md after _profile.md in every mode', () => {
   const rule = read('AGENTS.md')
