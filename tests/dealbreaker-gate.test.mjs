@@ -87,3 +87,12 @@ test('the headless SKIP row merges into the tracker with the rule and the JD lin
   assert.match(merged, /\| Adatum \| Staff Designer \| N\/A \| SKIP \|/);
   assert.ok(merged.includes('"no fully on-site roles"') && merged.includes('"This role is on site five days a week"'), merged);
 });
+
+test('a headless hit on an agency posting waits for the agency answer and writes nothing', () => {
+  assert.match(gate, /agency[^.]*write no SKIP row/i);
+  assert.ok(gate.includes('Agency confirmation handoff'));
+});
+
+test('quoted text cannot break the one-line TSV row', () => {
+  assert.match(gate, /tab or line break[^.]*with a space/i);
+});
