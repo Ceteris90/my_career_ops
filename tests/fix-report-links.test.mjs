@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { fixReportLinks } from '../fix-report-links.mjs';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const CODE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HEADER = [
@@ -36,7 +37,11 @@ function run(root, args = [], envExtra = { CAREER_OPS_ROOT: root }) {
   Object.assign(env, envExtra);
   const r = spawnSync(process.execPath, [join(CODE_ROOT, 'fix-report-links.mjs'), ...args], { cwd: CODE_ROOT, env, encoding: 'utf-8', timeout: 30_000 });
   assert.equal(r.error, undefined);
-  return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+  // Spread the real result, so describeSpawn() can still reach stdout, stderr,
+  // signal and error. Returning only { status, out } made the failure message
+  // print "(empty)" for both streams even when the script had written its
+  // usage text (#5380).
+  return { ...r, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 const withRoot = (fn) => () => { const root = makeRoot(); try { fn(root); } finally { rmSync(root, { recursive: true, force: true }); } };
 
@@ -155,7 +160,11 @@ function runVerify(root) {
   env.CAREER_OPS_ROOT = root;
   const r = spawnSync(process.execPath, [join(CODE_ROOT, 'verify-pipeline.mjs')], { cwd: CODE_ROOT, env, encoding: 'utf-8', timeout: 30_000 });
   assert.equal(r.error, undefined);
-  return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+  // Spread the real result, so describeSpawn() can still reach stdout, stderr,
+  // signal and error. Returning only { status, out } made the failure message
+  // print "(empty)" for both streams even when the script had written its
+  // usage text (#5380).
+  return { ...r, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 
 test('verify-pipeline warns about a report it cannot inspect instead of passing it', (t) => {
@@ -256,7 +265,7 @@ test('unknown flag is rejected; --help prints usage', withRoot((root) => {
   assert.match(bad.out, /--dryrun/);
   assert.equal(tracker(root), before, 'a mistyped flag must not fall through to a live run');
   const help = run(root, ['--help']);
-  assert.equal(help.status, 0);
+  assert.equal(help.status, 0, describeSpawn(help));
   assert.match(help.out, /Usage: node fix-report-links\.mjs/);
 }));
 
