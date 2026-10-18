@@ -260,6 +260,25 @@ If `portals.yml` is missing:
 
 Copy `templates/portals.example.yml` → `portals.yml`; if they gave target roles in Step 2, update `title_filter.positive`.
 
+Then tighten the filters to what they said, so the first scan does not fill the pipeline with roles they ruled out:
+
+- **Location.** When they name only countries ("remote in the US", "anywhere in Canada"), list those countries under both `always_allow` and `allow`. `allow` turns the filter into an allow-list, so a city you did not think to block (Paris, Manila) is dropped. A `block` list alone drops only the places it names. For the United States, `always_allow` also admits "City, ST" locations. For other countries, add the main cities too, since a posting may name only the city. When they name cities, list the cities under `allow`. Leave "Remote" out of `allow`, since it would admit remote roles in any country.
+- **Posting age.** Set `max_posting_age_days: 45` unless they ask for older postings. Tell them it also hides long-open roles on a company's own board.
+- **Excluded titles.** Add their exclusions to `title_filter.negative`. Never replace the list. Replacing it drops the template's junior, intern and German student entries (Werkstudent, Praktikant).
+
+For "remote or hybrid in the US", the result looks like this:
+
+```yaml
+location_filter:
+  always_allow:
+    - "United States"
+    - "USA"
+  allow:
+    - "United States"
+    - "USA"
+max_posting_age_days: 45
+```
+
 #### Step 4: Tracker
 If `data/applications.md` doesn't exist, create it:
 ```markdown
