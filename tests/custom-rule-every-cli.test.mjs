@@ -20,6 +20,7 @@ function test(name, fn) {
     pass(name);
   } catch (error) {
     fail(`${name}: ${error.message}`);
+    process.exitCode = 1;
   }
 }
 
