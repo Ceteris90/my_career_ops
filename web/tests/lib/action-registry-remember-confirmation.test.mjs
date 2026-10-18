@@ -47,6 +47,16 @@ test("a confirmed remember saves the trimmed text once", () => {
   assert.deepEqual(remembered, ["Prefers remote-first teams"]);
 });
 
+test("the confirm card shows the text exactly as it will be saved", () => {
+  const { ctx, remembered } = context();
+  const result = dispatch("remember", { fact: `Prefers   remote-first\nteams ${"x".repeat(400)}` }, ctx);
+
+  result.run();
+  assert.equal(remembered[0].length, 300);
+  assert.ok(remembered[0].startsWith("Prefers remote-first teams "));
+  assert.ok(result.summary.includes(`"${remembered[0]}"`), "the card and the saved text differ");
+});
+
 test("remember with only whitespace is ignored and saves nothing", () => {
   const { ctx, remembered } = context();
   const result = dispatch("remember", { fact: "   " }, ctx);

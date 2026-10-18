@@ -11,6 +11,7 @@
 import type { Application, InboxJob } from "@/lib/career-ops";
 import type { Job } from "@/components/jobs/job-store";
 import { normalizeTextKey } from "@/lib/core/normalize-text-key.mjs";
+import { normalizeMemoryFact } from "@/lib/memory-fact.mjs";
 import { coercePersonalization, SECTIONS } from "@/lib/personalization.mjs";
 import { formatBatchSpendConfirmation, requiresBatchSpendConfirmation } from "@/lib/run-cost-estimate.mjs";
 
@@ -311,7 +312,7 @@ const ACTIONS: Record<string, ActionDef> = {
   remember: {
     sideEffect: "write",
     run: (raw, ctx) => {
-      const fact = isStr(raw.fact) ? raw.fact.trim() : "";
+      const fact = isStr(raw.fact) ? normalizeMemoryFact(raw.fact) : "";
       if (!fact) return { status: "ignored" };
       return {
         status: "confirm",
