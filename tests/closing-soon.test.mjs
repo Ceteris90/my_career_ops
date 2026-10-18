@@ -263,3 +263,25 @@ test('alias status cells match the filter through the states.yml lookup', () => 
   const r = computeClosingSoon(md, { today: TODAY, within: 7, statuses: evaluated });
   assert.deepEqual(r.closingSoon.map(x => [x.num, x.status]), [[1, 'Evaluated']]);
 });
+
+test('captures: html markup between marker and date is stripped; script/style do not create markers', () => {
+  const box = sandbox();
+  try {
+    writeFileSync(join(box.dataRoot, 'data', 'applications.md'), [
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+      '|---|---|---|---|---|---|---|---|---|',
+      '| 1 | 2026-10-01 | Acme | Analyst | 4.2/5 | Evaluated | ❌ | [1](reports/001-acme-2026-10-01.md) | none |',
+      '| 2 | 2026-10-01 | Globex | Designer | 4.0/5 | Evaluated | ❌ | [2](reports/002-globex-2026-10-01.md) | none |',
+      '',
+    ].join('\n'));
+    writeFileSync(join(box.dataRoot, 'jds', '001-acme-analyst.html'),
+      '<p><strong>Closing date:</strong>&nbsp;<span>Oct 21, 2026</span></p>');
+    writeFileSync(join(box.dataRoot, 'jds', '002-globex-designer.html'),
+      '<style>.deadline 2026-10-18 {}</style><script>var deadline = "2026-10-19";</script><p>Hello</p>');
+    const out = JSON.parse(run(['--today', '2026-10-17'], box).stdout);
+    assert.deepEqual(out.closingSoon.map(x => [x.num, x.closes]), [[1, '2026-10-21']]);
+    assert.deepEqual([out.overdue, out.unparsed], [[], []]);
+  } finally {
+    cleanup(box);
+  }
+});

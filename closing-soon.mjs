@@ -208,6 +208,19 @@ export function resolveStatusFilter(value, lookup = loadStateLookup()) {
   return labels;
 }
 
+/**
+ * Flatten HTML to plain text for date matching only (never rendered): drop
+ * script/style blocks, turn tags into spaces, decode the few entities that
+ * matter.
+ */
+function htmlToText(html) {
+  return html
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&');
+}
+
 function readCaptureText(jdsDir, row) {
   if (!jdsDir) return null;
   const nums = linkedReportNumbers(row.report, row.notes);
@@ -219,7 +232,8 @@ function readCaptureText(jdsDir, row) {
   if (!hit || !READABLE_CAPTURE_EXTS.has(hit.ext.toLowerCase())) return null;
   try {
     const buf = readFileSync(hit.path);
-    return buf.subarray(0, MAX_CAPTURE_BYTES).toString('utf-8');
+    const text = buf.subarray(0, MAX_CAPTURE_BYTES).toString('utf-8');
+    return /^\.html?$/i.test(hit.ext) ? htmlToText(text) : text;
   } catch {
     return null;
   }
