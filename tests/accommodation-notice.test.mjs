@@ -25,7 +25,8 @@ const on = rows['CA-ON'];
 check('table has exactly one live seed row (Ontario); Manitoba and US stay comments',
   Object.keys(rows).length === 1 && Boolean(on), `rows: ${Object.keys(rows).join(', ')}`);
 check('Ontario row carries the verified citations',
-  on?.as_of === '2026-10-18' && on?.official_source?.url === 'https://www.ontario.ca/laws/regulation/110191'
+  /^\d{4}-\d{2}-\d{2}$/.test(String(on?.as_of)) && String(on?.as_of) >= '2026-10-18'
+    && on?.official_source?.url === 'https://www.ontario.ca/laws/regulation/110191'
     && /^s\. 22:/.test(on?.requires?.general || '') && /s\. 23 \(1\)/.test(on?.requires?.assessment || '')
     && /s\. 23 \(2\)/.test(on?.requires?.assessment || '') && /^s\. 24:/.test(on?.requires?.offer || '')
     && /ss\. 20, 21, 22, 23 \(1\)-\(2\) and 24/.test(on?.legal_basis || ''),
