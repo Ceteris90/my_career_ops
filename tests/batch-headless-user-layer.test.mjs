@@ -10,16 +10,26 @@
 // with no interactive-only scope. The runner also gave workers no signal that
 // they run unattended.
 //
-// Run:  node --test tests/batch-headless-user-layer.test.mjs
+// Run:  node tests/batch-headless-user-layer.test.mjs
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { getBash, rmSync, ROOT, toBashPath } from './helpers.mjs';
+import { fail, getBash, pass, rmSync, ROOT, toBashPath } from './helpers.mjs';
 import { describeSpawn } from './helpers/describe-spawn.mjs';
+
+console.log('\nBatch workers never write the user rule files');
+
+function test(name, fn) {
+  try {
+    fn();
+    pass(name);
+  } catch (error) {
+    fail(`${name}: ${error.message}`);
+  }
+}
 
 const read = (rel) => readFileSync(join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 const USER_RULE_FILES = ['modes/_custom.md', 'modes/_profile.md', 'config/profile.yml'];
