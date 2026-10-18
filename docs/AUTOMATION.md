@@ -158,8 +158,11 @@ The macOS and Linux worker records each check in `<store>.tick`, next to the
 scheduled jobs store (`data/scheduled-jobs.json.tick` by default); the page reads
 that file for "Last OS check". The installer bakes `CAREER_OPS_ROOT`,
 `CAREER_OPS_DATA_DIR` and `CAREER_OPS_SCHEDULED_JOBS_PATH` into the job when they
-are set, so the worker, the tick file and the page all use the same store. Set them
-before you run the installer, and run it again if you change them.
+are set in the shell that runs it. The web process must get the same values, for
+example in `web/.env.local`, or the page reads a different store and tick file.
+The installer does not read `web/.env.local`, so export the values in your shell
+when you install (for example `CAREER_OPS_ROOT=/path/to/data sh web/scripts/install-scan-schedule.sh`).
+Run the installer again after you change them.
 
 After any of these, new postings land in `data/pipeline.md` under `## Pending` on
 each run. Next you decide which are worth your attention — cheaply.
