@@ -574,3 +574,24 @@ closureVerdict("You can't view this job because it's not available at this time.
 closureVerdict('Salary data is not available at this time. Apply now.', ['Apply now']).result === 'active'
   ? pass('an availability mention on a live posting stays active')
   : fail('the new pattern over-triggered on a live posting');
+
+// ── isUnreadableVerdict: "body could not be read" is not "closed" (#5408) ────
+import { isUnreadableVerdict } from '../liveness-core.mjs';
+
+const unreadableProbe = classifyLiveness({
+  status: 200,
+  finalUrl: 'https://careers.example.com/job/123',
+  bodyText: 'Home Careers Contact',
+  applyControls: [],
+});
+isUnreadableVerdict(unreadableProbe)
+  ? pass('a nav/footer-only page (insufficient_content) is an unreadable verdict')
+  : fail('a nav/footer-only page was not flagged unreadable');
+
+isUnreadableVerdict({ result: 'expired', code: 'hard_expired' }) === false
+  && isUnreadableVerdict({ result: 'active' }) === false
+  && isUnreadableVerdict({ result: 'uncertain', code: 'bot_challenge' }) === false
+  && isUnreadableVerdict(null) === false
+  && isUnreadableVerdict(undefined) === false
+  ? pass('closed, active, other uncertain and missing verdicts are not unreadable')
+  : fail('isUnreadableVerdict over-matched a non-insufficient_content verdict');

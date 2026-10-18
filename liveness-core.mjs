@@ -315,6 +315,18 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
 const EXPIRED_HISTORY_STATUS = /expired/i;
 
 /**
+ * True when a verdict means "the posting body could not be read", not "the
+ * posting is closed". Today that condition is carried inside
+ * `result: 'expired'` with `code: 'insufficient_content'` (nav/footer only, or
+ * a body that sits in an unreadable iframe). Consumers that must not treat such
+ * a verdict as closure call this instead of repeating the code string.
+ * Detection only: it does not change what classifyLiveness returns.
+ */
+export function isUnreadableVerdict(verdict) {
+  return verdict?.code === 'insufficient_content';
+}
+
+/**
  * Plan the `skipped_expired` scan-history rows for a batch of liveness verdicts.
  *
  * The pure half of recording a liveness sweep (#3891). Kept here rather than in
@@ -378,7 +390,7 @@ export function planExpiredHistoryRows(scanHistoryText = '', verdicts = [], norm
   const rows = [];
   const claimed = new Set();
   for (const verdict of verdicts ?? []) {
-    if (verdict?.result !== 'expired' || verdict.code === 'insufficient_content') continue;
+    if (verdict?.result !== 'expired' || isUnreadableVerdict(verdict)) continue;
     const candidate = typeof verdict.url === 'string' ? verdict.url.trim() : '';
     if (!candidate) continue;
     const known = knownByKey.get(normalizeUrl(candidate));

@@ -368,6 +368,34 @@ const ATS_PROVIDERS = [
       return classifyLinkedInPosting(html);
     },
   },
+  {
+    id: 'nofluffjobs',
+    // nofluffjobs.com/pl/job/{slug}, the URL providers/nofluffjobs.mjs writes, and
+    // the same posting under /job/{slug} or another language prefix.
+    //
+    // The browser reads this board backwards (#4832). A live posting puts "Aplikuj"
+    // inside a <header> (the posting's own apply block), which the control walk
+    // skips as page chrome: 40 of 40 live postings read no_apply_control on
+    // 2026-10-18. A closed posting answers 200 and then moves to a search page
+    // (/pl/?criteria=...), where an "APLIKUJ ›" promo link reads as an Apply
+    // control: 42 of 59 closed postings read active. The board's public
+    // per-posting API needs no browser and says which it is.
+    match(u) {
+      if (u.hostname !== 'nofluffjobs.com' && u.hostname !== 'www.nofluffjobs.com') return null;
+      const m = u.pathname.match(/^\/(?:[a-z]{2}\/)?job\/([A-Za-z0-9-]+)\/?$/);
+      return m ? { slug: m[1] } : null;
+    },
+    api: ({ slug }) => `https://nofluffjobs.com/api/posting/${slug}`,
+    // Measured 2026-10-18: a live posting answers 200 with status "PUBLISHED", a
+    // closed one 200 with status "EXPIRED" (and expiredBeforeDays), and a slug the
+    // board does not have 404 {"status":"DOES_NOT_EXIST"}, so the 404 is
+    // authoritative here and any other readable status stays uncertain.
+    async interpret(res) {
+      let posting;
+      try { posting = await res.json(); } catch { return null; }
+      return classifyNoFluffJobsPosting(posting);
+    },
+  },
 ];
 
 // LinkedIn renders a closed posting with an explicit banner
@@ -492,6 +520,35 @@ export function classifyWorkablePosting(posting) {
     result: 'uncertain',
     code: 'workable_state_unrecognised',
     reason: `Workable reports state ${String(posting.state)}; not a verdict this rung can make`,
+  };
+}
+
+/**
+ * Decide liveness for one No Fluff Jobs posting from its /api/posting/{slug} answer.
+ * Pure + deterministic (no I/O), mirroring classifyWorkablePosting.
+ *
+ * "PUBLISHED" is live and "EXPIRED" is the board's own word for closed. Any other
+ * readable status is one this rung has not seen, so it stays uncertain rather than
+ * falling to the browser, which reads closed postings on this board as active. An
+ * unreadable body returns null so a future API change degrades to the browser
+ * rung rather than to a verdict.
+ *
+ * @param {any} posting - the parsed per-posting API response
+ * @returns {{ result: 'active' | 'expired' | 'uncertain', code: string, reason: string } | null}
+ */
+export function classifyNoFluffJobsPosting(posting) {
+  if (!posting || typeof posting !== 'object') return null;
+  if (posting.status === 'PUBLISHED') {
+    return { result: 'active', code: 'nofluffjobs_api_published', reason: 'No Fluff Jobs reports the posting published (live)' };
+  }
+  if (posting.status === 'EXPIRED') {
+    const days = Number.isFinite(posting.expiredBeforeDays) ? ` ${posting.expiredBeforeDays} day(s) ago` : '';
+    return { result: 'expired', code: 'nofluffjobs_api_expired', reason: `No Fluff Jobs reports the posting expired${days}` };
+  }
+  return {
+    result: 'uncertain',
+    code: 'nofluffjobs_status_unrecognised',
+    reason: `No Fluff Jobs reports status ${String(posting.status)}; not a verdict this rung can make`,
   };
 }
 
