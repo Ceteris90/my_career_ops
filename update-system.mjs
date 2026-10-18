@@ -449,6 +449,7 @@ const SYSTEM_PATHS = [
   'skill-extract.mjs',
   'skip-blockers.mjs',
   'intake.mjs',
+  'learn.mjs',
   'stats.mjs',
   'funnel-stages.mjs',
   'detect-reposts.mjs',
