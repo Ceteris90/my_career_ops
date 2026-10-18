@@ -15,11 +15,13 @@ export function parseLaunchctlPrint(exitCode) {
   return { exists: loaded, enabled: loaded };
 }
 
-// Next */15 boundary strictly after `now`, as an ISO string.
+// Next */15 boundary strictly after `now`, as an ISO string. Every UTC offset in
+// use is a multiple of 15 minutes, so epoch quarters equal local quarters; this
+// stays correct across DST transitions (wall-clock rounding repeated or skipped
+// an hour at fall-back and spring-forward).
 export function nextQuarterHour(now) {
-  const next = new Date(now);
-  next.setMinutes(15 * (Math.floor(now.getMinutes() / 15) + 1), 0, 0);
-  return next.toISOString();
+  const QUARTER_MS = 15 * 60_000;
+  return new Date((Math.floor(now.getTime() / QUARTER_MS) + 1) * QUARTER_MS).toISOString();
 }
 
 export function osScheduleStatus({ platform, crontabText, launchctlExitCode, tickMtimeMs, now }) {
