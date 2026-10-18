@@ -17,7 +17,7 @@ export function cleanMessages(input) {
       // never serialize an executable callback or revive a Retry control.
       if (p.type === 'confirm' && typeof p.statusChange?.n === 'string' && typeof p.statusChange.status === 'string' && ['saving', 'failed', 'unconfirmed', 'done'].includes(p.state) && typeof p.summary === 'string') {
         const state = p.state === 'done' ? 'saved' : p.state === 'failed' ? 'failed' : 'unconfirmed';
-        const detail = p.state === 'done' ? '' : `${typeof p.message === 'string' ? `: ${p.message}` : ''}; check current tracker status before a new request`;
+        const detail = p.state === 'done' ? '' : `${typeof p.message === 'string' ? `: ${p.message.replace(/\.\s*$/, '')}` : ''}; check current tracker status before a new request`;
         return [{ type: 'note', text: `${p.summary} (${state}${detail}) [application #${p.statusChange.n} → ${p.statusChange.status}]` }];
       }
       // Confirm callbacks exist only in the live component; never resurrect them.
