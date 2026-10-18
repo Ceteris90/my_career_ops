@@ -84,7 +84,7 @@ check('fixture: paid internship matches neither pattern (no output)',
 const signal = read('modes', 'oferta-signals', '20-unpaid-placement.md');
 check('signal handles unpaid, school-placement and silent outcomes',
   /Posting states the role is unpaid/.test(signal) && /credit-bearing or a school placement/.test(signal)
-    && /Posting is silent about pay/.test(signal) && /there is no silence check/.test(signal),
+    && /is silent about pay and says nothing about a credit-bearing or school placement/.test(signal) && /there is no silence check/.test(signal),
   'outcome sections missing');
 check('signal never asserts unlawfulness or carve-out applicability',
   /NEVER say or imply that the employer broke the law/.test(signal) && /NEVER assert that a carve-out does or does not apply/.test(signal)
