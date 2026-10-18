@@ -134,7 +134,7 @@ try {
     else env.CAREER_OPS_PROFILE = profileEnv;
     const r = spawnSync(NODE, [join(ROOT, 'doctor.mjs'), ...args], { cwd: scratch, encoding: 'utf-8', timeout: 60000, env });
     if (r.error) throw r.error;
-    return `${r.stdout}${r.stderr}`;
+    return args.includes('--json') ? r.stdout : `${r.stdout}${r.stderr}`;
   }
 
   const named = runDoctor([], namedProfile);
@@ -173,7 +173,7 @@ try {
     if (cli) env.CAREER_OPS_CLI = cli; else delete env.CAREER_OPS_CLI;
     const r = spawnSync(NODE, [join(ROOT, 'doctor.mjs'), ...args], { cwd: scratch, encoding: 'utf-8', timeout: 60000, env });
     if (r.error) throw r.error;
-    return `${r.stdout}${r.stderr}`;
+    return args.includes('--json') ? r.stdout : `${r.stdout}${r.stderr}`;
   };
   for (const cli of [undefined, 'claude']) {
     const label = cli ? 'with CAREER_OPS_CLI exported' : 'without CAREER_OPS_CLI';
@@ -209,7 +209,7 @@ try {
     delete env.CAREER_OPS_PROFILE;
     const r = spawnSync(NODE, [join(ROOT, 'doctor.mjs'), ...args], { cwd: scratch, encoding: 'utf-8', timeout: 60000, env });
     if (r.error) throw r.error;
-    return `${r.stdout}${r.stderr}`;
+    return args.includes('--json') ? r.stdout : `${r.stdout}${r.stderr}`;
   };
   const bothHuman = runDoctorBoth([]);
   const bothJson = JSON.parse(runDoctorBoth(['--json']));
@@ -234,7 +234,7 @@ try {
     delete env.CAREER_OPS_CLI;
     const r = spawnSync(NODE, [join(ROOT, 'doctor.mjs'), ...args], { cwd: scratch, encoding: 'utf-8', timeout: 60000, env });
     if (r.error) throw r.error;
-    return `${r.stdout}${r.stderr}`;
+    return args.includes('--json') ? r.stdout : `${r.stdout}${r.stderr}`;
   };
   const cloneHuman = /config\/profile\.yml not found/.test(runDoctorClone([]));
   const cloneJson = JSON.parse(runDoctorClone(['--json'])).missing.includes('config/profile.yml');
@@ -251,7 +251,7 @@ try {
     const env = { ...process.env, CAREER_OPS_ROOT: bothRoot, CAREER_OPS_DATA_DIR: '', CAREER_OPS_PROFILE: namedProfile };
     const r = spawnSync(NODE, [join(ROOT, 'doctor.mjs'), ...args], { cwd: scratch, encoding: 'utf-8', timeout: 60000, env });
     if (r.error) throw r.error;
-    return `${r.stdout}${r.stderr}`;
+    return args.includes('--json') ? r.stdout : `${r.stdout}${r.stderr}`;
   };
   const shadowHuman = shadowOut([]);
   const shadowJson = JSON.parse(shadowOut(['--json']));
