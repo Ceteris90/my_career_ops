@@ -4497,6 +4497,7 @@ export function shellQuoteArg(value) {
  * @param {string} version - Target version for the commit message.
  * @param {boolean} usedIndexCommit - Whether the index form is safe here.
  * @param {string[]} expandedPathsToStage - Concrete staged file list.
+ * @param {{git?: Function, root?: string, pathspecFile?: string}} [ctx] - Reuse a failed commit's file, or configure the shared writer.
  * @returns {string} A runnable git command.
  */
 export function updateCommitCommand(version, usedIndexCommit, expandedPathsToStage, ctx = {}) {
