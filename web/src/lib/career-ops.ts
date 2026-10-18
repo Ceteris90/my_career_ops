@@ -23,6 +23,7 @@ import { pdfIndexEntryForReport } from "@/lib/apply/cv-selection.mjs";
 // module, so rememberFact() (the block's only WRITER) and readMemory() (its
 // reader) cannot drift apart, and so the read rule is testable from web/tests.
 import { NOTES_START, NOTES_END, profilePath as profileMemoryPath, readProfileMemory } from "@/lib/profile-memory.mjs";
+import { normalizeMemoryFact } from "@/lib/memory-fact.mjs";
 
 /**
  * Resolve the career-ops "home" — the directory holding the user's sibling
@@ -465,7 +466,7 @@ export function readMemory(): string {
 /** Append a durable fact to the canonical modes/_profile.md (creating the file +
  *  managed block if needed), PRESERVING existing user content. */
 export function rememberFact(fact: string): "ok" | "deduped" | "error" {
-  const f = fact.trim().replace(/\s+/g, " ").slice(0, 300);
+  const f = normalizeMemoryFact(fact);
   if (!f) return "deduped";
   const p = profilePath();
   try {
