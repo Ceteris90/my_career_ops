@@ -89,8 +89,10 @@ check('signal defines presence, corroborating silence and stage hint as independ
 check('stage hint never asks about or infers health or disability',
   /never ask about, infer or comment on the candidate's health/.test(signal)
     && /never ask whether they need an accommodation/.test(signal), 'stage-hint guard missing');
-check('silence and stage-hint wording is conditional on a jurisdiction row existing',
-  /No table row → this check says nothing/.test(signal) && /Without a table row, say nothing/.test(signal), 'conditional wording missing');
+check('silence needs a jurisdiction row; the stage hint runs without one as a generic line only',
+  /No table row → this check says nothing/.test(signal)
+    && /whether or not a table row exists/.test(signal) && /give only the generic line/.test(signal)
+    && /add no jurisdiction-specific detail/.test(signal), 'conditional wording missing');
 check('signal never asserts non-compliance or coverage',
   /NEVER say or imply that the employer broke the law/.test(signal) && /NEVER assert that the employer is an obligated organization/.test(signal)
     && /depends on its type and size/.test(signal), 'phrasing discipline missing');
