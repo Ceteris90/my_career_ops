@@ -49,7 +49,7 @@ export type ActionCtx = {
   jobForUrl: (url: string) => Job | undefined; // skip-if-done / retry logic
   estimateCost?: (kind: string, count: number) => { tokens?: number; usd?: number };
   rememberFact: (fact: string) => void;
-  writeStatus: (n: string, status: string) => void; // UPDATE-only writeback via /api/status
+  writeStatus: (n: string, status: string) => void | Promise<void>; // UPDATE-only writeback via /api/status
   setApplyField: (idOrLabel: string, value: string) => void; // edit an apply-proxy answer
   startApply: (url: string) => void; // open the apply form-proxy for a posting URL
   applyExplore?: (patch: Record<string, unknown>, opts?: { merge?: boolean; run?: boolean }) => void; // build a FREE discovery search
@@ -91,7 +91,8 @@ export type DoneInfo = { jobIds?: string[]; batchId?: string; note?: string };
 export type DispatchResult =
   | ({ status: "done" } & DoneInfo)
   | { status: "ignored"; note?: string }
-  | { status: "confirm"; summary: string; run: () => DoneInfo };
+  | { status: "confirm"; summary: string; statusChange?: undefined; run: () => DoneInfo }
+  | { status: "confirm"; summary: string; statusChange: { n: string; status: string }; run: () => Promise<DoneInfo> };
 
 // ── helpers ──────────────────────────────────────────────────────────────
 const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
@@ -279,8 +280,9 @@ const ACTIONS: Record<string, ActionDef> = {
       return {
         status: "confirm",
         summary: `Mark ${label} → ${canon}?`,
-        run: () => {
-          ctx.writeStatus(n, canon);
+        statusChange: { n, status: canon },
+        run: async () => {
+          await ctx.writeStatus(n, canon);
           return { note: `Marked #${n} as ${canon}.` };
         },
       };
