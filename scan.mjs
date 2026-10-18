@@ -38,7 +38,6 @@
  */
 
 import {
-  appendFileSync,
   closeSync,
   existsSync,
   fchmodSync,
@@ -67,7 +66,7 @@ import { fingerprintText, findCrossListings } from './fingerprint-core.mjs';
 import { computeListingFingerprint } from './listing-fingerprint.mjs';
 import { resolveColumns, parseTrackerRow, normalizeTextKey, extractReqNumber, REQ_NUMBER_RE } from './tracker-parse.mjs';
 import { workdayDedupKey, stripWorkdayRepostSuffix, isWorkdayJobUrl } from './providers/workday.mjs';
-import { normalizeCompany } from './tracker-utils.mjs';
+import { normalizeCompany, appendLedgerRows } from './tracker-utils.mjs';
 import { normalizeCompanyName } from './invite-match.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 import { compileKeyword, compilePositiveKeyword, compileContentKeyword, buildTitleFilter, foldTitle } from './title-keywords.mjs';
@@ -3419,7 +3418,7 @@ export async function appendToScanHistory(offers, date, status = 'added', { alre
 
     const lines = offers.map(o => formatScanHistoryRow(o, date, status)).join('\n') + '\n';
 
-    appendFileSync(SCAN_HISTORY_PATH, lines, 'utf-8');
+    appendLedgerRows(SCAN_HISTORY_PATH, lines);
   };
 
   if (alreadyLocked) write();
@@ -3675,7 +3674,7 @@ export function appendScanRunSummary(c, filePath = SCAN_RUNS_PATH) {
     // filtered_country_eligibility (#2093) appended at the END for the same reason.
     c.filteredCountryEligibility ?? 0,
   ].join('\t') + '\n';
-  appendFileSync(filePath, row, 'utf-8');
+  appendLedgerRows(filePath, row);
 }
 
 // ── Portal health persistence (#1744) ───────────────────────────────
@@ -3705,7 +3704,7 @@ export async function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH
     for (const r of healthRecords) {
       lines += [r.timestamp, r.company, r.status].join('\t') + '\n';
     }
-    if (lines) appendFileSync(filePath, lines, 'utf-8');
+    if (lines) appendLedgerRows(filePath, lines);
   });
 }
 
@@ -3776,6 +3775,7 @@ export async function verifyOffers(offers, { headedFallback = false, throttleBas
   const {
     rejectPrivateOrInvalid, checkUrlLiveness, checkUrlLivenessWithFallback,
     createHeadedPageProvider, newLivenessPage, installLivenessRouteGuard, jitteredDelayMs, sleep,
+    takeSuppressedBlockCount,
   } = await import('./liveness-browser.mjs');
 
   // The HTTP rung can run concurrently; each provider retains its own rate
@@ -3918,6 +3918,9 @@ export async function verifyOffers(offers, { headedFallback = false, throttleBas
       if (browser) await browser.close();
     }
   }
+  // The route guard counts, rather than logs, subresources a DNS filter blocks.
+  const quietBlocks = typeof takeSuppressedBlockCount === 'function' ? takeSuppressedBlockCount() : 0;
+  if (quietBlocks) console.warn(`--verify: ${quietBlocks} tracker/analytics requests skipped (no usable address, e.g. a DNS ad-blocker); not counted against any posting`);
 
   return { verified, expired, dropped, invalid, migrated, verificationStatusByOffer };
 }

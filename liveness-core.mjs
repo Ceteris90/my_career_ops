@@ -1,4 +1,5 @@
 import { resolveColumns, parseTrackerRow, linkedReportNumbers, reportUrlForNumbers } from './tracker-parse.mjs';
+import { parseScanHistoryLine } from './lib/scan-history-columns.mjs';
 
 // Portals write closure banners with typographic punctuation and accents:
 // WTTJ renders "Cette offre n’est plus disponible." with U+2019, not ASCII "'".
@@ -353,7 +354,11 @@ export function planExpiredHistoryRows(scanHistoryText = '', verdicts = [], norm
 
   // slice(1) skips the header, the same convention collectSeenUrls uses.
   for (const line of String(scanHistoryText ?? '').split('\n').slice(1)) {
-    const [url, , portal = '', title = '', company = '', status = '', location = ''] = line.split('\t');
+    // parseScanHistoryLine undoes the formula escaping the writer applied. The
+    // planned rows go back through appendToScanHistory, which escapes again, so
+    // reading the stored cells raw added one more leading apostrophe to a title,
+    // company or location starting with = + - or @ on every record.
+    const { url, portal, title, company, status, location } = parseScanHistoryLine(line);
     if (!url) continue;
     const key = normalizeUrl(url);
     if (!knownByKey.has(key)) knownByKey.set(key, new Map());

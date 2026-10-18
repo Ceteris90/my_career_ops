@@ -122,7 +122,11 @@ Heningnya kabar setelah Anda menekan tombol kirim bukanlah salah Anda. Cukup ban
 
 <br>
 
-Proses rekrutmen tidak akan membaik dengan sendirinya. Orang-orang yang menjalaninyalah yang bisa memperbaikinya—dan mereka sudah berkumpul di sini, saling mencocokkan catatan dan membantu mengatur konfigurasi satu sama lain. [Di sinilah perbaikan itu ditulis](CONTRIBUTING.md). Sebuah ruang bersama, bukan klub eksklusif. **Mari kita bangun bersama.**
+Proses rekrutmen tidak akan membaik dengan sendirinya. Orang-orang yang menjalaninyalah yang bisa memperbaikinya—dan mereka sudah berkumpul di sini, saling mencocokkan catatan dan membantu mengatur konfigurasi satu sama lain.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=id" alt="Dinding animasi berisi avatar GitHub para kontributor, terisi sesuai urutan kedatangan sejak April 2026, dengan kotak berikutnya dibiarkan kosong." width="100%"></a></p>
+
+[Di sinilah perbaikan itu ditulis](CONTRIBUTING.md). Sebuah ruang bersama, bukan klub eksklusif. **Mari kita bangun bersama.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: jumlah anggota langsung di server career-ops"></a></p>
 
