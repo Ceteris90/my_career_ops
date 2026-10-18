@@ -43,8 +43,21 @@ Before Block A, check the JD against the candidate's own hard rules. A hard rule
 
 A hit needs a hard rule and a JD sentence that states the fact breaking it. An inferred fact is not a hit. A missing salary never breaks a pay floor, and a senior title with no stated year count never breaks an experience cap. A stated pay range breaks `compensation.minimum` only when its top is below the minimum in the same currency and period.
 
-1. On a hit, **stop before Block A**. Do no research and write no report, tracker row or CV. Reply with each broken rule and the JD sentence that breaks it, both quoted, then ask: "This breaks your rule: {rule}. Evaluate it anyway?"
-2. An explicit yes runs the full A-H evaluation as normal. Note the override in the report. Anything else ends here.
+1. On a hit, **stop before Block A**. Do no research and write no report or CV.
+   - **Interactive session:** write no tracker row either. Reply with each broken rule and the JD sentence that breaks it, both quoted, then ask: "This breaks your rule: {rule}. Evaluate it anyway?"
+   - **Headless run:** nobody can answer before the run ends. Treat a run as headless when the request says headless, unattended or non-interactive, when a parent agent or script dispatched you with one prompt (`grok -p`, `claude -p`, `codex exec`), or when auto-pipeline has no user turn to wait for. Otherwise treat it as interactive. A batch worker follows `batch/batch-prompt.md` and its JSON hand-back instead. In a headless run, do not ask and do not wait. Claim a number with `node reserve-report-num.mjs` and write this tracker addition to `{DATA_ROOT}/batch/tracker-additions/{num}-{company-slug}.tsv` (format in AGENTS.md, "TSV Format for Tracker Additions"), with the first broken rule and its JD sentence:
+
+     ```tsv
+     num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tnotes\turl
+     {num}\t{date}\t{company}\t{role}\tSKIP\tN/A\t❌\t-\tDealbreaker: "{rule}" vs "{jd_line}"\t{url}
+     ```
+
+     Then end with exactly this line and nothing after it, so the parent can find it:
+
+     ```
+     needs_confirmation: dealbreaker "{rule}" - rerun with "evaluate anyway" to evaluate
+     ```
+2. An explicit yes, or a rerun whose request says "evaluate anyway", runs the full A-H evaluation as normal. Note the override in the report. Its tracker addition carries the same URL, so it updates the SKIP row. Anything else ends here.
 3. No hit, or no hard rules → proceed.
 
 ## Agency confirmation gate (#1596, #4359)

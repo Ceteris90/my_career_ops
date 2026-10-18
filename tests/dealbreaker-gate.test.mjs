@@ -62,7 +62,7 @@ test('auto-pipeline applies the same gate before Step 1', () => {
 
 test('a headless run records a SKIP and ends on one fixed line instead of asking', () => {
   assert.match(gate, /headless/i);
-  for (const runner of ['-p', 'batch', 'auto-pipeline']) assert.ok(gate.includes(runner), `headless rule does not name ${runner}`);
+  for (const runner of ['-p', 'auto-pipeline', 'batch/batch-prompt.md']) assert.ok(gate.includes(runner), `headless rule does not name ${runner}`);
   assert.match(gate, /^\s*needs_confirmation: dealbreaker "\{rule\}" - rerun with "evaluate anyway" to evaluate$/m);
   assert.match(gate, /Interactive/);
 });
