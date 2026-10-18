@@ -173,6 +173,7 @@ const SUBJECTS = [
   // 0. the modules that already honored the override, now routed through the resolver
   ['resolver users', 'cv-templates.mjs', inline(`const m = await import(${JSON.stringify(module('cv-templates.mjs'))}); m.loadProfileDefault('cv');`)],
   ['resolver users', 'validate-profile.mjs', cli('validate-profile.mjs')],
+  ['resolver users', 'github-evidence.mjs', cli('github-evidence.mjs')],
   ['resolver users', 'scan.mjs (country, re-apply windows)', inline(`const m = await import(${JSON.stringify(module('scan.mjs'))}); m.loadCandidateCountry(); m.loadReApplyWindows();`)],
   ['resolver users', 'followup-cadence.mjs', cli('followup-cadence.mjs')],
   ['resolver users', 'rejection-latency.mjs', cli('rejection-latency.mjs', '--summary')],
