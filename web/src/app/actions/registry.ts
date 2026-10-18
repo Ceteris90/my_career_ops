@@ -311,10 +311,16 @@ const ACTIONS: Record<string, ActionDef> = {
   remember: {
     sideEffect: "write",
     run: (raw, ctx) => {
-      const fact = raw.fact;
-      if (!isStr(fact)) return { status: "ignored" };
-      ctx.rememberFact(String(fact).trim());
-      return { status: "done" };
+      const fact = isStr(raw.fact) ? raw.fact.trim() : "";
+      if (!fact) return { status: "ignored" };
+      return {
+        status: "confirm",
+        summary: `Save to your profile (modes/_profile.md): "${fact}"?`,
+        run: () => {
+          ctx.rememberFact(fact);
+          return { note: "Saved to your profile." };
+        },
+      };
     },
   },
 
