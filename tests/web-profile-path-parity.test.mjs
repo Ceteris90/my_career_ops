@@ -73,7 +73,9 @@ if (!existsSync(join(ROOT, 'web'))) {
 console.log('\nprofile path — web mirror against the core helper');
 
 const core = await import(pathToFileURL(join(ROOT, 'path-resolver.mjs')).href);
-if (!existsSync(MIRROR)) {
+if (!existsSync(join(ROOT, 'web'))) {
+  pass('core comparison skipped: no web/ in this checkout');
+} else if (!existsSync(MIRROR)) {
   fail('web profile-path mirror is missing; nothing to compare with the core helper');
 } else if (typeof core.getProfilePath !== 'function') {
   pass('core comparison skipped: path-resolver.mjs has no getProfilePath yet (Part 1 of #5026)');
