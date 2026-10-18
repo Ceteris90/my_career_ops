@@ -28,6 +28,7 @@ function test(name, fn) {
     pass(name);
   } catch (error) {
     fail(`${name}: ${error.message}`);
+    process.exitCode = 1;
   }
 }
 
@@ -49,6 +50,11 @@ for (const file of ['modes/_shared.md', 'modes/pdf.md']) {
     assert.ok(writes.length > 0, `${file} no longer tells the agent where lasting preferences go; update this test`);
     for (const s of writes) {
       assert.match(s, /interactive session/i, `this _custom.md write instruction has no interactive-only scope: ${s}`);
+    }
+    const workerRule = sentences.find((s) => /worker\b.*\bnever writes\b/.test(s));
+    assert.ok(workerRule, `${file} does not say what a delegated or batch worker must not write`);
+    for (const target of USER_RULE_FILES) {
+      assert.ok(workerRule.includes(`\`${target}\``), `${file} lets a worker write ${target}: ${workerRule}`);
     }
   });
 }
