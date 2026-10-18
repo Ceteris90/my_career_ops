@@ -102,5 +102,13 @@ check('oferta Risk Summary carries the vacancy-status row',
 const batch = read('batch', 'batch-prompt.md');
 check('batch-prompt Machine Summary schema carries vacancy_disclosure in both templates',
   batch.split('vacancy_disclosure:').length - 1 === 2, 'key missing or not in both templates');
+check('Ontario retention duty cites ESA s. 15 (7.1)',
+  /15 \(7\.1\)/.test(on?.record_retention || '') && /15 \(7\.1\)/.test(on?.legal_basis || '')
+    && !/not confirmed/.test(on?.record_retention || ''),
+  'retention source not cited');
+check('batch maps a silent posting dated before the row effective date to not_evaluated',
+  /not_evaluated`? otherwise, including a silent posting dated before the row's `effective` date/.test(batch)
+    && /on or after that row's `effective` date, so the silence note was actually produced/.test(batch),
+  'effective-date gate missing from the vacancy_disclosure mapping');
 check('templates/README documents the table',
   read('templates', 'README.md').includes('jurisdiction-vacancy-disclosure.yml'), 'README entry missing');
