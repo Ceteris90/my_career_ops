@@ -319,7 +319,7 @@ const ACTIONS: Record<string, ActionDef> = {
         summary: `Save to your profile (modes/_profile.md): "${fact}"?`,
         run: () => {
           ctx.rememberFact(fact);
-          return { note: "Saved to your profile." };
+          return {};
         },
       };
     },
