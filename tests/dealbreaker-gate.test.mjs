@@ -7,9 +7,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ROOT } from './helpers.mjs';
+import { ROOT, ownRootEnv } from './helpers.mjs';
 
 const oferta = readFileSync(join(ROOT, 'modes', 'oferta.md'), 'utf8');
 const autoPipeline = readFileSync(join(ROOT, 'modes', 'auto-pipeline.md'), 'utf8');
@@ -54,5 +56,34 @@ test('a hit writes nothing and lets the candidate override', () => {
 test('auto-pipeline applies the same gate before Step 1', () => {
   const step = section(autoPipeline, '## Step 0.7 — Dealbreaker gate');
   assert.ok(step.includes('modes/oferta.md'));
+  assert.match(step, /headless/i);
   assert.ok(autoPipeline.indexOf('## Step 0.7') < autoPipeline.indexOf('## Step 1'));
+});
+
+test('a headless run records a SKIP and ends on one fixed line instead of asking', () => {
+  assert.match(gate, /headless/i);
+  for (const runner of ['-p', 'batch', 'auto-pipeline']) assert.ok(gate.includes(runner), `headless rule does not name ${runner}`);
+  assert.match(gate, /^\s*needs_confirmation: dealbreaker "\{rule\}" - rerun with "evaluate anyway" to evaluate$/m);
+  assert.match(gate, /Interactive/);
+});
+
+test('the headless SKIP row merges into the tracker with the rule and the JD line', (t) => {
+  const tsv = gate.match(/```tsv\n([\s\S]*?)```/)?.[1]?.replace(/^[ \t]+/gm, '');
+  assert.ok(tsv, 'gate has no tsv example');
+  const dir = mkdtempSync(join(tmpdir(), 'co-dealbreaker-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'data'));
+  mkdirSync(join(dir, 'batch', 'tracker-additions'), { recursive: true });
+  writeFileSync(join(dir, 'data', 'applications.md'), '# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n|---|------|---------|------|-------|--------|-----|--------|-------|\n');
+  const row = tsv
+    .replace('{num}', '7').replace('{date}', '2026-01-31').replace('{company}', 'Adatum').replace('{role}', 'Staff Designer')
+    .replace('{rule}', 'no fully on-site roles').replace('{jd_line}', 'This role is on site five days a week')
+    .replace('{url}', 'https://example.test/jobs/7')
+    .replaceAll('\\t', '\t');
+  writeFileSync(join(dir, 'batch', 'tracker-additions', '7-adatum.tsv'), row);
+  const result = spawnSync(process.execPath, [join(ROOT, 'merge-tracker.mjs')], { cwd: dir, encoding: 'utf8', env: ownRootEnv({ CAREER_OPS_ROOT: dir }) });
+  assert.equal(result.status, 0, result.stderr);
+  const merged = readFileSync(join(dir, 'data', 'applications.md'), 'utf8').trim().split('\n').at(-1);
+  assert.match(merged, /\| Adatum \| Staff Designer \| N\/A \| SKIP \|/);
+  assert.ok(merged.includes('"no fully on-site roles"') && merged.includes('"This role is on site five days a week"'), merged);
 });
