@@ -39,7 +39,9 @@ check('Ontario row cites EPFNA ss. 7(1)-(3), 7.1, 8, 9 and ESA s. 74.8(1) paras 
   'citation missing');
 check('Ontario official_source URLs are the e-Laws EPFNA and ESA pages',
   on?.official_source?.url === 'https://www.ontario.ca/laws/statute/09e32'
-    && (on?.official_source?.what_it_shows || '').includes('https://www.ontario.ca/laws/statute/00e41'),
+    && (on?.official_source?.what_it_shows || '').match(/https?:\/\/[^\s)]+/g)
+      ?.map((u) => u.replace(/[.,;]+$/, ''))
+      .some((u) => u === 'https://www.ontario.ca/laws/statute/00e41'),
   String(on?.official_source?.url));
 check('Ontario row makes no claim of a general ban for citizens or permanent residents',
   !/general (ontario )?ban/i.test((on?.applies_to || '').replace(/No general[\s\S]*$/i, '')) && /was found, so no such rule is stated/.test(on?.applies_to || ''),
