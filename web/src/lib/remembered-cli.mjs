@@ -3,6 +3,12 @@ import path from "node:path";
 
 const LINE = /^\s*(?:export\s+)?CAREER_OPS_CLI\s*=\s*(.*?)\s*$/;
 
+/** A .env value as dotenv reads it: the text inside matching quotes, else the text before a ` #` comment. */
+function unquote(raw) {
+  const quoted = /^(['"`])(.*?)\1/.exec(raw);
+  return quoted ? quoted[2] : raw.replace(/\s+#.*$/, "");
+}
+
 /**
  * The agent CLI the user chose: CAREER_OPS_CLI from the shell, else from the
  * data root's .env (written by `node remember-cli.mjs`). Null when unset.
@@ -22,7 +28,7 @@ export function readRememberedCli(root, env = process.env) {
   let value = null;
   for (const line of text.split("\n")) {
     const m = LINE.exec(line);
-    if (m) value = m[1].replace(/^(['"])(.*)\1$/, "$2") || null;
+    if (m) value = unquote(m[1]) || null;
   }
   return value;
 }

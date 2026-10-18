@@ -62,7 +62,7 @@ export const CLI_CANDIDATES = [
   { bin: 'codex', args: p => ['exec', p] },
   { bin: 'copilot', args: p => ['-p', p] },
   { bin: 'qwen', args: p => ['-p', p] },
-  { bin: 'agy', args: p => ['-p', p] },
+  { bin: 'agy', id: 'antigravity', args: p => ['-p', p] },
   { bin: 'grok', args: p => ['-p', p] },
   { bin: 'pi', args: p => ['-p', p] },
 ];
@@ -321,7 +321,7 @@ async function main(args) {
   }
 
   const remembered = readRememberedCli(DATA_ROOT);
-  const active = CLI_CANDIDATES.find(c => c.bin === remembered);
+  const active = CLI_CANDIDATES.find(c => c.bin === remembered || c.id === remembered);
   const cli = forced
     ? CLI_CANDIDATES.find(c => c.bin === forced) ?? { bin: forced, args: p => ['-p', p] }
     : detectCli(active ? [active, ...CLI_CANDIDATES] : CLI_CANDIDATES);
