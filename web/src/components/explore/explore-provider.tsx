@@ -112,7 +112,6 @@ type ResultSnapshot = {
   sources: Partial<Record<DiscoverySource, SourceState>>;
   partial: boolean;
   status: string;
-  employerOutcome: EmployerScanOutcome | null;
   error: string;
   scannerMissing: boolean;
   added: string[];
@@ -178,6 +177,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     const f = filtersRef.current;
     if (f.preset === CHINA_PRESET && !f.employers?.length) return;
     const employer = f.preset === CHINA_PRESET;
+    if (employer) {
+      try { sessionStorage.removeItem(RESULTS_KEY); } catch { /* unavailable */ }
+    }
     const run = runs.current.start();
     runningRef.current = true;
     setPhase("casting");
@@ -214,7 +216,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       switch (ev.kind) {
         case "atsStart":
           setPhase("scanning");
-          setStatus(`Walking ${ATS_LABEL[ev.ats as AtsSource] ?? EMPLOYER_LABEL[ev.ats as keyof typeof EMPLOYER_LABEL] ?? ev.ats} — ${ev.companies.toLocaleString()} companies`);
+          setStatus(`Walking ${ATS_LABEL[ev.ats as AtsSource] ?? ev.ats} — ${ev.companies.toLocaleString()} companies`);
           setSources((s) => ({ ...s, [ev.ats]: { ...s[ev.ats as AtsSource], state: "active", companies: ev.companies } }));
           break;
         case "progress":
@@ -300,10 +302,10 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       // A missing terminal summary is interruption, even with zero results.
       const outcome: EmployerScanOutcome = employerResult ?? { state: acc.length ? "partial" : "failed", message: `Incomplete scan — ${(f.employers ?? []).map(id => EMPLOYER_LABEL[id]).join(", ")}: ${sawError || "source stream ended before completion"}.` };
       setEmployerOutcome(outcome);
-      setStatus(outcome.message);
+      setStatus("");
       setPartial(outcome.state !== "complete");
       setMatchCount(acc.length);
-      setError(outcome.state === "failed" ? outcome.message : "");
+      setError("");
       setPhase(acc.length ? "results" : outcome.state === "failed" ? "failed" : outcome.state === "partial" ? "degraded" : "empty-loose");
       return;
     }
@@ -612,8 +614,13 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       snap = null;
     }
     if (!snap || snap.v !== 1 || !Array.isArray(snap.offers)) return;
+    // Retire any employer snapshot created by the earlier implementation.
+    if ("employerOutcome" in snap && snap.employerOutcome) {
+      try { sessionStorage.removeItem(RESULTS_KEY); } catch { /* unavailable */ }
+      return;
+    }
     setModeState(snap.mode === "ai" ? "ai" : "scan");
-    setEmployerOutcome(snap.employerOutcome ?? null);
+    setEmployerOutcome(null);
     setOffers(snap.offers);
     setMatchCount(typeof snap.matchCount === "number" ? snap.matchCount : snap.offers.length);
     setCompaniesScanned(snap.companiesScanned ?? 0);
@@ -638,10 +645,16 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded", "blocked"]);
     if (!SETTLED.has(phase)) return;
+    // Employer coverage messages and results stay in memory. Do not serialize
+    // them into the legacy browser snapshot, or restore an older search instead.
+    if (employerOutcome) {
+      try { sessionStorage.removeItem(RESULTS_KEY); } catch { /* unavailable */ }
+      return;
+    }
     try {
       const snap: ResultSnapshot = {
         v: 1, mode, phase, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources,
-        partial, status, employerOutcome, error, scannerMissing, added: [...added], aiTrace, aiCost, aiIntent,
+        partial, status, error, scannerMissing, added: [...added], aiTrace, aiCost, aiIntent,
       };
       sessionStorage.setItem(RESULTS_KEY, JSON.stringify(snap));
     } catch {

@@ -43,7 +43,9 @@ provider's original posting link. Employer cards do not request the disk-backed
 logo proxy. Discovery invokes no pipeline, history, health, profile or portal
 writer and creates no temporary configuration. Pipeline addition and evaluation
 continue to require their existing separate explicit actions. Scheduling this
-preset is not offered by this change.
+preset is not offered by this change. Employer preset results and coverage
+messages stay in memory and are not saved in the browser snapshot; refreshing
+the page requires a new scan. The legacy ATS/AI snapshot behavior is unchanged.
 
 ## Live check — 2026-10-18 (Asia/Shanghai)
 

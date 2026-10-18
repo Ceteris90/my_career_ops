@@ -9,7 +9,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   CHINA_PRESET,
   CHINA_SOURCES,
@@ -340,16 +339,28 @@ test("worker lifecycle times out, cancels, and leaves user files byte-identical;
   mkdirSync(path.join(dir, "providers"));
   writeFileSync(
     path.join(dir, "scan.mjs"),
-    `export { buildTitleFilter, buildLocationFilter, normalizeUrlForDedup } from ${JSON.stringify(fileURLToPath(new URL("../../../scan.mjs", import.meta.url)))};`,
+    `import { readFileSync } from "node:fs";
+const modules = JSON.parse(readFileSync(new URL("./modules.json", import.meta.url), "utf8"));
+const core = await import(modules.scan);
+export const { buildTitleFilter, buildLocationFilter, normalizeUrlForDedup } = core;`,
   );
   writeFileSync(
     path.join(dir, "providers/tencent.mjs"),
-    `export { default } from ${JSON.stringify(fileURLToPath(new URL("../../../providers/tencent.mjs", import.meta.url)))};`,
+    `import { readFileSync } from "node:fs";
+const modules = JSON.parse(readFileSync(new URL("../modules.json", import.meta.url), "utf8"));
+export default (await import(modules.tencent)).default;`,
   );
   writeFileSync(
     path.join(dir, "providers/_http.mjs"),
-    `export const makeHttpCtx=()=>({ fetchJson:async()=>(${JSON.stringify(payloads.tencent)}) });`,
+    `import { readFileSync } from "node:fs";
+const payload = JSON.parse(readFileSync(new URL("./tencent-response.json", import.meta.url), "utf8"));
+export const makeHttpCtx = () => ({ fetchJson: async () => structuredClone(payload) });`,
   );
+  writeFileSync(path.join(dir, "modules.json"), JSON.stringify({
+    scan: new URL("../../../scan.mjs", import.meta.url).href,
+    tencent: new URL("../../../providers/tencent.mjs", import.meta.url).href,
+  }));
+  writeFileSync(path.join(dir, "providers/tencent-response.json"), JSON.stringify(payloads.tencent));
   const before = listTree(dir).sort();
   const success = await runEmployerWorker("tencent", request, {
     codeRoot: dir,

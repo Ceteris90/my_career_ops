@@ -186,6 +186,7 @@ test(
       resolve();
       release = null;
       await page.getByText(message, { exact: true }).waitFor();
+      await page.waitForFunction(() => sessionStorage.getItem("career-ops:explore-results") === null);
       assert.equal(
         await focusBefore.evaluate(
           (element) => element === document.activeElement,
