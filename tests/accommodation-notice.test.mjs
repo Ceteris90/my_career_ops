@@ -53,6 +53,9 @@ check('freshly verified row produces no findings',
   verdict.rowsChecked === 1 && verdict.findings.length === 0 && verdict.warnings.length === 0, JSON.stringify(verdict));
 
 // --- synthetic fixtures: a small model of the signal's decision table ---
+// `evaluate` models the rules documented in modes/oferta-signals/22-accommodation-notice.md.
+// It is not the production implementation (Signal 22 is agent-judged); these fixtures pin the
+// documented decision table, not the agent's behaviour.
 const statesRe = /accommodations? (is|are) available/i;
 function evaluate({ jd, postingDate = '2026-10-01', jurisdiction = 'CA-ON', invited = false }) {
   const row = rows[jurisdiction];
