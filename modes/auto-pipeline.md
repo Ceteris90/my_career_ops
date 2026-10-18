@@ -46,7 +46,7 @@ On a hit, **stop before Step 1** and surface the candidate's own recorded decisi
 
 ## Step 0.7 — Dealbreaker gate
 
-Apply `modes/oferta.md` → **Dealbreaker gate** before Step 1. On a hit, stop before Step 1 and write no report or PDF unless the candidate answers yes. With the candidate present, ask. In a headless run, write the gate's SKIP tracker row and end on its `needs_confirmation` line.
+Apply `modes/oferta.md` → **Dealbreaker gate** before Step 1. On a hit, stop before Step 1 and write no report or PDF unless the candidate answers yes. With the candidate present, ask. In a headless run, write the gate's SKIP tracker row and end on its `needs_confirmation` line, unless the posting is agency-mediated, in which case the agency handoff below comes first and nothing is written.
 
 ## Step 1 — A-G Evaluation
 
