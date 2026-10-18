@@ -8,10 +8,12 @@ on:
   pull_request:
     paths:
       - 'web/**'
+      - '.github/workflows/web-ci.yml'
   push:
     branches: [main]
     paths:
       - 'web/**'
+      - '.github/workflows/web-ci.yml'
 
 permissions:
   contents: read
@@ -29,7 +31,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            package.json
+            web/package-lock.json
+      # Web/core parity tests import scan.mjs and real providers. Node resolves
+      # their packages from the core checkout, not from web/node_modules.
+      # No browser install or other lifecycle script is needed for these tests.
+      - name: Install core dependencies for parity tests
+        run: npm install --ignore-scripts --no-package-lock
+        working-directory: .
       - run: npm ci
       - run: npm test
       - run: npx tsc --noEmit
