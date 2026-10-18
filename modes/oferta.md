@@ -37,6 +37,16 @@ If `data/blacklist.md` exists, check both the posting's company and posting URL 
 2. Wait for an explicit answer — never silently refuse, never silently proceed. The candidate's call always wins (same HITL spirit as the score < 4.0 rule): an explicit yes runs the full A-H evaluation as normal (note the override in the report notes); anything else stops here with no evaluation, report, or CV.
 3. No match, or no `data/blacklist.md` → proceed. A blacklist entry never changes any score anywhere — it is a gate, not a signal.
 
+## Dealbreaker gate
+
+Before Block A, check the JD against the candidate's own hard rules. A hard rule is one the candidate wrote as a dealbreaker, a hard skip, a hard no, a "never" or a walk-away number. Look for them in `config/profile.yml` (any `dealbreakers` list, and `compensation.minimum`), `modes/_profile.md` and `modes/_custom.md`. A scored preference, such as "5 days on site: 3.0", is not a hard rule. Score it in Block A as usual.
+
+A hit needs a hard rule and a JD sentence that states the fact breaking it. An inferred fact is not a hit. A missing salary never breaks a pay floor, and a senior title with no stated year count never breaks an experience cap. A stated pay range breaks `compensation.minimum` only when its top is below the minimum in the same currency and period.
+
+1. On a hit, **stop before Block A**. Do no research and write no report, tracker row or CV. Reply with each broken rule and the JD sentence that breaks it, both quoted, then ask: "This breaks your rule: {rule}. Evaluate it anyway?"
+2. An explicit yes runs the full A-H evaluation as normal. Note the override in the report. Anything else ends here.
+3. No hit, or no hard rules → proceed.
+
 ## Agency confirmation gate (#1596, #4359)
 
 Before Block A or any tracker, report, or CV write, if the JD suggests an agency/recruiter intermediary ("our client", agency domain, no employer named), ask which agency this posting came through and wait for an explicit answer. Follow `modes/_shared.md` → **Agency confirmation handoff**: a delegated/headless worker returns `needs_confirmation` with the posting identity, evidence, and question, then stops without artifacts. The parent asks and resumes only with the user's explicit answer for this posting. Never write `Company: ?` / Via first and seek confirmation afterward. After confirmation, retain `?` for an unknown employer and the confirmed agency in Via.
