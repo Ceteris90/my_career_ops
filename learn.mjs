@@ -283,7 +283,7 @@ function check(root, inputPath) {
 }
 
 function readPending(root, pendingPath) {
-  const abs = resolve(pendingPath);
+  const abs = resolve(root, pendingPath);
   const dir = join(root, PENDING_DIR);
   const inside = existsSync(abs) && existsSync(dir) ? relative(realpathSync(dir), realpathSync(abs)) : '..';
   if (inside.startsWith('..') || inside.includes(sep) || !inside.endsWith('.json')) {
@@ -407,7 +407,23 @@ function selfTest() {
   return failed === 0;
 }
 
+const USAGE = `Usage:
+  node learn.mjs check <candidates.json> [--summary]
+  node learn.mjs apply <pending.json> --accept 1,3 [--reject 2] --reply "<the user's reply, verbatim>"
+  node learn.mjs --self-test
+
+  --summary   print the numbered candidates for the user instead of JSON
+  --accept    ids the user accepted, comma-separated; there is no "all"
+  --reject    ids the user rejected, comma-separated
+  --reply     the user's reply, recorded verbatim in data/learning/ledger.jsonl
+  --self-test run the pure-function checks and exit
+  -h, --help  show this help`;
+
 async function main(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    console.log(USAGE);
+    return 0;
+  }
   if (argv.includes('--self-test')) return selfTest() ? 0 : 1;
   const [command, path, ...rest] = argv;
   const root = getCareerOpsRoot();
@@ -420,7 +436,7 @@ async function main(argv) {
     console.log(JSON.stringify(await apply(root, path, rest), null, 2));
     return 0;
   }
-  console.error('usage: node learn.mjs check <candidates.json> [--summary]\n       node learn.mjs apply <pending.json> --accept 1,3 [--reject 2] --reply "<the user\'s reply>"\n       node learn.mjs --self-test');
+  console.error(USAGE);
   return 1;
 }
 
