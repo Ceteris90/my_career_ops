@@ -13,7 +13,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { buildLocationFilter, normalizeUrlForDedup, PORTALS_PATH, SCAN_HISTORY_PATH, PIPELINE_PATH } from './scan.mjs';
 import { buildTitleFilter } from './title-keywords.mjs';
 import { loadProviders, resolveProvider } from './providers/_registry.mjs';
@@ -215,7 +215,7 @@ export function diagnose(posting, ctx) {
 }
 
 export function loadContext() {
-  const config = yaml.load(readFileSync(PORTALS_PATH, 'utf8')) || {};
+  const config = loadYaml(readFileSync(PORTALS_PATH, 'utf8')) || {};
   const entries = [...(config.tracked_companies || []), ...(config.job_boards || [])].filter(e => e && typeof e === 'object');
   const history = new Map();
   const historyCompanies = new Map();

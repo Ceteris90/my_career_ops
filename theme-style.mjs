@@ -31,7 +31,7 @@
  * Pure + dependency-light (js-yaml only) so it's unit-testable without Playwright.
  */
 import { readFileSync, existsSync } from 'fs';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getProfilePath } from './path-resolver.mjs';
 
 // Recognized style tokens → the CSS custom property each maps to. Anything not
@@ -79,7 +79,7 @@ export const STYLE_VAR_MAP = {
 export function readStyleTokens(profilePath = getProfilePath()) {
   try {
     if (!existsSync(profilePath)) return {};
-    const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    const raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
     return styleTokensFrom(raw?.style);
   } catch {
     return {};
@@ -116,7 +116,7 @@ export function styleTokensFrom(style) {
 export function readCvSectionOrder(profilePath = getProfilePath()) {
   try {
     if (!existsSync(profilePath)) return [];
-    const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    const raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
     return cvSectionOrderFrom(raw?.cv);
   } catch {
     return [];

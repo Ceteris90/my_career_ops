@@ -14,7 +14,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { loadCanonicalStates, foldStatusInput } from './tracker-utils.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
@@ -86,7 +86,7 @@ export function loadProfileCadence(profilePath = PROFILE_FILE) {
   if (!profilePath || !existsSync(profilePath)) return {};
   let raw;
   try {
-    raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
   } catch {
     return {};
   }
@@ -105,7 +105,7 @@ export function loadProfileCadence(profilePath = PROFILE_FILE) {
 export function loadFollowupsEnabled(profilePath = PROFILE_FILE) {
   if (!profilePath || !existsSync(profilePath)) return true;
   try {
-    return yaml.load(readFileSync(profilePath, 'utf-8'))?.follow_ups?.enabled !== false;
+    return loadYaml(readFileSync(profilePath, 'utf-8'))?.follow_ups?.enabled !== false;
   } catch {
     return true;
   }
@@ -682,7 +682,7 @@ export function loadSelfIdentities(profilePath = PROFILE_FILE) {
   if (!profilePath || !existsSync(profilePath)) return new Set();
   let raw;
   try {
-    raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
   } catch {
     return new Set();
   }

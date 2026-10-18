@@ -33,6 +33,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { buildCompanyCanonicalizer, findBlacklistEntry, loadBlacklist } from './scan.mjs';
 import { parseScanHistoryLine, scanHistoryLineHasColumn } from './lib/scan-history-columns.mjs';
@@ -107,7 +108,7 @@ if (!existsSync(HISTORY_PATH)) {
 // count as tracked: the user turned them off deliberately, and re-proposing
 // them every run would be noise.
 const portalsRaw = existsSync(PORTALS_PATH)
-  ? (yaml.load(readFileSync(PORTALS_PATH, 'utf-8')) || {})
+  ? (loadYaml(readFileSync(PORTALS_PATH, 'utf-8')) || {})
   : {};
 const canon = buildCompanyCanonicalizer(portalsRaw.company_aliases);
 

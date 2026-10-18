@@ -17,7 +17,7 @@ import { readFileSync, existsSync, realpathSync, writeFileSync, symlinkSync, rmS
 import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
-import { load as yamlLoad } from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput } from './tracker-utils.mjs';
@@ -309,7 +309,7 @@ export function parseMachineSummary(content) {
   if (!raw) return null;
 
   try {
-    const parsed = yamlLoad(raw);
+    const parsed = loadYaml(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return Object.fromEntries(
       Object.entries(parsed).filter(([key]) => MACHINE_SUMMARY_FIELDS.has(key))
@@ -1163,7 +1163,7 @@ const DISCARD_REASONS_FILE = join(dirname(fileURLToPath(import.meta.url)), 'temp
  */
 export function loadDiscardReasonVocabulary(file = DISCARD_REASONS_FILE) {
   try {
-    const parsed = yamlLoad(readFileSync(file, 'utf8'));
+    const parsed = loadYaml(readFileSync(file, 'utf8'));
     const reasons = Array.isArray(parsed?.reasons) ? parsed.reasons : [];
     const ids = reasons.map(reason => reason?.id).filter(id => typeof id === 'string' && id);
     return ids.length > 0 ? new Set(ids) : null;

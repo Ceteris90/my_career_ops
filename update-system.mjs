@@ -327,6 +327,7 @@ const SYSTEM_PATHS = [
   'lib/template-manifest.mjs',
   'lib/agent-cli.mjs',
   'remember-cli.mjs',
+  'lib/yaml-document.mjs',
   'scan-hn.mjs',
   'scripts/check-syntax.mjs',
   'scripts/export-ats-text.mjs',
