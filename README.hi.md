@@ -122,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-हायरिंग अपने आप ठीक नहीं होगी। जो लोग इससे गुज़र रहे हैं, वे इसे ठीक कर सकते हैं, और वे पहले से उस कमरे में हैं: नोट्स मिला रहे हैं और एक-दूसरे का सेटअप ठीक कर रहे हैं। [समाधान यहीं लिखा जाता है](CONTRIBUTING.md)। एक कमरा, कोई क्लब नहीं। **आइए, मिलकर बनाएँ।**
+हायरिंग अपने आप ठीक नहीं होगी। जो लोग इससे गुज़र रहे हैं, वे इसे ठीक कर सकते हैं, और वे पहले से उस कमरे में हैं: नोट्स मिला रहे हैं और एक-दूसरे का सेटअप ठीक कर रहे हैं।
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=hi" alt="योगदानकर्ताओं के GitHub अवतारों की एनिमेटेड दीवार, जो अप्रैल 2026 से आने के क्रम में भरती जाती है, और अगला खाना खुला छोड़ा गया है।" width="100%"></a></p>
+
+[समाधान यहीं लिखा जाता है](CONTRIBUTING.md)। एक कमरा, कोई क्लब नहीं। **आइए, मिलकर बनाएँ।**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: career-ops सर्वर के सदस्यों की लाइव संख्या"></a></p>
 
@@ -204,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` [Node.js](https://nodejs.org) के साथ आता है: यह इंस्टॉलर एक बार चलाता है,
 > बिना कुछ ग्लोबली इंस्टॉल किए। अभी Node नहीं है? पहले उसे इंस्टॉल करें।
-> (पहले से Claude Code / Gemini / Codex CLI इस्तेमाल कर रहे हैं? तो आपके पास पहले से है।)
+> (पहले से Claude Code / Codex CLI इस्तेमाल कर रहे हैं? तो आपके पास पहले से है।)
 
 यह नवीनतम रिलीज़ को `./career-ops` में क्लोन करता है और डिपेंडेंसी इंस्टॉल करता है। फिर:
 

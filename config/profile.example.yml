@@ -154,6 +154,14 @@ language:
 # Set to off to keep your own titles.
 # session_title: auto
 
+# Optional. Private repos the `expand` mode's GitHub evidence step
+# (`node github-evidence.mjs`, needs a logged-in `gh`) may use as evidence.
+# Empty by default: a private repo appears only by name and PR count, never with
+# PR titles, until you add it here yourself as "owner/repo". Only PR metadata is
+# read, never source code, and nothing reaches cv.md without your confirmation.
+# github_evidence:
+#   private_allowlist: []            # e.g. ["acme-corp/billing-service"]
+
 # Controls which model tier evaluates your offers. Valid values:
 #   economy  -- cheapest/fastest model, no extended thinking. Best for high-volume scanning.
 #   standard -- balanced model, no extended thinking. Default if this key is absent.

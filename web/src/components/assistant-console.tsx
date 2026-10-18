@@ -11,6 +11,7 @@ import { useJobs } from "@/components/jobs/job-store";
 import { usePipeline } from "@/components/pipeline/pipeline-provider";
 import { useApply } from "@/components/apply/apply-provider";
 import { useExplore } from "@/components/explore/explore-provider";
+import { workerBatchSummary, workerDetailsLabel } from "@/lib/worker-feedback.mjs";
 import { WorkerCard } from "@/components/jobs/worker-card";
 import { Button } from "@/components/ui/button";
 import { dispatch, type ActionCtx, type DoneInfo } from "@/app/actions/registry";
@@ -18,6 +19,8 @@ import { estimateRunCost } from "@/lib/run-cost-estimate.mjs";
 import { scoreNum } from "@/lib/format";
 import { pendingActOpenerStart } from "@/lib/act-envelope.mjs";
 import { cleanMessages } from "@/lib/assistant-history.mjs";
+import { StatusConfirmationCard, type StatusConfirmationPart } from "@/components/assistant-status-confirmation";
+import { StatusWriteError, writeAssistantStatus } from "@/lib/assistant-status-write.mjs";
 import { cn } from "@/lib/cn";
 
 // ── message model: messages are PART arrays so a live worker card can render
@@ -27,7 +30,8 @@ type Part =
   | { type: "note"; text: string }
   | { type: "card"; jobId: string }
   | { type: "batch"; batchId: string; jobIds: string[] }
-  | { type: "confirm"; cid: string; summary: string; state: "pending" | "done" | "cancelled" };
+  | { type: "confirm"; cid: string; summary: string; state: "pending" | "done" | "cancelled"; statusChange?: undefined }
+  | StatusConfirmationPart;
 type Msg = { role: "user" | "assistant"; parts: Part[] };
 type RequestFeedback = { id: number; phase: "working" | "ready" | "error"; announce: boolean };
 
@@ -220,6 +224,7 @@ export function AssistantConsole() {
   exploreRef.current = explore;
   const handledRef = useRef<Set<string>>(new Set());
   const confirmRuns = useRef<Map<string, () => DoneInfo>>(new Map());
+  const statusRuns = useRef(new Map<string, { run?: () => Promise<DoneInfo>; pending: boolean; settled: boolean }>());
 
   // panel size: restored on mount (client-only, so SSR markup never mismatches),
   // persisted on change
@@ -400,6 +405,7 @@ export function AssistantConsole() {
       setMessages(next);
       setInput("");
       confirmRuns.current.clear();
+      statusRuns.current.clear();
       setRequestFeedback(null);
       setAnnouncement("");
     } catch (e) { setSaveError(e instanceof Error ? e.message : "Could not switch conversations"); }
@@ -428,6 +434,7 @@ export function AssistantConsole() {
       setMessages([]);
       setInput("");
       confirmRuns.current.clear();
+      statusRuns.current.clear();
       setRequestFeedback(null);
       setAnnouncement("");
       setSaveError("");
@@ -452,6 +459,7 @@ export function AssistantConsole() {
       messagesRef.current = [];
       setMessages([]);
       confirmRuns.current.clear();
+      statusRuns.current.clear();
       setRequestFeedback(null);
       setAnnouncement("");
       await refreshChats();
@@ -519,17 +527,10 @@ export function AssistantConsole() {
           body: JSON.stringify({ fact }),
         }).catch(() => {});
       },
-      writeStatus: (n, status) => {
-        fetch("/api/status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ n, status }),
-        })
-          .then(() => {
-            router.refresh();
-            pipelineRef.current.refetch();
-          })
-          .catch(() => {});
+      writeStatus: async (n, status) => {
+        await writeAssistantStatus(n, status);
+        router.refresh();
+        pipelineRef.current.refetch();
       },
       setApplyField: (idOrLabel, value) => applyRef.current.setAnswer(idOrLabel, value),
       startApply: (u) => {
@@ -567,13 +568,50 @@ export function AssistantConsole() {
       if (res.note) appendParts([{ type: "note", text: res.note }]);
     } else if (res.status === "confirm") {
       const cid = `c-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
-      confirmRuns.current.set(cid, res.run);
-      appendParts([{ type: "confirm", cid, summary: res.summary, state: "pending" }]);
+      if (res.statusChange) {
+        statusRuns.current.set(cid, { run: res.run, pending: false, settled: false });
+        appendParts([{ type: "confirm", cid, summary: res.summary, statusChange: res.statusChange, state: "pending" }]);
+      } else {
+        confirmRuns.current.set(cid, res.run);
+        appendParts([{ type: "confirm", cid, summary: res.summary, state: "pending" }]);
+      }
     }
     return res.status !== "ignored" || Boolean(res.note?.trim());
   }
 
+  async function resolveStatusConfirm(cid: string, accept: boolean) {
+    const entry = statusRuns.current.get(cid);
+    if (!entry || entry.pending || entry.settled || !entry.run) return;
+    const update = (patch: Partial<StatusConfirmationPart>) => setMessages((ms) => ms.map((m) => ({ ...m,
+      parts: m.parts.map((p) => p.type === "confirm" && p.statusChange && p.cid === cid ? { ...p, ...patch } : p),
+    })));
+    if (!accept) {
+      entry.settled = true;
+      entry.run = undefined;
+      update({ state: "cancelled" });
+      return;
+    }
+    entry.pending = true;
+    update({ state: "saving", message: undefined, retryable: false });
+    try {
+      await entry.run();
+      entry.settled = true;
+      entry.run = undefined;
+      update({ state: "done" });
+    } catch (error) {
+      const known = error instanceof StatusWriteError;
+      const retryable = known && error.retryable;
+      entry.settled = !retryable;
+      if (!retryable) entry.run = undefined;
+      update({ state: known && !error.unconfirmed ? "failed" : "unconfirmed", retryable,
+        message: known ? error.message : "The status change could not be confirmed. Check the current tracker status before trying again." });
+    } finally {
+      entry.pending = false;
+    }
+  }
+
   function resolveConfirm(cid: string, accept: boolean) {
+    if (statusRuns.current.has(cid)) { void resolveStatusConfirm(cid, accept); return; }
     const run = confirmRuns.current.get(cid);
     confirmRuns.current.delete(cid);
     const info = accept && run ? run() : null;
@@ -981,7 +1019,7 @@ function PartView({
         job={job}
         variant="inline"
         trailing={
-          <Link href={`/jobs/${job.id}`} className="text-faint transition-colors hover:text-brand" aria-label="Open worker">
+          <Link href={`/jobs/${job.id}`} className="text-faint transition-colors hover:text-brand" aria-label={workerDetailsLabel(job)}>
             <ArrowUpRight className="size-3.5" />
           </Link>
         }
@@ -989,25 +1027,24 @@ function PartView({
     );
   }
   if (part.type === "batch") {
-    const children = part.jobIds.map((id) => jobs.find((j) => j.id === id)).filter(Boolean);
-    const done = children.filter((j) => j!.status === "done").length;
+    const children = part.jobIds.map((id) => jobs.find((j) => j.id === id)).filter((j) => j != null);
     return (
       <div className="rounded-xl border border-border bg-surface/40 p-2.5">
         <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
           <Sparkles className="size-3.5 text-brand" />
           {part.jobIds.length} evaluations
           <span className="ml-auto tabular-nums text-faint">
-            {done}/{part.jobIds.length} done
+            {workerBatchSummary(children, part.jobIds.length)}
           </span>
         </div>
         <div className="space-y-1.5">
           {children.map((j) => (
             <WorkerCard
-              key={j!.id}
-              job={j!}
+              key={j.id}
+              job={j}
               variant="inline"
               trailing={
-                <Link href={`/jobs/${j!.id}`} className="text-faint transition-colors hover:text-brand" aria-label="Open worker">
+                <Link href={`/jobs/${j.id}`} className="text-faint transition-colors hover:text-brand" aria-label={workerDetailsLabel(j)}>
                   <ArrowUpRight className="size-3.5" />
                 </Link>
               }
@@ -1018,7 +1055,8 @@ function PartView({
     );
   }
   if (part.type === "confirm") {
-    return <ConfirmationCard key={part.cid} part={part} onConfirm={onConfirm} />;
+    return part.statusChange ? <StatusConfirmationCard key={part.cid} part={part} onConfirm={onConfirm} />
+      : <ConfirmationCard key={part.cid} part={part} onConfirm={onConfirm} />;
   }
   return null;
 }

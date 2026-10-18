@@ -42,6 +42,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run invite-match` | `invite-match.mjs` | Fuzzy-match a pasted interview-invite email against `data/applications.md` |
 | `npm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
 | `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
+| `npm run closing-soon` | `closing-soon.mjs` | List tracker rows whose Notes (or matching `jds/` capture) carry a closing date within N days, plus separate `overdue` and `unparsed` groups (read-only) |
 | `npm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
 | `npm run jd-archive` | `check-jd-archive.mjs` | Validate every `reports/*.md` has an archived JD (embedded section or `jds/` capture) — flags `missing-jd-archive` |
 | `npm run openai:tailor` | `openai-tailor.mjs` | Tailor a CV via any OpenAI-compatible endpoint (headless companion to `openai-eval.mjs`) |
@@ -537,6 +538,45 @@ tracker row, so a contact cannot be attached across companies.
 
 ---
 
+## github-evidence
+
+Optional GitHub evidence step of the `expand` mode (#5295). Reads the pull
+requests you authored through your existing `gh auth` (no new token) and checks
+what `cv.md` claims against them. Read-only, metadata only (PR title, state,
+repository, stars, visibility); it never reads source code and never writes
+`cv.md`. Candidates reach `cv.md` only through `expand`'s confirm gate and
+`add-entry.mjs`.
+
+```bash
+node github-evidence.mjs          # writes output/github-evidence-{date}.{md,json}
+node github-evidence.mjs --json   # same, and prints the JSON on stdout
+```
+
+- Only PRs you authored count. Your own repos (owning is not authorship) and
+  forks are listed by name and count only, never as evidence.
+- A private repo is evidence only when listed in `config/profile.yml`:
+  `github_evidence.private_allowlist: ["owner/repo"]` (empty by default). Any
+  other private repo, or one whose visibility could not be read, appears by
+  name and count only, never with PR titles.
+- `claimCheck.mergedNotNamed`: third-party repos with merged PRs that `cv.md`
+  does not name. `claimCheck.namedNoMerge`: repos `cv.md` names where you have
+  no merged PR. Matching is literal and case-insensitive (`owner/repo`, then
+  the repo name, then the owner), and each row says which one matched.
+- GitHub search returns at most 1000 results per query; the `truncated` flags
+  say when a list may be incomplete.
+
+**Exit codes:** `0` report written, `1` usage error or `candidate.github`
+missing/malformed (normalized as in `expand`'s Input step, so a repo link such
+as `github.com/janesmith/tool` is malformed), `2` a GitHub query failed (nothing written), `3` `gh` not
+installed or not logged in (nothing written; with `--json`, stdout carries
+`{"status":"gh-unavailable","reason":...}`). Only an auth error from `gh`
+counts as not logged in: a login check that fails any other way (no stderr,
+`gh` crashed or was killed) is a `2` naming the exit status. On exit `2` or
+`3`, `expand` continues with its zero-key behaviour; on exit `1` it asks the
+user to fix `candidate.github` (its Input steps 2–4).
+
+---
+
 ## weekly-digest
 
 Rolls up `interview-prep/sessions/*.md` — the structured, machine-readable transcripts `interview/debrief` and `interview/practice` already write (schema in `interview-prep/sessions/README.md`) — into a single digest for a date range (default: the current ISO week, Monday–Sunday). Groups sessions by company/role into a per-company round rollup (round type + date per round), counts `<!-- competency: tag[, tag...] -->` annotations across all sessions in range and flags any tag appearing 2+ times as recurring, and — best-effort, since `interview-prep/question-bank.md` has no fixed schema — attributes 🔴-tagged lines to whichever in-range company's heading they fall under. Purely mechanical: front-matter parsing, date filtering, and tag counting, no LLM judgment calls.
@@ -615,6 +655,24 @@ node rejection-latency.mjs --self-test
 ```
 
 **Exit codes:** `0` always (missing data files produce an explanatory empty result), `1` self-test failure.
+
+---
+
+## closing-soon
+
+Surfaces tracker rows whose posting is about to close. Posting closing dates have no structured home, so people type them into Notes (`closes 2026-10-22`, `deadline Nov 4`); this script reads them and lists the rows closing within `--within N` days (default 7), soonest first. Dates are recognized only after a marker (`closes`, `closing date`, `closing`, `deadline`, `apply by`): ISO `2026-10-22`, `Mon D, YYYY`, `Mon D` (this year, or next year when it passed more than 60 days ago) and `MM/DD/YYYY` only when unambiguous. Anything else after a marker (`04/05/2026`, `4 Nov 2026`, `TBD`) is listed under `unparsed` instead of being guessed. Rows already past their date go in a separate `overdue` group (most recently overdue first). When a row's Notes carry no marker at all, the `jds/` capture resolved by report number (`jd-capture.mjs`; text captures only) is read instead. Several dates in one row surface the earliest. Rows are filtered by `--status` (default `Evaluated`; any canonical state from `templates/states.yml`, comma-separated).
+
+Read-only and zero-LLM: the tracker is read once and parsed defensively through `tracker-parse.mjs`; nothing is written and no lock is taken, so a concurrent session rewriting the tracker cannot be disturbed. No tracker column or schema is involved.
+
+```bash
+node closing-soon.mjs                          # JSON (closingSoon, overdue, unparsed)
+node closing-soon.mjs --summary                # human-readable table
+node closing-soon.mjs --within 14 --status Evaluated,Applied
+node closing-soon.mjs --today 2026-10-17       # deterministic runs/tests
+node closing-soon.mjs --tracker path/to/applications.md --jds path/to/jds
+```
+
+**Exit codes:** `0` on a report (a missing tracker yields an empty result with a warning), `1` unrecognized flag, `2` invalid `--today` / `--within` / `--status` value.
 
 ---
 
@@ -1168,6 +1226,14 @@ Action are listed on stderr as unreadable rather than silently dropped;
 `story-provenance-check.mjs` reports the same entries under `malformed`
 while still checking their figures.
 
+The answer is checked with that classifier before it prints, because it is
+meant to be pasted as-is. A story marked `**Provenance:** user-cannot-confirm`
+has every number in its answer, title and tags replaced with
+`[unconfirmed figure]`. In any other story, a figure that
+does not trace to `cv.md` gets a ⚠️ line naming it and its bucket
+(`derived-unverified` or `supportedByResume`), so you can confirm it before
+pasting.
+
 ---
 
 ## archive
@@ -1228,7 +1294,7 @@ These have no `npm run` binding — modes and agents call them with
 | `node agent-inbox.mjs add "..."` | Append a request to the queue the agent drains at the next session start |
 | `node agent-inbox.mjs list [--all]` | List pending (or all) queued items by stable number — gaps mean already resolved |
 | `node agent-inbox.mjs resolve <n> [--expect "..."] [--result "..."]` | Tick item `n` and stamp a one-line result; `--expect` aborts unless the item contains that substring |
-| `node generate-latex.mjs <input.tex> [output.pdf] [--compile-only] [--help]` | Validate and compile a generated `.tex` CV via tectonic or pdflatex; `--compile-only` skips career-ops template validation so a user-owned `.tex` compiles as-is (`latex-tex` mode) |
+| `node generate-latex.mjs <input.tex> [output.pdf] [--compile-only] [--source <path>] [--skip-fact-check] [--help]` | Fact-check, validate and compile a generated `.tex` CV via tectonic or pdflatex. The CV fact gate runs first whenever the data root has a `cv.md`, and a blocked document is not compiled; `--source` adds an evidence file (repeatable; `latex-tex` passes the user's own `.tex`). `--compile-only` skips career-ops template validation so a user-owned `.tex` compiles as-is (`latex-tex` mode) |
 | `node install-latex-engine.mjs [--check] [--force] [--json] [--help]` | Opt-in local LaTeX engine: downloads a pinned tectonic release for this platform, verifies its SHA-256 before extracting, and places it in the repo root (gitignored) where `generate-latex.mjs` looks first. Downloads are bounded by a timeout and a size cap. No-op when tectonic is already available (a pdflatex-only host still gets tectonic, which the CJK template needs); `--check` never downloads |
 | `node classify-tier.mjs` | Classify a job title into intern / entry / mid / senior |
 | `node ats-payload.mjs <payload.json> [--summary]` | ATS payload transform: folds `competencies[]` into `skills[]` (one safe, idempotent transform) and reports three judgement calls it deliberately does not apply. Payload on stdout, findings on stderr |

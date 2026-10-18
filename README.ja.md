@@ -122,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-採用は勝手には直らない。それをくぐり抜けている人たちなら直せる。そして彼らはもう同じ部屋にいて、メモを見せ合い、互いのセットアップを直している。[修正はここで書かれる](CONTRIBUTING.md)。クラブではなく、部屋。**一緒に作ろう。**
+採用は勝手には直らない。それをくぐり抜けている人たちなら直せる。そして彼らはもう同じ部屋にいて、メモを見せ合い、互いのセットアップを直している。
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ja" alt="コントリビューターの GitHub アバターが 2026年4月 から参加順に埋まっていくアニメーションの壁。次のマスは空けてある。" width="100%"></a></p>
+
+[修正はここで書かれる](CONTRIBUTING.md)。クラブではなく、部屋。**一緒に作ろう。**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord：career-ops サーバーのメンバー数（ライブ）"></a></p>
 
@@ -204,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` は [Node.js](https://nodejs.org) に同梱されています：グローバルに何もインストールせず、
 > インストーラーを 1 回だけ実行します。Node がまだ？ 先にインストールしてください。
-> （すでに Claude Code / Gemini / Codex の CLI を使っている？ ならもう入っています。）
+> （すでに Claude Code / Codex の CLI を使っている？ ならもう入っています。）
 
 これで最新リリースが `./career-ops` にクローンされ、依存関係がインストールされます。次に：
 

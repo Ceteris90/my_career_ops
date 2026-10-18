@@ -31,11 +31,11 @@ import { normalizeReportLink as normalizeLink } from './tracker-links.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { parsePdfIndex, livePdfIndex, normNum } from './find.mjs';
-import { LEGACY_COLMAP, TSV_REQUIRED_FIELDS, detectColumns, isHeaderRow, resolveScoreStatus, looksLikeTsvHeaderRow, resolveTsvColumns, looksLikeScoreCell, normalizeVia, normalizeTextKey, SEPARATOR_ROW_RE, extractReqNumber, extractCellUrl, parseMarkdownLinks, unwrapReportUrlToken } from './tracker-parse.mjs';
+import { LEGACY_COLMAP, TSV_REQUIRED_FIELDS, detectColumns, isHeaderRow, resolveScoreStatus, looksLikeTsvHeaderRow, resolveTsvColumns, looksLikeScoreCell, parseScore, normalizeVia, normalizeTextKey, SEPARATOR_ROW_RE, extractReqNumber, extractCellUrl, parseMarkdownLinks, unwrapReportUrlToken } from './tracker-parse.mjs';
 // The ATS vendor table shared with analyze-patterns.mjs and the scanners, so
 // the URL cell's label and the per-vendor analysis name a board identically.
 import { atsVendorOf } from './ats-vendor.mjs';
-import { resolveTrackerPath, resolveWorkspaceRoot, resolvePdfIndexPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, companiesMatchIgnoringCorporateForm, cell, loadCanonicalStates, findDeadReportLink, rebuildRow } from './tracker-utils.mjs';
+import { resolveTrackerPath, resolveWorkspaceRoot, resolvePdfIndexPath, trackerLockDirFor, acquireTrackerLock, writeFileAtomic, normalizeCompany, companiesMatchIgnoringCorporateForm, cell, loadCanonicalStates, findDeadReportLink, rebuildRow, trackerLinkDirsFor } from './tracker-utils.mjs';
 // Canonical posting-URL key and URL comparison, shared with the other tracker
 // scripts and scan.mjs so the definitions cannot drift apart.
 import { normalizeUrl, isAggregatorUrl, aggregatorPostingId, postingUrlRelation } from './url-key.mjs';
@@ -307,6 +307,10 @@ function formatUrlCell(raw, previousCell = '') {
  * @param {object} options
  * @param {string} options.appsFile - Tracker to merge into (canonical path, see resolveTrackerPath).
  * @param {string} [options.dataRoot] - Data root; defaults to the tracker's workspace root.
+ * @param {string[]} [options.trackerLinkDirs] - Directories the missing-report
+ *   check resolves report links from; defaults to the tracker's own directory.
+ *   The CLI passes trackerLinkDirsFor(), which adds a symlinked tracker's own
+ *   folder (#5374).
  * @param {string} [options.additionsDir] - Pending TSVs; defaults to `<dataRoot>/batch/tracker-additions`.
  * @param {string} [options.batchStateFile] - batch-state.tsv; defaults to `<dataRoot>/batch/batch-state.tsv`.
  * @param {string} [options.pdfIndexFile] - PDF manifest; defaults to `<workspace>/data/pdf-index.tsv`.
@@ -331,6 +335,7 @@ export async function mergeTracker(options = {}) {
   const APPS_FILE = appsFile;
   const DATA_ROOT = options.dataRoot ?? resolveWorkspaceRoot(APPS_FILE);
   const TRACKER_DIR = dirname(APPS_FILE);
+  const TRACKER_LINK_DIRS = options.trackerLinkDirs ?? [TRACKER_DIR];
   const ADDITIONS_DIR = options.additionsDir ?? join(DATA_ROOT, 'batch/tracker-additions');
   const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
   const BATCH_STATE_FILE = options.batchStateFile ?? join(DATA_ROOT, 'batch/batch-state.tsv');
@@ -609,21 +614,6 @@ export async function mergeTracker(options = {}) {
       .some(c => c === incomingClause || c.endsWith(`: ${incomingClause}`));
     const tail = incoming && !isRepeat ? `${marker}: ${incoming}` : marker;
     return prev ? `${prev}. ${tail}` : tail;
-  }
-
-  /**
-   * Parse a score cell into a numeric value for score-upgrade decisions.
-   *
-   * The merge path compares old and new scores to decide whether to update an
-   * existing duplicate row. Markdown bolding and `/5` suffixes are presentation
-   * details, so only the first numeric value is used.
-   *
-   * @param {string} s - Raw score cell such as `4.2/5`.
-   * @returns {number} Parsed score, or 0 when no numeric value is present.
-   */
-  function parseScore(s) {
-    const m = s.replace(/\*\*/g, '').match(/(\d+(?:[.,]\d+)?)/);
-    return m ? parseFloat(m[1].replace(',', '.')) : 0;
   }
 
   /**
@@ -1372,7 +1362,10 @@ export async function mergeTracker(options = {}) {
         const isHeader = parts[colmap.num] === '#';
         const isSeparator = /^[-: ]*$/.test(parts.join(''));
         const insert = isHeader ? 'Via' : isSeparator ? '-----' : '—';
-        const cells = [...parts.slice(1, companyIdx + 1), insert, ...parts.slice(companyIdx + 1, parts.length - 1)];
+        // Only a closing pipe adds a padding cell; otherwise the last part is
+        // real data (Notes, URL, or a custom column) and must survive migration.
+        const end = line.trimEnd().endsWith('|') ? parts.length - 1 : parts.length;
+        const cells = [...parts.slice(1, companyIdx + 1), insert, ...parts.slice(companyIdx + 1, end)];
         changed++;
         return isSeparator
           ? `|${cells.map(c => c || '---').join('|')}|`
@@ -1796,10 +1789,10 @@ export async function mergeTracker(options = {}) {
       // The rule itself lives in tracker-utils.mjs (findDeadReportLink), shared with
       // verify-pipeline's Check 3 and fix-report-links.mjs: a directory (e.g. a link
       // to `reports/`) is not a report, so a regular file is required.
-      const deadLink = findDeadReportLink(addition.report, TRACKER_DIR, DATA_ROOT);
+      const deadLink = findDeadReportLink(addition.report, TRACKER_LINK_DIRS, DATA_ROOT);
       if (deadLink !== null) {
         const linked = deadLink.trim();
-        console.warn(`⚠️  ${file}: ${addition.company} — ${addition.role}: report link "${linked}" does not resolve to a file (checked from ${TRACKER_DIR} and ${DATA_ROOT}) — the row is not rewritten; verify-pipeline will flag it until the report exists`);
+        console.warn(`⚠️  ${file}: ${addition.company} — ${addition.role}: report link "${linked}" does not resolve to a file (checked from ${[...TRACKER_LINK_DIRS, DATA_ROOT].join(', ')}) — the row is not rewritten; verify-pipeline will flag it until the report exists`);
         missingReports++;
       }
 
@@ -2366,6 +2359,7 @@ if (isMainModule(import.meta.url)) {
   const code = await mergeTracker({
     appsFile,
     dataRoot: DATA_ROOT,
+    trackerLinkDirs: trackerLinkDirsFor(DATA_ROOT),
     // CAREER_OPS_ADDITIONS overrides the additions dir (used by tests, mirrors CAREER_OPS_TRACKER).
     additionsDir: process.env.CAREER_OPS_ADDITIONS || join(DATA_ROOT, 'batch/tracker-additions'),
     // CAREER_OPS_BATCH_STATE overrides the batch-state.tsv path (used by tests).
