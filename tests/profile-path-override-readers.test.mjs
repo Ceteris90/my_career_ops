@@ -88,6 +88,16 @@ for (const n of ['readFile', 'access', 'stat']) {
   fs.promises[n] = function (p, ...a) { hit(p); return o.call(this, p, ...a); };
 }
 syncBuiltinESMExports();
+// The children run with fake provider keys; only loopback may be reached, so a
+// reader that gets as far as its provider call fails fast instead of going out.
+const realFetch = globalThis.fetch;
+globalThis.fetch = function (input, ...a) {
+  const url = String(input && input.url ? input.url : input);
+  let host = '';
+  try { host = new URL(url).hostname; } catch { /* not a URL: blocked below */ }
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return Promise.reject(new TypeError('offline test: blocked ' + url));
+  return realFetch.call(this, input, ...a);
+};
 `, 'utf-8');
 
 // ollama-eval probes /api/tags before it loads any context.
@@ -99,9 +109,10 @@ let logCounter = 0;
 /**
  * Run a module in a child and return the sorted set of profile paths it touched.
  * @param {string[]} argv node arguments after the preload
- * @param {{override: boolean, cwd?: string}} opts
+ * @param {{override: boolean, cwd?: string, dotEnvDir?: string}} opts dotEnvDir: name the
+ *   override only in <dotEnvDir>/.env, with the variable absent from the environment
  */
-function touched(argv, { override, cwd = decoyCwd }) {
+function touched(argv, { override, cwd = decoyCwd, dotEnvDir }) {
   const log = join(scratch, `trace-${++logCounter}.log`);
   writeFileSync(log, '');
   const env = {
@@ -113,7 +124,12 @@ function touched(argv, { override, cwd = decoyCwd }) {
     CAREER_OPS_PROFILE: override ? profileB : '',
     OPENAI_API_KEY: 'unused', GEMINI_API_KEY: 'unused', OPENROUTER_API_KEY: 'unused',
     OPENAI_BASE_URL: 'http://127.0.0.1:9/v1', OLLAMA_BASE_URL: ollamaUrl,
+    CAREER_OPS_MODEL: 'probe-model',
   };
+  // dotenv never overrides a key that is already set, even to an empty string.
+  if (dotEnvDir) delete env.CAREER_OPS_PROFILE;
+  const dotEnvFile = dotEnvDir ? join(dotEnvDir, '.env') : null;
+  if (dotEnvFile) writeFileSync(dotEnvFile, `CAREER_OPS_PROFILE=${profileB}\n`, 'utf-8');
   return new Promise((resolveRun) => {
     const child = spawn(NODE, ['--import', pathToFileURL(tracer).href, ...argv], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -122,6 +138,7 @@ function touched(argv, { override, cwd = decoyCwd }) {
     const timer = setTimeout(() => child.kill('SIGKILL'), 90_000);
     child.on('close', (code) => {
       clearTimeout(timer);
+      if (dotEnvFile) rmSync(dotEnvFile, { force: true });
       const paths = [...new Set(readFileSync(log, 'utf-8').split('\n').filter(Boolean))].sort();
       resolveRun({ paths, code, out });
     });
@@ -178,6 +195,32 @@ try {
       ? pass(`${group}: ${label} falls back to the data root profile when the override is unset`)
       : failOnce(`${group}: ${label} touched ${JSON.stringify(fallback.paths.map((p) => p.replace(scratch, '<scratch>')))} with the override unset; expected only <scratch>/data-root/config/profile.yml (exit ${fallback.code})`);
   }
+
+  // An override named only in a .env reaches the readers that load one: scan.mjs from
+  // the data root, the evaluators and openai-tailor.mjs from the working directory.
+  // The cases above export the variable, so they cannot see a regression in that
+  // loading order. (openrouter-runner.mjs loads the code root's .env, which a test
+  // must not write to, so it is covered by the exported-variable case above.)
+  const bySubject = new Map(SUBJECTS.map(([, label, argv]) => [label, argv]));
+  for (const [label, dotEnvDir] of [
+    ['scan.mjs (country, re-apply windows)', dataRoot],
+    ['gemini-eval.mjs', decoyCwd],
+    ['ollama-eval.mjs', decoyCwd],
+    ['openai-eval.mjs', decoyCwd],
+    ['openai-tailor.mjs', decoyCwd],
+    ['batch-evaluate-gemini.mjs', decoyCwd],
+  ]) {
+    const fromEnv = await touched(bySubject.get(label), { override: false, dotEnvDir });
+    fromEnv.paths.length === 1 && fromEnv.paths[0] === profileB
+      ? pass(`.env: ${label} reads the profile a .env names, with the variable not exported`)
+      : failOnce(`.env: ${label} touched ${JSON.stringify(fromEnv.paths.map((p) => p.replace(scratch, '<scratch>')))} when only ${dotEnvDir.replace(scratch, '<scratch>')}/.env names the profile; expected only <scratch>/named-profile-B.yml (exit ${fromEnv.code})`);
+  }
+
+  // The preload's fetch guard is what keeps the evaluator children offline.
+  const blocked = await touched(inline("try { await fetch('https://example.com/'); console.log('REACHED'); } catch (e) { console.log(String(e.message)); }"), { override: false });
+  /offline test: blocked https:\/\/example\.com/.test(blocked.out) && !/REACHED/.test(blocked.out)
+    ? pass('the test preload blocks a request to a non-loopback host')
+    : failOnce(`the test preload let a non-loopback request through: ${blocked.out.slice(0, 120)}`);
 
   // generate-pdf's renderHtmlToPdf: a caller that names its own workspace has said
   // which profile it means, so the override does not redirect it; a caller that
