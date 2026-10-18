@@ -231,3 +231,35 @@ test('tolerates a tracker with malformed and truncated rows', () => {
   const r = computeClosingSoon(md, { today: TODAY, within: 7, statuses: evaluated });
   assert.equal(r.closingSoon.length, 4);
 });
+
+test('captures: marker words without a date are prose; unreadable date-shaped text still reports', () => {
+  const lax = extractClosingDates('A deadline-driven team. Deadline: rolling.', TODAY, { strictMarkers: false });
+  assert.deepEqual(lax, { dates: [], unparsed: [] });
+  const dated = extractClosingDates('Deadline: 4 Nov 2026', TODAY, { strictMarkers: false });
+  assert.equal(dated.unparsed.length, 1);
+  const box = sandbox();
+  try {
+    writeFileSync(join(box.dataRoot, 'data', 'applications.md'), [
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+      '|---|---|---|---|---|---|---|---|---|',
+      '| 1 | 2026-10-01 | Acme | Analyst | 4.2/5 | Evaluated | ❌ | [1](reports/001-acme-2026-10-01.md) | none |',
+      '',
+    ].join('\n'));
+    writeFileSync(join(box.dataRoot, 'jds', '001-acme-analyst.md'), 'We are a deadline-driven team. Deadline: rolling.');
+    const out = JSON.parse(run(['--today', '2026-10-17'], box).stdout);
+    assert.deepEqual([out.closingSoon, out.overdue, out.unparsed], [[], [], []]);
+  } finally {
+    cleanup(box);
+  }
+});
+
+test('alias status cells match the filter through the states.yml lookup', () => {
+  const md = [
+    '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+    '|---|---|---|---|---|---|---|---|---|',
+    '| 1 | 2026-10-01 | Acme | Analyst | 4.2/5 | evaluada | ❌ | — | closes 2026-10-20 |',
+    '',
+  ].join('\n');
+  const r = computeClosingSoon(md, { today: TODAY, within: 7, statuses: evaluated });
+  assert.deepEqual(r.closingSoon.map(x => [x.num, x.status]), [[1, 'Evaluated']]);
+});

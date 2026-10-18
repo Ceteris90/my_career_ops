@@ -156,7 +156,7 @@ function readDate(tail, today) {
  *   it is not a marker ("closing the loop"); every other marker without a
  *   readable date is returned in `unparsed`.
  */
-export function extractClosingDates(text, today) {
+export function extractClosingDates(text, today, { strictMarkers = true } = {}) {
   const dates = [];
   const unparsed = [];
   const source = String(text ?? '').replace(/\s+/g, ' ');
@@ -172,7 +172,7 @@ export function extractClosingDates(text, today) {
       dates.push({ date: isoDay(read.date), form: read.form, marker });
     } else if (read && read.unparsed) {
       unparsed.push({ marker, text: `${match[0]}${after}`.slice(0, 48).trim(), reason: read.unparsed });
-    } else if (marker !== 'closing') {
+    } else if (strictMarkers && marker !== 'closing') {
       unparsed.push({ marker, text: `${match[0]}${after}`.slice(0, 48).trim(), reason: 'no date after marker' });
     }
   }
@@ -235,7 +235,7 @@ function readCaptureText(jdsDir, row) {
  * @param {Set<string>} opts.statuses - Canonical status labels to include.
  * @param {string|null} [opts.jdsDir] - Captures directory; null disables.
  */
-export function computeClosingSoon(trackerMd, { today, within = DEFAULT_WITHIN_DAYS, statuses, jdsDir = null }) {
+export function computeClosingSoon(trackerMd, { today, within = DEFAULT_WITHIN_DAYS, statuses, jdsDir = null, lookup = loadStateLookup() }) {
   const lines = String(trackerMd || '').replace(/\r\n/g, '\n').split('\n');
   const colmap = resolveColumns(lines);
   const wanted = new Set([...statuses].map(s => s.toLowerCase()));
@@ -248,7 +248,9 @@ export function computeClosingSoon(trackerMd, { today, within = DEFAULT_WITHIN_D
   for (const line of lines) {
     const row = parseTrackerRow(line, colmap);
     if (!row) continue;
-    const status = String(row.status || '').replace(/\*\*/g, '').trim();
+    const rawStatus = String(row.status || '').replace(/\*\*/g, '').trim();
+    // Same states.yml lookup as --status, so an alias cell (e.g. `evaluada`) matches.
+    const status = lookup.get(rawStatus.toLowerCase()) ?? rawStatus;
     if (!wanted.has(status.toLowerCase())) continue;
     rowsChecked++;
 
@@ -259,7 +261,9 @@ export function computeClosingSoon(trackerMd, { today, within = DEFAULT_WITHIN_D
     if (found.dates.length === 0 && found.unparsed.length === 0) {
       const text = readCaptureText(jdsDir, row);
       if (text) {
-        found = extractClosingDates(text, today);
+        // JD prose ("deadline-driven team") is not a closing-date claim: only
+        // date-shaped text that cannot be read is worth an `unparsed` entry.
+        found = extractClosingDates(text, today, { strictMarkers: false });
         source = 'capture';
       }
     }
