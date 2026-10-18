@@ -1,21 +1,7 @@
 /**
- * updater-branch-guard.test.mjs — the update commit must not land on a
- * contributor's feature branch (#3846).
- *
- * `apply()` committed to whatever HEAD pointed at. For someone who contributes
- * from the same checkout they use, that dropped a full system snapshot onto
- * their branch: PR #3648 arrived as +173,092/-13,920 over a 39-line change.
- *
- * The guard's failure mode in the other direction is worse than the bug — an
- * updater that withholds too eagerly leaves users on stale system files, and
- * staleness is invisible until something breaks. So the tests below pin BOTH
- * halves: the skip on a real feature branch, and every uncertain case
- * (detached HEAD, no discoverable default branch, opt-in) still committing.
- *
- * Behavioural, driven against throwaway repos through the git-runner seam —
- * same approach as tests/updater-commit-file-modes.test.mjs. The repo-facing
- * tests call resolveUpdateCommitBranch(), which is the exact composition
- * apply() runs, so a caller wired up wrong cannot pass here.
+ * Branch safety (#3846): exercise apply()'s branch-decision entry point against
+ * throwaway repositories. Cover withheld commits, unchanged default/uncertain
+ * behavior, recovery commands, and pending-snapshot local-edit attribution.
  */
 
 import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from 'fs';
@@ -41,9 +27,7 @@ import {
   unstagedPathsOutside,
 } from '../update-system.mjs';
 
-// A throwaway repo with one commit on `main`, no remote. Remotes are added per
-// test, because whether `origin/HEAD` exists is exactly what the fallback in
-// defaultBranchIn() is for.
+// One commit on main, no remote; each test sets origin/HEAD as needed.
 function makeRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'co-branchguard-'));
   const g = (...args) => gitIn(dir, ...args);
@@ -56,8 +40,7 @@ function makeRepo() {
   return { dir, g };
 }
 
-// Point refs/remotes/origin/HEAD at a branch the way `git clone` records it,
-// without needing a second repo to clone from.
+// Simulate the origin/HEAD recorded by git clone.
 function setOriginHead(g, branch) {
   g('update-ref', `refs/remotes/origin/${branch}`, 'HEAD');
   g('symbolic-ref', 'refs/remotes/origin/HEAD', `refs/remotes/origin/${branch}`);
@@ -187,9 +170,7 @@ console.log('\n🧪 Testing updater branch guard (#3846)...');
 
 // ── 9. --force does not imply the branch opt-in ────────────────────────
 {
-  // The two mean different things (#2337 vs #3846). Folding them together
-  // would make `--force`, which users reach for to resolve local system-file
-  // edits, silently reintroduce the commit this guard exists to withhold.
+  // --force permits overwriting local system-file edits, not branch commits.
   const decision = updateCommitBranchDecision({
     currentBranch: 'feat/x', defaultBranch: 'main',
     optIn: commitOnBranchOptIn(['apply', '--force', '--confirm'], {}),
@@ -203,9 +184,7 @@ console.log('\n🧪 Testing updater branch guard (#3846)...');
 
 // ── 10. The suggested command matches the commit that was withheld ─────
 {
-  // Index form vs pathspec form are not interchangeable: the pathspec form
-  // drops staged mode bits where core.fileMode is false. Handing the user the
-  // wrong one turns the recovery step into the bug it recovers from.
+  // Match the selected commit form to preserve staged file modes.
   const indexForm = updateCommitCommand('1.31.0', true, ['a.mjs']);
   const { dir, g } = repo();
   const paths = ['a.mjs', "it's.mjs"];
@@ -393,17 +372,7 @@ console.log('\n🧪 Testing updater branch guard (#3846)...');
   }
 }
 
-// ── 12-15. The withheld snapshot as a baseline, and its lifetime ───────
-//
-// A withheld update leaves its snapshot staged and uncommitted, so there is no
-// updater commit to serve as locallyModifiedSystemFiles' baseline and the next
-// run reads the previous run's own files as edits THIS install made: preserved,
-// .bak'd, and the delta it came to install skipped. recordStagedUpdate() writes
-// the snapshot the run staged; stagedUpdateBaseline() believes it only while it
-// is still the state on disk.
-//
-// A repo in the state a withheld run leaves behind: v1 is the last committed
-// updater snapshot, v2 is staged but uncommitted, upstream has moved to v3.
+// Pending-update fixture: v1 committed, v2 staged, upstream at v3.
 function repoWithWithheldUpdate() {
   const { dir, g } = repo();
   writeFileSync(join(dir, 'sys.mjs'), 'v1\n');
@@ -422,13 +391,7 @@ function repoWithWithheldUpdate() {
 const atRiskIn = (dir, gitAt) =>
   locallyModifiedSystemFiles(['sys.mjs'], 'upstream', { git: gitAt, root: dir });
 
-// `git stash push --staged` needs git 2.35, and nothing in this repo declares a
-// minimum — so on an older git it would throw out of gitIn() and take the whole
-// suite file down with it, turning a version difference into a mystery failure.
-// Plain `stash push` performs the same index-and-worktree transition for a
-// fixture whose only change IS the staged one, so the scenario stays real on
-// every version; the flag is used where it exists because that is the exact
-// command the withheld-update notice hands the user.
+// Before Git 2.35, plain stash has the same effect in this staged-only fixture.
 function stashStagedArgs(g) {
   const version = /(\d+)\.(\d+)/.exec(g('--version')) || [];
   const [major, minor] = [Number(version[1]), Number(version[2])];
@@ -475,9 +438,7 @@ for (const staged of [false, true]) {
 
 // ── 13. A genuine local edit is still caught while one is pending ───────
 {
-  // The recorded snapshot must not become a blanket amnesty: the preservation
-  // guard (#2337) exists to stop the checkout silently overwriting a system
-  // file this install edited, and it has to keep working while an update waits.
+  // Pending-update attribution must still detect genuine edits (#2337).
   const { dir, gitAt } = repoWithWithheldUpdate();
   recordStagedUpdate('2.0.0', { git: gitAt });
   writeFileSync(join(dir, 'sys.mjs'), 'my own local fix\n');
@@ -491,12 +452,7 @@ for (const staged of [false, true]) {
 
 // ── 14. Discarding the withheld update by hand must self-heal ──────────
 {
-  // The ref is durable; the state it describes is not. A contributor who throws
-  // the withheld update away leaves the ref behind, and believing it on sight
-  // makes every system file read as a local edit against a snapshot that is no
-  // longer there — the invisible skip this guard exists to remove, one step
-  // further out. Measured before the check existed: `sys.mjs` came back at risk
-  // with the working tree untouched.
+  // Discarding the files must invalidate the durable ref's attribution.
   for (const [label, discard] of [
     ['git reset --hard', (g) => g('reset', '--hard', 'HEAD')],
     ['git restore', (g) => { g('restore', '--staged', '--worktree', 'sys.mjs'); }],
@@ -516,14 +472,7 @@ for (const staged of [false, true]) {
 
 // ── 16. …and distrust must not become deletion ─────────────────────────
 {
-  // Deleting a snapshot that fails the check would be tidier, but it makes the
-  // damage permanent in the one sequence where the state comes back: the
-  // notice's own option 2 is `git stash push --staged` then a branch switch, and
-  // an updater run in that window sees an index that does not match. Delete
-  // there and `git stash pop` restores the update with nothing left to explain
-  // it — the false positives return, on the default branch this time. Keeping
-  // the ref costs nothing: the check is a content comparison, so a ref that
-  // matches the index describes the tree truthfully whatever produced it.
+  // An updater run while stashed must not delete the ref needed after pop.
   const { dir, g, gitAt } = repoWithWithheldUpdate();
   g('checkout', '-q', '-b', 'feat/x');
   recordStagedUpdate('2.0.0', { git: gitAt });
@@ -543,10 +492,7 @@ for (const staged of [false, true]) {
 
 // ── 15. Staging unrelated work does not invalidate the snapshot ─────────
 {
-  // The check is scoped to the paths being asked about, because a contributor
-  // with a withheld update pending is also, by definition, working on something
-  // else in the same tree. Invalidating on that would put the false positives
-  // straight back.
+  // Only queried paths participate in snapshot validation.
   const { dir, g, gitAt } = repoWithWithheldUpdate();
   recordStagedUpdate('2.0.0', { git: gitAt });
   writeFileSync(join(dir, 'my-feature.mjs'), 'export const x = 1;\n');
@@ -561,20 +507,12 @@ for (const staged of [false, true]) {
 
 // ── 17. The snapshot must be recordable without a git identity ─────────
 {
-  // `commit-tree` needs an author and a committer. On an install with no git
-  // identity — a container, a fresh machine, a harness that isolates the global
-  // config — it fails, recordStagedUpdate()'s catch swallows that, and the next
-  // run falls back to an older baseline and reads this update's own files as
-  // the user's edits: the second-order bug, back through a side door.
+  // Missing identity must not silently disable pending-update attribution.
   const { dir, g, gitAt } = repoWithWithheldUpdate();
   g('config', '--unset', 'user.email');
   g('config', '--unset', 'user.name');
 
-  // Isolating the config files is not enough: git also takes an identity from
-  // GIT_AUTHOR_*/GIT_COMMITTER_* and from a bare EMAIL, and any of them makes
-  // `commit-tree` succeed. Measured — with the config isolated and either set,
-  // the bare call returns a sha. A runner that exports one would leave this test
-  // warning instead of testing, so all of them are cleared here.
+  // Isolate both config and inherited identity variables for the negative control.
   const noConfig = join(dir, 'no-such-gitconfig');   // absent file reads as empty, on every platform
   const overrides = {
     GIT_CONFIG_GLOBAL: noConfig,
@@ -611,8 +549,7 @@ for (const staged of [false, true]) {
     }
 
     if (!bareCommitTreeFailed) {
-      // This git resolved an identity anyway, so the case cannot be exercised
-      // here — say so rather than passing on a control that never fired.
+      // Report an unreachable negative control rather than silently passing.
       warn('no-identity case not reachable on this git; snapshot recording untested here');
     } else if (recorded && !atRiskIn(dir, gitAt).includes('sys.mjs')) {
       pass('the snapshot is recorded even with no git identity configured');

@@ -129,16 +129,9 @@ function isLegacyReexec() {
 }
 
 const CANONICAL_REPO = 'https://github.com/career-ops-hq/career-ops.git';
-// Where an update whose commit the branch guard withheld records the snapshot it
-// staged (#3846). A local ref, like the WIP stash ref above it: invisible to
-// `git status`, carried by no branch, and therefore unable to leak into a
-// contributor's pull request.
-//
-// It points at a commit whose TREE is the index the withheld update produced —
-// not at the upstream commit those files came from. The upstream commit would
-// describe what the update INTENDED; the staged tree describes what this install
-// actually holds, preserved files included, which is what a baseline has to mean.
-// It also makes the ref checkable: see stagedUpdateBaseline().
+// Local snapshot of a withheld update's index, including preserved files.
+// A ref stays out of git status and contributor branches; trust it only while
+// its content matches the queried paths (see stagedUpdateBaseline).
 export const STAGED_UPDATE_REF = 'refs/career-ops/staged-update';
 const RAW_VERSION_URL = 'https://raw.githubusercontent.com/career-ops-hq/career-ops/main/VERSION';
 const RELEASES_API = 'https://api.github.com/repos/career-ops-hq/career-ops/releases/latest';
@@ -2520,32 +2513,10 @@ export function driftPathspecExcludingSkillEntrypoints(systemPaths, skillEntrypo
 }
 
 /**
- * The withheld update's staged snapshot, when it is still the state on disk.
- *
- * The ref is durable and the state it describes is not, so trusting it on sight
- * is a bug of its own: a contributor who discards a withheld update by hand
- * (`git reset --hard`, `git restore`, a stash and a branch switch) leaves the
- * ref behind, and every system file then reads as a local edit against a
- * snapshot that is no longer there — preserved, `.bak`, delta skipped, the same
- * invisible skip this guard exists to remove, one step further out. Measured:
- * with the ref recorded and the tree reset to HEAD, `sys.mjs` came back in the
- * at-risk set even though the working tree was untouched.
- *
- * So the ref is checked against the index before it is believed, over the paths
- * actually being asked about. Being wrong in the safe direction costs a fallback
- * to the ordinary baseline; being wrong in the other direction costs a skipped
- * update the user cannot see.
- *
- * A ref that fails the check is distrusted but NOT deleted, which is a
- * deliberate departure from "drop it otherwise". Deleting is what makes the
- * damage permanent in the one sequence where the state comes back: the notice's
- * own option 2 is `git stash push --staged` then a branch switch, and an
- * updater run in that window would delete a ref that `git stash pop` is about
- * to make current again — measured, the false positives return after the pop.
- * A stale ref that is kept costs nothing, because the check is a content
- * comparison: if it matches the index it describes the state on disk truthfully,
- * whatever history produced it. The ref is cleared where the update genuinely
- * ends — a commit, or a rollback (see clearStagedUpdate).
+ * Use the pending snapshot only while it matches the queried index or worktree
+ * paths. Manual discard must fall back to normal local-edit attribution.
+ * Keep a mismatched ref: a stash/pop round trip can restore the snapshot after
+ * an intervening updater run. Commit and rollback clear it instead.
  *
  * @param {Function} runGit - Git runner (injectable for tests).
  * @param {string[]} paths - Pathspecs the caller is asking about.
@@ -2559,22 +2530,9 @@ export function stagedUpdateBaseline(runGit, paths) {
     return null; // No withheld update recorded — the normal case.
   }
   if (!ref) return null;
-  // `--quiet` makes each of these an exit-code question: zero when the snapshot
-  // is still there, a throw when it is not. Scoped to `paths`, so a contributor
-  // staging their own work elsewhere in the tree does not invalidate it.
-  //
-  // The INDEX and the WORKING TREE are both asked, because the snapshot survives
-  // in one or the other depending on how it got here, and each check alone has a
-  // blind spot that costs a real case:
-  //   - index only: `git stash push --staged` + `git stash pop` restores the
-  //     files unstaged, so the index is back at HEAD and the snapshot — sitting
-  //     right there on disk — reads as gone. Measured: the false positives came
-  //     back after the pop.
-  //   - worktree only: a user edit to one system file while the update waits
-  //     makes the whole snapshot fail, taking the baseline away from every other
-  //     file with it.
-  // Either match is proof enough: the checks compare content, so a snapshot that
-  // matches what is on disk describes this tree truthfully whatever produced it.
+  // Scope checks to the queried paths so unrelated staged work is ignored.
+  // Index match permits later worktree edits; worktree match permits stash pop
+  // to restore the snapshot unstaged. Either suffices for attribution below.
   for (const check of [
     () => runGit('diff-index', '--cached', '--quiet', ref, '--', ...paths),
     () => runGit('diff', '--quiet', ref, '--', ...paths),
@@ -2586,9 +2544,7 @@ export function stagedUpdateBaseline(runGit, paths) {
       // Try the next one.
     }
   }
-  // Neither the index nor the tree holds it, so it says nothing about this
-  // install. Fall back to the ordinary baseline; see above for why the ref is
-  // left in place rather than deleted.
+  // Neither matches; retain the ref for a possible stash pop.
   return null;
 }
 
@@ -4357,13 +4313,7 @@ export function reconcileGitignore(localText, upstreamText) {
 
 // ── BRANCH SAFETY (#3846) ───────────────────────────────────────
 
-/**
- * Opt-in that restores the pre-#3846 behaviour: commit the update onto
- * whatever branch HEAD is on. Kept as its own switch rather than folded into
- * `--force`, which already means something else entirely ("overwrite system
- * files this install edited locally") — a fourth meaning on that flag would
- * make neither state readable.
- */
+// Separate from --force, which permits overwriting locally edited system files.
 export const COMMIT_ON_BRANCH_FLAG = '--commit-on-branch';
 
 export function commitOnBranchOptIn(argv = process.argv, env = process.env) {
@@ -4371,12 +4321,7 @@ export function commitOnBranchOptIn(argv = process.argv, env = process.env) {
     env.CAREER_OPS_UPDATE_COMMIT_ON_BRANCH === '1';
 }
 
-/**
- * The checked-out branch name, or null on a detached HEAD (or no git at all).
- *
- * @param {string} [root=ROOT] - Repository to read.
- * @returns {string|null} Branch name, or null.
- */
+/** Checked-out branch, or null for detached HEAD / unavailable git. */
 export function currentBranchIn(root = ROOT) {
   try {
     return gitQuietIn(root, 'symbolic-ref', '--quiet', '--short', 'HEAD') || null;
@@ -4386,20 +4331,8 @@ export function currentBranchIn(root = ROOT) {
 }
 
 /**
- * This checkout's default branch, or null when it cannot be established.
- *
- * `origin/HEAD` is the authoritative answer and is what `git clone` records,
- * so a stock install always has it. The `main`/`master` fallback covers
- * checkouts whose `origin/HEAD` was never set or has been pruned; it only
- * answers with a branch that actually exists locally.
- *
- * Returning null is a real outcome, not a failure: the caller treats "cannot
- * tell" as "behave exactly as before", because an updater that guesses wrong
- * about the default branch would withhold the commit from the very users the
- * plain path is for.
- *
- * @param {string} [root=ROOT] - Repository to read.
- * @returns {string|null} Default branch name, or null.
+ * Resolve origin/HEAD, falling back to a local main/master. Return null when
+ * unknown so the caller retains the existing commit behavior.
  */
 export function defaultBranchIn(root = ROOT) {
   try {
@@ -4422,21 +4355,10 @@ export function defaultBranchIn(root = ROOT) {
 }
 
 /**
- * Whether the update commit may land on the branch HEAD is on.
+ * Withhold only on a known non-default branch without opt-in (#3846).
+ * Default-branch and uncertain cases retain the existing commit behavior.
  *
- * Pure, so the policy is testable without a repo; the git reads that feed it
- * live in currentBranchIn/defaultBranchIn.
- *
- * Every uncertain case answers `commit: true`. The plain-user path — on the
- * default branch, no local commits — is the overwhelming majority of runs and
- * must not change or grow a prompt (#3846), and the mirror-image failure of an
- * updater that withholds too eagerly is worse than the bug being fixed:
- * stale system files are invisible until something breaks.
- *
- * @param {object} params
- * @param {string|null} params.currentBranch - From currentBranchIn().
- * @param {string|null} params.defaultBranch - From defaultBranchIn().
- * @param {boolean} [params.optIn] - From commitOnBranchOptIn().
+ * @param {{currentBranch: string|null, defaultBranch: string|null, optIn?: boolean}} params
  * @returns {{commit: boolean, reason: string}} Decision and why.
  */
 export function updateCommitBranchDecision({ currentBranch, defaultBranch, optIn = false }) {
@@ -4448,10 +4370,7 @@ export function updateCommitBranchDecision({ currentBranch, defaultBranch, optIn
 }
 
 /**
- * updateCommitBranchDecision against a real repository: the exact composition
- * apply() runs, exported so a test drives the same entry point rather than
- * re-deriving the branch reads around a pure function that would then pass on
- * its own while the caller wired it up wrong.
+ * Shared entry point for apply() and tests using real repositories.
  *
  * @param {string} [root=ROOT] - Repository to read.
  * @param {{optIn?: boolean}} [options] - Defaults to the CLI/env opt-in.
@@ -4469,16 +4388,8 @@ export function resolveUpdateCommitBranch(root = ROOT, options = {}) {
 }
 
 /**
- * A value safe to paste into a shell, quoted only when it needs to be.
- *
- * The notice's commands are copied by hand into a terminal, so a value carrying
- * shell syntax executes it there. Git's own ref rules forbid spaces and a
- * handful of glob characters but allow `;`, `&`, `$`, backticks and parentheses,
- * so a branch name is not the safe token it looks like. Plain names are left
- * bare because the commands are read as much as they are run.
- *
- * @param {string} value - Value to interpolate into a printed command.
- * @returns {string} The value, single-quoted if it carries anything unusual.
+ * Quote POSIX shell arguments: valid Git branch names can contain shell syntax.
+ * Leave plain tokens bare for readability.
  */
 export function shellQuoteArg(value) {
   const text = String(value);
@@ -4487,12 +4398,8 @@ export function shellQuoteArg(value) {
 }
 
 /**
- * The commit command for a given staging outcome — the one the updater runs,
- * and therefore the one to hand the user when it does not run it itself.
- *
- * The pathspec form is NOT interchangeable with the index form: it drops
- * staged mode bits where `core.fileMode` is false. Suggesting it after the
- * index form was selected would tell the user to reintroduce that bug.
+ * Format recovery using the selected commit form. Pathspec commits can lose
+ * staged mode bits with core.fileMode=false, so do not substitute for index form.
  *
  * @param {string} version - Target version for the commit message.
  * @param {boolean} usedIndexCommit - Whether the index form is safe here.
@@ -4517,35 +4424,20 @@ export function updateCommitCommand(version, usedIndexCommit, expandedPathsToSta
 }
 
 /**
- * Record the snapshot a withheld update staged, so the next run can tell it
- * apart from the user's own edits.
- *
- * Best-effort: this bookkeeping improves the NEXT run's diagnosis, and an update
- * that succeeded must not be reported as failed because a local ref could not be
- * written. The recorded commit hangs off HEAD with the staged index as its tree,
- * which also makes it a snapshot the user could check out if they ever want it.
+ * Best-effort snapshot of the index, parented to HEAD, for next-run attribution.
+ * Ref-write failure must not turn an applied update into a reported failure.
  *
  * @param {string} version - Target version, for the recorded commit's message.
  * @param {object} [ctx] - Git runner override and preservedPaths excluded from update attribution.
- * @returns {void}
  */
 export function recordStagedUpdate(version, ctx = {}) {
-  // gitQuiet, not git: every failure here is swallowed on purpose, so git's raw
-  // stderr ("Please tell me who you are") must not surface in the middle of an
-  // update that is otherwise succeeding.
+  // Suppress stderr from non-fatal bookkeeping failures.
   const runGit = ctx.git || gitQuiet;
   try {
     const tree = runGit('write-tree');
     const commit = runGit(
-      // A fixed synthetic identity, not the user's. `commit-tree` needs an
-      // author and a committer, and an install with no git identity configured
-      // — a container, a fresh machine, a harness that isolates the global
-      // config — makes it fail: measured, `fatal: unable to auto-detect email
-      // address`. The catch below would swallow that, and the next update would
-      // fall back to an older baseline and read this update's own files as the
-      // user's edits, which is the bug this ref exists to prevent. The identity
-      // is also honest about what the commit is: machinery, not authored work.
-      // `.invalid` is reserved by RFC 2606, so it can never route anywhere.
+      // commit-tree needs an identity even on fresh installs; this is a
+      // synthetic snapshot, not a user-authored commit.
       '-c', 'user.name=career-ops updater',
       '-c', 'user.email=updater@career-ops.invalid',
       'commit-tree', tree, '-p', runGit('rev-parse', 'HEAD'),
@@ -4560,13 +4452,7 @@ export function recordStagedUpdate(version, ctx = {}) {
   }
 }
 
-/**
- * Drop the recorded snapshot: the withheld update is no longer pending, either
- * because it was committed or because a rollback replaced the tree.
- *
- * @param {object} [ctx] - `{ git }` runner override, for tests.
- * @returns {void}
- */
+/** Clear the pending snapshot after commit or rollback; best-effort. */
 export function clearStagedUpdate(ctx = {}) {
   const runGit = ctx.git || git;
   try {
@@ -4582,22 +4468,15 @@ export function clearStagedUpdate(ctx = {}) {
 }
 
 /**
- * What the user is told when the update is applied but not committed.
- *
- * The whole point of #3846 is that this is not silent and leaves a choice, so
- * the notice names the branch, says exactly what state the tree is in, and
- * gives all three exits: keep it here, move it to the default branch, or undo
- * it. `rollback` is the sanctioned undo — apply() already created a backup
- * branch this run — so no destructive `reset --hard` is ever suggested.
+ * Explain the staged state and offer keep / move / rollback commands (#3846).
+ * apply() has already created the backup used by rollback.
  *
  * @param {object} params
  * @param {string} params.currentBranch
  * @param {string} params.defaultBranch
  * @param {string} params.version
  * @param {string} params.commitCommand - From updateCommitCommand().
- * @param {string[]} [params.unrelatedStaged] - Staged paths this update does not
- *   own, from stagedPathsOutside(). The paths themselves, not a flag: option 2's
- *   escape hatch is only runnable if it can name what to move.
+ * @param {string[]} [params.unrelatedStaged] - Paths from stagedPathsOutside().
  * @param {string[]} [params.unrelatedUnstaged] - Unstaged tracked paths outside the update.
  * @returns {string} Multi-line notice.
  */
@@ -4621,24 +4500,9 @@ export function skippedBranchCommitNotice({
     `  2. Move it to '${defaultBranch}' (git 2.35+ for --staged):`,
     `       git stash push --staged -m ${stashMessage}`,
     `       git switch ${branch} && git stash pop && ${commitCommand}`,
-    // `--staged` takes the whole index, not just this update's share of it, so
-    // for a contributor with their own work staged option 2 would carry that
-    // work onto the default branch too. The updater already knows when that is
-    // the case — it is the same signal that scopes the commit — so say it here
-    // rather than letting the recipe do it quietly.
-    //
-    // Naming the paths is the whole point. Both of the obvious unscoped reads
-    // fail, and they fail as the two things this guard exists to prevent:
-    // a bare `git commit` puts the update's own snapshot on the feature branch
-    // (#3846 itself), and a bare `git stash push` takes the refreshed files out
-    // of the tree, which is the staleness the guard is careful never to cause.
-    // Unstaging fails a third way: the change stays in the working tree, so the
-    // `git switch` below either carries it across or refuses to run.
-    //
-    // The path list is never truncated. A shortened command is a wrong command,
-    // and wrong-but-runnable is the failure this note is being written to fix;
-    // a long line that wraps is only ugly. stagedPathsOutside() reads `-z` to
-    // keep paths holding spaces intact, so they are quoted here to match.
+    // --staged takes the whole index and leaves unstaged work behind. Isolate
+    // unrelated work by path before switching; unstaging alone is insufficient.
+    // Quote every path and keep the full list so the printed command is runnable.
     ...(unrelatedStaged.length > 0 ? [
       `       NOTE: ${unrelatedStaged.length === 1 ? 'one other path is' : `${unrelatedStaged.length} other paths are`} staged besides this update. \`stash push --staged\``,
       '       takes the whole index, so option 2 would move them too. Take them out of',
@@ -4964,9 +4828,7 @@ async function apply() {
           'apply',
           '--confirm',
           ...(updateForce ? ['--force'] : []),
-          // The child is the process that commits, so the branch opt-in has to
-          // reach it. The env twin below covers older targets that do not know
-          // the flag; a target that does know it reads either.
+          // Forward opt-in to the committing child; the env twin covers older targets.
           ...(commitOnBranch ? [COMMIT_ON_BRANCH_FLAG] : []),
         ], {
           cwd: ROOT,
@@ -5411,8 +5273,7 @@ async function apply() {
     // Which commit form was used, so the failure path can suggest the matching
     // recovery command. Declared outside the try because the catch reads it.
     let usedIndexCommit = false;
-    // Set when the branch guard withheld the commit, so the closing summary
-    // reports what actually happened instead of implying a commit was made.
+    // Keep the closing summary consistent with a withheld commit.
     let skippedBranchCommit = false;
 
     // The staging and scoped-commit paths must use the same concrete file list.
@@ -5465,15 +5326,11 @@ async function apply() {
         preservedPaths,
       );
       usedIndexCommit = unrelated.length === 0;
-      // Which branch receives the commit is decided here, after staging, so a
-      // withheld commit still leaves the refreshed files in the tree: the user
-      // is never left on stale system files by this guard (#3846).
+      // Decide after staging so withholding a commit does not withhold the update.
       const branchDecision = resolveUpdateCommitBranch(ROOT, { optIn: commitOnBranch });
       if (!branchDecision.commit) {
         skippedBranchCommit = true;
-        // Leave the next run a truthful baseline for these staged files, so it
-        // does not mistake this update's own output for the user's local edits
-        // and preserve the very files it came to install (#3846).
+        // Distinguish this update from user edits on the next run.
         recordStagedUpdate(remote, { preservedPaths });
         console.log(skippedBranchCommitNotice({
           currentBranch: branchDecision.currentBranch,
