@@ -304,6 +304,7 @@ try {
     'cv-sync-check.mjs',
     'gemini-eval.mjs',
     'generate-pdf.mjs',
+    'github-evidence.mjs',
     'ollama-eval.mjs',
     'openai-eval.mjs',
     'openai-tailor.mjs',
