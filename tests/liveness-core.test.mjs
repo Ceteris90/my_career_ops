@@ -634,6 +634,15 @@ classifyLiveness({
   ? pass('a later deadline in a related-jobs card does not close the posting')
   : fail('a related-jobs deadline closed the posting');
 
+// A dead permalink that redirects to a listing page must not be closed by
+// another job's deadline on that page (review of #5367).
+{
+  const v = careerviet('29/09/2025', ['NỘP ĐƠN ỨNG TUYỂN'], 'https://careerviet.vn/vi/tim-viec-lam/ket-qua');
+  v.result === 'uncertain' && v.code === 'redirected_off_posting'
+    ? pass('redirect off the posting + past deadline -> uncertain, not expired')
+    : fail(`redirected listing read as ${JSON.stringify(v)}`);
+}
+
 // Without a deadline the Apply label alone still reads active, and the label
 // is not a loose match: "đơn" prose elsewhere does not count.
 classifyLiveness({

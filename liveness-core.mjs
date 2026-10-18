@@ -295,14 +295,6 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
     return { result: 'expired', code: 'expired_body', reason: `pattern matched: ${expiredBody.source}` };
   }
 
-  // A stated deadline in the past closes the posting even though the page and
-  // its Apply button are intact (CareerViet, #4832). Before the apply control
-  // is read, for the same reason the hard patterns are.
-  const pastDeadline = deadlinePassed(bodyText, now);
-  if (pastDeadline) {
-    return { result: 'expired', code: 'deadline_passed', reason: `application deadline passed: ${pastDeadline}` };
-  }
-
   // A dead permalink that 301s to a generic search/listing page still shows
   // "Apply" buttons — on OTHER jobs' cards (seen when jobs.careers.microsoft.com
   // permalinks migrated to apply.careers.microsoft.com). When the requested URL
@@ -317,6 +309,14 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
       code: 'redirected_off_posting',
       reason: `redirected to ${finalUrl} — job id "${jobId}" missing from final URL`,
     };
+  }
+
+  // A stated deadline in the past closes the posting even though the page and
+  // its Apply button are intact (CareerViet, #4832). Read after the redirect
+  // guard: on a listing page the date belongs to some other job's card.
+  const pastDeadline = deadlinePassed(bodyText, now);
+  if (pastDeadline) {
+    return { result: 'expired', code: 'deadline_passed', reason: `application deadline passed: ${pastDeadline}` };
   }
 
   if (hasApplyControl(applyControls)) {
