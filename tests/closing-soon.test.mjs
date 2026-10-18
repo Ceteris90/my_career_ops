@@ -285,3 +285,21 @@ test('captures: html markup between marker and date is stripped; script/style do
     cleanup(box);
   }
 });
+
+test('captures: dates inside tag attributes (even containing ">") and comments are not matched', () => {
+  const box = sandbox();
+  try {
+    writeFileSync(join(box.dataRoot, 'data', 'applications.md'), [
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+      '|---|---|---|---|---|---|---|---|---|',
+      '| 1 | 2026-10-01 | Acme | Analyst | 4.2/5 | Evaluated | ❌ | [1](reports/001-acme-2026-10-01.md) | none |',
+      '',
+    ].join('\n'));
+    writeFileSync(join(box.dataRoot, 'jds', '001-acme-analyst.html'),
+      '<a title="deadline 2026-10-21">Apply</a><a title="x > deadline 2026-10-20" href=\'y\'>Go</a><!-- closes 2026-10-19 --><p>Hi</p>');
+    const out = JSON.parse(run(['--today', '2026-10-17'], box).stdout);
+    assert.deepEqual([out.closingSoon, out.overdue, out.unparsed], [[], [], []]);
+  } finally {
+    cleanup(box);
+  }
+});

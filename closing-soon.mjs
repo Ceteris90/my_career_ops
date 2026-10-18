@@ -216,7 +216,8 @@ export function resolveStatusFilter(value, lookup = loadStateLookup()) {
 function htmlToText(html) {
   return html
     .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/?[a-z!][^\s>]*(?:"[^"]*"|'[^']*'|[^>"'])*>/gi, ' ')
     .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&');
 }
