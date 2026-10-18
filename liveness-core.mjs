@@ -1,4 +1,5 @@
 import { resolveColumns, parseTrackerRow, linkedReportNumbers, reportUrlForNumbers } from './tracker-parse.mjs';
+import { parseScanHistoryLine } from './lib/scan-history-columns.mjs';
 
 // Portals write closure banners with typographic punctuation and accents:
 // WTTJ renders "Cette offre n’est plus disponible." with U+2019, not ASCII "'".
@@ -350,6 +351,18 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
 const EXPIRED_HISTORY_STATUS = /expired/i;
 
 /**
+ * True when a verdict means "the posting body could not be read", not "the
+ * posting is closed". Today that condition is carried inside
+ * `result: 'expired'` with `code: 'insufficient_content'` (nav/footer only, or
+ * a body that sits in an unreadable iframe). Consumers that must not treat such
+ * a verdict as closure call this instead of repeating the code string.
+ * Detection only: it does not change what classifyLiveness returns.
+ */
+export function isUnreadableVerdict(verdict) {
+  return verdict?.code === 'insufficient_content';
+}
+
+/**
  * Plan the `skipped_expired` scan-history rows for a batch of liveness verdicts.
  *
  * The pure half of recording a liveness sweep (#3891). Kept here rather than in
@@ -389,7 +402,11 @@ export function planExpiredHistoryRows(scanHistoryText = '', verdicts = [], norm
 
   // slice(1) skips the header, the same convention collectSeenUrls uses.
   for (const line of String(scanHistoryText ?? '').split('\n').slice(1)) {
-    const [url, , portal = '', title = '', company = '', status = '', location = ''] = line.split('\t');
+    // parseScanHistoryLine undoes the formula escaping the writer applied. The
+    // planned rows go back through appendToScanHistory, which escapes again, so
+    // reading the stored cells raw added one more leading apostrophe to a title,
+    // company or location starting with = + - or @ on every record.
+    const { url, portal, title, company, status, location } = parseScanHistoryLine(line);
     if (!url) continue;
     const key = normalizeUrl(url);
     if (!knownByKey.has(key)) knownByKey.set(key, new Map());
@@ -409,7 +426,7 @@ export function planExpiredHistoryRows(scanHistoryText = '', verdicts = [], norm
   const rows = [];
   const claimed = new Set();
   for (const verdict of verdicts ?? []) {
-    if (verdict?.result !== 'expired' || verdict.code === 'insufficient_content') continue;
+    if (verdict?.result !== 'expired' || isUnreadableVerdict(verdict)) continue;
     const candidate = typeof verdict.url === 'string' ? verdict.url.trim() : '';
     if (!candidate) continue;
     const known = knownByKey.get(normalizeUrl(candidate));

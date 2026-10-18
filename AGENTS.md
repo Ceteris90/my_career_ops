@@ -10,8 +10,8 @@ Built and used by [santifer](https://santifer.io) for his own job search: 740 li
 
 Two layers — full list in `DATA_CONTRACT.md`:
 
-- **User Layer (NEVER auto-updated; personalization goes HERE):** `cv.md`, `config/profile.yml`, `modes/_profile.md`, `modes/_custom.md`, `article-digest.md`, `portals.yml`, `data/*`, `documents/*`, `reports/*`, `output/*`, `interview-prep/*`
-- **System Layer (auto-updatable; DON'T put user data here):** `modes/_shared.md` and all other modes, `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `OPENCODE.md`, `KIMI.md`, `GEMINI.md`, `*.mjs` scripts, `dashboard/*`, `templates/*`, `batch/*`
+- **User Layer (NEVER auto-updated; personalization goes HERE):** `cv.md`, `config/profile.yml`, `modes/_profile.md`, `modes/_custom.md`, `article-digest.md`, `portals.yml`, `data/*`, `documents/*`, `reports/*`, `output/*`, `interview-prep/*`, `batch/tracker-additions/*`
+- **System Layer (auto-updatable; DON'T put user data here):** `modes/_shared.md` and all other modes, `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `OPENCODE.md`, `KIMI.md`, `GEMINI.md`, `*.mjs` scripts, `dashboard/*`, `templates/*`, `batch/*` (except `batch/tracker-additions/`)
 
 **THE RULE: When the user asks to customize facts or targeting (archetypes, narrative, negotiation scripts, proof points, location policy, comp targets), ALWAYS write to `modes/_profile.md` or `config/profile.yml`. When they ask for procedural house rules, custom workflows, output preferences, or automations, write to `modes/_custom.md` (copy it from `modes/_custom.template.md` if missing). NEVER edit `modes/_shared.md` for user-specific content.** This ensures system updates don't overwrite their customizations.
 
@@ -127,7 +127,7 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `interview-prep/{company}-{role}.md` | Company-specific interview intel |
 | `generate-pdf.mjs` | Playwright: HTML to PDF |
 | `verify-cv-structure.mjs` | Non-blocking warning on the tailored-CV JSON payload (`modes/pdf.md` step 17b), before HTML/PDF rendering — flags structure silently lost or reordered vs. `cv.md` (a dropped `"· {descriptor}"` suffix, an experience entry out of cv.md's chronological order) that fact-checking alone can't see, since the surviving content is still true; reports `UNVERIFIED` rather than a false pass when `cv.md` doesn't use a supported Experience header convention |
-| `generate-latex.mjs` | LaTeX CV validator + pdflatex compiler |
+| `generate-latex.mjs` | LaTeX CV fact gate + validator + compiler (gates the `.tex` before compiling whenever `cv.md` exists; `--source` adds evidence, `--skip-fact-check` opts out) |
 | `scan.mjs` | Zero-token portal scanner (Greenhouse/Ashby/Lever APIs, zero LLM cost) |
 | `scan-ats-full.mjs` | Reverse-ATS keyword-first scanner over full public ATS datasets (Greenhouse/Lever/Ashby/Workday/iCIMS) plus board seeds derived locally from tracker/scan-history URLs, filtered by portals.yml `title_filter`/`location_filter`; optional `domain_filter` gates whole boards on industry relevance before any title is tested (opt-in, #3105); checkpoints every 500 companies, `--resume` continues an interrupted sweep |
 | `scan-interamt.mjs` | Playwright browser scanner for Interamt.de (German public sector portal — Apache Wicket, no REST API) |
@@ -154,11 +154,13 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables — flags `expired` rows (past `next_effective` without re-verification, exit 1) and `review-due` rows (`as_of` older than 12 months, soft); discovers any `templates/*.yml` with `as_of` rows automatically (JSON or `--summary` table output) |
 | `process-quality.mjs` | Per-company recruiting-friction rate from `[process-friction]` tags in `data/active-interviews.md` Notes (JSON or `--summary`) |
 | `rejection-latency.mjs` | Post-interview response-latency signal — flags companies still in `Interview` state whose silence since the last `data/active-interviews.md` round exceeds a courtesy (30d default, configurable) threshold, with a ready-to-copy `data/blacklist.md` suggestion row; suggestion-only, never writes (JSON or `--summary` table output) |
+| `closing-soon.mjs` | Read-only, zero-LLM closing-date surfacer — reads closing dates typed into tracker Notes (`closes 2026-10-22`, `deadline Nov 4`; or the `jds/` capture when Notes have no marker) and lists rows within `--within N` days (default 7), soonest first, with a separate `overdue` group and an `unparsed` list; `--status` (default `Evaluated`), `--today` for deterministic runs; never writes (JSON or `--summary` table output) |
 | `tracker-sync-check.mjs` | Status-drift checker between `data/applications.md` and `data/active-interviews.md` — matches rows via a `#N in tracker` Notes reference or fuzzy Company+Role, then two-tier resolves mismatches (auto-tier1 via canonical lifecycle order, needs-review-tier2 via `git blame` timestamps). Read-only/reporting in this version — does not write status fixes. Wired into `verify-pipeline.mjs`'s health check. |
 | `salary-gap.mjs` | Desired/advertised/actual comp gap analyzer — folds report `advertised_comp` + `data/salary-observations.tsv` (JSON or `--summary`) |
 | `negotiation-roi.mjs` | Salary-negotiation talking-point generator — anchors an ask in a quantified `interview-prep/story-bank.md` achievement, kept only if the same number also appears verbatim in `cv.md` (v1 safety gate), converted to an estimated annualized dollar value from an explicit wage/frequency input (never guessed); read-only, draft-only (JSON or `--summary`) |
 | `assessment-log.mjs` | Skills-assessment logger — `add` appends platform/subject/threshold/score + staleness note to `data/assessments.tsv` (JSON or `--summary`) |
 | `ats-payload.mjs` | ATS payload transform for `build-cv-html.mjs` payloads — one safe transform (fold `competencies[]` into `skills[]`, idempotent, so the same facts ship comma-delimited under a header parsers recognise) plus three lints it reports and deliberately never applies (`employer-in-role`, `parenthetical-in-company`, `multiple-date-ranges`). Payload on stdout, findings on stderr; read-only (never writes `cv.md` / `config/profile.yml`) |
+| `github-evidence.mjs` | Optional GitHub evidence step of the `expand` mode (#5295): PRs the user authored (merged / open / closed unmerged per repo, with stars and visibility) through the user's existing `gh auth`, plus a claim check of `cv.md` against them (named but never merged; merged but never named). Read-only and metadata only, never source code; forks and the user's own repos are never evidence, and private repos count only when listed in `config/profile.yml` → `github_evidence.private_allowlist` (others appear by name and count only). Writes `output/github-evidence-{date}.{md,json}`; exits 3 when `gh` is missing or logged out and 2 when a GitHub query fails, and on either `expand` stays zero-key (`--json`) |
 | `jd-skill-gap.mjs` | Zero-LLM JD skill classifier vs `cv.md`: existing / supportedByResume / gap; never auto-adds claims to `cv.md` (JSON or `--summary`) |
 | `cv-title-check.mjs` | Zero-LLM job-title consistency checker — pairs each tailored-CV `{company, dates}` entry against `cv.md`'s canonical entry and flags an exact-string title mismatch (case/whitespace-normalized, never fuzzy); warn-only, never edits either file; reads `cv.md` from the data root, and reports "title check did not run" instead of ✅ when nothing could be compared (JSON or `--summary`) |
 | `contacts.mjs` | Job-search phonebook → vCard 3.0 exporter — stable UIDs so re-imports update instead of duplicating on platforms that honor vCard UID (JSON, `--summary`, `--vcf`, `--caller-id`) |
@@ -233,6 +235,8 @@ If `cv.md` is missing, ask:
 Create `cv.md` from whatever they provide — clean markdown with standard sections (Summary, Experience, Projects, Education, Skills). The CV checks (`cv-title-check.mjs`, `verify-cv-structure.mjs`, `jd-skill-gap.mjs`) find jobs and skills by heading, so keep the shape `examples/cv-example.md` uses: an Experience section named `## Experience`, `## Work Experience`, `## Professional Experience`, `## Employment History` or `## Work History`; each job as `### Company — Location`, then a bold `**Title**` line, then a dates line; skills under a heading containing "Skills". Pandoc output converted from a .docx (`## **[Experience]{.smallcaps}**`, `---` dashes, trailing `\` hard breaks) is read too (#4879). `node doctor.mjs` warns when it cannot find the Experience section.
 
 #### Step 2: Profile (required)
+If `node doctor.mjs --json` `warnings` says the data-root `.env` sets `CAREER_OPS_PROFILE`, do not copy the example profile. Ask the user to export that variable in the shell (or shell profile) that starts the agent, then restart the session from it, or to remove the line from `.env`. A shell export does not reach an agent session that is already running, so run doctor again only after that.
+
 If `config/profile.yml` is missing, copy from `config/profile.example.yml` and ask:
 > "I need a few details to personalize the system:
 > - Your full name and email
@@ -395,7 +399,7 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 | Wants to build, import, review, or validate a Master Career Profile | `master-profile` — source-backed CV import with explicit approval; profile selection and PDF integration are not yet implemented |
 | Wants to check if a generated CV is ATS-friendly (parseability score + issues), or to prepare a render payload for an ATS parser before building the HTML | `ats` — two stages: `ats-payload.mjs` on the payload (one safe fold, three lints it only reports), then `verify-ats.mjs` on the generated HTML (score + issues) |
 | Wants a hiring-manager's read on a tailored CV before sending | `pdf --hm-audit` — opt-in pass (`modes/pdf/hm-audit.md`), off by default: researches the likely reviewer, dispatches a separate agent role-playing them, and returns a bullet-by-bullet keep/cut/rewrite verdict |
-| Wants an ATS-parseable copy of the tailored CV to paste into an application form, alongside the styled PDF | `pdf --ats`: opt-in Step 21a, off by default. Folds the payload through `ats-payload.mjs`, renders it with the `ats` template to `output/cv-{candidate}-{company}-ats.html`, and fact-gates it. Not a bundle artifact and not the tracker's PDF column |
+| Wants an ATS-parseable copy of the tailored CV to paste into an application form, alongside the styled PDF | `pdf --ats`: opt-in Step 21a, off by default. Folds the payload through `ats-payload.mjs`, renders it with the `ats` template to `output/cv-{candidate}[-{report}]-{company}-ats.html`, and fact-gates it. Not a bundle artifact and not the tracker's PDF column |
 | Wants the LaTeX/Overleaf CV path | `latex` |
 | Maintains their own hand-tuned `.tex` CV and wants it tailored in place (opt-in; cv.md stays the default) | `latex-tex` |
 | Wants a tailored CV as markdown instead of a PDF (to paste into their own template or editor) | `text` |
@@ -547,7 +551,7 @@ If they say yes: run `node hired-share.mjs --report N --anonymity <their choice>
 
 ### TSV Format for Tracker Additions
 
-One TSV file per evaluation at `batch/tracker-additions/{num}-{company-slug}.tsv`: a **header row of column labels**, then exactly one data row.
+One TSV file per evaluation at `{DATA_ROOT}/batch/tracker-additions/{num}-{company-slug}.tsv`, where `merge-tracker.mjs` and `verify-pipeline.mjs` look for it (with a data-root override, a TSV written in the checkout is never merged): a **header row of column labels**, then exactly one data row.
 
 ```
 num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tnotes\turl
@@ -583,7 +587,7 @@ num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tnotes\turl
 
 ### Pipeline Integrity
 
-1. **NEVER edit applications.md to ADD new entries** -- write TSV in `batch/tracker-additions/` and let `merge-tracker.mjs` merge.
+1. **NEVER edit applications.md to ADD new entries** -- write TSV in `{DATA_ROOT}/batch/tracker-additions/` and let `merge-tracker.mjs` merge.
 2. **UPDATE status/notes of existing entries via `node set-status.mjs <report#|company> <State> [--note]`** — the canonical (locked, validated, atomic) write path. Do not hand-edit the table.
 3. All reports MUST include `**URL:**` in the header (between Score and PDF), and `**Legitimacy:** {tier}` (see Block G in `modes/oferta.md`).
 4. All statuses MUST be canonical (see `templates/states.yml`).

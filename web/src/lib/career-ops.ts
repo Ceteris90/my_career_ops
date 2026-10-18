@@ -3,6 +3,7 @@ import path from "node:path";
 import * as yaml from "js-yaml";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { resolveDataRoot } from "@/lib/core/data-root.mjs";
+import { getProfilePath } from "@/lib/core/profile-path.mjs";
 import { readTrackerFile } from "@/lib/core/tracker-files.mjs";
 import { resolveCodeRoot, resolveRootScript } from "@/lib/core/code-root.mjs";
 import { parseApplications } from "@/lib/tracker-table.mjs";
@@ -229,7 +230,7 @@ export type PdfPathForReportResult =
  *  reader. The parsing itself is pdfIndexEntryForReport, a pure function
  *  shared with the apply flow's own CV resolver (cv-selection.mjs) so there
  *  is one definition of "which row matches this report", not two. */
-export async function pdfPathStatusForReport(n: string): Promise<PdfPathForReportResult> {
+export async function pdfPathStatusForReport(n: string, kind: "cv" | "cover" = "cv"): Promise<PdfPathForReportResult> {
   const target = pdfIndexTarget(n);
   if (target === null) return { status: "invalid" };
   const indexPath = await resolvePdfIndexPath();
@@ -241,7 +242,7 @@ export async function pdfPathStatusForReport(n: string): Promise<PdfPathForRepor
     return { status: "not-found" };
   }
   const root = careerOpsRoot();
-  const entry = pdfIndexEntryForReport(tsv, target);
+  const entry = pdfIndexEntryForReport(tsv, target, kind);
   if (!entry.found) return { status: "not-found" };
   if (!entry.path) return { status: "rejected" };
   // The manifest is a user-layer file (generate-pdf.mjs writes it, but nothing
@@ -302,7 +303,10 @@ export function doctorState(snapshot?: Pick<PipelineSummary, "applications" | "i
   const root = careerOpsRoot();
   const has = (rel: string) => {
     try {
-      return fs.existsSync(path.join(root, rel));
+      // The profile is where getProfilePath() says, not always <root>/config/profile.yml,
+      // so this agrees with core's `node doctor.mjs --json` under CAREER_OPS_PROFILE.
+      const file = rel === "config/profile.yml" ? getProfilePath(root) : path.join(root, rel);
+      return fs.existsSync(file);
     } catch {
       return false;
     }
@@ -432,7 +436,8 @@ export function readReport(n: string): ReportData | null {
       content: fs.readFileSync(/* turbopackIgnore: true */ file, "utf8"),
       file: path.basename(file),
     };
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     return null;
   }
 }
@@ -582,7 +587,7 @@ export function readLanguageConfig(): LanguageConfig {
   let modesDirs = ["modes"];
   let output = "en";
   try {
-    const parsed = yaml.load(fs.readFileSync(path.join(root, "config", "profile.yml"), "utf8"));
+    const parsed = yaml.load(fs.readFileSync(getProfilePath(root), "utf8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       const language = (parsed as Record<string, unknown>).language;
       if (language && typeof language === "object" && !Array.isArray(language)) {

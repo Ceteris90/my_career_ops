@@ -187,7 +187,9 @@ export function PipelineView({
           return (
             <button
               key={t}
+              type="button"
               ref={tab === t ? activeTab : undefined}
+              aria-pressed={visibleTab === t}
               onClick={() => setParams({ tab: t === "INBOX" ? null : t })}
               className={cn(
                 // gap-1, not a whitespace text node: flex containers drop
@@ -336,7 +338,7 @@ export function PipelineView({
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums">
-                      <Link href={detailHref} className="transition-colors group-hover:text-brand">
+                      <Link href={detailHref} tabIndex={-1} className="transition-colors group-hover:text-brand">
                         #{r.n}
                       </Link>
                     </td>
@@ -348,7 +350,7 @@ export function PipelineView({
                     </td>
                   <td className="px-4 py-3 text-muted">
                     <div className="flex items-center gap-2">
-                      <Link href={detailHref}>{r.role}</Link>
+                      <Link href={detailHref} tabIndex={-1}>{r.role}</Link>
                       {posting && (
                         <a
                           href={posting}
