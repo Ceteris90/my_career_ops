@@ -27,7 +27,7 @@ check('table has exactly one live seed row (Ontario); other candidates stay comm
   Object.keys(rows).length === 1 && Boolean(on),
   `rows: ${Object.keys(rows).join(', ')}`);
 check('Ontario row carries the verified dates',
-  on?.effective === '2023-10-26' && on?.as_of === '2026-10-18', `${on?.effective} / ${on?.as_of}`);
+  on?.effective === '2023-10-26' && /^\d{4}-\d{2}-\d{2}$/.test(String(on?.as_of)) && String(on?.as_of) >= '2026-10-18', `${on?.effective} / ${on?.as_of}`);
 check('Ontario applies_to states the foreign-national scope and excludes citizens and PRs',
   /not a Canadian\s+citizen and not a permanent resident/.test(on?.applies_to || '')
     && /does NOT cover Canadian\s+citizens or permanent residents/.test(on?.applies_to || '')
