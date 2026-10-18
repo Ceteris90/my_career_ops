@@ -24,6 +24,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
+import { spawn } from 'node:child_process';
+import { tryAcquireDirLockSync } from '../lib/dir-lock.mjs';
 import {
   acquirePipelineLock, LockTimeoutError, OWNERLESS_GRACE_MS,
   lockRecoveryVerdict, RECOVER_STALE, RECOVER_VANISHED, RECOVER_LIVE,
@@ -356,18 +358,43 @@ test('lockRecoveryVerdict: an absent directory is VANISHED, never STALE — "gon
 
 test('lockRecoveryVerdict: STALE, LIVE and the grace floor keep their existing meanings', () => {
   const root = fixtureRoot();
+  const liveChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)'], { stdio: 'ignore' });
   try {
     const dead = join(root, 'data', 'dead.lock');
     writeCrashedHolder(dead);
     assert.equal(lockRecoveryVerdict(dead, 1), RECOVER_STALE, 'a crashed holder is still reclaimable');
 
+    // A live owner is ANOTHER live process. This process's own pid no longer
+    // stands in for one: without a handle behind it, it is a leftover (#5390).
     const live = join(root, 'data', 'live.lock');
     mkdirSync(live, { recursive: true });
     writeFileSync(join(live, 'owner.json'), JSON.stringify({
-      pid: process.pid, token: 'live', started_at: new Date().toISOString(),
+      pid: liveChild.pid, token: 'live', started_at: new Date().toISOString(),
     }), 'utf-8');
     backdate(live, OWNERLESS_GRACE_MS * 50);
     assert.equal(lockRecoveryVerdict(live, 1), RECOVER_LIVE, 'a live owner is never stale, however old');
+
+    // Our own pid with a token no handle of ours holds: a release whose rm was
+    // swallowed, or a stamp we could not confirm. Judged by age, so a long-lived
+    // process (the web server) does not keep it LIVE until it restarts.
+    const leftover = join(root, 'data', 'leftover.lock');
+    mkdirSync(leftover, { recursive: true });
+    writeFileSync(join(leftover, 'owner.json'), JSON.stringify({
+      pid: process.pid, token: 'no-handle', started_at: new Date().toISOString(),
+    }), 'utf-8');
+    assert.equal(lockRecoveryVerdict(leftover, 1), RECOVER_LIVE, 'our own leftover is respected while young');
+    backdate(leftover, OWNERLESS_GRACE_MS * 50);
+    assert.equal(lockRecoveryVerdict(leftover, 1), RECOVER_STALE, 'our own leftover ages out once old');
+
+    // Our own pid with a handle we really hold: live, however old.
+    const held = join(root, 'data', 'held.lock');
+    const handle = tryAcquireDirLockSync(held, { staleMs: 1 });
+    try {
+      backdate(held, OWNERLESS_GRACE_MS * 50);
+      assert.equal(lockRecoveryVerdict(held, 1), RECOVER_LIVE, 'a lock this process holds is never stale');
+    } finally {
+      handle.release();
+    }
 
     const fresh = join(root, 'data', 'fresh.lock');
     mkdirSync(fresh, { recursive: true });
@@ -386,6 +413,7 @@ test('lockRecoveryVerdict: STALE, LIVE and the grace floor keep their existing m
     backdate(opaque, OWNERLESS_GRACE_MS * 5);
     assert.equal(lockRecoveryVerdict(opaque, 1), RECOVER_LIVE, 'a stamp we could not read protects the lock');
   } finally {
+    liveChild.kill();
     rmSync(root, { recursive: true, force: true });
   }
 });

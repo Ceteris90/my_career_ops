@@ -197,7 +197,7 @@ export function isRmContention(err) {
 // Contention is swallowed and reported via the return value; anything else
 // (EROFS/ENOSPC-class breakage) still throws. Never fatal on contention
 // because every lock artifact ages out: an abandoned guard or lock is
-// reclaimed by lockCanRecover on a later attempt, so the worst case of
+// reclaimed by lockRecoveryVerdict on a later attempt, so the worst case of
 // leaving one behind is one extra retry for some caller. Killing the writer
 // loses its item; waiting does not.
 export function rmLockArtifactSync(dir) {
@@ -250,6 +250,24 @@ export const RECOVER_STALE = 'stale';
 export const RECOVER_VANISHED = 'vanished';
 export const RECOVER_LIVE = 'live';
 
+// Tokens of the handles this module has handed out and not yet released.
+//
+// A live pid proves its holder is alive only when the holder is another
+// process. For THIS process's pid it proves nothing: a long-lived process (the
+// web server) can be left holding a directory no handle owns — a release whose
+// rm was contended on Windows (swallowed by design, see createRelease), or a
+// stamp this caller wrote but could not confirm. The pid rule would then keep
+// that lock LIVE until the server restarts, answering "busy" to every request
+// that needs it (#5390 review). So our own pid counts as live only for a token
+// we are actually holding; any other stamp of ours goes to the age rule below.
+//
+// The age rule, not an immediate reclaim, because this set is per module
+// instance: a second copy of this module in the same process (a bundler chunk,
+// a worker thread, a dev-server reload) holds tokens this one cannot see. Its
+// lock is reclaimable only once it is older than staleMs, which no critical
+// section in this repo approaches.
+const activeTokens = new Set();
+
 export function lockRecoveryVerdict(lockDir, staleMs) {
   const { inspected, owner } = readLockOwner(lockDir);
   // Unreadable is not ownerless. A stamp this process could not read proves
@@ -257,7 +275,11 @@ export function lockRecoveryVerdict(lockDir, staleMs) {
   // rule on that basis is how a LIVE lock gets condemned — the same reasoning
   // #2984 applied to the stat below, one step earlier in the same function.
   if (!inspected) return RECOVER_LIVE;
-  if (owner?.pid) return processIsAlive(owner.pid) ? RECOVER_LIVE : RECOVER_STALE;
+  if (owner?.pid) {
+    if (!processIsAlive(owner.pid)) return RECOVER_STALE;
+    if (owner.pid !== process.pid || activeTokens.has(owner.token)) return RECOVER_LIVE;
+    // Our pid, but no handle of ours: fall through to the age rule.
+  }
   try {
     return Date.now() - statSync(lockDir).mtimeMs > Math.max(staleMs, OWNERLESS_GRACE_MS)
       ? RECOVER_STALE
@@ -272,10 +294,6 @@ export function lockRecoveryVerdict(lockDir, staleMs) {
   }
 }
 
-// A cheap identity for "which holder currently has this lock". Used only to
-// tell a lock that is CHANGING HANDS (the system is making progress; this
-// caller is merely unlucky) from one that is WEDGED (a single holder is not
-// letting go, which is what the timeout exists to escape).
 /**
  * The waiting half of the protocol.
  *
@@ -301,7 +319,7 @@ export function lockRecoveryVerdict(lockDir, staleMs) {
  *   `hardDeadline` is OPTIONAL: omit it and the policy applies its own default
  *   ceiling, DEFAULT_MAX_WAIT_FACTOR x timeoutMs from now. Pass one only when
  *   the caller has a real knob of its own (acquireDirLock's `maxWaitMs`).
- * @returns {{backoffMs: () => number, holderStillWedged: () => boolean}}
+ * @returns {{backoffMs: () => number, holderStillWedged: () => boolean, noteWaiting: () => void, ceilingReached: () => boolean}}
  */
 export function createLockWaitPolicy(lockDir, { timeoutMs, retryMs, deadline, hardDeadline }) {
   let perHolderDeadline = deadline;
@@ -395,6 +413,10 @@ export function createLockWaitPolicy(lockDir, { timeoutMs, retryMs, deadline, ha
   return { backoffMs, holderStillWedged, noteWaiting, ceilingReached };
 }
 
+// A cheap identity for "which holder currently has this lock". Used only to
+// tell a lock that is CHANGING HANDS (the system is making progress; this
+// caller is merely unlucky) from one that is WEDGED (a single holder is not
+// letting go, which is what the timeout exists to escape).
 function lockFingerprint(lockDir) {
   try {
     const st = statSync(lockDir);
@@ -670,6 +692,7 @@ function newAttemptState(onContention = () => {}) {
 }
 
 function lockHandle(lockDir, state, startedAt, options) {
+  activeTokens.add(state.token);
   return {
     lockDir,
     token: state.token,
@@ -865,6 +888,12 @@ export function tryAcquireDirLockSync(lockDir, options) {
 function createRelease(lockDir, token, removeLock = (path) => rmSync(path, { recursive: true, force: true })) {
   let released = false;
   let verifiedDir = null;
+  // Released, whether or not the rm below succeeded: the handle no longer
+  // holds the lock, so its token stops counting as live (see activeTokens).
+  const finish = () => {
+    released = true;
+    activeTokens.delete(token);
+  };
   return function release() {
     if (released) return;
     if (verifiedDir) {
@@ -876,18 +905,18 @@ function createRelease(lockDir, token, removeLock = (path) => rmSync(path, { rec
         currentDir = statSync(lockDir);
       } catch (err) {
         if (err?.code === 'ENOENT') {
-          released = true;
+          finish();
           return;
         }
         throw err;
       }
       if (!sameLockDirectory(verifiedDir, currentDir)) {
-        released = true;
+        finish();
         return;
       }
       const { owner } = readLockOwner(lockDir);
       if (owner && owner.token !== token) {
-        released = true;
+        finish();
         return;
       }
       if (!owner && existsSync(join(lockDir, 'owner.json'))) {
@@ -899,7 +928,7 @@ function createRelease(lockDir, token, removeLock = (path) => rmSync(path, { rec
         beforeRead = statSync(lockDir);
       } catch (err) {
         if (err?.code === 'ENOENT') {
-          released = true;
+          finish();
           return;
         }
         throw err;
@@ -907,14 +936,14 @@ function createRelease(lockDir, token, removeLock = (path) => rmSync(path, { rec
       const { owner } = readLockOwner(lockDir);
       if (owner?.token !== token) {
         if (owner) {
-          released = true; // reclaimed by someone else — leave it alone
+          finish(); // reclaimed by someone else — leave it alone
           return;
         }
         throw new Error(`Cannot verify lock ownership at ${lockDir}`);
       }
       const afterRead = statSync(lockDir);
       if (!sameLockDirectory(beforeRead, afterRead)) {
-        released = true; // swapped underneath us
+        finish(); // swapped underneath us
         return;
       }
       verifiedDir = afterRead;
@@ -924,7 +953,7 @@ function createRelease(lockDir, token, removeLock = (path) => rmSync(path, { rec
     } catch (rmErr) {
       if (!isRmContention(rmErr)) throw rmErr;
     }
-    released = true;
+    finish();
   };
 }
 

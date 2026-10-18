@@ -95,6 +95,33 @@ test('a lock file left by the previous version is reclaimed once old, and respec
   assert.deepEqual(readdirSync(join(root, '.career-ops-web', 'chats')), [`${id}.json`]);
 });
 
+// A release whose rm is contended (Windows EBUSY) is swallowed by design, so the
+// lock directory survives under the server's own live pid. That pid must not
+// keep it busy until the server restarts: with no handle behind it, it ages
+// out like any ownerless leftover (#5390 review).
+test('a lock the server failed to release does not block the conversation until restart', t => {
+  const root = fixture(t), id = randomUUID();
+  const lockDir = join(root, '.career-ops-web', 'chats', `${id}.json.lock`);
+  const originalRmSync = fs.rmSync;
+  fs.rmSync = (path, ...args) => {
+    if (String(path) === lockDir) throw Object.assign(new Error('simulated contended release'), { code: 'EBUSY' });
+    return originalRmSync(path, ...args);
+  };
+  syncBuiltinESMExports();
+  try {
+    assert.equal(saveChat(root, id, { revision: 0, messages }).revision, 1);
+  } finally {
+    fs.rmSync = originalRmSync;
+    syncBuiltinESMExports();
+  }
+  assert.ok(existsSync(join(lockDir, 'owner.json')), 'the swallowed release left the lock behind');
+  assert.throws(() => saveChat(root, id, { revision: 1, messages }), /busy/, 'a fresh leftover is respected');
+  const dayAgo = new Date(Date.now() - 86_400_000);
+  utimesSync(lockDir, dayAgo, dayAgo);
+  assert.equal(saveChat(root, id, { revision: 1, messages }).revision, 2);
+  assert.equal(existsSync(lockDir), false);
+});
+
 test('lock and temp cleanup errors do not replace a saved conversation', t => {
   const root = fixture(t), lockId = randomUUID(), tempId = randomUUID();
   const lockDir = join(root, '.career-ops-web', 'chats', `${lockId}.json.lock`);
