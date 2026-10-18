@@ -190,7 +190,13 @@ function deadlinePassed(bodyText, now) {
   const [day, month, year] = [Number(match[1]), Number(match[2]), Number(match[3])];
   const deadline = new Date(Date.UTC(year, month - 1, day));
   if (deadline.getUTCFullYear() !== year || deadline.getUTCMonth() !== month - 1 || deadline.getUTCDate() !== day) return null;
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: DEADLINE_TIME_ZONE }).format(now);
+  // Built from formatToParts: the field order of a formatted date is locale
+  // data, and en-CA has rendered MM/DD/YYYY on some ICU builds.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: DEADLINE_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const part = (type) => parts.find((p) => p.type === type).value;
+  const today = `${part('year')}-${part('month')}-${part('day')}`;
   const isoDeadline = deadline.toISOString().slice(0, 10);
   return isoDeadline < today ? match[0] : null;
 }

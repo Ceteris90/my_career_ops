@@ -619,6 +619,23 @@ classifyLiveness({
   ? pass('the deadline is judged in Vietnam time (UTC+7)')
   : fail('the deadline was judged in UTC');
 
+// Today's date must not depend on how a locale orders a formatted date: with
+// format() rendering MM/DD/YYYY, both sides of the deadline still read right.
+{
+  const format = Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, 'format');
+  Object.defineProperty(Intl.DateTimeFormat.prototype, 'format', { configurable: true, get: () => () => '10/17/2026' });
+  let past, ahead;
+  try {
+    past = careerviet('16/10/2026').result;
+    ahead = careerviet('30/03/2027').result;
+  } finally {
+    Object.defineProperty(Intl.DateTimeFormat.prototype, 'format', format);
+  }
+  past === 'expired' && ahead === 'active'
+    ? pass('the deadline comparison does not depend on the locale date format')
+    : fail(`with an MM/DD/YYYY format: past=${past}, ahead=${ahead}`);
+}
+
 careerviet('31/02/2026').result === 'active'
   ? pass('an impossible date is not read as a closure')
   : fail('an impossible date closed the posting');
