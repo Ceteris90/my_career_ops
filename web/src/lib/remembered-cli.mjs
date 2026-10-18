@@ -3,10 +3,10 @@ import path from "node:path";
 
 const LINE = /^\s*(?:export\s+)?CAREER_OPS_CLI\s*=\s*(.*?)\s*$/;
 
-/** A .env value as dotenv reads it: the text inside matching quotes, else the text before a ` #` comment. */
+/** A .env value as dotenv reads it: the text inside matching quotes, else the text before a `#` comment. */
 function unquote(raw) {
   const quoted = /^(['"`])(.*?)\1/.exec(raw);
-  return quoted ? quoted[2] : raw.replace(/\s+#.*$/, "");
+  return quoted ? quoted[2] : raw.replace(/#.*$/, "").trim();
 }
 
 /**
