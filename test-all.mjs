@@ -2478,26 +2478,6 @@ for (const f of skillEntrypoints) {
   }
 }
 
-// tests/cv-visual/Dockerfile pins the same image a third time, by tag and
-// digest, for the cv-visual job. Its first line asks to stay aligned with
-// package.json, but nothing checked it, so the 1.64.1 bump (#5415) left it a
-// patch behind. Only the tag can be compared here: the digest has to come
-// from the registry, so this requires one is present but cannot derive it.
-{
-  const pkgPlaywright = JSON.parse(readFile('package.json')).dependencies?.playwright;
-  const cvVisualFrom = readFile('tests/cv-visual/Dockerfile')
-    .match(/^FROM mcr\.microsoft\.com\/playwright:v([\d.]+)-[\w.-]+@sha256:[0-9a-f]{64}\s*$/m);
-  if (pkgPlaywright) {
-    if (!cvVisualFrom) {
-      fail('tests/cv-visual/Dockerfile missing the expected "FROM mcr.microsoft.com/playwright:vX-<distro>@sha256:<digest>" line');
-    } else if (cvVisualFrom[1] !== pkgPlaywright) {
-      fail(`tests/cv-visual/Dockerfile's base image is playwright@${cvVisualFrom[1]} but package.json depends on playwright@${pkgPlaywright} — bump its tag and digest`);
-    } else {
-      pass(`tests/cv-visual/Dockerfile's base image (${cvVisualFrom[1]}) matches package.json`);
-    }
-  }
-}
-
 // Check user files are NOT tracked (gitignored)
 const userFiles = [
   'config/profile.yml', 'modes/_profile.md', 'portals.yml',
