@@ -31,6 +31,8 @@ test("readRememberedCli reads CAREER_OPS_CLI from the shell, then the data root 
   assert.equal(readRememberedCli(root(t, "CAREER_OPS_CLI=grok\n"), {}), "grok");
   assert.equal(readRememberedCli(root(t, 'export CAREER_OPS_CLI="codex"\n'), {}), "codex");
   assert.equal(readRememberedCli(root(t, "CAREER_OPS_CLI=grok\n"), { CAREER_OPS_CLI: "claude" }), "claude");
+  assert.equal(readRememberedCli(root(t, "CAREER_OPS_CLI=grok # set at setup\n"), {}), "grok");
+  assert.equal(readRememberedCli(root(t, "CAREER_OPS_CLI='kimi' # quoted\r\n"), {}), "kimi");
   assert.equal(readRememberedCli(root(t, "OTHER=1\n"), {}), null);
   assert.equal(readRememberedCli(root(t), {}), null);
 });

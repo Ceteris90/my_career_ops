@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from './helpers.mjs';
@@ -54,6 +54,17 @@ test('remember-cli refuses an unknown CLI and writes nothing', (t) => {
   assert.equal(existsSync(join(dir, '.env')), false);
 });
 
+test('remember-cli keeps the .env file mode', {
+  skip: process.platform === 'win32' && 'POSIX file modes',
+}, (t) => {
+  const dir = sandbox(t);
+  writeFileSync(join(dir, '.env'), 'EXAMPLE_API_KEY=fake\n', { mode: 0o600 });
+  chmodSync(join(dir, '.env'), 0o600);
+  assert.equal(node(dir, [join(ROOT, 'remember-cli.mjs'), 'codex']).status, 0);
+  assert.equal(statSync(join(dir, '.env')).mode & 0o777, 0o600);
+  assert.equal(readFileSync(join(dir, '.env'), 'utf8'), 'EXAMPLE_API_KEY=fake\nCAREER_OPS_CLI=codex\n');
+});
+
 test('doctor reports the remembered CLI', (t) => {
   const dir = sandbox(t);
   node(dir, [join(ROOT, 'remember-cli.mjs'), 'grok']);
@@ -62,26 +73,28 @@ test('doctor reports the remembered CLI', (t) => {
   assert.equal(state.active_cli, 'grok');
 });
 
-test('rank-pipeline runs the remembered CLI when several are installed', {
-  skip: process.platform === 'win32' && 'POSIX executable fixture',
-}, (t) => {
-  const dir = sandbox(t);
-  mkdirSync(join(dir, 'data'));
-  mkdirSync(join(dir, 'bin'));
-  writeFileSync(join(dir, 'data', 'pipeline.md'), '- [ ] https://example.test/job | Example | Engineer');
-  for (const cli of ['claude', 'opencode']) {
-    const binary = join(dir, 'bin', cli);
-    writeFileSync(binary, `#!${process.execPath}\n`
-      + `if (process.argv[2] !== '--version') require('node:fs').writeFileSync(process.env.RANK_CALL, ${JSON.stringify(cli)} + ' ' + process.argv[2]);\n`
-      + `console.log('[]');\n`);
-    chmodSync(binary, 0o755);
-  }
-  node(dir, [join(ROOT, 'remember-cli.mjs'), 'opencode']);
-  const call = join(dir, 'call.txt');
-  const result = node(dir, [join(ROOT, 'rank-pipeline.mjs'), '--dry-run'], {
-    PATH: `${join(dir, 'bin')}:${process.env.PATH}`,
-    RANK_CALL: call,
+for (const [remembered, bin, call] of [['opencode', 'opencode', 'opencode run'], ['antigravity', 'agy', 'agy -p']]) {
+  test(`rank-pipeline runs the remembered CLI (${remembered}) when several are installed`, {
+    skip: process.platform === 'win32' && 'POSIX executable fixture',
+  }, (t) => {
+    const dir = sandbox(t);
+    mkdirSync(join(dir, 'data'));
+    mkdirSync(join(dir, 'bin'));
+    writeFileSync(join(dir, 'data', 'pipeline.md'), '- [ ] https://example.test/job | Example | Engineer');
+    for (const cli of ['claude', bin]) {
+      const binary = join(dir, 'bin', cli);
+      writeFileSync(binary, `#!${process.execPath}\n`
+        + `if (process.argv[2] !== '--version') require('node:fs').writeFileSync(process.env.RANK_CALL, ${JSON.stringify(cli)} + ' ' + process.argv[2]);\n`
+        + `console.log('[]');\n`);
+      chmodSync(binary, 0o755);
+    }
+    node(dir, [join(ROOT, 'remember-cli.mjs'), remembered]);
+    const callFile = join(dir, 'call.txt');
+    const result = node(dir, [join(ROOT, 'rank-pipeline.mjs'), '--dry-run'], {
+      PATH: `${join(dir, 'bin')}:${process.env.PATH}`,
+      RANK_CALL: callFile,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(callFile, 'utf8'), call);
   });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(call, 'utf8'), 'opencode run');
-});
+}
