@@ -303,3 +303,24 @@ test('captures: dates inside tag attributes (even containing ">") and comments a
     cleanup(box);
   }
 });
+
+test('captures: pathological unterminated markup is stripped in linear time', () => {
+  const box = sandbox();
+  try {
+    writeFileSync(join(box.dataRoot, 'data', 'applications.md'), [
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+      '|---|---|---|---|---|---|---|---|---|',
+      '| 1 | 2026-10-01 | Acme | Analyst | 4.2/5 | Evaluated | ❌ | [1](reports/001-acme-2026-10-01.md) | none |',
+      '',
+    ].join('\n'));
+    const hostile = ['<a ', '<a "', '<script ', '<!-- '].map(u => u.repeat(10000)).join('\n');
+    writeFileSync(join(box.dataRoot, 'jds', '001-acme-analyst.html'),
+      `${hostile}\n<strong>Closing date:</strong><span>Oct 21, 2026</span>`);
+    const t = Date.now();
+    const out = JSON.parse(run(['--today', '2026-10-17'], box).stdout);
+    assert.ok(Date.now() - t < 2000, `took ${Date.now() - t}ms`);
+    assert.deepEqual(out.closingSoon.map(x => x.closes), ['2026-10-21']);
+  } finally {
+    cleanup(box);
+  }
+});

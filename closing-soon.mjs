@@ -208,18 +208,68 @@ export function resolveStatusFilter(value, lookup = loadStateLookup()) {
   return labels;
 }
 
+/** A tag longer than this is treated as plain text, which bounds the scan. */
+const MAX_TAG_CHARS = 4096;
+
 /**
- * Flatten HTML to plain text for date matching only (never rendered): drop
- * script/style blocks, turn tags into spaces, decode the few entities that
- * matter.
+ * Index just past the '>' that ends the tag opening at html[start], skipping
+ * quoted attribute values, or -1 when it does not close within MAX_TAG_CHARS.
+ */
+function tagEnd(html, start) {
+  const limit = Math.min(html.length, start + MAX_TAG_CHARS);
+  let quote = '';
+  for (let i = start + 1; i < limit; i++) {
+    const c = html[i];
+    if (quote) {
+      if (c === quote) quote = '';
+    } else if (c === '"' || c === "'") {
+      quote = c;
+    } else if (c === '>') {
+      return i + 1;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Flatten HTML to plain text for date matching only (never rendered): comments
+ * and script/style blocks are dropped, tags (including quoted attribute values)
+ * become spaces, and the few entities that matter are decoded. A single linear
+ * pass, so hostile markup cannot trigger regex backtracking; best-effort, not
+ * an HTML parser.
  */
 function htmlToText(html) {
-  return html
-    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<\/?[a-z!][^\s>]*(?:"[^"]*"|'[^']*'|[^>"'])*>/gi, ' ')
-    .replace(/&nbsp;|&#160;/gi, ' ')
-    .replace(/&amp;/gi, '&');
+  const lower = html.toLowerCase();
+  const missing = new Set(); // closers already searched for and absent: never search again
+  const indexOfOnce = (needle, from) => {
+    if (missing.has(needle)) return -1;
+    const at = lower.indexOf(needle, from);
+    if (at === -1) missing.add(needle);
+    return at;
+  };
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt === -1) { out += html.slice(i); break; }
+    out += html.slice(i, lt);
+    i = lt;
+    let end = -1;
+    if (lower.startsWith('<!--', lt)) {
+      const close = indexOfOnce('-->', lt + 4);
+      if (close !== -1) end = close + 3;
+    } else {
+      const raw = /^<(script|style)(?![a-z0-9])/.exec(lower.slice(lt, lt + 10));
+      if (raw) {
+        const close = indexOfOnce('</' + raw[1], lt + 1);
+        const gt = close === -1 ? -1 : lower.indexOf('>', close);
+        if (gt !== -1) end = gt + 1;
+      }
+      if (end === -1 && /[a-z!/]/i.test(html[lt + 1] ?? '')) end = tagEnd(html, lt);
+    }
+    if (end === -1) { out += '<'; i = lt + 1; } else { out += ' '; i = end; }
+  }
+  return out.replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&');
 }
 
 function readCaptureText(jdsDir, row) {
