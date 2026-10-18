@@ -565,7 +565,7 @@ Report header:
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **Work Auth:** {✅ Sponsors | ➖ Not needed | ⚠️ Unstated | ⛔ No sponsorship}
 **URL:** {{URL}}
-**PDF:** {output/cv-candidate-{company-slug}-{{DATE}}.pdf if score >= resolved auto_pdf_score_threshold, otherwise a localized equivalent of `not generated — run /career-ops pdf {company-slug} to create on demand` in `language.output`}
+**PDF:** {output/cv-candidate-{{REPORT_NUM}}-{company-slug}-{{DATE}}.pdf if score >= resolved auto_pdf_score_threshold, otherwise a localized equivalent of `not generated — run /career-ops pdf {company-slug} to create on demand` in `language.output`}
 **Batch ID:** {{ID}}
 
 
@@ -671,13 +671,17 @@ If score is greater than or equal to the threshold:
 8. Reorder experience bullets by relevance.
 9. Build a 6-8 item competency grid.
 10. Inject keywords ethically into existing achievements; never invent skills or metrics.
-11. If consent is absent, replace `{{CONSENT}}` with an empty string. If consent is present, replace `{{CONSENT}}` with its HTML-escaped value. Write HTML to `output/cv-candidate-{company-slug}.html`.
+11. If consent is absent, replace `{{CONSENT}}` with an empty string. If consent is present, replace `{{CONSENT}}` with its HTML-escaped value. Write HTML to `output/cv-candidate-{{REPORT_NUM}}-{company-slug}.html`.
+    The report number goes first in every path of this step: `{company-slug}` alone
+    collides when the same company has two postings evaluated on the same day, and the
+    second PDF silently overwrites the first. `{{REPORT_NUM}}` is unique per report
+    (reserved atomically by `reserve-report-num.mjs`).
 12. Run:
 
 ```bash
 node generate-pdf.mjs \
-  output/cv-candidate-{company-slug}.html \
-  output/cv-candidate-{company-slug}-{{DATE}}.pdf \
+  output/cv-candidate-{{REPORT_NUM}}-{company-slug}.html \
+  output/cv-candidate-{{REPORT_NUM}}-{company-slug}-{{DATE}}.pdf \
   --format={letter|a4} \
   --report={{REPORT_NUM}}
 ```

@@ -537,6 +537,45 @@ tracker row, so a contact cannot be attached across companies.
 
 ---
 
+## github-evidence
+
+Optional GitHub evidence step of the `expand` mode (#5295). Reads the pull
+requests you authored through your existing `gh auth` (no new token) and checks
+what `cv.md` claims against them. Read-only, metadata only (PR title, state,
+repository, stars, visibility); it never reads source code and never writes
+`cv.md`. Candidates reach `cv.md` only through `expand`'s confirm gate and
+`add-entry.mjs`.
+
+```bash
+node github-evidence.mjs          # writes output/github-evidence-{date}.{md,json}
+node github-evidence.mjs --json   # same, and prints the JSON on stdout
+```
+
+- Only PRs you authored count. Your own repos (owning is not authorship) and
+  forks are listed by name and count only, never as evidence.
+- A private repo is evidence only when listed in `config/profile.yml`:
+  `github_evidence.private_allowlist: ["owner/repo"]` (empty by default). Any
+  other private repo, or one whose visibility could not be read, appears by
+  name and count only, never with PR titles.
+- `claimCheck.mergedNotNamed`: third-party repos with merged PRs that `cv.md`
+  does not name. `claimCheck.namedNoMerge`: repos `cv.md` names where you have
+  no merged PR. Matching is literal and case-insensitive (`owner/repo`, then
+  the repo name, then the owner), and each row says which one matched.
+- GitHub search returns at most 1000 results per query; the `truncated` flags
+  say when a list may be incomplete.
+
+**Exit codes:** `0` report written, `1` usage error or `candidate.github`
+missing/malformed (normalized as in `expand`'s Input step, so a repo link such
+as `github.com/janesmith/tool` is malformed), `2` a GitHub query failed (nothing written), `3` `gh` not
+installed or not logged in (nothing written; with `--json`, stdout carries
+`{"status":"gh-unavailable","reason":...}`). Only an auth error from `gh`
+counts as not logged in: a login check that fails any other way (no stderr,
+`gh` crashed or was killed) is a `2` naming the exit status. On exit `2` or
+`3`, `expand` continues with its zero-key behaviour; on exit `1` it asks the
+user to fix `candidate.github` (its Input steps 2–4).
+
+---
+
 ## weekly-digest
 
 Rolls up `interview-prep/sessions/*.md` — the structured, machine-readable transcripts `interview/debrief` and `interview/practice` already write (schema in `interview-prep/sessions/README.md`) — into a single digest for a date range (default: the current ISO week, Monday–Sunday). Groups sessions by company/role into a per-company round rollup (round type + date per round), counts `<!-- competency: tag[, tag...] -->` annotations across all sessions in range and flags any tag appearing 2+ times as recurring, and — best-effort, since `interview-prep/question-bank.md` has no fixed schema — attributes 🔴-tagged lines to whichever in-range company's heading they fall under. Purely mechanical: front-matter parsing, date filtering, and tag counting, no LLM judgment calls.

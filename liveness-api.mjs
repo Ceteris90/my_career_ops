@@ -87,6 +87,11 @@ const ATS_PROVIDERS = [
     // Company careers pages can expose only gh_jid, with no Greenhouse board.
     // The embed redirect supplies the board; a second per-job API request is
     // still required because even closed jobs can have an embed redirect.
+    // Scanners often record these pages as plain http (http://block.xyz/careers/
+    // jobs/N?gh_jid=N); only the gh_jid matters and both API hosts are fixed, so
+    // the page's scheme is accepted. Without this the posting fell to the browser,
+    // which timed out or saw the id dropped by a redirect and answered uncertain.
+    acceptsHttp: true,
     match(u) {
       if (/(^|\.)greenhouse\.io$/.test(u.hostname)) return null;
       const id = u.searchParams.get('gh_jid');
@@ -552,8 +557,12 @@ export function resolveAtsApi(rawUrl) {
   } catch {
     return null;
   }
-  if (u.protocol !== 'https:') return null;
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  const plainHttp = u.protocol === 'http:';
   for (const provider of ATS_PROVIDERS) {
+    // Plain http resolves only for a provider that opts in: one whose API host is
+    // fixed and never derived from the page URL, so the page's scheme is irrelevant.
+    if (plainHttp && !provider.acceptsHttp) continue;
     const parts = provider.match(u);
     if (!parts) continue;
     // SSRF guard: every derived value must be safe — a single path segment for
