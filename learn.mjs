@@ -241,11 +241,16 @@ function loadLedger(root) {
   const text = readOrNull(join(root, LEDGER));
   if (!text) return [];
   return text.split('\n').filter(Boolean).map((line, i) => {
+    let entry;
     try {
-      return JSON.parse(line);
+      entry = JSON.parse(line);
     } catch {
-      throw new InputError(`${LEDGER} line ${i + 1} is not JSON; fix or remove it`);
+      entry = null;
     }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new InputError(`${LEDGER} line ${i + 1} is not a JSON object; fix or remove it`);
+    }
+    return entry;
   });
 }
 
