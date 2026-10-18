@@ -244,6 +244,26 @@ try {
     ? pass('doctor human output and --json both report the profile missing from the root doctor started at, not the one the .env names')
     : fail(`doctor human says profile missing=${cloneHuman} but --json says missing=${cloneJson} when the .env sets CAREER_OPS_ROOT`);
 
+  // scan.mjs fixes DATA_ROOT, loads that root's .env, then reads the profile. A
+  // CAREER_OPS_ROOT in the .env must not send the profile read to another root
+  // than the one the rest of the scan (portals, history, the .env itself) uses.
+  const scanRoot = join(scratch, 'scan-root');
+  const scanOther = join(scratch, 'scan-other');
+  for (const [dir, country] of [[scanRoot, 'Rootland'], [scanOther, 'Otherland']]) {
+    mkdirSync(join(dir, 'config'), { recursive: true });
+    writeFileSync(join(dir, 'config', 'profile.yml'), `location:\n  country: ${country}\n`, 'utf-8');
+  }
+  writeFileSync(join(scanRoot, '.env'), `CAREER_OPS_ROOT=${scanOther}\n`, 'utf-8');
+  const scanEnv = { ...process.env, CAREER_OPS_DATA_DIR: scanRoot };
+  delete scanEnv.CAREER_OPS_ROOT;
+  delete scanEnv.CAREER_OPS_PROFILE;
+  const scanRun = spawnSync(NODE, ['--input-type=module', '-e',
+    `const m = await import(${JSON.stringify(pathToFileURL(join(ROOT, 'scan.mjs')).href)}); console.log(m.loadCandidateCountry());`],
+  { cwd: scratch, encoding: 'utf-8', timeout: 60000, env: scanEnv });
+  scanRun.stdout.trim() === 'Rootland'
+    ? pass('scan.mjs reads the profile from the root it fixed at startup, not the one a CAREER_OPS_ROOT in that root\'s .env names')
+    : fail(`scan.mjs read the profile from the wrong root: country=${JSON.stringify(scanRun.stdout.trim())} (expected Rootland); stderr: ${scanRun.stderr.slice(0, 160)}`);
+
   // checkEnvFileProfile has two guards, and each needs a case that only it catches.
   // A value exported in the shell shadows the .env, so the .env is no split: no
   // warning in either output even with a data-root profile beside it.
