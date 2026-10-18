@@ -353,6 +353,19 @@ test('--help and -h print usage, exit 0, and write nothing', () => {
   }
 });
 
+test('a ledger line that is valid JSON but not an object stops check with a named line', () => {
+  const root = scratchRoot();
+  try {
+    mkdirSync(join(root, 'data/learning'), { recursive: true });
+    writeFileSync(join(root, 'data/learning/ledger.jsonl'), 'null\n');
+    const r = run(root, ['check', writeCandidates(root, [FIRST_PERSON])]);
+    assert(r.status !== 0, 'check ran over a malformed ledger');
+    assert(/ledger\.jsonl line 1/.test(r.stderr) && !/TypeError/.test(r.stderr), describeSpawn(r, 'the error does not name the ledger line'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('learn.mjs imports no network module', () => {
   const src = readFileSync(join(ROOT, 'learn.mjs'), 'utf8');
   const imports = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
