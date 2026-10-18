@@ -34,9 +34,12 @@ check('Ontario applies_to states the foreign-national scope and excludes citizen
     && /s\. 3 \(1\)/.test(on?.applies_to || '') && /immigration or foreign temporary employee program/.test(on?.applies_to || '') && !/PGWP/.test(on?.applies_to || ''),
   'foreign-national scope missing');
 const ex = (on?.exceptions || []).join('\n');
-check('Ontario row cites EPFNA ss. 7(1)-(3), 7.1, 8, 9 and ESA s. 74.8(1) paras 1, 2, 3, 5',
-  ['s. 7 (1)', 's. 7 (2)', 's. 7 (3)', 's. 7.1', 's. 8 (1)', 's. 9', 's. 74.8 (1) para. 1', 'para. 2', 'para. 3', 'para. 5'].every((c) => ex.includes(c)),
+check('Ontario row cites EPFNA ss. 7(1)-(3), 7.1, 8, 9 and ESA s. 74.8(1) paras 1, 2, 3, 5, 8 and s. 74.8(2)',
+  ['s. 7 (1)', 's. 7 (2)', 's. 7 (3)', 's. 7.1', 's. 8 (1)', 's. 9', 's. 74.8 (1) para. 1', 'para. 2', 'para. 3', 'para. 5',
+    'para. 8', 's. 74.8 (2)'].every((c) => ex.includes(c)),
   'citation missing');
+check('Ontario row states the six-month limit on the agency's client hiring fee',
+  /six-month period/.test(ex), 'client-hiring fee limit missing');
 check('Ontario official_source URLs are the e-Laws EPFNA and ESA pages',
   on?.official_source?.url === 'https://www.ontario.ca/laws/statute/09e32'
     && (on?.official_source?.what_it_shows || '').match(/https?:\/\/[^\s)]+/g)
