@@ -238,12 +238,23 @@ function tagEnd(html, start) {
  * pass, so hostile markup cannot trigger regex backtracking; best-effort, not
  * an HTML parser.
  */
-function htmlToText(html) {
+export function htmlToText(html) {
   const lower = html.toLowerCase();
   const missing = new Set(); // closers already searched for and absent: never search again
   const indexOfOnce = (needle, from) => {
     if (missing.has(needle)) return -1;
     const at = lower.indexOf(needle, from);
+    if (at === -1) missing.add(needle);
+    return at;
+  };
+  // Closer of a script/style block: `</script` must end at a tag-name boundary,
+  // so `</scripture>` does not close it.
+  const rawClose = (name, from) => {
+    const needle = '</' + name;
+    let at = indexOfOnce(needle, from);
+    while (at !== -1 && !/[\s/>]/.test(lower[at + needle.length] ?? '')) {
+      at = lower.indexOf(needle, at + 1);
+    }
     if (at === -1) missing.add(needle);
     return at;
   };
@@ -261,7 +272,7 @@ function htmlToText(html) {
     } else {
       const raw = /^<(script|style)(?![a-z0-9])/.exec(lower.slice(lt, lt + 10));
       if (raw) {
-        const close = indexOfOnce('</' + raw[1], lt + 1);
+        const close = rawClose(raw[1], lt + 1);
         const gt = close === -1 ? -1 : lower.indexOf('>', close);
         if (gt !== -1) end = gt + 1;
       }

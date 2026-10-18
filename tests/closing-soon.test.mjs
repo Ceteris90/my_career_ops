@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const { extractClosingDates, computeClosingSoon, resolveStatusFilter, loadStateLookup } =
+const { extractClosingDates, computeClosingSoon, htmlToText, resolveStatusFilter, loadStateLookup } =
   await import(pathToFileURL(join(ROOT, 'closing-soon.mjs')).href);
 
 const TODAY = new Date('2026-10-17T00:00:00Z');
@@ -304,7 +304,7 @@ test('captures: dates inside tag attributes (even containing ">") and comments a
   }
 });
 
-test('captures: pathological unterminated markup is stripped in linear time', () => {
+test('captures: pathological unterminated markup is still read around', () => {
   const box = sandbox();
   try {
     writeFileSync(join(box.dataRoot, 'data', 'applications.md'), [
@@ -316,11 +316,31 @@ test('captures: pathological unterminated markup is stripped in linear time', ()
     const hostile = ['<a ', '<a "', '<script ', '<!-- '].map(u => u.repeat(10000)).join('\n');
     writeFileSync(join(box.dataRoot, 'jds', '001-acme-analyst.html'),
       `${hostile}\n<strong>Closing date:</strong><span>Oct 21, 2026</span>`);
-    const t = Date.now();
     const out = JSON.parse(run(['--today', '2026-10-17'], box).stdout);
-    assert.ok(Date.now() - t < 2000, `took ${Date.now() - t}ms`);
     assert.deepEqual(out.closingSoon.map(x => x.closes), ['2026-10-21']);
   } finally {
     cleanup(box);
   }
+});
+
+test('htmlToText: hostile unterminated markup stays near-linear (in-process, generous bound)', () => {
+  // The old tag regex needed ~17s for 200k of this; a linear scan needs well
+  // under a second. 5s leaves ample headroom for a loaded CI runner while still
+  // failing on quadratic or exponential backtracking.
+  for (const unit of ['<a ', '<a "', '<script ', '<!-- ']) {
+    const input = unit.repeat(Math.ceil(200000 / unit.length));
+    const t = process.hrtime.bigint();
+    htmlToText(input);
+    const ms = Number(process.hrtime.bigint() - t) / 1e6;
+    assert.ok(ms < 5000, JSON.stringify(unit) + ' took ' + Math.round(ms) + 'ms');
+  }
+});
+
+test('htmlToText: script/style end only at a real closing tag', () => {
+  const t = (html) => htmlToText(html).replace(/\s+/g, ' ').trim();
+  assert.equal(t('<script>deadline 2026-10-18 </scripture> deadline 2026-10-19</script>after'), 'after');
+  assert.equal(t('<style>x 2026-10-18 </styled> y</STYLE >after'), 'after');
+  assert.equal(t('a<script src=x></script>b'), 'a b');
+  // No real closer: the block is not silently swallowed to the end.
+  assert.match(t('<script>never closed </scripture> closes 2026-10-20'), /2026-10-20/);
 });
