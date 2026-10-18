@@ -31,7 +31,7 @@ check('Ontario row carries the verified dates',
 check('Ontario applies_to states the foreign-national scope and excludes citizens and PRs',
   /not a Canadian\s+citizen and not a permanent resident/.test(on?.applies_to || '')
     && /does NOT cover Canadian\s+citizens or permanent residents/.test(on?.applies_to || '')
-    && /PGWP/.test(on?.applies_to || ''),
+    && /s\. 3 \(1\)/.test(on?.applies_to || '') && /immigration or foreign temporary employee program/.test(on?.applies_to || '') && !/PGWP/.test(on?.applies_to || ''),
   'foreign-national scope missing');
 const ex = (on?.exceptions || []).join('\n');
 check('Ontario row cites EPFNA ss. 7(1)-(3), 7.1, 8, 9 and ESA s. 74.8(1) paras 1, 2, 3, 5',
