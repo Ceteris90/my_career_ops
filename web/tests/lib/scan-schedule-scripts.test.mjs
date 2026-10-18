@@ -229,6 +229,16 @@ test("macos install removes the plist when bootstrap keeps failing", { skip }, (
   assert.equal(fs.existsSync(sb.plist), false);
 }));
 
+test("macos reinstall restores the old plist when bootstrap keeps failing", { skip }, () => withSandbox((sb) => {
+  fs.mkdirSync(path.dirname(sb.plist), { recursive: true });
+  fs.writeFileSync(sb.plist, "<!-- old plist -->\n");
+  const result = sb.run(sb.installScript, { FAKE_UNAME: "Darwin", FAKE_BOOTSTRAP_FAILS: "99" });
+  assert.equal(result.status, 1, result.out);
+  assert.equal(fs.readFileSync(sb.plist, "utf8"), "<!-- old plist -->\n");
+  // Five failed attempts, then one bootstrap of the restored plist.
+  assert.equal(sb.launchctlCalls().filter((l) => l.startsWith("bootstrap ")).length, 6);
+}));
+
 test("macos plist runs the job command with XML escaping", { skip }, () => withSandbox((sb) => {
   const special = path.join(sb.dir, "a&b<c>");
   const result = sb.run(sb.installScript, { FAKE_UNAME: "Darwin", CAREER_OPS_ROOT: special });

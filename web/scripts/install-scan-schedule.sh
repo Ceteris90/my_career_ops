@@ -78,6 +78,11 @@ xml_escape() {
 if [ "$OS" = Darwin ]; then
   PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
   mkdir -p "$(dirname "$PLIST")"
+  BACKUP=
+  if [ -f "$PLIST" ]; then
+    BACKUP=$(mktemp)
+    cp "$PLIST" "$BACKUP"
+  fi
   cat >"$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -114,10 +119,17 @@ EOF
     [ "$ATTEMPT" -lt 5 ] && sleep 1
   done
   if [ "$BOOTSTRAPPED" -ne 1 ]; then
-    rm -f "$PLIST"
+    if [ -n "$BACKUP" ]; then
+      # Reinstall: put the previous schedule back so scans keep running.
+      mv "$BACKUP" "$PLIST"
+      launchctl bootstrap "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
+    else
+      rm -f "$PLIST"
+    fi
     echo "launchctl bootstrap failed; a logged-in GUI session is required" >&2
     exit 1
   fi
+  rm -f "$BACKUP"
   echo "Installed $LABEL (launchd, every 15 minutes)."
 else
   TMP=$(mktemp)
