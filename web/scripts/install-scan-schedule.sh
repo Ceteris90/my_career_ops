@@ -30,6 +30,10 @@ if [ -z "$NODE" ]; then
   exit 1
 fi
 
+# Pin the real binary: version-manager shims and fnm per-shell paths do not survive reboot,
+# and the runner already spawns scans with process.execPath.
+NODE=$("$NODE" -e 'process.stdout.write(process.execPath)')
+
 # Keep the runner on the same store as the web app: schedulers start with a minimal
 # environment, so bake in the path overrides that are set now.
 ENV_PREFIX=""
@@ -110,6 +114,7 @@ EOF
     [ "$ATTEMPT" -lt 5 ] && sleep 1
   done
   if [ "$BOOTSTRAPPED" -ne 1 ]; then
+    rm -f "$PLIST"
     echo "launchctl bootstrap failed; a logged-in GUI session is required" >&2
     exit 1
   fi
