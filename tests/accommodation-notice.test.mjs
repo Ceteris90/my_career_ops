@@ -60,7 +60,7 @@ function evaluate({ jd, postingDate = '2026-10-01', jurisdiction = 'CA-ON', invi
   const out = [];
   if (states) out.push('statement');
   else if (row && row.effective <= postingDate) out.push('silence');
-  if (invited && row) out.push('stage-hint'); // independent of (a) and (b)
+  if (invited) out.push('stage-hint'); // independent of (a) and (b); generic line when there is no row
   return JSON.stringify(out);
 }
 const withStatement = 'Example Widgets Ltd. Analyst, Toronto. Accommodations are available on request during the recruitment process.';
@@ -73,8 +73,10 @@ check('fixture: assessment-stage hint fires even when the posting is silent (sil
   evaluate({ jd: silent, invited: true }) === '["silence","stage-hint"]', evaluate({ jd: silent, invited: true }));
 check('fixture: assessment-stage hint fires alongside a stated accommodation',
   evaluate({ jd: withStatement, invited: true }) === '["statement","stage-hint"]', evaluate({ jd: withStatement, invited: true }));
-check('fixture: no jurisdiction row gives no silence note and no stage hint',
-  evaluate({ jd: silent, jurisdiction: 'XX', invited: true }) === '[]', evaluate({ jd: silent, jurisdiction: 'XX', invited: true }));
+check('fixture: no jurisdiction row gives no silence note but still the generic stage hint',
+  evaluate({ jd: silent, jurisdiction: 'XX', invited: true }) === '["stage-hint"]', evaluate({ jd: silent, jurisdiction: 'XX', invited: true }));
+check('fixture: no jurisdiction row and no invitation gives nothing',
+  evaluate({ jd: silent, jurisdiction: 'XX' }) === '[]', evaluate({ jd: silent, jurisdiction: 'XX' }));
 check('fixture: no jurisdiction row still allows the presence note',
   evaluate({ jd: withStatement, jurisdiction: 'XX' }) === '["statement"]', evaluate({ jd: withStatement, jurisdiction: 'XX' }));
 
