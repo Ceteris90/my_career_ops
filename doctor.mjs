@@ -205,6 +205,25 @@ function checkDependencies() {
   };
 }
 
+// The web UI is optional, so missing web/ dependencies are a warning: only
+// `npm run ui` needs them, and a CLI-only install never does.
+function checkWebDependencies() {
+  const webDir = join(codeRoot, 'web');
+  if (!existsSync(join(webDir, 'package.json'))) return null;
+  let missing;
+  try {
+    missing = findMissingDependencies(webDir);
+  } catch (err) {
+    return { warn: true, label: `Web UI dependencies could not be checked: web/package.json unreadable (${err.message})` };
+  }
+  if (missing.length === 0) return { pass: true, label: 'Web UI dependencies installed' };
+  return {
+    warn: true,
+    label: `Web UI dependencies are not installed (${missing.length} missing, including ${missing[0]}), so npm run ui cannot start`,
+    fix: 'Run: npm --prefix web ci',
+  };
+}
+
 // update-system.mjs versions before #2857 could commit cascading .bak backups
 // when a checkout write failed. #2857 stops that for NEW installs, but an
 // install that already `git add`ed one is stuck: nothing in the update path
@@ -1038,6 +1057,7 @@ async function main() {
     geminiNodeFloor(activeCli, process.versions.node),
     checkBillingSource(),
     checkDependencies(),
+    checkWebDependencies(),
     checkTrackedBakFiles(codeRoot),
     checkSkillEntrypoints(codeRoot),
     await checkPlaywright(),
