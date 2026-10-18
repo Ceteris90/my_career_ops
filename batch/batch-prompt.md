@@ -49,6 +49,7 @@ If the declared markets remain genuinely ambiguous after reviewing the JD, the b
 | CV | `cv.md` | **Deferred to Block B pass 2** — candidate evidence, never loaded before Block B assigns Importance (see Step 2) |
 | Profile customizations | `modes/_profile.md` if it exists | Always; user-specific archetypes, role-shape rules, location policy, comp targets |
 | Profile config | `config/profile.yml` if it exists | Always; identity, output language, comp range, target roles |
+| House rules | `modes/_custom.md` if it exists | Always; the user's standing procedural and style rules, applied to every block and the PDF. It never adds factual claims about the candidate |
 | Portfolio digest | `article-digest.md` if it exists | **Deferred to Block B pass 2**, same reason; proof points and metrics |
 | llms.txt | `llms.txt` if it exists | Always |
 | CV template | `templates/cv-template.html` | For PDF |

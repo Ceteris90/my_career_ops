@@ -15,6 +15,8 @@ Two layers — full list in `DATA_CONTRACT.md`:
 
 **THE RULE: When the user asks to customize facts or targeting (archetypes, narrative, negotiation scripts, proof points, location policy, comp targets), ALWAYS write to `modes/_profile.md` or `config/profile.yml`. When they ask for procedural house rules, custom workflows, output preferences, or automations, write to `modes/_custom.md` (copy it from `modes/_custom.template.md` if missing). NEVER edit `modes/_shared.md` for user-specific content.** This ensures system updates don't overwrite their customizations.
 
+**Read `modes/_custom.md` (if it exists) after `modes/_profile.md` and honor its house rules in every mode, in every language, and in every batch item.** It holds the user's standing procedural and style instructions. It can override workflow, style, and procedural defaults, but it never introduces factual claims about the candidate.
+
 **Path Resolution Override & Precedence:**
 The User Layer location (Data Root) is resolved dynamically using the following precedence order:
 1. **Environment Variables:** `CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR` overrides the root path (resolved relative to the repository root if it is a relative path).
