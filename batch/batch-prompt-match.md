@@ -110,7 +110,10 @@ Bypass the multi-step reasoning chain (Blocks A-G, WebSearch, compensation resea
      - 3.0–3.9: Moderate match; core skills present but missing secondary requirements.
      - 1.0–2.9: Major gaps in core competencies or seniority.
    - Detect closest archetype (e.g., AI Platform Engineer, ML Engineer, Tech Lead).
-   - Assess legitimacy tier: `High Confidence`, `Proceed with Caution`, or `Suspicious`.
+    - Assess legitimacy tier (must be one of: `High Confidence`, `Proceed with Caution`, or `Suspicious`):
+      - `High Confidence`: Direct company posting, verified employer domain, standard transparent hiring signals, no red flags.
+      - `Proceed with Caution`: Third-party recruiter/agency, unstated compensation, vague company details, or unconfirmed posting age.
+      - `Suspicious`: Red flags such as undisclosed employer with vague duties, scam indicators, suspicious contact domains, or requests for sensitive info.
 
 ### Step 3 — Write the Report
 
@@ -143,6 +146,10 @@ Write the report to `reports/{{REPORT_NUM}}-{company_slug}-{{DATE}}.md` (where `
 ## Strengths & Risks
 - **Key Strengths:** {2-3 top alignment points}
 - **Risks & Mitigation:** {Key gaps and suggested mitigation for interview}
+
+## Job Description (archived verbatim)
+
+{the JD text from {{JD_FILE}} pasted here verbatim}
 ```
 
 ### Step 4 — Write Tracker Addition
@@ -173,7 +180,7 @@ Print the final result as a real fenced code block (```json ... ```) on stdout:
   "company": "{Company}",
   "role": "{Role}",
   "score": {Score_numeric},
-  "legitimacy": "{Legitimacy}",
+  "legitimacy": "{High Confidence | Proceed with Caution | Suspicious}",
   "pdf": null,
   "report": "reports/{{REPORT_NUM}}-{company_slug}-{{DATE}}.md",
   "error": null

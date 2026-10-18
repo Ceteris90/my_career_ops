@@ -24,6 +24,7 @@ import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { TSV_ADDITION_HEADER } from './tracker-parse.mjs';
+import { hasFlag, flagValue } from './lib/cli-flags.mjs';
 import {
   normalizedTrackerScore, slugifyCompany, tsvSafe,
 } from './lib/tracker-addition.mjs';
@@ -105,14 +106,122 @@ export function readYearsCap() {
 }
 
 export function parseCliMode(args = process.argv.slice(2)) {
-  if (args.includes('--single-pass')) return 'match';
-  const modeArg = args.find(a => a.startsWith('--mode=') || a === '--mode');
-  if (modeArg) {
-    if (modeArg.startsWith('--mode=')) return modeArg.split('=')[1].trim();
-    const idx = args.indexOf('--mode');
-    if (idx !== -1 && args[idx + 1]) return args[idx + 1].trim();
+  if (hasFlag(args, '--single-pass')) return 'match';
+  const mode = flagValue(args, '--mode');
+  return mode ? mode.trim() : 'full';
+}
+
+/**
+ * Normalizes legitimacy tier to one of canonical states:
+ * 'High Confidence', 'Proceed with Caution', or 'Suspicious'.
+ * Defaults to 'Proceed with Caution' on unknown or ambiguous input.
+ */
+export function parseLegitimacy(raw) {
+  if (!raw || typeof raw !== 'string') return 'Proceed with Caution';
+  const clean = raw.trim().replace(/^[*_`"']+|[*_`"']+$/g, '');
+  if (/^high(?:\s+confidence)?$/i.test(clean)) return 'High Confidence';
+  if (/^proceed(?:\s+with\s+caution)?$/i.test(clean)) return 'Proceed with Caution';
+  if (/^suspicious$/i.test(clean)) return 'Suspicious';
+  if (/suspicious/i.test(clean)) return 'Suspicious';
+  if (/proceed\s+with\s+caution/i.test(clean)) return 'Proceed with Caution';
+  if (/high\s+confidence/i.test(clean)) return 'High Confidence';
+  return 'Proceed with Caution';
+}
+
+/**
+ * Enforces candidate experience cap (#5297) using JavaScript logic on cv.md.
+ * Filters out experience entries whose end date is strictly older than currentYear - yearsCap.
+ */
+export function filterCvByYearsCap(cvText, yearsCap, currentYear = new Date().getFullYear()) {
+  if (!yearsCap || typeof cvText !== 'string') return cvText;
+  const numCap = parseInt(yearsCap, 10);
+  if (isNaN(numCap) || numCap <= 0) return cvText;
+  const cutoffYear = currentYear - numCap;
+
+  const lines = cvText.split(/\r?\n/);
+  const result = [];
+  let inExperience = false;
+  let skippingEntry = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^##\s+(?:professional\s+)?experience/i.test(line)) {
+      inExperience = true;
+      skippingEntry = false;
+      result.push(line);
+      continue;
+    }
+    if (/^##\s+[^#]/i.test(line) && !/^##\s+(?:professional\s+)?experience/i.test(line)) {
+      inExperience = false;
+      skippingEntry = false;
+      result.push(line);
+      continue;
+    }
+
+    if (inExperience) {
+      const dateMatch = line.match(/\b(19\d\d|20\d\d)\s*[-–—]\s*(19\d\d|20\d\d|present|current)\b/i);
+      const isHeading = /^###\s+/.test(line);
+      const isBullet = /^[*-]\s+/.test(line);
+
+      if (isHeading) {
+        if (dateMatch) {
+          const endPart = dateMatch[2].toLowerCase();
+          const endYear = (endPart === 'present' || endPart === 'current') ? currentYear : parseInt(endPart, 10);
+          skippingEntry = endYear < cutoffYear;
+        } else {
+          const nextLine = lines[i + 1] || '';
+          const nextDateMatch = nextLine.match(/\b(19\d\d|20\d\d)\s*[-–—]\s*(19\d\d|20\d\d|present|current)\b/i);
+          if (nextDateMatch) {
+            const endPart = nextDateMatch[2].toLowerCase();
+            const endYear = (endPart === 'present' || endPart === 'current') ? currentYear : parseInt(endPart, 10);
+            skippingEntry = endYear < cutoffYear;
+          } else {
+            skippingEntry = false;
+          }
+        }
+      } else if (isBullet && !skippingEntry && dateMatch) {
+        const endPart = dateMatch[2].toLowerCase();
+        const endYear = (endPart === 'present' || endPart === 'current') ? currentYear : parseInt(endPart, 10);
+        skippingEntry = endYear < cutoffYear;
+      }
+
+      if (skippingEntry) continue;
+    }
+
+    result.push(line);
   }
-  return 'full';
+
+  return result.join('\n');
+}
+
+/**
+ * Validates and enforces the years-cap constraint (#5297) on LLM evaluation output.
+ * Ensures the candidate is not penalized for experience requirements exceeding yearsCap.
+ */
+export function validateYearsCap(evaluationText, yearsCap) {
+  if (!yearsCap || typeof evaluationText !== 'string') return evaluationText;
+  const numCap = parseInt(yearsCap, 10);
+  if (isNaN(numCap) || numCap <= 0) return evaluationText;
+
+  const gapRegex = new RegExp(`(\\b(?:require[s]?|demands?|needs?|minimum(?: of)?)\\s+(\\d+)\\+?\\s*years?\\b[\\s\\S]{0,120}?\\b(?:lacks?|only has|short of|missing|gap)\\b|\\b(?:lacks?|only has|short of|missing)\\s+(\\d+)\\+?\\s*years?\\b)`, 'gi');
+
+  let penalizedForCap = false;
+  let match;
+  while ((match = gapRegex.exec(evaluationText)) !== null) {
+    const requiredYears = parseInt(match[2] || match[3] || '0', 10);
+    if (requiredYears > numCap) {
+      penalizedForCap = true;
+    }
+  }
+
+  let sanitized = evaluationText;
+  if (penalizedForCap && !sanitized.includes('years-cap constraint')) {
+    sanitized = sanitized.replace(
+      /(##\s*Executive Match Summary[\s\S]*?\n\n)/i,
+      `$1*[Note: Candidate experience cap enforced at ${numCap} years per config/profile.yml (#5297). Requirements exceeding ${numCap} years are waived.]*\n\n`
+    );
+  }
+  return sanitized;
 }
 
 function spendTierToModel(tier) {
@@ -167,6 +276,7 @@ export function loadContext(mode = 'full') {
     const profileContent = existsSync(PATHS.profile) ? readFileSync(PATHS.profile, 'utf-8').trim() : '';
     const profileYml = existsSync(PATHS.profileYml) ? readFileSync(PATHS.profileYml, 'utf-8').trim() : '';
     const yearsCap = readYearsCap();
+    const effectiveCv = yearsCap !== null ? filterCvByYearsCap(cvContent, yearsCap) : cvContent;
     const yearsCapInstruction = yearsCap !== null
       ? `\nCANDIDATE EXPERIENCE CAP (issue #5297): config/profile.yml enforces years-cap: ${yearsCap}. Only count and evaluate the candidate's last ${yearsCap} years of relevant experience. Do not penalize for older unlisted history or require experience beyond this window.\n`
       : '';
@@ -177,7 +287,7 @@ Your objective is to extract candidate CV facts and evaluate candidate alignment
 ═══════════════════════════════════════════════════════
 CANDIDATE RESUME (cv.md)
 ═══════════════════════════════════════════════════════
-${cvContent}
+${effectiveCv}
 ${yearsCapInstruction}
 ═══════════════════════════════════════════════════════
 TARGET ROLES & PREFERENCES (config/profile.yml & _profile.md)
@@ -193,9 +303,13 @@ INSTRUCTIONS (CONDENSED SINGLE-PASS EVALUATION)
 2. Extract the primary role requirements and must-have qualifications from the Job Description.
 3. Compare the candidate's verified background directly to the requirements in a single pass:
    - Identify Strong Matches, Partial Matches, and Critical Gaps.
+   - Enforce Candidate Experience Cap (#5297): ${yearsCap !== null ? `Strictly cap experience evaluation at ${yearsCap} years. Do not penalize the candidate for experience requirements beyond ${yearsCap} years or older unlisted roles.` : 'Evaluate verified experience on CV.'}
    - Calculate an overall Match Score from 1.0 to 5.0 (5.0 = ideal fit, 4.0 = strong match, 3.0 = acceptable, <3.0 = major gap).
    - Detect the closest role archetype.
-   - Assess role legitimacy (High Confidence | Proceed with Caution | Suspicious).
+   - Assess role legitimacy (High Confidence | Proceed with Caution | Suspicious):
+     * High Confidence: direct company posting, verified employer, transparent requirements.
+     * Proceed with Caution: agency/intermediary, missing company specifics, unstated compensation.
+     * Suspicious: suspicious domain, unverified recruiter, unrealistic claims or scam indicators.
 4. Output a concise markdown report with executive match summary, requirements matrix, and strengths/gaps.
 5. End with the exact machine-readable summary block:
 
@@ -368,11 +482,18 @@ export async function processOffer(browser, line, idx, _evaluate = evaluateWithR
     }
 
     console.log(`🧠 Calling Gemini (${modelName})...`);
-    const evaluationText = await _evaluate(`URL: ${url}\n\n${jdText}`);
+    let evaluationText = await _evaluate(`URL: ${url}\n\n${jdText}`);
 
     // Parse output
     if (/^---DEAD_POSTING---\s*$/m.test(evaluationText)) {
       return await resolveDeadPosting();
+    }
+
+    if (currentEvalMode === 'match' || currentEvalMode === 'single-pass') {
+      const yearsCap = readYearsCap();
+      if (yearsCap !== null) {
+        evaluationText = validateYearsCap(evaluationText, yearsCap);
+      }
     }
 
     const summaryMatch = evaluationText.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
@@ -391,7 +512,7 @@ export async function processOffer(browser, line, idx, _evaluate = evaluateWithR
     const role = extract('ROLE');
     const score = extract('SCORE');
     const archetype = extract('ARCHETYPE');
-    const legitimacy = extract('LEGITIMACY');
+    const legitimacy = parseLegitimacy(extract('LEGITIMACY'));
 
     // Save
     mkdirSync(PATHS.reports, { recursive: true });
@@ -422,7 +543,9 @@ export async function processOffer(browser, line, idx, _evaluate = evaluateWithR
 **PDF:** pending
 **Tool:** Gemini (${modelName})\n
 ---\n
-${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim()}\n`;
+${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').trim()}\n
+## Job Description (archived verbatim)\n
+${jdText}\n`;
 
     writeFileSync(reportPath, reportContent, 'utf-8');
 

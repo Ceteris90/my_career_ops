@@ -531,6 +531,7 @@ const SYSTEM_PATHS = [
   'contact-extract-tests.mjs',
   'outcome.mjs',
   'batch/batch-prompt.md',
+  'batch/batch-prompt-match.md',
   'batch/batch-runner.sh',
   'batch/aggregate-tokens.mjs',
   'batch/README.md',

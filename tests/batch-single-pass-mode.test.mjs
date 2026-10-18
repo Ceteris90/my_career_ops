@@ -3,11 +3,14 @@
 // condensed single-pass prompt generation, and years-cap profile setting (#5297).
 
 import { pass, fail, ROOT, getBash } from './helpers.mjs';
-import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { PATHS, readYearsCap, parseCliMode, loadContext } from '../batch-evaluate-gemini.mjs';
+import {
+  PATHS, readYearsCap, parseCliMode, loadContext,
+  parseLegitimacy, filterCvByYearsCap, validateYearsCap, processOffer,
+} from '../batch-evaluate-gemini.mjs';
 
 console.log('\nbatch-single-pass-mode.test.mjs — Single-Pass CV-Match Evaluation Mode');
 
@@ -136,6 +139,149 @@ try {
   PATHS.profileYml = originalProfileYml;
   PATHS.cv = originalCv;
   PATHS.profile = originalProfile;
+}
+
+// ── Test 3b: parseLegitimacy canonical state normalization ────────────────────
+try {
+  if (parseLegitimacy('High Confidence') === 'High Confidence' &&
+      parseLegitimacy('high confidence') === 'High Confidence' &&
+      parseLegitimacy('High') === 'High Confidence') {
+    pass('parseLegitimacy parses High Confidence variations');
+  } else {
+    fail('parseLegitimacy failed on High Confidence');
+  }
+
+  if (parseLegitimacy('Proceed with Caution') === 'Proceed with Caution' &&
+      parseLegitimacy('proceed with caution') === 'Proceed with Caution') {
+    pass('parseLegitimacy parses Proceed with Caution variations');
+  } else {
+    fail('parseLegitimacy failed on Proceed with Caution');
+  }
+
+  if (parseLegitimacy('Suspicious') === 'Suspicious' &&
+      parseLegitimacy('suspicious') === 'Suspicious') {
+    pass('parseLegitimacy parses Suspicious variations');
+  } else {
+    fail('parseLegitimacy failed on Suspicious');
+  }
+
+  if (parseLegitimacy('unknown') === 'Proceed with Caution' &&
+      parseLegitimacy('') === 'Proceed with Caution') {
+    pass('parseLegitimacy defaults safely to Proceed with Caution for unknown/empty tiers');
+  } else {
+    fail('parseLegitimacy failed to default to Proceed with Caution');
+  }
+} catch (err) {
+  fail(`parseLegitimacy tests threw: ${err.message}`);
+}
+
+// ── Test 3c: filterCvByYearsCap JavaScript enforcement (#5297) ────────────────
+try {
+  const sampleCv = `# Test Candidate
+## Professional Experience
+
+### Senior Engineer — Acme Corp (2022–2026)
+- Built modern cloud infra.
+
+### Mid Engineer — Beta Inc (2018–2021)
+- Managed databases.
+
+### Junior Engineer — Gamma LLC (2012–2016)
+- Wrote unit tests.
+
+## Education
+B.Sc. in Computer Science, 2012
+`;
+
+  // Cap at 5 years (cutoff: 2026 - 5 = 2021) -> Acme (2022-2026) and Beta (2018-2021) kept, Gamma (2012-2016) filtered out
+  const filtered5 = filterCvByYearsCap(sampleCv, 5, 2026);
+  if (filtered5.includes('Acme Corp') && filtered5.includes('Beta Inc') && !filtered5.includes('Gamma LLC')) {
+    pass('filterCvByYearsCap excludes experience older than years-cap (#5297)');
+  } else {
+    fail('filterCvByYearsCap failed to exclude older experience');
+  }
+
+  // Education section must remain intact
+  if (filtered5.includes('B.Sc. in Computer Science, 2012')) {
+    pass('filterCvByYearsCap preserves non-experience sections (Education)');
+  } else {
+    fail('filterCvByYearsCap dropped non-experience section');
+  }
+} catch (err) {
+  fail(`filterCvByYearsCap tests threw: ${err.message}`);
+}
+
+// ── Test 3d: validateYearsCap output validator (#5297) ────────────────────────
+try {
+  const evalWithExceededGap = `## Executive Match Summary
+Candidate matches core skills.
+
+## Requirements Matrix
+Role requires 10+ years experience, candidate lacks required 10 years experience.
+`;
+
+  const validated = validateYearsCap(evalWithExceededGap, 5);
+  if (validated.includes('Candidate experience cap enforced at 5 years per config/profile.yml (#5297)')) {
+    pass('validateYearsCap annotates and enforces cap when requirements exceed years-cap (#5297)');
+  } else {
+    fail('validateYearsCap failed to annotate exceeded requirement');
+  }
+} catch (err) {
+  fail(`validateYearsCap tests threw: ${err.message}`);
+}
+
+// ── Test 3e: Verbatim JD archival in generated reports ────────────────────────
+try {
+  const mockWork = mkdtempSync(join(tmpdir(), 'cops-jdarchive-'));
+  const oldReports = PATHS.reports;
+  const oldAdditions = PATHS.trackerAdditions;
+  PATHS.reports = join(mockWork, 'reports');
+  PATHS.trackerAdditions = join(mockWork, 'tracker-additions');
+
+  const rawJd = 'Verbatim Job Description: Software Engineer at Acme Corp. Must know Node.js, distributed systems, and CI/CD pipelines.';
+  const mockBrowser = {
+    newPage: async () => ({
+      url: () => 'https://example.com/test-job',
+      route: async () => {},
+      goto: async () => {},
+      waitForTimeout: async () => {},
+      evaluate: async () => rawJd,
+      close: async () => {}
+    })
+  };
+
+  const mockEval = async () => `
+## Executive Match Summary
+Great fit.
+
+---SCORE_SUMMARY---
+COMPANY: Acme Corp
+ROLE: Software Engineer
+SCORE: 4.8
+ARCHETYPE: Backend Engineer
+LEGITIMACY: High Confidence
+---END_SUMMARY---
+`;
+
+  await processOffer(mockBrowser, '- [ ] https://example.com/test-job | Acme | SWE', 1, mockEval);
+
+  const reportFiles = readdirSync(PATHS.reports).filter(f => f.endsWith('.md') && !f.includes('RESERVED'));
+  if (reportFiles.length > 0) {
+    const reportText = readFileSync(join(PATHS.reports, reportFiles[0]), 'utf-8');
+    if (reportText.includes('## Job Description (archived verbatim)') && reportText.includes(rawJd)) {
+      pass('processOffer appends ## Job Description (archived verbatim) with raw scraped JD');
+    } else {
+      fail('processOffer report missing ## Job Description (archived verbatim) or raw JD text');
+    }
+  } else {
+    fail('processOffer failed to write report file for JD archive test');
+  }
+
+  PATHS.reports = oldReports;
+  PATHS.trackerAdditions = oldAdditions;
+  rmSync(mockWork, { recursive: true, force: true });
+} catch (err) {
+  fail(`verbatim JD archival test threw: ${err.message}`);
 }
 
 // ── Test 4: batch/batch-runner.sh CLI flag parsing and prompt wiring ─────────
