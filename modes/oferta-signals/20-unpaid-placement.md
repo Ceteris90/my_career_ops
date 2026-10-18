@@ -7,8 +7,8 @@ Several jurisdictions treat the label "intern", "trainee" or "volunteer" as irre
 **Presence-based, agent-judged (match meaning, never naive keyword regex).** Three outcomes:
 
 - **Posting states the role is unpaid** (for example "unpaid internship", "unpaid", "stipend-only", or "volunteer" for a role doing the employer's ordinary work): append the unpaid note below, quoting the phrase.
-- **Posting says the role is credit-bearing or a school placement** (for example "for course credit", "co-op placement through your school", "must be enrolled in an approved program"): append the neutral school-placement note below. A school placement is not unpaid by that fact alone; if the same posting also states no pay, report both in the one note.
-- **Posting is silent about pay, or states pay**: say nothing. Absence-based signals never assert a violation (umbrella contract points 3 and 5). Silence is never evidence of anything, so there is no silence check.
+- **Posting says the role is credit-bearing or a school placement, but does not state that it is unpaid** (for example "for course credit", "co-op placement through your school", "must be enrolled in an approved program"): append the neutral school-placement note below. A school placement is not unpaid by that fact alone. If the posting also states the role is unpaid, use the unpaid note only and keep the school-placement wording in it; never append both notes.
+- **Posting states pay, or is silent about pay and says nothing about a credit-bearing or school placement**: say nothing. Absence-based signals never assert a violation (umbrella contract points 3 and 5). Silence about pay is never evidence of anything, so there is no silence check.
 
 If the candidate's jurisdiction key (from `config/profile.yml` → `location`, for example an Ontario location → `CA-ON`) has no table row, state only the quoted phrase as a fact and do not describe any law.
 
@@ -16,11 +16,11 @@ If the candidate's jurisdiction key (from `config/profile.yml` → `location`, f
 
 If the posting states the role is unpaid, append:
 
-> ℹ️ **Unpaid-placement note:** [Render in {language.output}: quote the posting's exact phrase and state that it describes the role as unpaid. If the candidate's jurisdiction has a table row, add the rule in one or two sentences from the row's `applies_to`, then the carve-outs from its `exceptions` (law_name), and say that whether a carve-out applies, for example an approved school program, cannot be seen from the posting. Point the candidate to the row's `official_source.url` as a link they can open themselves. Close with: informational only, not legal advice. Never assert the arrangement is unlawful.]
+> ℹ️ **Unpaid-placement note:** [Render in {language.output}: quote the posting's exact phrase and state that it describes the role as unpaid. If the candidate's jurisdiction has a table row, add the rule in one or two sentences from the row's `applies_to`, then the carve-outs from its `exceptions` (law_name), and, if the posting also describes a credit-bearing or school placement, quote that wording too; say that whether a carve-out applies, for example an approved school program, cannot be seen from the posting. Point the candidate to the row's `official_source.url` as a link they can open themselves. Close with: informational only, not legal advice. Never assert the arrangement is unlawful.]
 
-If the posting says the role is credit-bearing or a school placement, append:
+If the posting says the role is credit-bearing or a school placement and does not state that it is unpaid, append:
 
-> ℹ️ **Unpaid-placement note:** [Render in {language.output}: quote the exact phrase and state neutrally that the posting describes a credit-bearing or school-placement role, so the school-program exception in the candidate's jurisdiction (name it from the row's `exceptions` when a row applies) may be relevant. Say that whether it applies depends on the school's approval of the program, which cannot be seen from the posting. Informational only, not legal advice.]
+> ℹ️ **Unpaid-placement note:** [Render in {language.output}: quote the exact phrase and state neutrally that the posting describes a credit-bearing or school-placement role, and stop there if the candidate's jurisdiction has no table row (make no exception claim). Only when a row applies, add that the school-program exception named in the row's `exceptions` may be relevant, and that whether it applies depends on the school's approval of the program, which cannot be seen from the posting. Informational only, not legal advice.]
 
 **Hard rule (mandatory):** this signal never fetches or scrapes anything: no WebFetch, no WebSearch, no Playwright against `official_source.url`. It reads the JD text the mode already has and the candidate's own jurisdiction from `config/profile.yml`; the candidate clicks the official link.
 
