@@ -643,6 +643,26 @@ classifyLiveness({
     : fail(`redirected listing read as ${JSON.stringify(v)}`);
 }
 
+// A missing CareerViet id lands on the all-jobs page, and 35C89ABA (the usual
+// id shape, with no five digits in a row) is not one the redirect guard
+// recognises. The page's cards print "Hạn nộp: dd-mm-yyyy", not the posting's
+// "Hết hạn nộp dd/mm/yyyy", and its "ỨNG TUYỂN NGAY" is not the posting's
+// button, so the page cannot close the posting or keep it alive, even with a
+// card dated in the past first (the real page had none on 2026-10-18).
+{
+  const v = classifyLiveness({
+    status: 200,
+    requestedUrl: 'https://careerviet.vn/vi/tim-viec-lam/brand-executive.35C89ABA.html',
+    finalUrl: 'https://careerviet.vn/viec-lam/tat-ca-viec-lam-vi.html',
+    bodyText: `Việc làm\nKế toán tổng hợp\nCạnh tranh Hà Nội Hạn nộp: 01-10-2025 Cập nhật: 18-10-2026\nNhân Viên Kinh Doanh B2B\nHạn nộp: 31-10-2026\n${'Mô tả công việc. '.repeat(30)}`,
+    applyControls: ['ỨNG TUYỂN NGAY', 'Lưu việc làm'],
+    now: new Date('2026-10-17T05:00:00Z'),
+  });
+  v.result === 'uncertain'
+    ? pass('the all-jobs page a missing CareerViet id lands on stays uncertain')
+    : fail(`the all-jobs landing page read as ${JSON.stringify(v)}`);
+}
+
 // Without a deadline the Apply label alone still reads active, and the label
 // is not a loose match: "đơn" prose elsewhere does not count.
 classifyLiveness({
