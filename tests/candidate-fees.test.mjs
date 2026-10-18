@@ -65,6 +65,9 @@ check('freshly verified row produces no findings',
   JSON.stringify(verdict));
 
 // --- synthetic fixtures for the four cases in the issue ---
+// feeRe and thirdPartyRe are illustrative stand-ins for the documented decision table in
+// modes/oferta-signals/21-candidate-paid-fees.md. Signal 21 itself is agent-judged (meaning, not
+// keywords), so these fixtures pin the documented classification, not the agent's behaviour.
 // Mirrors the signal's examples: a fee paid TO the employer/agency as a
 // condition of the job triggers; a credential bought from a third party does not.
 const feeRe = /(training|onboarding|processing|administration|background[- ]check) fee|(pay|payable|remit)[^.]{0,40}(deposit|fee)|\bdeposit\b[^.]{0,40}(required|before)|(purchase|buy)[^.]{0,30}(uniform|equipment)[^.]{0,40}(from us|through us|before (you )?start)/i;
