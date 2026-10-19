@@ -69,9 +69,9 @@ const CALL_SITES = [
     source: 'web/src/lib/core-cli.ts',
     argvSource: 'web/src/app/api/status/route.ts',
     script: 'set-status.mjs',
-    // The route builds ['--row', row, canon, '--source', 'web', '--json'];
+    // The route builds ['--row', row, canon, '--source', 'web', '--detach-jd-archive', '--json'];
     // row 1 and Responded are the fixture tracker's row and a canonical state.
-    args: ['--row', '1', 'Responded', '--source', 'web', '--json'],
+    args: ['--row', '1', 'Responded', '--source', 'web', '--detach-jd-archive', '--json'],
     probe: 'run',
   },
   {

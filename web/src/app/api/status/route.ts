@@ -99,12 +99,16 @@ export async function POST(req: Request) {
   // --row: `n` is the tracker's # column, the same key this route has always
   // matched on. It is NOT a report number — the two counters diverge
   // permanently — so naming the number space is required, not cosmetic.
+  // --detach-jd-archive: a move into Interview may start a JD archive that can
+  // run past this request's 30s budget. Waiting for it turned a saved status
+  // into a 504, and this route never reads the archive's outcome anyway.
   const { code, stdout, stderr, spawnFailed, timedOut } = await runSetStatus([
     "--row",
     row,
     canon,
     "--source",
     "web",
+    "--detach-jd-archive",
     "--json",
   ]);
   const parsed = parseCliJson(stdout);

@@ -479,6 +479,24 @@ export async function mergeTracker(options = {}) {
    *   it is empty, so the backfill can report the two cases separately.
    */
   /**
+   * The absolute path a report cell's link resolves to under REPORTS_ROOT,
+   * without touching the filesystem: null when there is no link or it escapes
+   * REPORTS_ROOT. resolveReportPath() adds the is-a-file check.
+   *
+   * @param {string} reportField - Report cell, e.g. `[42](reports/042-acme.md)`.
+   * @returns {string|null}
+   */
+  function resolveReportTarget(reportField) {
+    const linkTarget = firstLinkTarget(reportField);
+    if (linkTarget == null) return null;
+    // Containment, not cosmetics: resolve and assert the path stays under
+    // REPORTS_ROOT. Stripping leading `../` alone still let an embedded
+    // `reports/../../..` walk out of the tree, and the tracker is user-editable.
+    const reportPath = resolve(REPORTS_ROOT, linkTarget.trim().replace(/^(\.\.\/)+/, ''));
+    return reportPath.startsWith(REPORTS_ROOT + sep) ? reportPath : null;
+  }
+
+  /**
    * Resolve a report cell to the absolute path of the report file it links to,
    * or null when the link is missing, escapes REPORTS_ROOT, or the file doesn't
    * exist. Factored out of resolveReportUrl() so the merge loop's dedup tiers
@@ -489,13 +507,8 @@ export async function mergeTracker(options = {}) {
    * @returns {string|null} The resolved absolute path, or null.
    */
   function resolveReportPath(reportField) {
-    const linkTarget = firstLinkTarget(reportField);
-    if (linkTarget == null) return null;
-    // Containment, not cosmetics: resolve and assert the path stays under
-    // REPORTS_ROOT. Stripping leading `../` alone still let an embedded
-    // `reports/../../..` walk out of the tree, and the tracker is user-editable.
-    const reportPath = resolve(REPORTS_ROOT, linkTarget.trim().replace(/^(\.\.\/)+/, ''));
-    if (!reportPath.startsWith(REPORTS_ROOT + sep)) return null;
+    const reportPath = resolveReportTarget(reportField);
+    if (!reportPath) return null;
     // existsSync alone accepts a directory, which would let the new Pass 0.5
     // dedup tier treat two additions whose report link happens to resolve to
     // the same directory as report-identical without ever reading a file.
@@ -1919,7 +1932,11 @@ export async function mergeTracker(options = {}) {
       if (!duplicate) {
         const addPath = resolveReportPath(addition.report);
         if (addPath) {
-          duplicate = existingApps.find(app => !urlDiffers(app) && resolveReportPath(app.report) === addPath);
+          // addPath is already a confirmed file, so an existing row whose link
+          // resolves to the same string names that same file: no stat needed.
+          // Statting every row here cost two syscalls per tracker row for each
+          // addition, under the tracker lock.
+          duplicate = existingApps.find(app => !urlDiffers(app) && resolveReportTarget(app.report) === addPath);
           if (duplicate) { dupReason = 'report-file'; reportNumMatched = true; }
         }
       }

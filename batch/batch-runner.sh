@@ -95,6 +95,7 @@ RESOLVED_MODEL=""
 RESOLVED_SPEND_TIER=""
 CLI=claude
 RATE_LIMIT_SLEEP=300
+WORKER_TIMEOUT=1800
 BATCH_PAUSED=false
 STATUS_ONLY=false
 WATCH_MODE=false
@@ -114,7 +115,7 @@ spend_tier in config/profile.yml unless --model overrides it.
 Usage: batch-runner.sh [OPTIONS]
 
 Options:
-  --cli NAME           Agent CLI to use: claude (default), opencode, gemini, qwen
+  --cli NAME           Agent CLI to use: claude (default), opencode, gemini, qwen, grok
   --model NAME         Model for the CLI (e.g. qwen2.5:32b for opencode/ollama).
                        For claude, overrides the tier-resolved model (otherwise
                        config/profile.yml spend_tier: economy/standard/premium;
@@ -129,6 +130,8 @@ Options:
   --max-retries N      Max retry attempts per offer (default: 2)
   --min-score N        Skip PDF/tracker for offers scoring below N (default: 0 = off)
   --skip-pdf           Skip PDF generation entirely (write ❌ in tracker PDF column)
+  --worker-timeout N   Stop a worker after N seconds and record it as failed
+                       (default: 1800; 0 = no limit)
   --rate-limit-sleep N Maximum adaptive retry delay in seconds; 0 pauses immediately
                        (default: 300; range: 0–2147483647; claude only)
   --status             Show batch progress and a per-job table, then exit
@@ -197,6 +200,21 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --model) MODEL="$2"; shift 2 ;;
+    --worker-timeout)
+      if [[ $# -lt 2 ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: --worker-timeout must be a non-negative integer (seconds)."
+        exit 1
+      fi
+      # Strip leading zeroes, then compare as a decimal string: Bash arithmetic
+      # wraps past 2^63-1, and a wrapped value at or below 0 disables the watchdog.
+      WORKER_TIMEOUT="${2#"${2%%[!0]*}"}"
+      WORKER_TIMEOUT="${WORKER_TIMEOUT:-0}"
+      if [[ ${#WORKER_TIMEOUT} -gt 19 ]] || { [[ ${#WORKER_TIMEOUT} -eq 19 ]] && [[ "$WORKER_TIMEOUT" > 9223372036854775807 ]]; }; then
+        echo "ERROR: --worker-timeout must be at most 9223372036854775807 seconds."
+        exit 1
+      fi
+      shift 2
+      ;;
     --status) STATUS_ONLY=true; shift ;;
     --watch) WATCH_MODE=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -272,7 +290,8 @@ check_prerequisites() {
     opencode) command -v opencode &>/dev/null && cli_cmd="opencode" || cli_cmd="ollama" ;;
     gemini)   cli_cmd="gemini" ;;
     qwen)     cli_cmd="qwen" ;;
-    *) echo "ERROR: Unknown --cli '$CLI'. Supported: claude, opencode, gemini, qwen"; exit 1 ;;
+    grok)     cli_cmd="grok" ;;
+    *) echo "ERROR: Unknown --cli '$CLI'. Supported: claude, opencode, gemini, qwen, grok"; exit 1 ;;
   esac
 
   if ! command -v "$cli_cmd" &>/dev/null; then
@@ -502,6 +521,46 @@ spend_tier_to_model() {
     premium) echo "claude-opus-5-5" ;;
     standard|*) echo "claude-sonnet-5-5" ;;
   esac
+}
+
+# Run one worker CLI with stdin closed, so a CLI that waits for input reads EOF
+# instead of hanging on the runner's terminal. With WORKER_TIMEOUT > 0 a
+# watchdog sends TERM at the limit and KILL 10 s later, and the worker exits
+# 124. Background jobs ignore SIGINT in a non-interactive shell, so Ctrl+C is
+# forwarded to the worker by hand.
+run_worker() {
+  "$@" </dev/null &
+  local pid=$!
+  local watchdog=""
+  if (( WORKER_TIMEOUT > 0 )); then
+    (
+      for (( s = 0; s < WORKER_TIMEOUT; s++ )); do
+        sleep 1
+        kill -0 "$pid" 2>/dev/null || exit 0
+      done
+      kill -TERM "$pid" 2>/dev/null
+      for (( s = 0; s < 10; s++ )); do
+        sleep 1
+        kill -0 "$pid" 2>/dev/null || exit 124
+      done
+      kill -KILL "$pid" 2>/dev/null
+      exit 124
+    ) &
+    watchdog=$!
+  fi
+  trap 'kill -TERM "$pid" 2>/dev/null; exit 130' INT TERM
+  local rc=0
+  wait "$pid" || rc=$?
+  trap - INT TERM
+  if [[ -n "$watchdog" ]]; then
+    local watchdog_rc=0
+    wait "$watchdog" || watchdog_rc=$?
+    if (( watchdog_rc == 124 )); then
+      echo "batch-runner: worker timed out after ${WORKER_TIMEOUT}s"
+      rc=124
+    fi
+  fi
+  return "$rc"
 }
 
 # Resolve the model to pass to the worker CLI. --model always wins.
@@ -1202,20 +1261,23 @@ process_offer() {
     exit_code=0
     case "$CLI" in
       claude)
-        claude "${claude_args[@]}" > "$log_file" 2>&1 || exit_code=$?
+        run_worker claude "${claude_args[@]}" > "$log_file" 2>&1 || exit_code=$?
         ;;
       opencode)
         if command -v opencode &>/dev/null; then
-          opencode run ${model_args[@]+"${model_args[@]}"} "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+          run_worker opencode run ${model_args[@]+"${model_args[@]}"} "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         else
-          ollama launch opencode ${model_args[@]+"${model_args[@]}"} -y -- run "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+          run_worker ollama launch opencode ${model_args[@]+"${model_args[@]}"} -y -- run "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         fi
         ;;
       gemini)
-        gemini ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+        run_worker gemini ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         ;;
       qwen)
-        qwen ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+        run_worker qwen ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+        ;;
+      grok)
+        run_worker grok --always-approve --output-format plain ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         ;;
     esac
 
@@ -1399,6 +1461,65 @@ process_offer() {
       return 0
     fi
 
+    # A dealbreaker hit is a finished skip, not a hold (batch-prompt.md Step
+    # 1.6). The worker writes one SKIP row quoting the rule and the JD line and
+    # no report. Accept it only when the handoff names this posting and the row
+    # proves it; anything else is quarantined and retried like a failure.
+    if [[ "$parsed_status" == "skipped" ]]; then
+      local skip_tracker="$TRACKER_DIR/$id.tsv" skip_rule=""
+      local -a skip_reports=()
+      if [[ -n "$report_num" && "$report_num" != "-" ]]; then
+        shopt -s nullglob
+        local skip_candidate
+        for skip_candidate in "$REPORTS_DIR/$report_num-"*.md; do
+          [[ "$skip_candidate" == *-RESERVED.md ]] || skip_reports+=("$skip_candidate")
+        done
+        shopt -u nullglob
+      fi
+      if (( ${#skip_reports[@]} == 0 )); then
+        skip_rule=$(node -e '
+          const fs = require("fs");
+          const [json, url, id, tsv, reserved] = process.argv.slice(1);
+          const flat = (s) => String(s).replace(/[\x00-\x1f\x7f]+/g, " ").replace(/ +/g, " ").trim();
+          const result = JSON.parse(json);
+          if (result.reason !== "dealbreaker" || result.url !== url || String(result.id) !== id) process.exit(1);
+          if (typeof result.rule !== "string" || !flat(result.rule)) process.exit(1);
+          const lines = fs.readFileSync(tsv, "utf8").replace(/\r\n/g, "\n").split("\n").filter(Boolean);
+          if (lines.length !== 2) process.exit(1);
+          const head = lines[0].split("\t");
+          const row = lines[1].split("\t");
+          const field = (name) => row[head.indexOf(name)] ?? "";
+          if (field("status") !== "SKIP" || field("url") !== url || !field("notes").startsWith("Dealbreaker: \"")) process.exit(1);
+          // merge-tracker keeps the TSV num as the row id, so it must be the
+          // number this runner reserved (zero padding aside).
+          if (!/^\d+$/.test(field("num")) || Number(field("num")) !== Number(reserved)) process.exit(1);
+          process.stdout.write(flat(result.rule));
+        ' "$worker_result_json" "$url" "$id" "$skip_tracker" "$report_num" 2>/dev/null) || skip_rule=""
+      fi
+      if [[ -n "$skip_rule" ]]; then
+        # Keep the reservation. The SKIP row uses this number and no report
+        # file holds it, so releasing now would hand it to the next job before
+        # the merge. merge_tracker releases it once the row is in the tracker.
+        update_state_retrying "$id" "$url" "skipped" "$started_at" "$completed_at" "$report_num" "-" "dealbreaker: \"$skip_rule\"" "$retries" || true
+        echo "    ⏭️  Skipped (dealbreaker): $url — \"$skip_rule\""
+        return 0
+      fi
+      local skip_quarantine="$LOGS_DIR/quarantine"
+      mkdir -p "$skip_quarantine"
+      [[ -f "$skip_tracker" ]] && mv "$skip_tracker" "$skip_quarantine/$id-tracker.tsv"
+      local skip_report
+      for skip_report in ${skip_reports[@]+"${skip_reports[@]}"}; do
+        mv "$skip_report" "$skip_quarantine/$id-${skip_report##*/}"
+      done
+      if (( retries < MAX_RETRIES )); then
+        retries=$((retries + 1))
+      fi
+      update_state_retrying "$id" "$url" "failed" "$started_at" "$completed_at" "$report_num" "-" "dealbreaker skip without a valid SKIP tracker row for this posting, or with a report; artifacts quarantined" "$retries" || true
+      release_report_num "$report_num"
+      echo "    ❌ Failed (invalid dealbreaker skip, attempt $retries): artifacts moved to $skip_quarantine"
+      return 0
+    fi
+
     if [[ -n "$worker_failed_match" ]]; then
       [[ -z "$worker_error_match" ]] && worker_error_match="worker reported status:failed (exit code 0)"
       if (( retries < MAX_RETRIES )); then
@@ -1463,6 +1584,16 @@ merge_tracker() {
   echo ""
   echo "=== Merging tracker additions ==="
   node "$PROJECT_DIR/merge-tracker.mjs"
+  # A dealbreaker SKIP row holds its report number until it is merged. The
+  # tracker row now holds it for reserve-report-num.mjs, so drop the sentinel.
+  if [[ -f "$STATE_FILE" ]]; then
+    local mid mstatus mnum merror
+    while IFS=$'\t' read -r mid _ mstatus _ _ mnum _ merror _; do
+      if [[ "$mid" != "id" && "$mstatus" == "skipped" && "$merror" == dealbreaker:* ]]; then
+        release_report_num "$mnum"
+      fi
+    done < "$STATE_FILE"
+  fi
   echo ""
   echo "=== Reconciling pipeline.md ==="
   node "$PROJECT_DIR/reconcile-pipeline.mjs" || echo "⚠️  Pipeline reconcile had issues (see above)"
@@ -1487,8 +1618,9 @@ print_summary() {
 
   local total=0 completed=0 skipped=0 failed=0 pending=0 needs_confirmation=0
   local score_sum=0 score_count=0
+  local -a dealbreaker_lines=()
 
-  while IFS=$'\t' read -r sid _ sstatus _ _ _ sscore _ _; do
+  while IFS=$'\t' read -r sid surl sstatus _ _ _ sscore serror _; do
     [[ "$sid" == "id" ]] && continue
     total=$((total + 1))
     case "$sstatus" in
@@ -1498,7 +1630,9 @@ print_summary() {
           score_count=$((score_count + 1))
         fi
         ;;
-      skipped) skipped=$((skipped + 1)) ;;
+      skipped) skipped=$((skipped + 1))
+        [[ "$serror" == dealbreaker:* ]] && dealbreaker_lines+=("#$sid $surl — $serror")
+        ;;
       failed) failed=$((failed + 1)) ;;
       needs_confirmation) needs_confirmation=$((needs_confirmation + 1)) ;;
       *) pending=$((pending + 1)) ;;
@@ -1506,6 +1640,14 @@ print_summary() {
   done < "$STATE_FILE"
 
   echo "Total: $total | Completed: $completed | Skipped: $skipped | Failed: $failed | Pending: $pending | Needs confirmation: $needs_confirmation"
+
+  if (( ${#dealbreaker_lines[@]} > 0 )); then
+    echo "Dealbreaker skips: ${#dealbreaker_lines[@]} (SKIP rows merged; to evaluate one anyway, rerun it in a session and say \"evaluate anyway\")"
+    local dealbreaker_line
+    for dealbreaker_line in "${dealbreaker_lines[@]}"; do
+      echo "  $dealbreaker_line"
+    done
+  fi
 
   if (( score_count > 0 )); then
     local avg

@@ -13,6 +13,7 @@
  * - --json subtracts already-tracked companies (canonical-name + alias match,
  *   disabled entries count as tracked)
  * - --min-rows, --added-only, --since window (undated rows pass)
+ * - skipped_title rows are ignored (#2695)
  * - ranking: 'added'-producing companies rank first
  * - default YAML output is the `companies: [{name}]` shape discover-ats consumes
  *
@@ -246,6 +247,24 @@ console.log('\n--- 3. Filters ---');
   const names = res.companies.map((c) => c.name);
   ok('--added-only keeps companies that produced an added row', names.includes('RealHit'));
   ok('--added-only drops never-added companies', !names.includes('FilteredOnly'));
+}
+
+{
+  // #2695: scan.mjs records every title rejection as skipped_title. An
+  // aggregator board carries many employers, so those rows name untracked
+  // companies whose only postings are off-target; they are not candidates.
+  const history = [
+    row({ company: 'OffTarget', status: 'skipped_title' }),
+    row({ company: 'OffTarget', status: 'skipped_title' }),
+    row({ company: 'Mixed', status: 'skipped_title' }),
+    row({ company: 'Mixed', status: 'skipped_location' }),
+    row({ company: 'Mixed', status: 'skipped_location' }),
+  ];
+  const res = run(history, {}, ['--min-rows', '2', '--json']);
+  const names = res.companies.map((c) => c.name);
+  ok('skipped_title rows do not make a company a candidate', !names.includes('OffTarget'));
+  const mixed = res.companies.find((c) => c.name === 'Mixed');
+  ok('skipped_title rows do not count toward --min-rows', mixed?.rows === 2);
 }
 
 {
