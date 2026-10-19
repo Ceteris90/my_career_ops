@@ -1,8 +1,9 @@
-import { lstatSync, realpathSync } from 'node:fs';
-import { isAbsolute, basename, dirname, join, relative, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { isAbsolute, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { pathIsInsideCanonical } from './tracker-utils.mjs';
 
 export class ApplyScopeError extends Error {
   constructor(message) {
@@ -34,48 +35,12 @@ export function allowedRoots() {
   return [code, data];
 }
 
-function outside(base, target) {
-  const rel = relative(base, target);
-  return rel !== '' && (rel.startsWith('..') || isAbsolute(rel));
-}
-
-function nearestExisting(abs) {
-  const missing = [];
-  let current = abs;
-  while (true) {
-    try {
-      return { existing: realpathSync(current), missing };
-    } catch (e) {
-      if (!e || e.code !== 'ENOENT') throw e;
-      let present = false;
-      try {
-        lstatSync(current);
-        present = true;
-      } catch (le) {
-        if (!le || le.code !== 'ENOENT') throw le;
-      }
-      if (present) throw new ApplyScopeError('Apply refused a path outside the project.');
-      const parent = dirname(current);
-      if (parent === current) {
-        throw new ApplyScopeError('Apply refused a path outside the project.');
-      }
-      missing.push(basename(current));
-      current = parent;
-    }
-  }
-}
-
 export function resolveInsideProject(root, candidate) {
   if (typeof candidate !== 'string' || candidate.trim() === '' || candidate.includes('\0')) {
     throw new ApplyScopeError('Apply refused a path outside the project.');
   }
-  const base = realOrLexical(root);
   const abs = isAbsolute(candidate) ? resolve(candidate) : resolve(root, candidate);
-  const { existing, missing } = nearestExisting(abs);
-  if (outside(base, existing)) {
-    throw new ApplyScopeError('Apply refused a path outside the project.');
-  }
-  if (missing.length && outside(base, missing.reduceRight((dir, part) => join(dir, part), existing))) {
+  if (!pathIsInsideCanonical(abs, root)) {
     throw new ApplyScopeError('Apply refused a path outside the project.');
   }
   return abs;
