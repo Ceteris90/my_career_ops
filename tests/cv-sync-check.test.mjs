@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -129,7 +129,7 @@ test('a candidate metric is flagged and a time window is not', async () => {
 });
 
 test('importing the module runs no checks', async () => {
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(join(ROOT, 'cv-sync-check.mjs'))}); console.log('imported');`], {
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(join(ROOT, 'cv-sync-check.mjs')).href)}); console.log('imported');`], {
     cwd: ROOT,
     encoding: 'utf-8',
     timeout: 30_000,
