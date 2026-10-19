@@ -53,6 +53,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'fs';
+import { spawnSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -170,6 +171,59 @@ export function atomicWriteFile(filePath, text) {
 export function emitJsonReceipt(receipt, exitCode) {
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
   process.exitCode = exitCode;
+}
+
+function parseJsonReceipt(stdout) {
+  const lines = String(stdout || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      return JSON.parse(lines[i]);
+    } catch {
+      // Keep scanning backward; any prose belongs on stderr, but fail closed.
+    }
+  }
+  return null;
+}
+
+function runBrowserSourceScan({ config, dryRun }) {
+  // Browser-only sources (Cloudflare-managed challenge → no plain HTTP). Each
+  // runs as a child process that emits a JSON receipt on stdout; entries whose
+  // config section is absent are skipped, and a zero-config section means the
+  // scanner itself falls back to its default search.
+  const browserSources = [
+    { configKey: 'theprotocol_searches', script: 'scan-theprotocol.mjs', label: 'The Protocol' },
+    { configKey: 'fractal_searches', script: 'scan-fractal.mjs', label: 'FRACTAL' },
+  ];
+  const receipts = [];
+  for (const source of browserSources) {
+    if (!Array.isArray(config?.[source.configKey]) || config[source.configKey].length === 0) continue;
+    const childArgs = [path.join(CODE_ROOT, source.script), '--json'];
+    if (dryRun) childArgs.push('--dry-run');
+    const child = spawnSync(process.execPath, childArgs, {
+      cwd: CODE_ROOT,
+      env: process.env,
+      encoding: 'utf8',
+    });
+    if (child.stderr) process.stderr.write(child.stderr);
+    const receipt = parseJsonReceipt(child.stdout);
+    if (!receipt) {
+      receipts.push({
+        source: source.script.replace(/^scan-|\.mjs$/g, ''),
+        scanned: 0,
+        found: 0,
+        filtered_title: 0,
+        filtered_location: 0,
+        duplicates: 0,
+        added: 0,
+        added_urls: [],
+        errors: [{ company: source.label, error: `${source.script} returned no JSON receipt` }],
+        exitCode: child.status ?? 1,
+      });
+    } else {
+      receipts.push({ ...receipt, exitCode: child.status ?? 0 });
+    }
+  }
+  return receipts;
 }
 
 // Provider loading + routing live in providers/_registry.mjs so the portal
@@ -1041,6 +1095,55 @@ export function buildVisaFilter(visaFilter) {
   };
 }
 
+// Search providers often label aggregator hits with the board name rather than
+// the employer. Recover only explicit title patterns; uncertain titles retain
+// the provider value instead of guessing. Better company keys let the existing
+// company+role dedup collapse regional LinkedIn URLs and aggregator mirrors.
+export function normalizeAggregatorSearchJob(job, entryName = '') {
+  if (!job || typeof job !== 'object' || typeof job.title !== 'string') return job;
+  const source = String(entryName).toLowerCase();
+  const title = job.title.trim();
+  let match;
+
+  if (source.includes('wellfound')) {
+    match = title.match(/^(.+?)\s+at\s+(.+?)(?:\s*[•|]\s*|\s+-\s+Wellfound\b)/i);
+    if (match) return { ...job, title: match[1].trim(), company: match[2].trim() };
+  }
+
+  if (source.includes('jobgether')) {
+    match = title.match(/^(.+?)\s+at\s+(.+?)\s+-\s+Jobgether\b/i);
+    if (match) return { ...job, title: match[1].trim(), company: match[2].trim() };
+  }
+
+  if (source.includes('linkedin')) {
+    match = title.match(/^(.+?)\s+hiring\s+(.+?)(?:\s+in\s+.+)?(?:\s+-\s+LinkedIn\b)?$/i);
+    if (match) return { ...job, title: match[2].trim(), company: match[1].trim() };
+    match = title.match(/^(.+?)\s+at\s+(.+?)\s+-\s+LinkedIn\b/i);
+    if (match) return { ...job, title: match[1].trim(), company: match[2].trim() };
+
+    // Public LinkedIn URLs encode "role-at-company-{numeric id}" even when
+    // Google's display title omits the employer. The delimiter and terminal id
+    // make this explicit enough to use without inferring from arbitrary prose.
+    try {
+      const slug = new URL(job.url).pathname.split('/').filter(Boolean).pop() || '';
+      match = slug.match(/^(.+)-at-(.+)-\d+$/i);
+      if (match) {
+        const company = match[2].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const companySuffix = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cleanTitle = title
+          .replace(/\s+-\s+LinkedIn\b.*$/i, '')
+          .replace(new RegExp(`\\s+-\\s+${companySuffix}$`, 'i'), '')
+          .trim();
+        return { ...job, title: cleanTitle, company };
+      }
+    } catch {
+      // Keep the provider values for malformed URLs; URL validation reports it.
+    }
+  }
+
+  return job;
+}
+
 // ── Salary filter ───────────────────────────────────────────────────
 // Optional. If `salary_filter` is absent from portals.yml, all salaries pass.
 // Semantics:
@@ -1683,12 +1786,11 @@ const DEDUP_STRIP_PARAMS = new Set([
 /**
  * Normalize a job posting URL into a stable dedup key.
  *
- * Strips cosmetic query params (locale/tracking), promotes recognized
- * hash-route job IDs before dropping other fragments, drops a trailing slash,
- * and lowercases scheme, host, and path. Only used to compute the *comparison*
- * key — callers keep writing/displaying the original URL so links stay
- * clickable and scan-history/pipeline.md stay faithful to what the provider
- * returned.
+ * Strips cosmetic query params (locale/tracking), drops a trailing slash,
+ * and lowercases scheme, host, and path. Only used to compute the
+ * *comparison* key — callers keep writing/displaying the original URL so
+ * links stay clickable and scan-history/pipeline.md stay faithful to what
+ * the provider returned.
  *
  * The path is lowercased because scan.mjs and scan-ats-full.mjs run as
  * separate processes and can independently produce different casing for the
@@ -4580,6 +4682,17 @@ async function main() {
 
   await parallelFetch(tasks, CONCURRENCY);
 
+  const browserSourceReceipts = runBrowserSourceScan({ config, dryRun });
+  for (const browserSourceReceipt of browserSourceReceipts) {
+    totalFound += Number(browserSourceReceipt.found) || 0;
+    totalFilteredTitle += Number(browserSourceReceipt.filtered_title) || 0;
+    totalFilteredLocation += Number(browserSourceReceipt.filtered_location) || 0;
+    totalDupes += Number(browserSourceReceipt.duplicates) || 0;
+    for (const error of Array.isArray(browserSourceReceipt.errors) ? browserSourceReceipt.errors : []) {
+      errors.push({ company: error.company || browserSourceReceipt.source || 'browser source', error: error.error || 'browser scan failed' });
+    }
+  }
+
   // 5.5. Optional liveness verification — drop expired and guard-rejected postings
   let verifiedOffers = newOffers;
   let expiredOffers = [];
@@ -4830,6 +4943,10 @@ async function main() {
     console.log(`Invalid (guarded):     ${invalidOffers.length} dropped`);
   }
   console.log(`New offers added:      ${verifiedOffers.length}`);
+  const browserSourcesAdded = browserSourceReceipts.reduce((sum, r) => sum + (Number(r.added) || 0), 0);
+  if (browserSourcesAdded) {
+    console.log(`Browser sources added: ${browserSourcesAdded}`);
+  }
 
   // Trust validation summary (only when trust_filter is configured)
   if (config.trust_filter && config.trust_filter.enabled !== false && verifiedOffers.length > 0) {
@@ -5001,8 +5118,11 @@ async function main() {
       found: totalFound,
       filtered,
       duplicates: totalDupes,
-      added: verifiedOffers.length,
-      added_urls: verifiedOffers.map(offer => offer.url),
+      added: verifiedOffers.length + browserSourceReceipts.reduce((sum, r) => sum + (Number(r.added) || 0), 0),
+      added_urls: [
+        ...verifiedOffers.map(offer => offer.url),
+        ...browserSourceReceipts.flatMap((r) => (Array.isArray(r.added_urls) ? r.added_urls : [])),
+      ],
       errors: errors.map(({ company, error }) => ({ company, error })),
       unverified_zero: unverifiedZeroTargets,
       dry_run: dryRun,

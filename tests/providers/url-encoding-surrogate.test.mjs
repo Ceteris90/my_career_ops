@@ -200,6 +200,34 @@ try {
     (jobs) => jobs.length === 1 && jobs[0].url.includes('g-1'),
   );
 
+  // connectis.parseOffers — for…of over data.publicJobBoardOffers; id feeds the /offer/ URL.
+  const { parseOffers: connectisParseOffers } = await load('connectis.mjs');
+  check(
+    'connectis.parseOffers',
+    () => connectisParseOffers(
+      { data: { publicJobBoardOffers: [
+        { id: `${LONE}bad`, jobOrder: { role: 'Bad' } },
+        { id: 'g-1', jobOrder: { role: 'Good' } },
+      ] } },
+      'Connectis',
+    ),
+    (jobs) => jobs.length === 1 && jobs[0].url.includes('g-1'),
+  );
+
+  // miratech.parseMiratechPage — for…of over content[]; id feeds the public job URL.
+  const { parseMiratechPage } = await load('miratech.mjs');
+  check(
+    'miratech.parseMiratechPage',
+    () => parseMiratechPage(
+      { content: [
+        { id: `${LONE}bad`, name: 'Bad' },
+        { id: 'g-1', name: 'Good' },
+      ] },
+      'Miratech',
+    ).rows,
+    (jobs) => jobs.length === 1 && jobs[0].url.includes('g-1'),
+  );
+
   // platsbanken.postingUrl — the ad id is the only segment of the permalink, and
   // the helper's null (rather than a throw) is what lets one bad row drop.
   const { postingUrl: platsbankenPostingUrl } = await load('platsbanken.mjs');
@@ -236,9 +264,9 @@ try {
   // import _safe-url.mjs and call safeEncodeURIComponent; dropping either is the
   // regression this list catches.
   const CONVERTED = [
-    'alibaba.mjs', 'arbeitsagentur.mjs', 'bamboohr.mjs', 'feishu-jobs.mjs', 'garena.mjs', 'jibeapply.mjs',
-    'kalibrr.mjs', 'manfred.mjs', 'meituan.mjs', 'mokahr.mjs', 'phenom.mjs', 'platsbanken.mjs',
-    'techinasia.mjs', 'thehub.mjs', 'tkms.mjs', 'vdab.mjs',
+    'alibaba.mjs', 'arbeitsagentur.mjs', 'bamboohr.mjs', 'connectis.mjs', 'feishu-jobs.mjs', 'garena.mjs',
+    'jibeapply.mjs', 'kalibrr.mjs', 'manfred.mjs', 'meituan.mjs', 'miratech.mjs', 'mokahr.mjs', 'phenom.mjs',
+    'platsbanken.mjs', 'techinasia.mjs', 'thehub.mjs', 'tkms.mjs', 'vdab.mjs',
   ];
 
   // Bare `encodeURIComponent` on a url line that is reviewed as safe: the value

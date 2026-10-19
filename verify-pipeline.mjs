@@ -597,7 +597,7 @@ if (!existsSync(PORTALS_FILE)) {
       ...(Array.isArray(cfg.tracked_companies) ? cfg.tracked_companies : []),
       ...(Array.isArray(cfg.job_boards) ? cfg.job_boards : []),
     ];
-    // providers/ and plugins/ both ship in the code layer — resolve them from
+// providers/ and plugins/ both ship in the code layer — resolve them from
     // CODE_ROOT (scan.mjs does the same). Without mergeProviderPlugins() the
     // health check sees only providers/*.mjs and reports every enabled
     // plugin-provider entry as an unknown provider that "never scans", while

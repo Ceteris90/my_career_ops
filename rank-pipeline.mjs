@@ -38,6 +38,18 @@ import { sanitizeMarkdownField } from './scan.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+import {
+  isTrackingLead,
+  isEmailChrome,
+  isLoginWall,
+  needsResolution,
+  cleanTitle,
+  titleFromUrl,
+  rewriteResolvedRow,
+  stripRankAnnotation,
+  applyRowRewrites,
+} from './lib/tracking-resolver.mjs';
+import { PROFILE_DIR, launchProfileContext } from './site-login.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -69,12 +81,13 @@ export const CLI_CANDIDATES = [
 const USAGE = `
   rank-pipeline.mjs — opt-in LLM relevance re-ranker (annotates, never filters)
 
-  node rank-pipeline.mjs [--limit N] [--cli <name>] [--model <name>] [--dry-run]
+  node rank-pipeline.mjs [--limit N] [--cli <name>] [--model <name>] [--dry-run] [--no-resolve]
 
     --limit N     max entries to rank this run (default ${DEFAULT_LIMIT}, ceiling ${LIMIT_CEILING})
     --cli <name>  force a CLI instead of $CAREER_OPS_CLI or auto-detection
     --model <n>   passed through to the CLI when it accepts one
     --dry-run     print the annotations, write nothing
+    --no-resolve  skip browser resolution of email tracking links (default: resolve)
     --self-test   run the in-memory suite (no subprocess, no network)
 `;
 const KNOWN_FLAGS = [
@@ -82,6 +95,7 @@ const KNOWN_FLAGS = [
   '--cli',
   '--model',
   '--dry-run',
+  '--no-resolve',
   '--self-test',
   '--help',
   '-h',
@@ -277,6 +291,192 @@ function callCli(cli, prompt, model) {
   });
 }
 
+/**
+ * Resolve every email tracking link in the pipeline file, ranked or not, in a real
+ * browser, capturing the ACTUAL job URL, title and a JD snippet. Each resolved row
+ * gets its URL/title rewritten and any stale `rank:` segment stripped, so it becomes
+ * pending again and is re-ranked against the real posting. A lead that makes no
+ * progress (still a tracking page, no usable title) is left untouched. Returns the
+ * (possibly rewritten) file text plus a summary; `browser: false` means Playwright
+ * could not launch and resolution was skipped.
+ *
+ * @param {string} text - current pipeline.md contents.
+ * @param {{persist: boolean}} opts
+ */
+async function resolveTrackingLeadsInText(text, { persist }) {
+  const lines = String(text).split('\n');
+  const targets = lines
+    .map((raw, index) => ({ raw, index, ...rowCells(raw) }))
+    .filter(x => x.raw.startsWith('- [ ] ') && needsResolution(x));
+  if (!targets.length) return { text, resolved: 0, calls: 0, browser: false };
+
+  // Prefer the persistent profile created by `site-login.mjs` — authenticated
+  // cookies let the resolver unwrap login-walled links (LinkedIn /comm/jobs/view,
+  // Indeed viewjob/cts, Glassdoor jobListing) instead of bouncing to a login page.
+  // Falls back to a throwaway context when no profile exists.
+  const useProfile = existsSync(PROFILE_DIR);
+  let context;
+  let throwawayBrowser = null;
+  try {
+    if (useProfile) {
+      // Same launch options as site-login (real Chrome + automation markers
+      // stripped), so the saved session behaves as the user set it up.
+      context = await launchProfileContext({ headless: false });
+    } else {
+      // Indeed/Glassdoor block headless Chromium; a visible browser gets past their
+      // bot gate far enough to resolve the tracking link to the real job URL.
+      throwawayBrowser = await chromium.launch({ headless: false, args: ['--no-sandbox'] });
+      context = await throwawayBrowser.newContext({
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 900 },
+      });
+    }
+  } catch (err) {
+    console.error(`  tracking resolution skipped: cannot launch browser (${err.message})`);
+    return { text, resolved: 0, calls: 0, browser: false, authNeeded: 0 };
+  }
+  const resolved = new Map(); // index -> {url, title, desc}
+  let calls = 0;
+  let authNeeded = 0;
+  const authHosts = new Set();
+  try {
+    for (const [i, t] of targets.entries()) {
+      calls += 1;
+      // Glassdoor/Indeed rate-limit a rapid burst of opens and start serving an
+      // anti-bot interstitial. A short jittered gap between opens keeps the real
+      // destination URL resolvable. Skipped before the first open.
+      if (i > 0) await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 1800)));
+      try {
+        const r = await resolveInBrowser(t.url, context);
+        // Login wall = the link needs a session we do not have. Count it so the
+        // caller can nudge the user to run `site-login.mjs`, rather than silently
+        // dropping the lead.
+        if (isLoginWall({ url: r.finalUrl }) || (r.finalUrl === t.url && isLoginWall({ url: t.url }))) {
+          authNeeded += 1;
+          try { authHosts.add(new URL(r.finalUrl || t.url).hostname.replace(/^www\./, '')); } catch { /* ignore */ }
+          continue;
+        }
+        // Prefer the cleaned page title; fall back to a title derived from the real
+        // job URL when the page is CAPTCHA/SPA-blocked (the URL is still the win).
+        const title = cleanTitle(r.pageTitle) || titleFromUrl(r.finalUrl);
+        const company = cleanTitle(r.company);
+        // A same-URL resolve (e.g. an opaque Indeed viewjob or a JustJoin slug) is
+        // still progress when it yields a title/company we did not have before.
+        const gained = (title && title !== t.title) || (company && company !== t.company);
+        const moved = r.finalUrl && r.finalUrl !== t.url;
+        // Still a redirect-style tracker after the pass, or the pass landed on a
+        // login/chrome page (LinkedIn /comm wrapper, Indeed account page) = no real
+        // destination reached. Reject rather than rewrite a row into a junk title.
+        if ((!gained && !moved) || !r.finalUrl || isTrackingLead({ url: r.finalUrl }) || isEmailChrome({ url: r.finalUrl })) continue;
+        resolved.set(t.index, { url: r.finalUrl, title, company, desc: r.jdText });
+        console.log(`  resolved: ${truncate(t.raw, 56)}… → ${[company, title].filter(Boolean).join(' — ')}`);
+      } catch (err) {
+        console.error(`  resolution failed for ${t.url}: ${err.message}`);
+      }
+    }
+    let newText = text;
+    if (resolved.size) {
+      newText = lines
+        .map((line, i) => {
+          const r = resolved.get(i);
+          if (!r) return line;
+          return rewriteResolvedRow(stripRankAnnotation(line), r);
+        })
+        .join('\n');
+    }
+    if (persist && resolved.size) {
+      await withPipelineLock(PIPELINE_PATH, () => writeFileSync(PIPELINE_PATH, newText));
+    }
+    return { text: newText, resolved: resolved.size, calls, browser: true, authNeeded, authHosts: [...authHosts], useProfile };
+  } finally {
+    if (throwawayBrowser) await throwawayBrowser.close();
+    else if (context) await context.close();
+  }
+}
+
+function rowCells(raw) {
+  const c = raw.slice(6).split('|').map(s => s.trim());
+  return { url: c[0] || '', company: c[1] || '', title: c[2] || '' };
+}
+
+function hasTrackingLeads(text) {
+  return String(text ?? '')
+    .split('\n')
+    .some(line => line.startsWith('- [ ] ') && needsResolution(rowCells(line)));
+}
+
+/**
+ * Mark email-alert chrome rows (nav/account/promo/search links that are never
+ * vacancies) as processed `[x]` with a stored justification, so the Inbox holds only
+ * real postings. Pure and idempotent: only `- [ ]` rows are touched, and a row whose
+ * URL is not chrome is returned byte-for-byte.
+ *
+ * @param {string} text
+ * @returns {{text: string, dropped: number}}
+ */
+export function dropEmailChromeInText(text) {
+  let dropped = 0;
+  const out = String(text ?? '')
+    .split('\n')
+    .map(line => {
+      if (!line.startsWith('- [ ] ')) return line;
+      const cells = rowCells(line);
+      if (!isEmailChrome(cells)) return line;
+      dropped += 1;
+      const descriptor = [cells.company, cells.title].filter(Boolean).join(' — ') || 'navigation/promo link from a job-alert email';
+      // Rebuild cleanly so empty cells do not produce `|  |  |` noise.
+      return `- [x] #-- ${cells.url} | ${cells.company || ''} | ${cells.title || ''} | skipped (email chrome, not a vacancy: ${descriptor})`;
+    })
+    .join('\n');
+  return { text: out, dropped };
+}
+
+async function resolveInBrowser(url, context) {
+  const page = await context.newPage();
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    // Let client-side redirects / tracking JS settle before reading the URL.
+    await page.waitForTimeout(2500);
+    const finalUrl = page.url();
+    const pageTitle = await page.title();
+    const { jdText, company } = await page.evaluate(() => {
+      const sel = '[data-testid="job-description"],#jobDescriptionText,.jobsearch-JobComponent-description,#jobDescriptionContainer,.job-description,main,article';
+      const el = document.querySelector(sel);
+      const jd = (el?.innerText || document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 3000);
+      // Best-effort employer name: JSON-LD hiringOrganization first (most job boards
+      // and ATS pages embed it), then a few common in-page company selectors.
+      let co = '';
+      for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const parsed = JSON.parse(s.textContent || '');
+          const arr = Array.isArray(parsed) ? parsed : [parsed];
+          for (const o of arr) {
+            const n = o?.hiringOrganization?.name || o?.hiringOrganization?.legalName;
+            if (n && String(n).trim()) { co = String(n).trim(); break; }
+          }
+        } catch { /* ignore malformed JSON-LD */ }
+        if (co) break;
+      }
+      if (!co) {
+        const csel = '[data-testid="inlineHeader-companyName"],[data-testid="company-name"],.jobsearch-CompanyInfoContainer a,[class*="company-name"],[class*="CompanyName"]';
+        const ce = document.querySelector(csel);
+        co = (ce?.innerText || '').trim();
+      }
+      return { jdText: jd, company: co };
+    });
+    return { finalUrl, pageTitle, jdText, company };
+  } finally {
+    // Close only the page — the context (persistent profile or throwaway) is owned
+    // by the caller and closed once at the end of the whole resolution pass.
+    await page.close();
+  }
+}
+
+function truncate(s, n) {
+  const t = String(s ?? '').trim();
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
 const ANSI = /\x1b\[[0-9;]*m/g;
 
 /**
@@ -300,6 +500,7 @@ async function main(args) {
   }
 
   const dryRun = hasFlag(args, '--dry-run');
+  const noResolve = hasFlag(args, '--no-resolve');
   const limit = flagValue(args, '--limit') ?? DEFAULT_LIMIT;
   const model = flagValue(args, '--model');
   const forced = flagValue(args, '--cli') ?? process.env.CAREER_OPS_RANK_CLI;
@@ -324,7 +525,54 @@ async function main(args) {
     return 1;
   }
 
-  const original = readFileSync(PIPELINE_PATH, 'utf-8');
+  let text = readFileSync(PIPELINE_PATH, 'utf-8');
+
+  // Inbox hygiene, step 1: drop email-alert CHROME (nav/account/promo/search links)
+  // so it never shows up as a bare, unrankable row. Written under the shared lock so
+  // a concurrent scan cannot be clobbered. Skipped under --dry-run (writes nothing).
+  let chromeDropped = 0;
+  if (!dryRun) {
+    const hygiene = dropEmailChromeInText(text);
+    if (hygiene.dropped) {
+      await withPipelineLock(PIPELINE_PATH, () => {
+        const current = readFileSync(PIPELINE_PATH, 'utf-8');
+        const r = dropEmailChromeInText(current);
+        chromeDropped = r.dropped;
+        if (r.dropped) writeFileSync(PIPELINE_PATH, r.text);
+      });
+      text = readFileSync(PIPELINE_PATH, 'utf-8');
+    }
+  }
+
+  // Inbox hygiene, step 2: email job-alert tracking links (Glassdoor jobListing /
+  // Indeed rc/clk/dl, cts.indeed/v3, LinkedIn /comm/jobs/view) and bare real-URL rows
+  // are content-less until a real browser runs their JS. Resolve them up front so the
+  // ranker scores the ACTUAL posting; resolved rows are rewritten and their stale
+  // rank stripped so they become pending and are re-ranked this run (skipped under
+  // --dry-run). `pending` is therefore computed AFTER resolution.
+  let trackingResolved = 0;
+  let authNeeded = 0;
+  let authHosts = [];
+  if (!noResolve && hasTrackingLeads(text)) {
+    const summary = await resolveTrackingLeadsInText(text, { persist: !dryRun });
+    text = summary.text;
+    trackingResolved = summary.resolved;
+    authNeeded = summary.authNeeded || 0;
+    authHosts = summary.authHosts || [];
+    if (summary.browser) {
+      if (summary.useProfile) console.log('  Using saved browser profile (data/.browser-profile).');
+      console.log(`  Resolved ${summary.resolved} tracking link(s) in ${summary.calls} browser open(s).`);
+    }
+    if (authNeeded) {
+      const where = authHosts.length ? ` (${authHosts.join(', ')})` : '';
+      const how = summary.useProfile
+        ? 'your saved session may have expired — re-run `node site-login.mjs`'
+        : 'run `node site-login.mjs` once to log in, then re-run this command';
+      console.log(`  ⚠️  ${authNeeded} link(s) need a login session${where} — ${how}.`);
+    }
+  }
+
+  const original = text;
   const pending = parsePendingEntries(original);
   if (!pending.length) {
     console.log('No unranked pending entries. Nothing to do.');
@@ -398,6 +646,8 @@ async function main(args) {
   }
 
   console.log(`\n  Ranked ${written} entr(ies) of ${pending.length} pending in ${attemptedCalls} CLI call(s) via ${cli.bin}.`);
+  if (chromeDropped) console.log(`  ${chromeDropped} email-chrome row(s) dropped as non-vacancies (marked [x] with justification).`);
+  if (trackingResolved) console.log(`  ${trackingResolved} tracking link(s) resolved to real postings before ranking.`);
   if (skippedBatches) console.log(`  ${skippedBatches} batch(es) skipped — those rows are un-annotated, not dropped.`);
   if (pending.length > selected.length) {
     console.log(`  ${pending.length - selected.length} pending entr(ies) not ranked this run (--limit ${selectBatch(pending, limit).length}). Re-run to continue.`);
@@ -484,6 +734,95 @@ function selfTest() {
   check('detect respects priority order', detectCli(CLI_CANDIDATES, () => true).bin === 'claude');
 
   check('prompt marks postings untrusted', /untrusted data/.test(buildPrompt(pending, '')));
+
+  // tracking-resolver pure helpers
+  check('glassdoor jobListing is a tracking lead',
+    isTrackingLead({ url: 'https://www.glassdoor.ca/partner/jobListing.htm?jobListingId=101' }));
+  check('indeed rc/clk/dl is a tracking lead',
+    isTrackingLead({ url: 'https://pl.indeed.com/rc/clk/dl?jk=abc' }));
+  check('a real job URL is not a tracking lead',
+    !isTrackingLead({ url: 'https://pl.indeed.com/viewjob?jk=abc' }));
+  check('a justjoin slug is not a tracking lead',
+    !isTrackingLead({ url: 'https://justjoin.it/job-offer/acme-senior-dev-warszawa' }));
+  // A resolved Glassdoor job page keeps `jobListingId=` but is the destination, not a tracker.
+  check('a resolved glassdoor job page is not a tracking lead',
+    !isTrackingLead({ url: 'https://www.glassdoor.ca/job-listing/full-stack-developer-acme-JV_KO0,20.htm?jobListingId=101' }));
+  check('cleanTitle strips Indeed suffix', cleanTitle('React Native Developer - Warszawa - Indeed.com') === 'React Native Developer - Warszawa');
+  check('cleanTitle leaves a bare title alone', cleanTitle('React Native Developer') === 'React Native Developer');
+  check('cleanTitle drops a glassdoor block-page title', cleanTitle('Help Us Protect Glassdoor') === '');
+  check('cleanTitle strips a Glassdoor pipe suffix', cleanTitle('React Native Engineer | Glassdoor') === 'React Native Engineer');
+  check('cleanTitle drops a generic Glassdoor block title', cleanTitle('Security | Glassdoor') === '');
+  check('cleanTitle drops an Indeed account page title', cleanTitle('Sign In | Indeed Accounts') === '');
+  check('cleanTitle drops a help-center title', cleanTitle('Help Center Home') === '');
+  check('titleFromUrl reads a glassdoor job slug', /développeur.*senior/i.test(titleFromUrl('https://www.glassdoor.ca/job-listing/d%C3%A9veloppeur-d%C3%A9veloppeuse-senior-f-1000')));
+  check('titleFromUrl strips a glassdoor JV suffix',
+    titleFromUrl('https://www.glassdoor.ca/job-listing/full-stack-developer-cosready-JV_KO0,20_KE21,29.htm') === 'full stack developer cosready');
+  check('titleFromUrl skips generic path segments', titleFromUrl('https://usource.ripplehire.com/candidate/?token=abc') === '');
+  check('rewrite swaps url and title cells',
+    rewriteResolvedRow('- [ ] https://old.example |  | Job lead (email) | posted: 2026-01-01',
+      { url: 'https://pl.indeed.com/viewjob?jk=1', title: 'React Native Developer' })
+      .startsWith('- [ ] https://pl.indeed.com/viewjob?jk=1 |  | React Native Developer |'));
+  check('rewrite refuses a non-http url', rewriteResolvedRow('- [ ] https://old.example | a | b', { url: 'x', title: 't' }).includes('old.example'));
+  check('rewrite is a no-op for a short row', rewriteResolvedRow('- [ ] https://old.example | a', { url: 'https://x.test', title: 't' }).includes('old.example'));
+  check('rewrite fills an empty company cell',
+    rewriteResolvedRow('- [ ] https://x.test |  | Job lead (email)', { url: 'https://x.test', title: 'RN Dev', company: 'Acme' }).includes('| Acme | RN Dev'));
+
+  // email-chrome detection (Inbox hygiene)
+  check('linkedin feed is email chrome', isEmailChrome({ url: 'https://www.linkedin.com/comm/feed/?lipi=x' }));
+  check('linkedin premium upsell is email chrome', isEmailChrome({ url: 'https://www.linkedin.com/comm/premium/products/?utype=job' }));
+  check('linkedin /comm job wrapper is chrome (login-walled)', isEmailChrome({ url: 'https://www.linkedin.com/comm/jobs/view/123' }));
+  check('linkedin canonical job view is NOT chrome', !isEmailChrome({ url: 'https://www.linkedin.com/jobs/view/123' }));
+  check('linkedin ssr-login is chrome', isEmailChrome({ url: 'https://www.linkedin.com/ssr-login/passwordless-email-login?midToken=x' }));
+
+  // login-wall detection (drives the site-login.mjs nudge)
+  check('linkedin ssr-login is a login wall', isLoginWall({ url: 'https://www.linkedin.com/ssr-login/passwordless-email-login?midToken=x' }));
+  check('indeed account page is a login wall', isLoginWall({ url: 'https://pl.indeed.com/account/login' }));
+  check('a normal job URL is not a login wall', !isLoginWall({ url: 'https://justjoin.it/job-offer/acme-senior-dev-warszawa' }));
+  check('indeed subscriptions is email chrome', isEmailChrome({ url: 'https://subscriptions.indeed.com/alerts/cancel?token=x' }));
+  check('indeed viewjob is NOT chrome', !isEmailChrome({ url: 'https://pl.indeed.com/viewjob?jk=abc' }));
+  check('indeed search listing is chrome', isEmailChrome({ url: 'https://pl.indeed.com/jobs?q=react+native' }));
+  check('indeed cts/v3 opaque tracker is chrome', isEmailChrome({ url: 'https://cts.indeed.com/v3/H4sIAAAAAAAA_32UW6ujWBCF' }));
+  check('glassdoor community is chrome', isEmailChrome({ url: 'https://www.glassdoor.ca/Community/bowl-B1/post-P2.htm' }));
+  check('glassdoor search listing is chrome', isEmailChrome({ url: 'https://www.glassdoor.ca/Job/home-office-jobs-SRCH_IL.0,11_IS12619.htm' }));
+  check('indeed support host is chrome', isEmailChrome({ url: 'https://support.indeed.com/hc/pl' }));
+  check('glassdoor job listing is NOT chrome', !isEmailChrome({ url: 'https://www.glassdoor.ca/job-listing/react-dev-acme-JV_KO0,10.htm' }));
+  check('justjoin home is chrome', isEmailChrome({ url: 'https://justjoin.it/' }));
+  check('justjoin offer is NOT chrome', !isEmailChrome({ url: 'https://justjoin.it/job-offer/acme-senior-dev-warszawa-mobile' }));
+  check('a social footer link is chrome', isEmailChrome({ url: 'https://www.facebook.com/justjoin.it/' }));
+
+  // needsResolution
+  check('a bare real-URL row needs resolution', needsResolution({ url: 'https://justjoin.it/job-offer/acme-senior-dev', company: '', title: '' }));
+  check('the Job lead (email) placeholder still needs resolution', needsResolution({ url: 'https://justjoin.it/job-offer/acme-senior-dev', company: '', title: 'Job lead (email)' }));
+  check('a filled row does not need resolution', !needsResolution({ url: 'https://x.test/1', company: 'Acme', title: 'RN Dev' }));
+  check('a tracker always needs resolution', needsResolution({ url: 'https://pl.indeed.com/rc/clk/dl?jk=abc', company: 'Acme', title: 'RN Dev' }));
+
+  const chromeText = [
+    '## Pending',
+    '- [ ] https://www.linkedin.com/comm/feed/?lipi=x |  | Job lead (email)',
+    '- [ ] https://justjoin.it/job-offer/acme-senior-dev-warszawa-mobile |  | Job lead (email)',
+  ].join('\n');
+  const chromeOut = dropEmailChromeInText(chromeText);
+  check('dropEmailChromeInText drops the chrome row', chromeOut.dropped === 1);
+  check('dropEmailChromeInText marks it [x] with a reason', /^\- \[x\] #-- .*skipped \(email chrome/.test(chromeOut.text.split('\n')[1]));
+  check('dropEmailChromeInText leaves the real offer pending', chromeOut.text.split('\n')[2].startsWith('- [ ] https://justjoin.it/job-offer/acme'));
+
+  const rwText = [
+    '## Pending',
+    '- [ ] https://t.example/1 |  | Job lead (email)',
+    '- [ ] https://t.example/2 |  | Job lead (email)',
+  ].join('\n');
+  const rwOut = applyRowRewrites(rwText, [
+    { raw: '- [ ] https://t.example/1 |  | Job lead (email)', url: 'https://real.test/1', title: 'One' },
+  ]);
+  check('applyRowRewrites rewrites only the targeted row', rwOut.written === 1);
+  check('applyRowRewrites leaves the other row untouched', rwOut.text.includes('t.example/2'));
+
+  check('stripRankAnnotation removes a trailing rank',
+    stripRankAnnotation('- [ ] https://x | A | B | rank: 0.0/5 — stale') === '- [ ] https://x | A | B');
+  check('stripRankAnnotation leaves an unranked row alone',
+    stripRankAnnotation('- [ ] https://x | A | B | posted: 2026-01-01') === '- [ ] https://x | A | B | posted: 2026-01-01');
+
+  // prompt includes resolved JD content
 
   // pipeline.md does not enforce line uniqueness. Two identical pending rows are
   // two entries scored separately; matching by row text alone would hand both the

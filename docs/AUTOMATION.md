@@ -16,7 +16,11 @@ Three independent pieces, smallest first. You can use any of them on their own.
   reads `## Pending` from `data/pipeline.md`, compares each posting against
   `config/profile.yml`, and writes a shortlist you actually open. No web, no JD
   extraction, no PDFs, no subagents.
-- **[3. Automate the follow-up sweep](#3-automate-the-follow-up-sweep)** — a
+- **[3. Automate the evaluation of triaged offers](#3-automate-the-evaluation-of-triaged-offers)**
+  — runs the batch runner on every pending posting whose `rank:` cleared your
+  threshold, so a scheduled scan becomes scan **and** evaluation instead of a
+  growing backlog of already-triaged, never-scored offers.
+- **[4. Automate the follow-up sweep](#4-automate-the-follow-up-sweep)** — a
   headless `claude -p` call on the same cron/launchd pattern, driven by
   `scripts/followup-sweep.sh`, that drafts follow-ups for overdue applications
   to a file for you to review. Costs tokens (it's LLM-driven, not a script),
@@ -180,7 +184,87 @@ that already cleared a free title/location filter.
 
 ---
 
-## 3. Automate the follow-up sweep
+## 3. Automate the evaluation of triaged offers
+
+The scan is zero-token and the triage above is a single cheap prompt, but a full
+A-G **evaluation** is the expensive step — and it is *manual*: it only runs when you
+invoke `/career-ops pipeline` or `batch/batch-runner.sh`. If you scan on a schedule
+but never evaluate, `data/pipeline.md` silently accumulates already-triaged postings
+(rank annotations present, score absent) and the higher-ranked ones are real lost
+results. Closing that gap means running the batch runner on the triaged shortlist
+after every scan, not just when you remember.
+
+`batch/batch-runner.sh` (see `batch/README.md`) evaluates each offer in `batch-input.tsv`
+headlessly and writes the report + tracker row. The recipe below builds that input
+from every pending posting whose `rank:` annotation cleared your threshold, then runs
+the batch — so a scheduled scan becomes a scheduled scan **and evaluation**, not a
+growing backlog.
+
+**Already wired into your daily run.** If you use the `data/run-daily-scan.sh` launchd
+agent (macOS), the scan → rank → batch-evaluation chain is already connected: the
+script ranks up to 200 pending rows (`rank-pipeline.mjs --limit 200`), builds
+`batch/batch-input.tsv` from every row with `rank >= 3.0`, and runs
+`batch/batch-runner.sh --cli opencode --skip-pdf` on them. You don't need the cron
+recipe below unless you run the scan on a non-macOS scheduler or want a different
+threshold. The section below documents the pieces for a manual/cron setup.
+
+Threshold: pick the `rank:` you care about. The triage writes `| rank: N/5 — reason`.
+Everything at or above your threshold (e.g. `3.0`) is worth a real evaluation; below
+it is cheap to leave pending. Default `3.0` matches a "consider applying" floor.
+
+### Recipe (run after the scan, on cron/launchd)
+
+```bash
+cd /path/to/career-ops
+# 1. Triage annotations already exist from the triage pass. If not, run rank-pipeline:
+#    node rank-pipeline.mjs --limit 200          # annotate up to 200 pending rows
+# 2. Build batch-input.tsv from pending rows with rank >= threshold (3.0):
+node -e '
+const fs = require("fs");
+const THRESHOLD = parseFloat(process.argv[1] || "3.0");
+const s = fs.readFileSync("data/pipeline.md", "utf8");
+const rows = s.split("\n").filter(l =>
+  /^- \[ \] /.test(l) && /rank: ([3-9]|\d\.\d)/.test(l) &&
+  parseFloat((l.match(/rank:\s*([\d.]+)/)||[])[1]||"0") >= THRESHOLD
+);
+const out = rows.map((l, i) => {
+  const url = (l.match(/https?:\/\/[^ |]+/)||[])[0] || "";
+  let src = "web";
+  if (/linkedin/i.test(url)) src = "LinkedIn";
+  else if (/djinni/i.test(url)) src = "Djinni";
+  else if (/justjoin/i.test(url)) src = "JustJoin";
+  else if (/wttj|welcometothejungle/i.test(url)) src = "WTTJ";
+  return `${i+1}\t${url}\t${src}\trank>=${THRESHOLD}`;
+}).join("\n");
+fs.writeFileSync("batch/batch-input.tsv", "id\turl\tsource\tnotes\n" + out + "\n");
+console.log(`wrote ${rows.length} offers with rank >= ${THRESHOLD}`);
+' 3.0
+# 3. Evaluate them headlessly (skip PDFs; generate only for strong scores):
+./batch/batch-runner.sh --cli opencode --skip-pdf
+```
+
+For `claude`, add `--parallel N` and drop `--cli opencode` for concurrent workers:
+```bash
+./batch/batch-runner.sh --skip-pdf --parallel 2
+```
+
+### Why this closes the backlog
+
+The scan → triage → evaluate chain now runs on the same schedule instead of leaving
+the expensive step to manual action. Offers that clear triage get evaluated the same
+cycle; the `rank:` threshold keeps token spend bounded to postings you'd actually
+consider. Without this, the triage `rank:` annotations accumulate with no score and
+the ≥-threshold ones are silent lost results — the exact failure mode described above.
+
+> **Note on agency holds:** the batch runner stops each offer that hits the agency
+> confirmation gate (`status: needs_confirmation`) and, since it continues with the
+> next offer, the batch keeps running — but the held offer stays in `batch-state.tsv`
+> as `needs_confirmation` until you answer in the parent session. Those are the
+> legitimate ones to handle by hand (confirm the agency, then re-run).
+
+---
+
+## 4. Automate the follow-up sweep
 
 Unlike the scan (deterministic, zero-token), a follow-up sweep needs an LLM to
 read `data/applications.md`, decide what's overdue, and draft each email —

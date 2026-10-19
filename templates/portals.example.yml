@@ -1168,12 +1168,19 @@ search_queries:
 #   lever           jobs.(eu.)?lever.co/<slug>
 #   workable        apply.workable.com/<slug>
 #   smartrecruiters (careers|jobs).smartrecruiters.com/<slug>
+#   miratech        miratechgroup.com/career/  (single-company; the WordPress careers page embeds the
+#                   SmartRecruiters widget for company_code Miratech1 — the provider reads that public
+#                   postings API. The generic SmartRecruiters hosts stay with the smartrecruiters provider)
 #   recruitee       <slug>.recruitee.com
 #   bamboohr        <tenant>.bamboohr.com               (or api: field)
 #   breezy          <tenant>.breezy.hr                  (or api: field)
 #   solidjobs       solid.jobs/public-api/offers/<division>
 #   comeet          api: https://www.comeet.co/careers-api/2.0/company/<uid>/positions?token=<token>
 #   personio        <slug>.jobs.personio.(de|com)
+#   peopleforce     <tenant>.peopleforce.io  (single-company ATS vendor; reads /careers/v.json. A branded careers
+#                   domain fronting a PeopleForce tenant needs provider: peopleforce + api: the tenant feed.
+#                   Recognised filter params on careers_url (department_id, division_id, location_id,
+#                   employment_type_id, query) carry through to the API, so a scoped careers link stays scoped)
 #   pinpoint        <slug>.pinpointhq.com
 #   prevueaps       <tenant>.prevueaps.ca  (or api: field; domainId resolved from the tenant's /jobs/ page)
 #   rippling        ats.rippling.com/<slug>/jobs
@@ -1223,6 +1230,8 @@ search_queries:
 #                   recruiting.ultipro.(ca|com) / recruiting2/3.ultipro.com variants, matched by pattern —
 #                   whichever host the tenant's own board URL uses is preserved, not normalized)
 #   adp-workforcenow  workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=...&ccId=...
+#   connectis       jobs.connectis.pl / hub.connectis.pl  (single-company board — the Connectis
+#                   Hub GraphQL job board; reads api.hub.connectis.pl, no login)
 #
 # When the public careers URL is a branded custom domain (e.g.
 # careers.adyen.com), set `provider: smartrecruiters` explicitly to
@@ -1525,6 +1534,11 @@ search_queries:
 # from the company's own host (provider: optional, shown for clarity); a few need
 # it named. All still go under tracked_companies:.
 #
+# - name: Connectis                       # single-company; Connectis Hub GraphQL job board
+#   careers_url: https://jobs.connectis.pl/   # auto-detects on jobs.connectis.pl / hub.connectis.pl
+#   provider: connectis                   # optional — those hosts also auto-detect
+#   enabled: true                         # reads api.hub.connectis.pl, no login; whole board in one request
+#
 # - name: Dassault Systèmes              # single-company; Exalead card_search_api
 #   careers_url: https://www.3ds.com/careers/jobs   # auto-detects on *.3ds.com
 #   provider: dassault                    # optional — 3ds.com host also auto-detects
@@ -1560,6 +1574,89 @@ search_queries:
 # - name: RENK                            # softgarden hosted job widget
 #   careers_url: https://renk-group.softgarden.io/de/widgets/jobs
 #   provider: softgarden
+#   enabled: true
+#
+# - name: SoftServe                        # single-company; Nuxt SSG payload
+#   careers_url: https://career.softserveinc.com/en-us/vacancies/direction-engineering-technology/subdirection-software-development,research-development/position-middle,senior
+#   provider: softserve                   # auto-detects on career.softserveinc.com/en-us/vacancies
+#   max_pages: 20                          # optional page cap (default 20, max 100)
+#   enabled: true                          # reads the SSG _payload.json; keyword search is WAF-blocked
+#
+# - name: N-iX                             # single-company WordPress careers portal
+#   careers_url: https://careers.n-ix.com/jobs/?subcat%5B%5D=Android&subcat%5B%5D=iOS&subcat%5B%5D=JavaScript&work_type%5B%5D=Remote&work_type%5B%5D=Office+based&keyword=
+#   # optional page cap (default 20, max 100) — the full unfiltered board is ~11 pages
+#   # max_pages: 20
+#   enabled: true                          # walks the site's own `next` pagination link, filters preserved
+#
+# - name: Dev.Pro                          # single-company WordPress careers portal
+#   careers_url: https://career.dev.pro/open-positions/   # auto-detects on career.dev.pro; URL filters (?location=, ?level=, ?search=)
+#   # optional page cap (default 20, max 100) — the full unfiltered board is 4 pages of 10 jobs/page
+#   # max_pages: 20
+#   enabled: true                          # increments /page/N/ pagination, filters preserved; stops on a partial page
+#
+# - name: Intellias                         # single-company WordPress careers portal (fly_vacancies admin-ajax API)
+#   careers_url: https://career.intellias.com/vacancies/   # auto-detects on career.intellias.com
+#   # intellias:
+#   #   fetchDetails: true                  # optional — fetch each vacancy page for the full location +
+#   #   detailLimit: 25                     #   description (the card .location is truncated server-side)
+#   enabled: true                           # walks the full inventory; ~146 live postings
+#
+# - name: GlobalLogic                       # single-company WordPress careers portal (server-rendered listing)
+#   careers_url: https://www.globallogic.com/ua/career-search-page/?work_models=freelance%2Cremote%2Chybrid
+#   # filters (keywords/job_functions[]/experience[]/location[]/work_models[]) are read from careers_url
+#   #   query params; the provider pages by following the site's own `next` link, filters preserved
+#   # max_pages: 100                          # optional page cap (default 100, max 500)
+#   enabled: true                           # auto-detects on www.globallogic.com/<locale>/career-search-page/
+#
+# - name: Sigma Software                   # single-company WordPress careers portal (admin-ajax API)
+#   careers_url: https://career.sigma.software/what-we-offer/vacancies/?direction=android%2Cios%2Cjavascript%2Creact%2Creact-native
+#   # filters (direction/locations/seniority/workplace_type/keyword) are read from careers_url
+#   #   query params; direction_type=children is added automatically when a direction filter is set
+#   enabled: true                           # walks the full filtered inventory; ~10 live postings
+#
+# - name: Innovecs                         # single-company careers portal (jobs.innovecs.com)
+#   careers_url: https://jobs.innovecs.com/vacancies/   # auto-detects on jobs.innovecs.com/vacancies; a category
+#   #                                             #   path (/vacancies/react-js/) also works and is preserved by pagination
+#   # max_pages: 20                         # optional page cap (default 20, max 100)
+#   enabled: true                           # walks /vacancies/ then /page/N/ fragments; stops on a full-page past-the-end
+#
+# - name: Miratech                         # single-company; SmartRecruiters tenant behind a WordPress careers page
+#   careers_url: https://miratechgroup.com/career/   # auto-detects on miratechgroup.com/career
+#   provider: miratech                    # optional — the branded host also auto-detects
+#   enabled: true                         # reads the public SmartRecruiters postings API (company_code Miratech1); ~220 postings
+#
+# - name: Tieto                             # single-company Attrax careers portal (careers.tieto.com)
+#   careers_url: https://careers.tieto.com/jobs?options=193%2C403%2C414%2C413   # auto-detects on careers.tieto.com/jobs
+#   #   the `options` query param (Attrax facet option ids, comma-separated) is the search
+#   #   filter and is preserved verbatim across pagination; `page` advances the walk
+#   # max_pages: 20                          # optional page cap (default 20, max 100); page size is a fixed 10 tiles
+#   enabled: true                           # walks /jobs?options=...&page=N/; stops on a short (partial) page
+#
+# - name: Example DOU Co                   # company page on the Ukrainian IT board
+#   careers_url: https://jobs.dou.ua/companies/example-co/vacancies/   # any jobs.dou.ua company page auto-detects
+#   # provider: dou                        # optional; the jobs.dou.ua/companies/<slug>/vacancies/ host is auto-detected
+#   enabled: true                          # maps to the company's own RSS feed (its complete listing, no pagination)
+#
+# - name: Example Traffit Co               # Polish ATS vendor; single-company
+#   # A *.traffit.com careers_url auto-detects (e.g. https://exampleco.traffit.com/...). Most tenants front
+#   # the board with a branded careers page instead — then pin provider: traffit + api: the tenant feed:
+#   careers_url: https://exampleco.example/careers   # branded careers page (not auto-detected)
+#   provider: traffit
+#   api: https://exampleco.traffit.com/public/job_posts/published
+#   enabled: true                          # bare JSON array of the tenant's own postings, no auth/pagination
+#
+# - name: Example PeopleForce Co            # PeopleForce ATS vendor; single-company
+#   # A *.peopleforce.io careers_url auto-detects (e.g. https://exampleco.peopleforce.io/careers) and reads
+#   # /careers/v.json — a bare JSON array of the full inventory in one request, no pagination. Recognised filter
+#   # params on careers_url (department_id, division_id, location_id, employment_type_id, query) carry through,
+#   # so a scoped careers link stays scoped. A branded careers domain needs provider: peopleforce + api: the feed:
+#   careers_url: https://exampleco.peopleforce.io/careers?department_id=113633
+#   enabled: true                          # e.g. restrict to one department; drop the query param for the whole board
+#
+# - name: Example PeopleForce Co (branded) # PeopleForce fronted by a branded careers domain
+#   careers_url: https://careers.exampleco.example
+#   provider: peopleforce
+#   api: https://exampleco.peopleforce.io/careers/v.json
 #   enabled: true
 #
 # - name: Mercedes-Benz                   # BeeSite (milch & zucker) search backend
@@ -3134,6 +3231,20 @@ tracked_companies:
     careers_url: https://jobs.ashbyhq.com/hackerone
     notes: "Remote US. Bug bounty platform."
     enabled: false
+
+  # -- PeopleForce ATS tenants (single-company) --
+  #
+  # PeopleForce (an HR/ATS vendor) hosts each employer's public careers site at
+  # <tenant>.peopleforce.io, read via the no-auth /careers/v.json feed — a bare
+  # JSON array of the full inventory in one request. A careers_url on that host
+  # auto-detects; recognised filter params (department_id, division_id,
+  # location_id, employment_type_id, query) carry through, so a department-scoped
+  # link stays scoped. This entry is left `enabled: false` like every other
+  # example.
+
+  - name: EasySoftGroup
+    careers_url: https://easysoftgroup.peopleforce.io/careers?department_id=113633
+    notes: "European software development company. Verified 2026-10-01: 7 postings in the Research & Development department (drop the query param to scan the whole board)."
 
   # -- US K-12 school districts & community colleges (single-employer boards) --
   # Examples of the applitrack / neogov / redrover / schoolspring providers.

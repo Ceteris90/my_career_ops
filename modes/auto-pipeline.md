@@ -44,6 +44,23 @@ If `data/blacklist.md` exists, check both the posting's company and posting URL 
 
 On a hit, **stop before Step 1** and surface the candidate's own recorded decision: tell them which entry matched and quote their recorded reason ("{Company} is on your blacklist (since {Since}): *{Reason}*. Do you still want me to evaluate it?"). Wait for an explicit answer — never silently refuse, never silently proceed. The candidate's call always wins (same HITL spirit as the score < 4.0 rule): an explicit yes continues to Step 1 as normal; anything else stops the pipeline here, and if the entry came from `data/pipeline.md`, mark it `- [x] ~~Company | Role~~ — blacklisted`. A blacklist entry never changes any score.
 
+## Step 0.7 — Duplicate-vacancy gate (`check-duplicate.mjs`)
+
+The same opening reaches the pipeline repeatedly under different URLs, company spellings and boards, so neither the URL nor a company+role match catches it. Before evaluating, run:
+
+```bash
+node check-duplicate.mjs --company "<company>" --role "<role>" --url "<posting url>"
+```
+
+(Use `--jd <file>` when the JD text is already on disk, or `--json` for machine output.) The gate compares the posting against every tracked row on JD fingerprint, canonical URL, req id and fuzzy company+role:
+
+- **`DUPLICATE`** — the same vacancy is already tracked (the output names the row and the signal). **Do not create a second report.** Recommend SKIP, or update the existing row's notes with the new URL; never evaluate it as a new offer.
+- **`MATERIAL-CHANGE`** — same JD, but the salary differs. Do not skip: evaluate it as a genuinely changed offer and note the change.
+- **`POSSIBLE`** — same title and the employer is undisclosed (`?` or a job board standing in for a hidden client). Surface the listed rows and ask the candidate before evaluating.
+- **`NEW`** — continue to Step 1.
+
+Read-only; it never writes the tracker or changes a status. The candidate's call always wins on a `POSSIBLE`, but a `DUPLICATE` should not be silently overridden.
+
 ## Step 1 — A-G Evaluation
 
 Execute the same as the `oferta` mode (read `modes/oferta.md` for all A-F blocks + Block G Posting Legitimacy). Read `modes/_custom.md` → Evaluation Rules, if it exists, and apply its override here. Default (if absent or silent): standard A-G evaluation.

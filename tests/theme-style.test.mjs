@@ -188,6 +188,9 @@ try {
       'templates/cv-template.zh-minimal.html': false,
       'templates/resume-template.html': false,
       'templates/ats/cv-template.ats.html': true,
+      // Fork-local template pack (career-ops fork): declares both break-inside
+      // defaults on :root, same as the other shipped HTML CV templates.
+      'templates/rn-base/cv-template.rn-base.html': true,
     };
     // [effective default, declared on :root]
     const withDefaults = (defaults) => Object.fromEntries(

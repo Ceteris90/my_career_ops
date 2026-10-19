@@ -44,6 +44,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
 | `npm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
 | `npm run jd-archive` | `check-jd-archive.mjs` | Validate every `reports/*.md` has an archived JD (embedded section or `jds/` capture) — flags `missing-jd-archive` |
+| `npm run duplicate` | `check-duplicate.mjs` | Pre-apply gate — is this vacancy already tracked/applied? Compares JD fingerprint + URL + req id + company/role; recommends SKIP unless the salary differs |
 | `npm run openai:tailor` | `openai-tailor.mjs` | Tailor a CV via any OpenAI-compatible endpoint (headless companion to `openai-eval.mjs`) |
 | `npm run or` | `openrouter-runner.mjs` | Run scan/evaluate/pipeline/apply on OpenRouter free models — no Claude CLI required |
 | `npm run reconcile` | `reconcile-pipeline.mjs` | Remove batch-evaluated offers from pipeline.md "Pendientes" |
@@ -52,7 +53,9 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `node fix-slugs.mjs` | `fix-slugs.mjs` | Write `verify-portals.mjs`'s suggested ATS slug fixes back to portals.yml (dry run by default, `--fix` to write) |
 | `node audit-portals.mjs` | `audit-portals.mjs` | Audit what each portals.yml board actually serves — provider, posting count, sample titles — not just whether it answers (network; `--baseline` diffs against an earlier `--json` run) |
 | `npm run reposts` | `detect-reposts.mjs` | Flag re-listed (ghost) postings from scan history |
-| `node rank-pipeline.mjs` | `rank-pipeline.mjs` | Opt-in LLM relevance re-ranker — annotates pending pipeline rows with a score + reason (off by default) |
+| `node rank-pipeline.mjs` | `rank-pipeline.mjs` | Opt-in LLM relevance re-ranker — drops email-chrome, resolves tracking links in a browser (persistent profile), then annotates pending pipeline rows with a score + reason |
+| `node site-login.mjs` | `site-login.mjs` | One-time interactive login for login-walled job boards (LinkedIn/Indeed/Glassdoor); saves cookies to `data/.browser-profile` for the resolver to reuse (`--status` to inspect; `--cdp <url>` imports cookies from a Chrome on `--remote-debugging-port` when Google SSO is blocked) |
+| `node site-auth-doctor.mjs` | `site-auth-doctor.mjs` | Check whether the saved browser session is still valid (`--json`, `--quiet`; exit 0 = at least one session live) |
 | `npm run gemini:eval` | `gemini-eval.mjs` | Evaluate a JD with Google Gemini (free-tier alternative) |
 | `npm run ollama:eval` | `ollama-eval.mjs` | Evaluate a JD with a local Ollama model |
 | `npm run openai:eval` | `openai-eval.mjs` | Evaluate a JD via any OpenAI-compatible endpoint |
@@ -602,6 +605,30 @@ node check-jd-archive.mjs --self-test
 
 ---
 
+## check-duplicate
+
+Pre-application duplicate-vacancy gate. The same opening reaches the tracker several times under different URLs, company spellings and boards (justjoin / theprotocol / pracuj / LinkedIn), so URL and company+role dedup both miss it — you can apply to one Pretius requisition three times without ever seeing a warning. This gate answers one question before evaluation or submission: **have we already seen (or applied to) this vacancy?**
+
+It compares a candidate posting against every tracker row on independent signals:
+
+- **JD content fingerprint** — 64-bit SimHash over the archived JD body (`fingerprint-core.mjs`). Cross-board re-posts rarely rewrite the requirements. This gate uses `0.90` rather than the scanner's own `0.92`, because across boards the same body drifts (a reordered requirements list, extra benefits boilerplate); `0.90` sits in a measured gap between true re-posts and unrelated same-title postings.
+- **Canonical URL key** (`url-key.mjs`) — the exact posting re-listed.
+- **Req/job id** from Notes (`tracker-parse.mjs`) — same requisition, any board.
+- **Company (fuzzy) + role** — catches board re-posts whose bodies differ, e.g. a Polish and an English rendering of one listing (`Pretius` vs `PRETIUS SOFTWARE SP. Z O.O.`).
+
+Verdicts: `DUPLICATE` (recommend SKIP), `MATERIAL-CHANGE` (same JD, different salary — re-evaluate, do not skip), `POSSIBLE` (same title and the candidate's employer is undisclosed — an explicit `?` or a job-board/portal standing in for a hidden client — review before applying), `NEW`. Salary is a best-effort heuristic over the JD text and is **only** the MATERIAL-CHANGE override, never a reason to declare a match; location and salary are deliberately not match signals, since they produced false positives across unrelated companies. Read-only: it never writes the tracker and never changes a status.
+
+```bash
+npm run duplicate
+node check-duplicate.mjs --jd path/to/jd.txt --company X --role Y --url Z   # check a candidate posting
+node check-duplicate.mjs --report 124          # re-check a tracked report's JD
+node check-duplicate.mjs --json                # machine-readable output
+```
+
+**Exit codes:** `0` for any verdict (including `DUPLICATE` — the caller decides what to do), `1` on a bad flag or a missing input. Wired into the `apply` and `auto-pipeline` preflight gates.
+
+---
+
 ## rejection-latency
 
 Post-interview response-latency signal. Cross-references `data/active-interviews.md` (latest interview date per application — company + role, fuzzy role match via `role-matcher.mjs`) with `data/applications.md` (rows still in `Interview` state — i.e. no `Responded`/`Offer`/`Rejected` transition recorded since) and flags applications whose silence exceeds a soft **courtesy** threshold (30-day default, no legal claim attached) from `rejection_latency.courtesy_days` or `--courtesy-days`. (An earlier revision also shipped a jurisdiction-backed statutory tier; it was removed — the underlying legal threshold could change and the script has no way to re-verify it.) Each flag carries a ready-to-copy `data/blacklist.md` row (same suggestion-only bridge as `modes/interview-redflag.md`, #1854/#1856) — the script never writes to `data/blacklist.md`, `data/applications.md`, or `data/active-interviews.md` (#1742 opt-in guarantee). Surfaced by the `followup` mode.
@@ -1118,11 +1145,23 @@ first ~2000 chars) and the selected postings through that CLI's own auth and
 provider handling — review your chosen CLI's data-retention/provider settings
 before running this on sensitive CV content.
 
+Before ranking, each run performs **Inbox hygiene**: it drops email-alert CHROME
+(nav/account/promo/search links that are never vacancies — marked `[x]` with a
+justification) and resolves real tracking links / bare real-URL rows to a real
+company + role in a browser. If a board requires a login (LinkedIn
+`/comm/jobs/view`, Indeed `viewjob`/`cts`, Glassdoor `jobListing`), the resolver
+uses the persistent profile from `site-login.mjs`; when it hits a login wall it
+prints a nudge to run `node site-login.mjs` rather than dropping the lead.
+
 ```bash
 node rank-pipeline.mjs                  # rank up to 20 pending entries
-node rank-pipeline.mjs --limit 10
+node rank-pipeline.mjs --limit 200      # drain the whole backlog (ceiling)
 node rank-pipeline.mjs --cli codex      # override auto-detection
+node rank-pipeline.mjs --no-resolve     # skip the browser resolution pass
 node rank-pipeline.mjs --dry-run        # print annotations, write nothing
+
+node site-login.mjs                     # log in once (persistent profile)
+node site-auth-doctor.mjs --json        # is the session still valid?
 ```
 
 Writes go through `pipeline-lock.mjs`, the same lock `scan.mjs` and

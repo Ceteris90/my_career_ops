@@ -455,6 +455,7 @@ ${bullets}
       ROLE: escapeHtml(e.role || ''),
       LOCATION: escapeHtml(e.location || ''),
       CONTEXT: escapeHtml(e.context || ''),
+      JOB_CLASS: e.keep_together ? ' job--keep' : '',
       BULLETS: bullets,
     }, blockValues);
   }).join('\n  ');
@@ -641,7 +642,7 @@ function buildInterests(items) {
   return items
     .filter(Boolean)
     .map(String)
-    .map((item, idx) => (idx === 0 ? item : item.charAt(0).toLowerCase() + item.slice(1)))
+    .map(item => item.charAt(0).toUpperCase() + item.slice(1))
     .map(item => escapeHtml(item))
     .join(', ');
 }
@@ -785,6 +786,16 @@ function renderHtml(template, payload, templatePath) {
   // output is unchanged from the token-only replace this replaces.
   const titleBlock = buildTitle(candidate);
   html = html.replace(/\n([ \t]*)\{\{TITLE_BLOCK\}\}/g, (_, indent) => (titleBlock ? `\n${indent}${titleBlock}` : ''));
+
+  // {{TITLE_BLOCK}} is the optional headline under the name (candidate.title).
+  // Present → its own .header-title div; absent → drop the whole token line so
+  // no blank line is left between the name and the next element.
+  const titleText = candidate.title ? String(candidate.title).trim() : '';
+  if (titleText) {
+    html = html.replace(/[ \t]*\{\{TITLE_BLOCK\}\}/g, () => `<div class="header-title">${escapeHtml(titleText)}</div>`);
+  } else {
+    html = html.replace(/\n[ \t]*\{\{TITLE_BLOCK\}\}[ \t]*/g, '');
+  }
 
   // Drop the optional sections (projects, education) that have no entries, so
   // an absent one leaves no bare header behind. See cv-sections-core.mjs.
@@ -1170,7 +1181,7 @@ async function runSelfTest() {
 
   // Guard buildInterests(): comma-joined, sentence-cased (only the first item
   // keeps its capital), and escaped like every other free-text field.
-  if (!html.includes('Reading sci-fi &amp; fantasy, hiking, chess')) {
+  if (!html.includes('Reading sci-fi &amp; fantasy, Hiking, Chess')) {
     console.error('Self-test failed: Interests did not render as an escaped, comma-joined, sentence-cased line');
     process.exit(1);
   }
