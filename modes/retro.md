@@ -8,7 +8,7 @@ Turn the user's corrections from this session into at most five proposed rules. 
 needs_confirmation: retro session review - run /career-ops retro in an interactive session
 ```
 
-**What this mode writes.** It writes the candidates file in step 4. Only `learn.mjs` writes anything else. Never edit `cv.md`, `article-digest.md`, `config/profile.yml`, `modes/_custom.md`, or `modes/_profile.md` yourself.
+**What this mode writes.** It writes the candidates file in step 4 and the reply file in step 6. Only `learn.mjs` writes anything else. Never edit `cv.md`, `article-digest.md`, `config/profile.yml`, `modes/_custom.md`, or `modes/_profile.md` yourself.
 
 ## Steps
 
@@ -45,10 +45,10 @@ node learn.mjs check {DATA_ROOT}/data/learning/retro-candidates.json --summary
 
    A blocked candidate stays blocked. Do not reword it to get it past the check. After the check output, list the facts from step 2, each with the mode that records it.
 
-6. **Apply only the ids the user named.** Pass the pending path that the check printed and the user's reply, verbatim:
+6. **Apply only the ids the user named.** Write the user's reply, verbatim, to `{DATA_ROOT}/data/learning/retro-reply.txt` with your file-writing tool, not with `echo`, so no shell touches the quotes. Then pass the pending path that the check printed:
 
 ```bash
-node learn.mjs apply {pending} --accept {accepted ids} --reject {rejected ids} --reply "{the user's reply, verbatim}"
+node learn.mjs apply {pending} --accept {accepted ids} --reject {rejected ids} --reply-file {DATA_ROOT}/data/learning/retro-reply.txt
 ```
 
    Leave out `--accept` or `--reject` when the user named no ids for it. An id the user did not name stays undecided. There is no "accept all": if the user says "all" or "yes", list the ids and ask which ones. If the user edits a candidate, write the edited version as a new candidates file and go back to step 5. If the user says "later", run nothing. The pending file stays for the next retro.
