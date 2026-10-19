@@ -1,4 +1,6 @@
+import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page, type Frame, type Response } from "playwright-core";
+import { resolveCodeRoot, resolveRootScript } from "@/lib/core/code-root.mjs";
 import { extractForm, type ApplyField, type ExtractedForm } from "./extract";
 import { parseGreenhouse, fetchGreenhouseSchema } from "./greenhouse";
 import { statusBlock, dismissConsent, tryApplyTrigger, dropNewTabs, classifyEmpty, captchaWarning, multiStepInfo, verifyFill, type ApplyIssue } from "./diagnose";
@@ -9,7 +11,13 @@ import { resolveCli } from "../clis";
 import { fencingReport } from "../cli-fencing.mjs";
 import { CAPS } from "../worker-capabilities.mjs";
 import { assertSafeApplyUrl, installApplyEgressGuard, isUnsafeApplyUrlError, isBlockedNavigation, UnsafeApplyUrlError } from "./url-guard.mjs";
-import { BUNDLED_HEADED_LAUNCH, HEADED_APPLY_LAUNCH } from "../../../../apply-scope.mjs";
+
+type ApplyLaunch = { headless?: boolean; channel?: string; args?: string[] };
+
+async function applyLaunch(): Promise<{ HEADED_APPLY_LAUNCH: ApplyLaunch; BUNDLED_HEADED_LAUNCH: ApplyLaunch }> {
+  const file = resolveRootScript(resolveCodeRoot(process.cwd(), process.env), "apply-scope");
+  return import(/* webpackIgnore: true */ pathToFileURL(file).href) as Promise<{ HEADED_APPLY_LAUNCH: ApplyLaunch; BUNDLED_HEADED_LAUNCH: ApplyLaunch }>;
+}
 
 /** The frame with the most interactive controls — where the agentic interpreter
  *  should look when deterministic extraction found nothing usable. */
@@ -133,6 +141,7 @@ const SESSIONS: Map<string, Session> = (globalThis.__coApplySessions ??= new Map
 async function headedBrowser(): Promise<Browser> {
   const b = globalThis.__coHeadedBrowser;
   if (b && b.isConnected()) return b;
+  const { HEADED_APPLY_LAUNCH, BUNDLED_HEADED_LAUNCH } = await applyLaunch();
   let nb: Browser;
   try {
     nb = await chromium.launch(HEADED_APPLY_LAUNCH);

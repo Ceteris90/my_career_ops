@@ -58,6 +58,10 @@ test('resolveInsideProject accepts a file inside the root and rejects escapes', 
     assert.throws(() => resolveInsideProject(root, 'linked.md'), ApplyScopeError);
     assert.throws(() => resolveInsideProject(root, join(root, '..', 'outside.md')), ApplyScopeError);
     assert.throws(() => resolveInsideProject(root, ''), ApplyScopeError);
+
+    const link = join(root, 'link');
+    symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => resolveInsideProject(root, join(link, 'new.md')), ApplyScopeError);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
@@ -186,6 +190,8 @@ test('apply instructions name the scope guard and stop telling agents to attach 
 
   const session = readFileSync(join(ROOT, 'web/src/lib/apply/session.ts'), 'utf8');
   assert.match(session, /HEADED_APPLY_LAUNCH/);
+  assert.match(session, /resolveRootScript/);
+  assert.equal(/from\s+['"][^'"]*apply-scope\.mjs['"]/.test(session), false);
   assert.equal(session.includes('remote-debugging'), false);
   assert.equal(session.includes('connectOverCDP'), false);
   assert.equal(session.includes('DevToolsActivePort'), false);
@@ -217,7 +223,17 @@ test('check-path and launch-options stay inside the project browser', () => {
   assert.equal(Object.hasOwn(options, 'channel'), false);
   assert.equal(JSON.stringify(options).includes('remote-debugging'), false);
 
+  const help = spawnSync(NODE, [join(ROOT, 'apply-scope.mjs'), '--help'], {
+    cwd: ROOT,
+    env: { ...process.env, CAREER_OPS_ROOT: '', CAREER_OPS_DATA_DIR: '' },
+    encoding: 'utf8',
+  });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /^Usage:/);
+  assert.equal(help.stdout.includes(ROOT), false);
+
   const outside = scratch();
+  const data = scratch();
   try {
     const checked = spawnSync(NODE, [join(ROOT, 'apply-scope.mjs'), 'check-path', outside], {
       cwd: ROOT,
@@ -226,7 +242,18 @@ test('check-path and launch-options stay inside the project browser', () => {
     });
     assert.equal(checked.status, 1);
     assert.match(checked.stderr, /outside the project/);
+
+    const link = join(data, 'link');
+    symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const escaped = spawnSync(NODE, [join(ROOT, 'apply-scope.mjs'), 'check-path', join(link, 'new.md')], {
+      cwd: ROOT,
+      env: { ...process.env, CAREER_OPS_ROOT: '', CAREER_OPS_DATA_DIR: data },
+      encoding: 'utf8',
+    });
+    assert.equal(escaped.status, 1);
+    assert.match(escaped.stderr, /outside the project/);
   } finally {
     rmSync(outside, { recursive: true, force: true });
+    rmSync(data, { recursive: true, force: true });
   }
 });

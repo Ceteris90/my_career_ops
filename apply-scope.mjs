@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { isAbsolute, dirname, join, relative, resolve } from 'node:path';
+import { isAbsolute, basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -34,20 +34,40 @@ export function allowedRoots() {
   return [code, data];
 }
 
+function outside(base, target) {
+  const rel = relative(base, target);
+  return rel !== '' && (rel.startsWith('..') || isAbsolute(rel));
+}
+
+function nearestExisting(abs) {
+  const missing = [];
+  let current = abs;
+  while (true) {
+    try {
+      return { existing: realpathSync(current), missing };
+    } catch (e) {
+      if (!e || e.code !== 'ENOENT') throw e;
+      const parent = dirname(current);
+      if (parent === current) {
+        throw new ApplyScopeError('Apply refused a path outside the project.');
+      }
+      missing.push(basename(current));
+      current = parent;
+    }
+  }
+}
+
 export function resolveInsideProject(root, candidate) {
   if (typeof candidate !== 'string' || candidate.trim() === '' || candidate.includes('\0')) {
     throw new ApplyScopeError('Apply refused a path outside the project.');
   }
   const base = realOrLexical(root);
   const abs = isAbsolute(candidate) ? resolve(candidate) : resolve(root, candidate);
-  let target = abs;
-  try {
-    target = realpathSync(abs);
-  } catch {
-    target = abs;
+  const { existing, missing } = nearestExisting(abs);
+  if (outside(base, existing)) {
+    throw new ApplyScopeError('Apply refused a path outside the project.');
   }
-  const rel = relative(base, target);
-  if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) {
+  if (missing.length && outside(base, missing.reduceRight((dir, part) => join(dir, part), existing))) {
     throw new ApplyScopeError('Apply refused a path outside the project.');
   }
   return abs;
@@ -119,8 +139,17 @@ export function locateApplyReport(dataRoot, ref, io) {
   return { ok: true, path: resolveInsideProject(dataRoot, join('reports', match)) };
 }
 
+function printUsage() {
+  console.log('Usage: node apply-scope.mjs <root|check-path|launch-options>');
+}
+
 if (isMainModule(import.meta.url)) {
-  const [cmd, arg] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    printUsage();
+    process.exit(0);
+  }
+  const [cmd, arg] = args;
   try {
     if (cmd === 'root') {
       for (const root of allowedRoots()) console.log(root);
