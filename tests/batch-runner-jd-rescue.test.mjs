@@ -44,11 +44,10 @@ if (!bash || !rescue) {
       "import { writeFileSync, appendFileSync } from 'node:fs';",
       "appendFileSync(process.env.STUB_TRACE, JSON.stringify(process.argv.slice(2)) + '\\n');",
       "const mode = process.env.STUB_MODE;",
-      "if (mode === 'miss') { process.stdout.write('0\\tnone\\n'); process.exit(1); }",
-      "if (mode === 'crash') process.exit(2);",
-      `if (mode === 'thin') { process.stdout.write('12\\tld+json:thin\\n'); process.exit(1); }`,
-      `writeFileSync(process.argv[4], ${JSON.stringify(long)});`,
-      "process.stdout.write('120\\tld+json\\n');",
+      "if (mode === 'crash') process.exitCode = 2;",
+      "else if (mode === 'miss') { process.stdout.write('0\\tnone\\n'); process.exitCode = 1; }",
+      "else if (mode === 'thin') { process.stdout.write('12\\tld+json:thin\\n'); process.exitCode = 1; }",
+      "else { writeFileSync(process.argv[4], process.env.STUB_JD); process.stdout.write('120\\tld+json\\n'); }",
       '',
     ].join('\n'));
 
@@ -71,7 +70,7 @@ if (!bash || !rescue) {
         rescue,
         'echo "words=$jd_prefetch_words"',
       ].join('\n'));
-      const out = execFileSync(bash, [script], { encoding: 'utf-8', timeout: 30000, cwd: work, env: { ...process.env, STUB_MODE: mode, STUB_TRACE: trace } });
+      const out = execFileSync(bash, [script], { encoding: 'utf-8', timeout: 30000, cwd: work, env: { ...process.env, STUB_MODE: mode, STUB_TRACE: trace, STUB_JD: long } });
       return { out, jd: readFileSync(jd, 'utf-8'), trace: readFileSync(trace, 'utf-8'), rawLeft: existsSync(`${jd}.raw`) };
     };
 
