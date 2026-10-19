@@ -4,6 +4,8 @@
 
 Interactive mode for filling out an application form. Open the form in a Playwright browser this project launches, load the previous context of the job, and generate a response for each question.
 
+**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask, never wait and never submit. A blacklist hit stops before drafting and ends with `needs_confirmation: blacklist "{company}" - rerun with "apply anyway" to draft`. A company or role mismatch, or an agency that needs acknowledgement, stops before drafting and ends with `needs_confirmation: apply_preflight {company} - confirm the company and role, then rerun`. A posting that appears closed ends with `needs_confirmation: posting_closed {company} - rerun with the reason to apply anyway`. When liveness cannot be verified, the run ends with `needs_confirmation: liveness_unverified {company} - confirm the company, role and active posting, then rerun`. Otherwise draft only answers backed by the tailored CV, `cv.md`, `config/profile.yml`, the report, or answers the prompt gives for this application, leave every other field blank, and end with `needs_confirmation: apply_input {n} questions - answer them, then rerun`.
+
 ## Scope
 
 Work only inside this checkout. Run `node apply-scope.mjs root` and read or search only the directories it prints. That list is this checkout, plus the data root when `CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR` is set.
@@ -15,8 +17,6 @@ Open the form in a Playwright browser this project launches. Run `node apply-sco
 If Playwright is not available, ask the candidate to paste the questions or share a screenshot.
 
 Do not submit the form. Stop before Submit, Send, or Apply. Continue only after the candidate confirms they submitted it.
-
-**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask, never wait and never submit. A blacklist hit stops before drafting and ends with `needs_confirmation: blacklist "{company}" - rerun with "apply anyway" to draft`. A company or role mismatch, or an agency that needs acknowledgement, stops before drafting and ends with `needs_confirmation: apply_preflight {company} - confirm the company and role, then rerun`. A posting that appears closed ends with `needs_confirmation: posting_closed {company} - rerun with the reason to apply anyway`. When liveness cannot be verified, the run ends with `needs_confirmation: liveness_unverified {company} - confirm the company, role and active posting, then rerun`. Otherwise draft only answers backed by the tailored CV, `cv.md`, `config/profile.yml`, the report, or answers the prompt gives for this application, leave every other field blank, and end with `needs_confirmation: apply_input {n} questions - answer them, then rerun`.
 
 ## Requirements
 
