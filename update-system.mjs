@@ -2393,9 +2393,50 @@ async function apply() {
         if (overlaysToMerge.length > 0) {
           console.log(`\nReapplying local changes for ${overlaysToMerge.length} overlay file(s)...`);
           for (const file of overlaysToMerge) {
-            if (!existsSync(join(ROOT, `${file}.base`))) {
+            // Cross-run path: .overlay-base exists from a prior clean merge but
+            // .bak and .base are absent because they were cleaned up after that
+            // merge. The three-way merge below needs:
+            //
+            //   current (.file)  ← already written to FETCH_HEAD content by the
+            //                      checkout loop above
+            //   base    (.base)  ← .overlay-base content — the post-first-merge
+            //                      state, i.e. the common ancestor between the new
+            //                      upstream and the local edits. Using FETCH_HEAD
+            //                      here (= current) would make current==base, so
+            //                      git merge-file would see no diff and silently
+            //                      drop all new upstream changes.
+            //   other   (.bak)   ← pre-checkout local content (the file the user's
+            //                      overlay edits live in)
+            //
+            // The in-flight first-update path (.bak already written by
+            // backupSystemFiles above, .base absent) only needs .base written;
+            // the existsSync guards below keep the two paths independent.
+            if (!existsSync(join(ROOT, `${file}.bak`))) {
+              // The checkout loop has already overwritten the working-tree file
+              // with FETCH_HEAD content, so we cannot read it from disk. The
+              // committed HEAD blob is byte-identical to the pre-checkout
+              // working-tree file on a clean install (the auto-update commit
+              // committed the post-merge result), so use that instead.
               try {
-                const baseContent = git('show', `${baseline}:${file}`);
+                const localContent = git('show', `HEAD:${file}`);
+                writeFileSync(join(ROOT, `${file}.bak`), localContent);
+                generatedBackupPaths.add(`${file}.bak`);
+              } catch {
+                writeFileSync(join(ROOT, `${file}.bak`), '');
+                generatedBackupPaths.add(`${file}.bak`);
+              }
+            }
+            if (!existsSync(join(ROOT, `${file}.base`))) {
+              // Use .overlay-base as the merge ancestor — it is the anchor left by
+              // the previous clean merge and is the common ancestor between the
+              // new upstream blob and the local edits. Absent .overlay-base means
+              // no prior clean merge on record; fall back to an empty base so
+              // merge-file still runs (result will equal the local content).
+              const overlayBasePath = join(ROOT, `${file}.overlay-base`);
+              try {
+                const baseContent = existsSync(overlayBasePath)
+                  ? readFileSync(overlayBasePath, 'utf-8')
+                  : '';
                 writeFileSync(join(ROOT, `${file}.base`), baseContent);
                 generatedBackupPaths.add(`${file}.base`);
               } catch {

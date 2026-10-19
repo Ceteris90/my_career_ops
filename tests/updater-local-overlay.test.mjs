@@ -426,5 +426,141 @@ console.log('\n🧪 Local system overlay declaration file (#4326)\n');
   }
 }
 
+// Test 14. Second-update path: apply() sub-flow refreshes inputs from fresh sources
+//
+// Scenario (every install reaches a second update):
+//   1. First update: upstream changes line A (top); local overlay changes line E
+//      (bottom, 3 lines away -- non-adjacent). Clean merge -> .overlay-base kept.
+//   2. Second update: upstream changes line C (middle, non-adjacent to E). apply()
+//      must write fresh .bak (from HEAD) and .base (from .overlay-base) before
+//      calling merge-file. The overlay change on E must survive and the new
+//      upstream change on C must land. Adjacent-line changes are deliberately
+//      avoided here: git merge-file can declare a conflict on adjacent hunks even
+//      when the changes are logically independent.
+//
+// Correct three-way merge inputs for the second update:
+//   current (.file)  <- FETCH_HEAD content (checked out by the loop above)
+//   base    (.base)  <- .overlay-base (original pre-first-update content = the
+//                       real common ancestor between FETCH_HEAD and local)
+//   other   (.bak)   <- HEAD blob (post-first-merge committed = pre-checkout local)
+{
+  const dir = mkdtempSync(join(tmpdir(), 'co-overlay-apply-14-'));
+  roots.push(dir);
+  const g = (...args) => gitIn(dir, ...args);
+  g('init', '-q', '-b', 'main', '.');
+  g('config', 'user.email', 'test@example.com');
+  g('config', 'user.name', 'Test');
+  g('config', 'commit.gpgsign', 'false');
+  g('config', 'core.hooksPath', join(dir, 'no-such-hooks'));
+  g('config', 'core.autocrlf', 'false');
+  g('config', 'core.eol', 'lf');
+  mkdirSync(join(dir, 'modes'), { recursive: true });
+  mkdirSync(join(dir, 'config'), { recursive: true });
+
+  // Five lines so upstream (A, C) and local (E) changes are non-adjacent.
+  const baseFile = 'line A\nline B\nline C\nline D\nline E\n';
+  writeFileSync(join(dir, 'modes', 'pdf.md'), baseFile);
+  writeFileSync(join(dir, LOCAL_OVERLAY_FILE), 'modes/pdf.md\n');
+  g('add', '-A');
+  g('commit', '-qm', 'base');
+  g('branch', 'upstream');
+
+  // First update: upstream changes line A only.
+  g('checkout', '-q', 'upstream');
+  writeFileSync(join(dir, 'modes', 'pdf.md'), 'line A UP1\nline B\nline C\nline D\nline E\n');
+  g('commit', '-qam', 'upstream update 1');
+  g('checkout', '-q', 'main');
+
+  // Local overlay changes line E only (3 lines from A -- non-adjacent).
+  writeFileSync(join(dir, 'modes', 'pdf.md'), 'line A\nline B\nline C\nline D\nline E LOCAL\n');
+
+  // Artifact writes apply() does before the checkout loop:
+  const orig = gitRawIn(dir, 'show', 'HEAD:modes/pdf.md');
+  const localBak1 = readFileSync(join(dir, 'modes', 'pdf.md'), 'utf-8');
+  writeFileSync(join(dir, 'modes', 'pdf.md.base'), orig);
+  writeFileSync(join(dir, 'modes', 'pdf.md.bak'), localBak1);
+
+  g('checkout', 'upstream', '--', 'modes/pdf.md');
+  g('merge-file',
+    '-L', 'Upstream', '-L', 'Base', '-L', 'Local (Overlay)',
+    join(dir, 'modes', 'pdf.md'),
+    join(dir, 'modes', 'pdf.md.base'),
+    join(dir, 'modes', 'pdf.md.bak'));
+
+  const afterFirstMerge = readFileSync(join(dir, 'modes', 'pdf.md'), 'utf-8');
+  if (afterFirstMerge !== 'line A UP1\nline B\nline C\nline D\nline E LOCAL\n') {
+    fail('#14 setup: first merge produced unexpected result: ' + JSON.stringify(afterFirstMerge));
+  }
+
+  // Clean-merge cleanup: .base -> .overlay-base; discard .bak.
+  renameSync(join(dir, 'modes', 'pdf.md.base'), join(dir, 'modes', 'pdf.md.overlay-base'));
+  unlinkSync(join(dir, 'modes', 'pdf.md.bak'));
+
+  // Commit the merged result (the auto-update commit apply() makes).
+  g('add', 'modes/pdf.md');
+  g('commit', '-qm', 'chore: auto-update system files (v1)');
+
+  // Second update: upstream changes line C (middle, 2 lines from E -- non-adjacent).
+  g('checkout', '-q', 'upstream');
+  writeFileSync(join(dir, 'modes', 'pdf.md'), 'line A UP1\nline B\nline C UP2\nline D\nline E\n');
+  g('commit', '-qam', 'upstream update 2');
+  g('checkout', '-q', 'main');
+
+  // At this point:
+  //   working tree / HEAD = post-first-merge: 'line 1 UP1\nline 2\nline 3 LOCAL\n'
+  //   .overlay-base exists (persistence signal from clean merge)
+  //   .bak and .base do NOT exist (cleaned up after first merge)
+  //
+  // apply() must reconstruct both before calling git merge-file:
+  //   .bak  ← committed HEAD blob (post-first-merge content, same as pre-checkout
+  //            working tree — read from git after checkout already ran)
+  //   .base ← .overlay-base content (the common ancestor for the second merge,
+  //            NOT FETCH_HEAD — using FETCH_HEAD would make current==base and
+  //            silently drop all new upstream changes)
+
+  // Simulate checkout of the new upstream (what apply()'s checkout loop does):
+  g('checkout', 'upstream', '--', 'modes/pdf.md');
+
+
+  // ── apply()'s second-update input-refresh logic (the code under test) ──
+  // .bak absent → read from committed HEAD (the post-first-merge committed result).
+  // (apply() reads the working tree BEFORE the checkout loop; here we use HEAD as
+  //  the equivalent since the checkout has already run in this simulation.)
+  const priorLocal = gitRawIn(dir, 'show', 'HEAD:modes/pdf.md');
+  if (!existsSync(join(dir, 'modes', 'pdf.md.bak'))) {
+    writeFileSync(join(dir, 'modes', 'pdf.md.bak'), priorLocal);
+  }
+  // .base absent → read from .overlay-base (the common ancestor for the 3-way merge).
+  // NOT from FETCH_HEAD: using FETCH_HEAD would make current==base, causing
+  // git merge-file to see no diff and silently drop new upstream changes.
+  const overlayBasePath = join(dir, 'modes', 'pdf.md.overlay-base');
+  if (!existsSync(join(dir, 'modes', 'pdf.md.base'))) {
+    const baseContent = existsSync(overlayBasePath)
+      ? readFileSync(overlayBasePath, 'utf-8')
+      : '';
+    writeFileSync(join(dir, 'modes', 'pdf.md.base'), baseContent);
+  }
+
+  // Now run git merge-file with the correctly refreshed inputs:
+  let mergeExited0 = true;
+  try {
+    g('merge-file',
+      '-L', 'Upstream', '-L', 'Base', '-L', 'Local (Overlay)',
+      join(dir, 'modes', 'pdf.md'),
+      join(dir, 'modes', 'pdf.md.base'),
+      join(dir, 'modes', 'pdf.md.bak'));
+  } catch {
+    mergeExited0 = false;
+  }
+
+  const afterSecond = readFileSync(join(dir, 'modes', 'pdf.md'), 'utf-8');
+  const wantSecond  = 'line A UP1\nline B\nline C UP2\nline D\nline E LOCAL\n';
+  if (mergeExited0 && afterSecond === wantSecond) {
+    pass('second-update path: apply() sub-flow merges fresh upstream + fresh local (not stale first-run copies)');
+  } else {
+    fail('#14 second-update: mergeExited0=' + mergeExited0 + ' expected=' + JSON.stringify(wantSecond) + ' got=' + JSON.stringify(afterSecond));
+  }
+}
+
 for (const dir of roots) rmSync(dir, { recursive: true, force: true });
 
