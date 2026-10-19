@@ -1,15 +1,27 @@
 // The apply-or-not call sits in the report header, so a reader sees it at the
 // top instead of after the archived JD and the Machine Summary YAML. The
 // `## Verdict (lead)` block stays where it is; the header only repeats it.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
+import { pass, fail, ROOT } from './helpers.mjs';
+import { isDeepStrictEqual } from 'node:util';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+console.log('\nreports: decision in the header');
+
 const load = (rel) => import(pathToFileURL(join(ROOT, rel)).href);
 const read = (rel) => readFileSync(join(ROOT, rel), 'utf8');
+
+// One check; a problem string or a throw is a failure, never a crashed suite.
+function check(name, fn) {
+  try {
+    const problem = fn();
+    if (problem) fail(`${name}: ${problem}`);
+    else pass(name);
+  } catch (err) {
+    fail(`${name}: ${err.message}`);
+  }
+}
 
 const { hasEmbeddedJdArchive, extractStrippedJdSection } = await load('check-jd-archive.mjs');
 const { extractKeywords } = await load('keyword-match.mjs');
@@ -19,7 +31,7 @@ const { parseReportEnvelope } = await load('web/src/lib/report-envelope.mjs');
 
 function templateHeader(text, opener) {
   const start = text.indexOf(opener);
-  assert.ok(start >= 0, `template opener ${JSON.stringify(opener)} not found`);
+  if (start < 0) return `(template opener ${JSON.stringify(opener)} not found)`;
   const body = text.slice(start + opener.length);
   return body.slice(0, body.indexOf('\n---\n'));
 }
@@ -30,21 +42,20 @@ const HEADERS = {
 };
 
 for (const [file, header] of Object.entries(HEADERS)) {
-  test(`${file} puts the decision and its reason in the report header`, () => {
+  check(`${file} puts the decision and its reason in the report header`, () => {
     const lines = header.split('\n');
     const score = lines.findIndex((l) => l.startsWith('**Score:**'));
     const decision = lines.findIndex((l) => l === '**Decision:** {Apply | Consider | Research first | Skip}');
-    assert.ok(score >= 0 && decision > score, `**Decision:** line after **Score:** in:\n${header}`);
-    assert.ok(lines.some((l) => /^\{.*Verdict \(lead\).*\}$/.test(l)), `a lede line that repeats the Verdict (lead) sentence in:\n${header}`);
+    if (!(score >= 0 && decision > score)) return `no **Decision:** line after **Score:** in:\n${header}`;
+    if (!lines.some((l) => /^\{.*Verdict \(lead\).*\}$/.test(l))) return `no lede line repeating the Verdict (lead) sentence in:\n${header}`;
+    return null;
   });
 
   // The web job stream latches the first `VERDICT:` it sees, case-insensitively,
   // as the run's score line, and the evaluate worker streams the whole report
   // before its real VERDICT line. A header label ending in "Verdict:" would be
   // read as the score line and the run would show no score.
-  test(`${file} header carries no "Verdict:" label`, () => {
-    assert.doesNotMatch(header, /verdict\s*:/i);
-  });
+  check(`${file} header carries no "Verdict:" label`, () => (/verdict\s*:/i.test(header) ? `found in:\n${header}` : null));
 }
 
 const OLD_LAYOUT = `# Evaluation: Fabrikam — Platform Engineer
@@ -111,17 +122,18 @@ const NEW_LAYOUT = OLD_LAYOUT
   .replace('**Score:** 4.2/5\n', '**Score:** 4.2/5\n**Decision:** Apply\n')
   .replace('**PDF:** not generated\n', '**PDF:** not generated\n\n**Apply.** Strong match on Kubernetes operations with no hard stops.\n');
 
-test('the fixture really moves the call to the top', () => {
-  assert.notEqual(NEW_LAYOUT, OLD_LAYOUT);
-  assert.ok(NEW_LAYOUT.split('\n').findIndex((l) => l.startsWith('**Decision:**')) < 10);
+check('the fixture really moves the call to the top', () => {
+  const at = NEW_LAYOUT.split('\n').findIndex((l) => l.startsWith('**Decision:**'));
+  return NEW_LAYOUT !== OLD_LAYOUT && at >= 0 && at < 10 ? null : `**Decision:** at line ${at}`;
 });
 
 // Equal outputs only prove something if the parsers find real data in it.
-test('the parsers find real data in the fixture', () => {
-  assert.equal(hasEmbeddedJdArchive(OLD_LAYOUT), true);
-  assert.ok(extractKeywords(OLD_LAYOUT).length > 0);
-  assert.equal(readMachineSummary(OLD_LAYOUT).decision, 'Apply');
-  assert.ok(splitSections(OLD_LAYOUT).sections.some((s) => isVerdictHeading(s.heading)));
+check('the parsers find real data in the fixture', () => {
+  if (hasEmbeddedJdArchive(OLD_LAYOUT) !== true) return 'no JD archive found';
+  if (!(extractKeywords(OLD_LAYOUT).length > 0)) return 'no keywords found';
+  if (readMachineSummary(OLD_LAYOUT)?.decision !== 'Apply') return 'no final_decision read';
+  if (!splitSections(OLD_LAYOUT).sections.some((s) => isVerdictHeading(s.heading))) return 'no lead block found';
+  return null;
 });
 
 const PARSERS = {
@@ -139,7 +151,9 @@ const PARSERS = {
 };
 
 for (const [name, parse] of Object.entries(PARSERS)) {
-  test(`${name} reads the header-decision layout the same as before`, () => {
-    assert.deepEqual(parse(NEW_LAYOUT), parse(OLD_LAYOUT));
+  check(`${name} reads the header-decision layout the same as before`, () => {
+    const before = parse(OLD_LAYOUT);
+    const after = parse(NEW_LAYOUT);
+    return isDeepStrictEqual(after, before) ? null : `before ${JSON.stringify(before)}\nafter  ${JSON.stringify(after)}`;
   });
 }
