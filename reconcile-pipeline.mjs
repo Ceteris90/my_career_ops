@@ -170,7 +170,9 @@ function resolveScore(stateScore, reportFile) {
 // is the same in every language.
 function resolvePdf(reportFile) {
   const rep = readReportField(reportFile, 'PDF');
-  return rep && (/\.pdf\b/i.test(rep) || rep.includes('✅')) ? '✅' : '❌';
+  // A filename ending in .pdf (path or basename), not a bare ".pdf" mention in
+  // a localized "not generated" note.
+  return rep && (/[^\s]+\.pdf\b/i.test(rep) || rep.includes('✅')) ? '✅' : '❌';
 }
 
 // ---- parse pipeline.md ----

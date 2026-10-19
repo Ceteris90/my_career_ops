@@ -117,6 +117,7 @@ for (const [pdf, expected] of [
   ['Not generated', 'PDF ❌'],
   ['output/042-cv.pdf', 'PDF ✅'],
   ['no generado — ejecuta /career-ops pdf example para crearlo bajo demanda', 'PDF ❌'],
+  ['no se generó ningún archivo .pdf', 'PDF ❌'],
   ['nicht erstellt — mit /career-ops pdf example bei Bedarf erzeugen', 'PDF ❌'],
   ['não gerado — execute /career-ops pdf example para criar quando quiser', 'PDF ❌'],
   ['未生成 — 运行 /career-ops pdf example 按需生成', 'PDF ❌'],
