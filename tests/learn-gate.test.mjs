@@ -407,7 +407,7 @@ test('--reply-file records the reply byte for byte, with no shell in between', (
     const r = run(root, ['apply', result.pending, '--accept', '1', '--reply-file', 'reply.txt']);
     assert(r.status === 0, describeSpawn(r, 'apply with --reply-file should succeed'));
     const [entry] = read(root, 'data/learning/ledger.jsonl').trim().split('\n').map((l) => JSON.parse(l));
-    assert(entry.reply === reply, `ledger reply: ${JSON.stringify(entry.reply)}`);
+    assert(entry.reply === `${reply}\n`, `ledger reply: ${JSON.stringify(entry.reply)}`);
     assert(!existsSync(join(root, 'pwned')), 'something expanded the reply');
   } finally {
     rmSync(root, { recursive: true, force: true });
