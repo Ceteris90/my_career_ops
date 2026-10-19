@@ -54,6 +54,7 @@ function scratchRoot() {
 function argv(line, root, fill) {
   let text = line.replaceAll('{DATA_ROOT}', root);
   for (const [slot, value] of Object.entries(fill)) text = text.replaceAll(slot, value);
+  assert(!/["'`]/.test(text), `split on whitespace only works with no quoted words: ${line}`);
   const words = text.trim().split(/\s+/);
   assert(words[0] === 'node' && words[1] === 'learn.mjs', `not a learn.mjs command: ${line}`);
   return words.slice(2);
@@ -108,7 +109,7 @@ if (checkCommand && applyCommand) {
       for (const rel of PROTECTED) assert(after[rel] === FILES[rel], `${rel} changed`);
       const ledger = readFileSync(join(root, 'data/learning/ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
       assert(ledger.map((e) => `${e.id}:${e.decision}`).join(' ') === '1:accepted 2:rejected', `ledger: ${JSON.stringify(ledger)}`);
-      assert(ledger.every((e) => e.reply === REPLY), `the ledger does not carry the reply verbatim: ${JSON.stringify(ledger[0].reply)}`);
+      assert(ledger.every((e) => e.reply === `${REPLY}\n`), `the ledger does not carry the reply verbatim: ${JSON.stringify(ledger[0].reply)}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
