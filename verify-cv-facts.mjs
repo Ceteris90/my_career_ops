@@ -2145,9 +2145,7 @@ function pastClaimMetrics(span) {
   const add = (text) => {
     for (const claim of metricClaims(text, { keepPlanHorizons: true })) claims.add(claim);
   };
-  PAST_TIME_CLAIM_RE.lastIndex = 0;
   for (const match of span.matchAll(PAST_TIME_CLAIM_RE)) add(match[0]);
-  PAST_PERCENT_CLAIM_RE.lastIndex = 0;
   for (const match of span.matchAll(PAST_PERCENT_CLAIM_RE)) {
     const markerAfterVerb = match[0].search(FORWARD_MARKER_RE) > 0;
     if (markerAfterVerb) continue;
