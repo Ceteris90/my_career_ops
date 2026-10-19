@@ -33,8 +33,8 @@ function letter(opening) {
   });
 }
 
-function check(html, sourceTexts = []) {
-  return verifyFacts(html, { sourcePaths: [], sourceTexts, configPath: CONFIG });
+function check(html, planTexts = []) {
+  return verifyFacts(html, { sourcePaths: [], planTexts, configPath: CONFIG });
 }
 
 test('a plan the candidate typed is supported when it is passed as a source', () => {
@@ -51,13 +51,31 @@ test('a number in neither the career files nor the candidate inputs still blocks
   assert.deepEqual(result.invented, ['9 months']);
 });
 
+test('a plan answer does not support a past-experience claim with the same number', () => {
+  const result = check(letter('I have 6 months of incident-response experience.'), ['I plan to review the last 6 months of incidents.']);
+  assert.equal(result.verdict, 'block');
+  assert.deepEqual(result.invented, ['6 months']);
+});
+
+test('a number used once as a plan and once as a past claim still needs career evidence', () => {
+  const result = check(letter(`I have 6 months of incident-response experience. ${PLAN}`), [PLAN]);
+  assert.deepEqual(result.invented, ['6 months']);
+});
+
+test('an answer does not support an employer or a title', () => {
+  const claim = 'I worked at Globex Corporation as a Principal Engineer.';
+  const result = check(letter(claim), [claim]);
+  assert.equal(result.verdict, 'block');
+  assert.deepEqual(result.unsupportedFacts.map((f) => f.kind).sort(), ['employer', 'title']);
+});
+
 test('a first-90-days horizon is still not a claim', () => {
   assert.deepEqual(check(letter(HORIZON)).invented, []);
 });
 
 test('the block message names letter answers and does not send a plan to cv.md', () => {
   assert.throws(
-    () => assertFacts(letter(PLAN), { sourcePaths: [], configPath: CONFIG, label: 'cover letter' }),
+    () => assertFacts(letter(PLAN), { sourcePaths: [], planTexts: [], configPath: CONFIG, label: 'cover letter' }),
     (err) => {
       assert.match(err.message, /6 months/);
       assert.match(err.message, /answers and inputs supplied for this letter/);
@@ -68,7 +86,7 @@ test('the block message names letter answers and does not send a plan to cv.md',
   );
 });
 
-test('the fact-check CLI gives the same advice', () => {
+test('the fact-check CLI names only the files it read', () => {
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-cover-advice-'));
   try {
     const probe = join(dir, 'probe.html');
@@ -83,9 +101,8 @@ test('the fact-check CLI gives the same advice', () => {
     const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
     assert.equal(result.status, 1, text);
     assert.match(text, /6 months/);
-    assert.match(text, /answers and inputs supplied for this letter/);
-    assert.match(text, /Do not copy that plan into cv\.md/);
-    assert.doesNotMatch(text, /Add real evidence to cv\.md\/article-digest\.md/);
+    assert.match(text, /cv\.md and article-digest\.md/);
+    assert.doesNotMatch(text, /answers|this letter/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -154,4 +171,6 @@ test('cover mode tells the agent to pass those answers through as sources', () =
   assert.match(turkish, /user_inputs/);
   assert.match(english, /verbatim/);
   assert.match(english, /do not\s+add\s+(?:a\s+|that\s+)?plan\s+to\s+cv\.md/i);
+  assert.match(english, /Step 6 answer D, verbatim/);
+  assert.match(turkish, /Adım 6 D yanıtı, olduğu gibi/);
 });
