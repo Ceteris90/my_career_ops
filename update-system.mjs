@@ -1226,6 +1226,35 @@ export function getUpdateBaseline(upstreamRef = 'FETCH_HEAD', ctx = {}) {
   return baseline || 'HEAD';
 }
 
+/**
+ * Baseline used to decide whether a system file was modified locally.
+ * Mirrors the logic used on `main`: use the merge-base between the current
+ * HEAD and the upstream tip. If the two histories share no commit (e.g. a
+ * shallow clone or a fresh `git init` copy) fall back to the first commit of
+ * the install.
+ *
+ * @param {string} upstreamRef - ref being checked out, normally FETCH_HEAD.
+ * @param {{git?: Function}} [ctx] - injectable git runner for tests.
+ * @returns {string} - commit SHA to compare against.
+ */
+export function getLocalChangeBaseline(upstreamRef = 'FETCH_HEAD', ctx = {}) {
+  const runGit = ctx.git || git;
+  // Normal case: histories share a merge base.
+  try {
+    const mb = runGit('merge-base', 'HEAD', upstreamRef).trim();
+    if (mb) return mb;
+  } catch {
+    // ignore – fall back below.
+  }
+  // No shared history – use the first commit of this install as a safe baseline.
+  try {
+    const first = runGit('rev-list', '--max-parents=0', 'HEAD').trim();
+    return first || 'HEAD';
+  } catch {
+    return 'HEAD';
+  }
+}
+
 export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ctx = {}) {
   const runGit = ctx.git || git;
   if (!paths || paths.length === 0) return [];
@@ -2283,7 +2312,7 @@ async function apply() {
     const overlayPaths = localOverlayPaths();
     const baseline = getUpdateBaseline('FETCH_HEAD');
     
-    const atRisk = locallyModifiedSystemFiles(updatePaths, 'FETCH_HEAD');
+    const atRisk = locallyModifiedSystemFiles(updatePaths, getLocalChangeBaseline('FETCH_HEAD'));
     const failedBackups = new Set();
     if (atRisk.length > 0) {
       console.log('');
