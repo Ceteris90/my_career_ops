@@ -95,6 +95,7 @@ RESOLVED_MODEL=""
 RESOLVED_SPEND_TIER=""
 CLI=claude
 RATE_LIMIT_SLEEP=300
+WORKER_TIMEOUT=1800
 BATCH_PAUSED=false
 STATUS_ONLY=false
 WATCH_MODE=false
@@ -114,7 +115,7 @@ spend_tier in config/profile.yml unless --model overrides it.
 Usage: batch-runner.sh [OPTIONS]
 
 Options:
-  --cli NAME           Agent CLI to use: claude (default), opencode, gemini, qwen
+  --cli NAME           Agent CLI to use: claude (default), opencode, gemini, qwen, grok
   --model NAME         Model for the CLI (e.g. qwen2.5:32b for opencode/ollama).
                        For claude, overrides the tier-resolved model (otherwise
                        config/profile.yml spend_tier: economy/standard/premium;
@@ -129,6 +130,8 @@ Options:
   --max-retries N      Max retry attempts per offer (default: 2)
   --min-score N        Skip PDF/tracker for offers scoring below N (default: 0 = off)
   --skip-pdf           Skip PDF generation entirely (write ❌ in tracker PDF column)
+  --worker-timeout N   Stop a worker after N seconds and record it as failed
+                       (default: 1800; 0 = no limit)
   --rate-limit-sleep N Maximum adaptive retry delay in seconds; 0 pauses immediately
                        (default: 300; range: 0–2147483647; claude only)
   --status             Show batch progress and a per-job table, then exit
@@ -197,6 +200,14 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --model) MODEL="$2"; shift 2 ;;
+    --worker-timeout)
+      if [[ $# -lt 2 ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: --worker-timeout must be a non-negative integer (seconds)."
+        exit 1
+      fi
+      WORKER_TIMEOUT=$((10#$2))
+      shift 2
+      ;;
     --status) STATUS_ONLY=true; shift ;;
     --watch) WATCH_MODE=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -272,7 +283,8 @@ check_prerequisites() {
     opencode) command -v opencode &>/dev/null && cli_cmd="opencode" || cli_cmd="ollama" ;;
     gemini)   cli_cmd="gemini" ;;
     qwen)     cli_cmd="qwen" ;;
-    *) echo "ERROR: Unknown --cli '$CLI'. Supported: claude, opencode, gemini, qwen"; exit 1 ;;
+    grok)     cli_cmd="grok" ;;
+    *) echo "ERROR: Unknown --cli '$CLI'. Supported: claude, opencode, gemini, qwen, grok"; exit 1 ;;
   esac
 
   if ! command -v "$cli_cmd" &>/dev/null; then
@@ -502,6 +514,46 @@ spend_tier_to_model() {
     premium) echo "claude-opus-5-5" ;;
     standard|*) echo "claude-sonnet-5-5" ;;
   esac
+}
+
+# Run one worker CLI with stdin closed, so a CLI that waits for input reads EOF
+# instead of hanging on the runner's terminal. With WORKER_TIMEOUT > 0 a
+# watchdog sends TERM at the limit and KILL 10 s later, and the worker exits
+# 124. Background jobs ignore SIGINT in a non-interactive shell, so Ctrl+C is
+# forwarded to the worker by hand.
+run_worker() {
+  "$@" </dev/null &
+  local pid=$!
+  local watchdog=""
+  if (( WORKER_TIMEOUT > 0 )); then
+    (
+      for (( s = 0; s < WORKER_TIMEOUT; s++ )); do
+        sleep 1
+        kill -0 "$pid" 2>/dev/null || exit 0
+      done
+      kill -TERM "$pid" 2>/dev/null
+      for (( s = 0; s < 10; s++ )); do
+        sleep 1
+        kill -0 "$pid" 2>/dev/null || exit 124
+      done
+      kill -KILL "$pid" 2>/dev/null
+      exit 124
+    ) &
+    watchdog=$!
+  fi
+  trap 'kill -TERM "$pid" 2>/dev/null; exit 130' INT TERM
+  local rc=0
+  wait "$pid" || rc=$?
+  trap - INT TERM
+  if [[ -n "$watchdog" ]]; then
+    local watchdog_rc=0
+    wait "$watchdog" || watchdog_rc=$?
+    if (( watchdog_rc == 124 )); then
+      echo "batch-runner: worker timed out after ${WORKER_TIMEOUT}s"
+      rc=124
+    fi
+  fi
+  return "$rc"
 }
 
 # Resolve the model to pass to the worker CLI. --model always wins.
@@ -1202,20 +1254,23 @@ process_offer() {
     exit_code=0
     case "$CLI" in
       claude)
-        claude "${claude_args[@]}" > "$log_file" 2>&1 || exit_code=$?
+        run_worker claude "${claude_args[@]}" > "$log_file" 2>&1 || exit_code=$?
         ;;
       opencode)
         if command -v opencode &>/dev/null; then
-          opencode run ${model_args[@]+"${model_args[@]}"} "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+          run_worker opencode run ${model_args[@]+"${model_args[@]}"} "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         else
-          ollama launch opencode ${model_args[@]+"${model_args[@]}"} -y -- run "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+          run_worker ollama launch opencode ${model_args[@]+"${model_args[@]}"} -y -- run "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         fi
         ;;
       gemini)
-        gemini ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+        run_worker gemini ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         ;;
       qwen)
-        qwen ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+        run_worker qwen ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
+        ;;
+      grok)
+        run_worker grok --always-approve --output-format plain ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         ;;
     esac
 

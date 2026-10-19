@@ -37,6 +37,7 @@ Process multiple job offers in parallel via headless workers. Each worker runs t
 | `--start-from N` | `0` | Skip offers with ID below N |
 | `--limit N` | `0` | Max number of offers to process in this run (0 = no limit) |
 | `--max-retries N` | `2` | Max retry attempts per offer before giving up |
+| `--worker-timeout N` | `1800` | Stop a worker that runs longer than N seconds and mark the offer failed (0 = no limit) |
 | `--rate-limit-sleep N` | `300` | Maximum adaptive retry delay in seconds (0–2147483647); use `0` to pause the batch immediately |
 
 ### Adaptive rate-limit retries (Claude only)
