@@ -1,5 +1,5 @@
-import { pass, fail, ROOT } from './helpers.mjs';
-import { readFileSync } from 'node:fs';
+import { pass, fail, warn, ROOT } from './helpers.mjs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -62,10 +62,16 @@ for (const { file, score: scoreLine, decision: decisionLine, lede, apply: applyW
   });
 }
 
-const { readReport } = await import(pathToFileURL(join(ROOT, 'web/src/lib/report-header.mjs')).href);
+const headerMod = join(ROOT, 'web', 'src', 'lib', 'report-header.mjs');
+if (!existsSync(join(ROOT, 'web', 'src'))) {
+  warn('web/ not present in this checkout — skipping localized decision parser checks');
+} else if (!existsSync(headerMod)) {
+  fail('web/ exists but web/src/lib/report-header.mjs is missing — the decision parser cannot be checked (moved?)');
+} else {
+  const { readReport } = await import(pathToFileURL(headerMod).href);
 
-check('a translated header reads as Decision', () => {
-  const report = `# Evaluation: Example Labs — Researcher
+  check('a translated header reads as Decision', () => {
+    const report = `# Evaluation: Example Labs — Researcher
 
 **Score:** 3.4/5
 **Entscheidung:** Bewerben
@@ -75,56 +81,57 @@ check('a translated header reads as Decision', () => {
 
 Example Labs is a fictional employer.
 `;
-  const fields = readReport(report).fields;
-  const decision = fields.find((f) => f.label === 'Decision');
-  if (!decision || decision.value !== 'Bewerben') return JSON.stringify(fields);
-  const score = fields.find((f) => f.label === 'Score');
-  if (!score || score.value !== '3.4/5') return JSON.stringify(fields);
-  return null;
-});
+    const fields = readReport(report).fields;
+    const decision = fields.find((f) => f.label === 'Decision');
+    if (!decision || decision.value !== 'Bewerben') return JSON.stringify(fields);
+    const score = fields.find((f) => f.label === 'Score');
+    if (!score || score.value !== '3.4/5') return JSON.stringify(fields);
+    return null;
+  });
 
-check('English Decision and a legacy Date alias still resolve', () => {
-  const report = `# Evaluation: Example Labs — Researcher
+  check('English Decision and a legacy Date alias still resolve', () => {
+    const report = `# Evaluation: Example Labs — Researcher
 
 **Fecha:** 2026-10-18
 **Decision:** Research first
 
 ---
 `;
-  const fields = readReport(report).fields;
-  const decision = fields.find((f) => f.label === 'Decision');
-  const date = fields.find((f) => f.label === 'Date');
-  if (!decision || decision.value !== 'Research first') return JSON.stringify(fields);
-  if (!date || date.value !== '2026-10-18') return JSON.stringify(fields);
-  return null;
-});
+    const fields = readReport(report).fields;
+    const decision = fields.find((f) => f.label === 'Decision');
+    const date = fields.find((f) => f.label === 'Date');
+    if (!decision || decision.value !== 'Research first') return JSON.stringify(fields);
+    if (!date || date.value !== '2026-10-18') return JSON.stringify(fields);
+    return null;
+  });
 
-check('a Verdict label is not a decision and not a score latch', () => {
-  const report = `# Evaluation: Example Labs — Researcher
+  check('a Verdict label is not a decision and not a score latch', () => {
+    const report = `# Evaluation: Example Labs — Researcher
 
 **Verdict:** Apply
 **Score:** 3.4/5
 
 ---
 `;
-  const fields = readReport(report).fields;
-  if (fields.some((f) => f.label === 'Decision')) return JSON.stringify(fields);
-  if (/verdict\s*:/i.test('**Verdict:** Apply') !== true) return 'fixture lost the latch shape';
-  return null;
-});
+    const fields = readReport(report).fields;
+    if (fields.some((f) => f.label === 'Decision')) return JSON.stringify(fields);
+    if (/verdict\s*:/i.test('**Verdict:** Apply') !== true) return 'fixture lost the latch shape';
+    return null;
+  });
 
-for (const { file, decision: decisionLine, apply: applyWord } of LOCALES) {
-  const label = decisionLine.match(/^\*\*(.+):\*\*/)[1];
-  check(`${file} parser reads ${label}`, () => {
-    const report = `# Evaluation: Example Labs — Researcher
+  for (const { file, decision: decisionLine, apply: applyWord } of LOCALES) {
+    const label = decisionLine.match(/^\*\*(.+):\*\*/)[1];
+    check(`${file} parser reads ${label}`, () => {
+      const report = `# Evaluation: Example Labs — Researcher
 
 **${label}:** ${applyWord}
 **URL:** https://jobs.example/researcher
 
 ---
 `;
-    const decision = readReport(report).fields.find((f) => f.label === 'Decision');
-    if (!decision || decision.value !== applyWord) return JSON.stringify(readReport(report).fields);
-    return null;
-  });
+      const decision = readReport(report).fields.find((f) => f.label === 'Decision');
+      if (!decision || decision.value !== applyWord) return JSON.stringify(readReport(report).fields);
+      return null;
+    });
+  }
 }
