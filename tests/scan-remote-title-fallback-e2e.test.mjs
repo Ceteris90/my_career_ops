@@ -22,18 +22,16 @@ for (const script of ['scan.mjs', 'scan-ats-full.mjs']) {
         mkdirSync(join(dir, 'data', 'cache', 'ats-companies'), { recursive: true });
         writeFileSync(join(dir, 'data', 'cache', 'ats-companies', 'greenhouse.json'), JSON.stringify(['fixture']));
         writeFileSync(join(dir, 'portals.yml'), `title_filter:\n  positive: [Engineer]\nlocation_filter:\n  strict: true\n  allow: [Shenzhen]\n${flag === undefined ? '' : `  remote_title_fallback: ${flag}\n`}tracked_companies:\n  - name: Fixture\n    careers_url: https://job-boards.greenhouse.io/fixture\n`);
-        const launch = join(dir, 'launch.mjs');
-        writeFileSync(launch, `
+        const preload = join(dir, 'preload.mjs');
+        writeFileSync(preload, `
 import provider from ${JSON.stringify(pathToFileURL(join(root, 'providers/greenhouse.mjs')).href)};
 provider.fetchListing = undefined;
 provider.fetch = async () => ${JSON.stringify(fixtures)};
 // Fail closed if the fixture ever starts making real requests.
 globalThis.fetch = async () => { throw new Error('Unexpected network request'); };
-process.argv[1] = ${JSON.stringify(join(root, script))};
-await import(${JSON.stringify(pathToFileURL(join(root, script)).href)});
 `);
         const args = script === 'scan-ats-full.mjs' ? ['--ats', 'greenhouse', '--include-undated', '--json'] : [];
-        const result = spawnSync(process.execPath, [launch, ...args], {
+        const result = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(root, script), ...args], {
           cwd: dir, encoding: 'utf8', timeout: 20000,
           env: { ...process.env, CAREER_OPS_ROOT: dir, CAREER_OPS_DATA_DIR: '', CAREER_OPS_PORTALS: join(dir, 'portals.yml') },
         });
