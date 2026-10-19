@@ -255,3 +255,17 @@ test('AGENTS.md onboarding calls the writer and builds the finish from doctor', 
   assert.match(step6, /only[^.]*fail/i);
   assert.match(step6, /playwright install chromium/);
 });
+
+test('the Step 3 yaml example is what the writer writes for a US-only answer', () => {
+  const agents = readFileSync(join(ROOT, 'AGENTS.md'), 'utf8');
+  const step3 = agents.split('#### Step 3: Portals')[1].split('#### Step 4')[0];
+  const example = yaml.load(step3.match(/```yaml\n([\s\S]*?)```/)[1]);
+  const answers = { ...ANSWERS, portals: { ...ANSWERS.portals, countries: ['United States', 'USA'] } };
+  const { dir, res, read } = run(answers);
+  try {
+    assert.equal(res.status, 0, res.stderr);
+    const c = yaml.load(read('portals.yml'));
+    assert.deepEqual(c.location_filter, example.location_filter);
+    assert.equal(c.max_posting_age_days, example.max_posting_age_days);
+  } finally { cleanup(dir); }
+});
