@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>@santifer</strong></a> द्वारा बनाया गया</p>
 
 <p align="center">
 <strong>महीनों तक CV भेजता रहा, जवाब में सिर्फ़&nbsp;खामोशी।</strong><br>
@@ -120,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-हायरिंग अपने आप ठीक नहीं होगी। जो लोग इससे गुज़र रहे हैं, वे इसे ठीक कर सकते हैं, और वे पहले से उस कमरे में हैं: नोट्स मिला रहे हैं और एक-दूसरे का सेटअप ठीक कर रहे हैं। [समाधान यहीं लिखा जाता है](CONTRIBUTING.md)। एक कमरा, कोई क्लब नहीं। **आइए, मिलकर बनाएँ।**
+हायरिंग अपने आप ठीक नहीं होगी। जो लोग इससे गुज़र रहे हैं, वे इसे ठीक कर सकते हैं, और वे पहले से उस कमरे में हैं: नोट्स मिला रहे हैं और एक-दूसरे का सेटअप ठीक कर रहे हैं।
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=hi" alt="योगदानकर्ताओं के GitHub अवतारों की एनिमेटेड दीवार, जो अप्रैल 2026 से आने के क्रम में भरती जाती है, और अगला खाना खुला छोड़ा गया है।" width="100%"></a></p>
+
+[समाधान यहीं लिखा जाता है](CONTRIBUTING.md)। एक कमरा, कोई क्लब नहीं। **आइए, मिलकर बनाएँ।**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: career-ops सर्वर के सदस्यों की लाइव संख्या"></a></p>
 
@@ -180,7 +186,7 @@ career-ops उम्मीदवारों के लिए हमेशा �
 | **इंटरव्यू स्टोरी बैंक** | मूल्यांकनों के दौरान STAR+Reflection कहानियाँ जमा करता है: 5-10 मास्टर कहानियाँ, जिन्हें आप सामने आने वाले व्यवहारिक सवालों के हिसाब से ढाल सकते हैं |
 | **नेगोशिएशन स्क्रिप्ट**  | वेतन बातचीत के फ़्रेमवर्क, भौगोलिक कटौती का जवाब, प्रतिस्पर्धी ऑफ़र का लाभ                                                                |
 | **आवेदन ईमेल ड्राफ़्ट**  | रिपोर्ट या पेस्ट की गई JD से रिक्रूटर/रेफ़रल/कोल्ड आवेदन के औपचारिक ईमेल, विषय पंक्ति, अटैचमेंट चेकलिस्ट, स्रोत-समर्थित फ़िट पॉइंट और प्रोफ़ाइल-आधारित संपर्क ब्लॉक के साथ। सिर्फ़ ड्राफ़्ट: career-ops कभी कुछ भेजता, सबमिट करता या क्लिक नहीं करता। |
-| **पोर्टल स्कैनर**        | 100+ कंपनियाँ पहले से कॉन्फ़िगर (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + Ashby, Greenhouse, Lever, Wellfound पर कस्टम क्वेरी      |
+| **पोर्टल स्कैनर**        | 100+ कंपनियाँ पहले से कॉन्फ़िगर (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + Ashby, Greenhouse, Lever, Wellfound पर कस्टम वेब-सर्च क्वेरी |
 | **फ़ंडेड कंपनी डिस्कवरी** | रिव्यू-फ़र्स्ट `company:funded` कमांड संरचित सार्वजनिक फ़ीड से हाल में फ़ंड पाई कंपनियाँ और स्रोत डायग्नोस्टिक्स दिखाता है, आपका डेटा छुए बिना |
 | **बैच प्रोसेसिंग**       | हेडलेस CLI वर्कर्स (`claude -p` / `opencode run`) के साथ समानांतर मूल्यांकन                                                               |
 | **Dashboard TUI**        | अपनी पाइपलाइन ब्राउज़, फ़िल्टर और सॉर्ट करने के लिए टर्मिनल UI                                                                            |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` [Node.js](https://nodejs.org) के साथ आता है: यह इंस्टॉलर एक बार चलाता है,
 > बिना कुछ ग्लोबली इंस्टॉल किए। अभी Node नहीं है? पहले उसे इंस्टॉल करें।
-> (पहले से Claude Code / Gemini / Codex CLI इस्तेमाल कर रहे हैं? तो आपके पास पहले से है।)
+> (पहले से Claude Code / Codex CLI इस्तेमाल कर रहे हैं? तो आपके पास पहले से है।)
 
 यह नवीनतम रिलीज़ को `./career-ops` में क्लोन करता है और डिपेंडेंसी इंस्टॉल करता है। फिर:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-स्किल ओपन स्टैंडर्ड के अनुसार `.agents/skills/career-ops/SKILL.md` में परिभाषित है और हर सपोर्टेड CLI (जैसे `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`) के लिए सिमलिंक या रेफ़रेंस की गई है।
+स्किल ओपन स्टैंडर्ड के अनुसार `.agents/skills/career-ops/SKILL.md` में परिभाषित है और हर सपोर्टेड CLI (जैसे `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`) के लिए सिमलिंक या रेफ़रेंस की गई है। Cursor अपने आप `.agents/skills/` में साझा स्किल खोज लेता है।
 
 ## Codex Integration
 

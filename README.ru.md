@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Создано <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center">
 <strong>Месяцы отправки резюме в&nbsp;тишину.</strong><br>
@@ -120,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-Найм сам себя не починит. Люди, которые через него проходят, могут, и они уже в комнате: сверяют заметки и чинят друг другу настройки. [Именно здесь пишется исправление](CONTRIBUTING.md). Комната, а не клуб. **Давайте строить вместе.**
+Найм сам себя не починит. Люди, которые через него проходят, могут, и они уже в комнате: сверяют заметки и чинят друг другу настройки.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ru" alt="Анимированная стена из GitHub-аватаров участников, которая заполняется в порядке прихода с апрель 2026 г.; следующая клетка оставлена свободной." width="100%"></a></p>
+
+[Именно здесь пишется исправление](CONTRIBUTING.md). Комната, а не клуб. **Давайте строить вместе.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: число участников сервера career-ops в реальном времени"></a></p>
 
@@ -180,7 +186,7 @@ career-ops бесплатен для кандидатов, навсегда. Э�
 | **Банк историй для собеседований** | Накапливает истории STAR+Reflection между оценками: 5-10 главных историй, которые можно адаптировать под заданные вам поведенческие вопросы                |
 | **Скрипты переговоров**  | Фреймворки переговоров о зарплате, ответ на географическую скидку, рычаг конкурирующих офферов                                            |
 | **Черновики писем-откликов** | Формальные письма рекрутеру, по рекомендации или холодные отклики из отчёта или вставленного описания, с темой, чеклистом вложений, обоснованными пунктами соответствия и блоком контактов из профиля. Только черновики: career-ops никогда не отправляет, не подаёт и не кликает ничего. |
-| **Сканер порталов**      | 100+ предварительно настроенных компаний (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + собственные запросы по Ashby, Greenhouse, Lever, Wellfound |
+| **Сканер порталов**      | 100+ предварительно настроенных компаний (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + собственные поисковые веб-запросы по Ashby, Greenhouse, Lever, Wellfound |
 | **Поиск профинансированных компаний** | Команда `company:funded` (сначала просмотр) показывает компании с недавним финансированием и диагностику источников из структурированных публичных лент, не меняя ваши данные |
 | **Пакетная обработка**   | Параллельная оценка headless CLI-воркерами (`claude -p` / `opencode run`)                                                               |
 | **Dashboard TUI**        | Терминальный интерфейс для просмотра, фильтрации и сортировки вашего конвейера                                                           |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` идёт вместе с [Node.js](https://nodejs.org): он запускает установщик один раз,
 > ничего не устанавливая глобально. Ещё нет Node? Сначала установите его.
-> (Уже пользуетесь CLI Claude Code / Gemini / Codex? Тогда он у вас уже есть.)
+> (Уже пользуетесь CLI Claude Code / Codex? Тогда он у вас уже есть.)
 
 Это клонирует последний релиз в `./career-ops` и устанавливает зависимости. Затем:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-Скилл определён по открытому стандарту в `.agents/skills/career-ops/SKILL.md` и подключён символической ссылкой или ссылкой для каждого поддерживаемого CLI (например `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`).
+Скилл определён по открытому стандарту в `.agents/skills/career-ops/SKILL.md` и подключён символической ссылкой или ссылкой для каждого поддерживаемого CLI (например `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`). Cursor автоматически обнаруживает общий скилл в `.agents/skills/`.
 
 ## Интеграция с Codex
 

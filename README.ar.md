@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;أنشأه <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center" dir="rtl">
 <strong>أشهر من إرسال السير الذاتية إلى&nbsp;الصمت.</strong><br>
@@ -120,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-التوظيف لن يصلح نفسه بنفسه. من يمرّون به يستطيعون، وهم في الغرفة أصلًا، يقارنون ملاحظاتهم ويصلحون إعدادات بعضهم بعضًا. [هنا يُكتب الإصلاح](CONTRIBUTING.md). غرفة، لا نادٍ. **لنبنِ معًا.**
+التوظيف لن يصلح نفسه بنفسه. من يمرّون به يستطيعون، وهم في الغرفة أصلًا، يقارنون ملاحظاتهم ويصلحون إعدادات بعضهم بعضًا.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ar" alt="جدار متحرك لصور المساهمين الرمزية على GitHub، يمتلئ بترتيب الوصول منذ أبريل 2026، مع ترك المربع التالي مفتوحًا." width="100%"></a></p>
+
+[هنا يُكتب الإصلاح](CONTRIBUTING.md). غرفة، لا نادٍ. **لنبنِ معًا.**
 
 <p align="center" dir="rtl"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: عدد أعضاء خادم career-ops مباشرة"></a></p>
 
@@ -180,7 +186,7 @@ career-ops مجاني للمرشحين، إلى الأبد. هذه الشركا�
 | **بنك قصص المقابلات**    | يراكم قصص STAR+Reflection عبر التقييمات: 5 إلى 10 قصص رئيسية يمكنك تكييفها مع الأسئلة السلوكية التي تُطرح عليك                                                        |
 | **نصوص التفاوض**         | أطر التفاوض على الراتب، الرد على الخصم الجغرافي، استخدام العروض المنافسة كورقة ضغط                                                        |
 | **مسودات رسائل التقديم** | رسائل رسمية لمسؤول التوظيف أو للإحالة أو للتقديم البارد من تقرير أو وصف ملصق، مع سطر الموضوع، وقائمة المرفقات، ونقاط ملاءمة موثقة بمصادرها، وكتلة تواصل مستمدة من ملفك. مسودة فقط: career-ops لا يرسل ولا يقدّم ولا ينقر على أي شيء أبدًا. |
-| **ماسح البوابات**        | أكثر من 100 شركة مهيأة مسبقًا (Anthropic و OpenAI و ElevenLabs و Retool و n8n...) + استعلامات مخصصة عبر Ashby و Greenhouse و Lever و Wellfound |
+| **ماسح البوابات**        | أكثر من 100 شركة مهيأة مسبقًا (Anthropic و OpenAI و ElevenLabs و Retool و n8n...) + استعلامات بحث ويب مخصصة عبر Ashby و Greenhouse و Lever و Wellfound |
 | **اكتشاف الشركات الممولة** | أمر `company:funded` القائم على المراجعة أولًا يُظهر الشركات التي حصلت على تمويل حديثًا وتشخيصات المصادر من تغذيات عامة منظمة دون تعديل بياناتك |
 | **المعالجة الجماعية**    | تقييم متوازٍ عبر عمّال CLI بلا واجهة (`claude -p` / `opencode run`)                                                                      |
 | **لوحة تحكم TUI**        | واجهة طرفية لتصفح خط عملك وتصفيته وترتيبه                                                                                                |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` يأتي مع [Node.js](https://nodejs.org): يشغّل المثبّت مرة واحدة
 > دون تثبيت أي شيء بشكل عام. لا يوجد Node بعد؟ ثبّته أولًا.
-> (تستخدم بالفعل واجهة Claude Code / Gemini / Codex؟ إذن لديك بالفعل.)
+> (تستخدم بالفعل واجهة Claude Code / Codex؟ إذن لديك بالفعل.)
 
 يستنسخ هذا أحدث إصدار في `./career-ops` ويثبّت الاعتماديات. ثم:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-المهارة معرّفة وفق المعيار المفتوح في `.agents/skills/career-ops/SKILL.md` ومربوطة برابط رمزي أو مُشار إليها لكل واجهة مدعومة (مثل `.claude/` و`.cursor/` و`.qwen/` و`.antigravitycli/` و`.grok/`).
+المهارة معرّفة وفق المعيار المفتوح في `.agents/skills/career-ops/SKILL.md` ومربوطة برابط رمزي أو مُشار إليها لكل واجهة مدعومة (مثل `.claude/` و`.qwen/` و`.antigravitycli/` و`.grok/`). يكتشف Cursor المهارة المشتركة تلقائيًا في `.agents/skills/`.
 
 ## تكامل Codex
 

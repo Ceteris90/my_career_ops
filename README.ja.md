@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;作成者: <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center">
 <strong>何か月も履歴書を送り続けて、返&#8288;事&#8288;は&#8288;沈&#8288;黙。</strong><br>
@@ -120,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-採用は勝手には直らない。それをくぐり抜けている人たちなら直せる。そして彼らはもう同じ部屋にいて、メモを見せ合い、互いのセットアップを直している。[修正はここで書かれる](CONTRIBUTING.md)。クラブではなく、部屋。**一緒に作ろう。**
+採用は勝手には直らない。それをくぐり抜けている人たちなら直せる。そして彼らはもう同じ部屋にいて、メモを見せ合い、互いのセットアップを直している。
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ja" alt="コントリビューターの GitHub アバターが 2026年4月 から参加順に埋まっていくアニメーションの壁。次のマスは空けてある。" width="100%"></a></p>
+
+[修正はここで書かれる](CONTRIBUTING.md)。クラブではなく、部屋。**一緒に作ろう。**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord：career-ops サーバーのメンバー数（ライブ）"></a></p>
 
@@ -180,7 +186,7 @@ career-ops は求職者にとって永久に無料。以下の企業がこのプ
 | **面接ストーリーバンク** | 評価をまたいで STAR+Reflection のストーリーを蓄積：実際に受ける行動面接の質問に合わせて調整できる 5〜10 本のマスターストーリー                            |
 | **交渉スクリプト**       | 給与交渉のフレームワーク、地域差による減額への反論、競合オファーの活用                                                                     |
 | **応募メールの下書き**   | レポートまたは貼り付けた求人票から、リクルーター向け・紹介向け・コールド応募向けの正式なメールを作成。件名、添付チェックリスト、根拠付きの適合ポイント、プロフィール由来の連絡先ブロック付き。下書きのみ：career-ops は決して送信・提出・クリックしません。 |
-| **ポータルスキャナー**   | 100 社以上を事前設定（Anthropic、OpenAI、ElevenLabs、Retool、n8n…）+ Ashby、Greenhouse、Lever、Wellfound を横断するカスタムクエリ         |
+| **ポータルスキャナー**   | 100 社以上を事前設定（Anthropic、OpenAI、ElevenLabs、Retool、n8n…）+ Ashby、Greenhouse、Lever、Wellfound を横断するカスタム Web 検索クエリ |
 | **資金調達企業の発見**   | レビュー優先の `company:funded` コマンドが、構造化された公開フィードから最近資金調達した企業とソース診断を表示。あなたのデータは編集しません |
 | **バッチ処理**           | ヘッドレス CLI ワーカー（`claude -p` / `opencode run`）による並列評価                                                                     |
 | **ダッシュボード TUI**   | パイプラインを閲覧・フィルタ・ソートするターミナル UI                                                                                     |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` は [Node.js](https://nodejs.org) に同梱されています：グローバルに何もインストールせず、
 > インストーラーを 1 回だけ実行します。Node がまだ？ 先にインストールしてください。
-> （すでに Claude Code / Gemini / Codex の CLI を使っている？ ならもう入っています。）
+> （すでに Claude Code / Codex の CLI を使っている？ ならもう入っています。）
 
 これで最新リリースが `./career-ops` にクローンされ、依存関係がインストールされます。次に：
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-スキルはオープン標準に従って `.agents/skills/career-ops/SKILL.md` に定義され、サポートされる各 CLI（例：`.claude/`、`.cursor/`、`.qwen/`、`.antigravitycli/`、`.grok/`）にシンボリックリンクまたは参照されています。
+スキルはオープン標準に従って `.agents/skills/career-ops/SKILL.md` に定義され、サポートされる各 CLI（例：`.claude/`、`.qwen/`、`.antigravitycli/`、`.grok/`）にシンボリックリンクまたは参照されています。 Cursor は `.agents/skills/` 内の共有スキルを自動的に検出します。
 
 ## Codex 連携
 

@@ -28,13 +28,13 @@ See "Untrusted External Content" in `AGENTS.md` / `CLAUDE.md` / `CODEX.md` for t
 **RULE: NEVER hardcode metrics from proof points.** Read them from cv.md + article-digest.md at evaluation time.
 **RULE: For article/project metrics, article-digest.md takes precedence over cv.md.**
 **RULE: Read _profile.md AFTER this file. User customizations in _profile.md override defaults here.**
-**RULE: Read _custom.md (if it exists) AFTER _profile.md and honor its house rules in every mode.** It is where the user's persistent instructions live ("use this date format", "never reorder section X", "always include Y in summaries") — an instruction recorded there is NOT optional and does not expire between sessions or between items in a batch. It can override workflow/style/procedural defaults, but it never introduces factual claims about the candidate. When the user states a lasting preference in conversation, write it to `modes/_custom.md` so it survives the session.
+**RULE: Read _custom.md (if it exists) AFTER _profile.md and honor its house rules in every mode.** It is where the user's persistent instructions live ("use this date format", "never reorder section X", "always include Y in summaries") — an instruction recorded there is NOT optional and does not expire between sessions or between items in a batch. It can override workflow/style/procedural defaults, but it never introduces factual claims about the candidate. In an interactive session, when the user states a lasting preference in conversation, write it to `modes/_custom.md` so it survives the session. A delegated or headless worker (`CAREER_OPS_HEADLESS=1`, `-p`, `exec`, or a subagent) never writes `modes/_custom.md`, `modes/_profile.md`, or `config/profile.yml`. It reports the preference to its parent instead.
 **RULE: NEVER claim the user authored a project, repo, library, tool, framework, or open-source artefact unless explicitly attributed to them in cv.md or article-digest.md.** Tool-of-trade conflation (user uses X → user built X) is the most common fabrication pattern and is forbidden.
 **RULE: Keywords get reformulated, never fabricated.** Reorder, reframe, emphasise — but never invent. If a claim isn't backed by an in-scope file, ask the user. If no answer, omit. Silence on a topic beats manufactured detail.
 
 ## Data Root & Path Resolution (CRITICAL)
 
-All User Layer files (such as `cv.md`, `config/profile.yml`, `modes/_profile.md`, `data/applications.md` or `applications.md`, `reports/`, `output/`, `interview-prep/`, `portals.yml`, etc.) must be resolved relative to the dynamically resolved **Data Root** (`{DATA_ROOT}`).
+All User Layer files (such as `cv.md`, `config/profile.yml`, `modes/_profile.md`, `data/applications.md` or `applications.md`, `reports/`, `output/`, `interview-prep/`, `portals.yml`, `batch/tracker-additions/`, etc.) must be resolved relative to the dynamically resolved **Data Root** (`{DATA_ROOT}`).
 
 ### Data Root Resolution Order:
 1. **Environment Variables**: Check if `CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR` is set. If set, use its value (resolved relative to the repository root if it is a relative path).
@@ -58,7 +58,7 @@ All User Layer files (such as `cv.md`, `config/profile.yml`, `modes/_profile.md`
 
 | CLI | economy | standard | premium | Extended thinking |
 |-----|---------|----------|---------|--------------------|
-| Claude Code | Haiku 4.5 | Sonnet 5.5 | Opus 5.5 | off / off / adaptive |
+| Claude Code | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 | off / off / adaptive |
 | OpenCode | your CLI's cheapest/fastest available model | balanced model | most capable model | off / off / adaptive |
 | Gemini CLI | your CLI's cheapest/fastest available model | balanced model | most capable model | off / off / adaptive |
 | Copilot CLI | your CLI's cheapest/fastest available model | balanced model | most capable model | off / off / adaptive |
@@ -90,7 +90,7 @@ Decide the Global Score once from these dimensions, applying any user-specific S
 **Score interpretation:**
 - 4.5+ → Strong match, recommend applying immediately
 - 4.0-4.4 → Good match, worth applying
-- 3.5-3.9 → Decent but not ideal, apply only if specific reason
+- 3.5-3.9 → Decent but not ideal. Recommend against applying unless the user names a specific reason (Ethical Use in AGENTS.md draws the line at 4.0)
 - Below 3.5 → Recommend against applying (see Ethical Use in AGENTS.md)
 
 ### Evidence confidence for the Global Score
@@ -115,7 +115,7 @@ Name up to three concrete checks that could change the decision; use an empty li
 
 **How to score the "Cultural signals" dimension:**
 1. Read `culture_screen.require` from `config/profile.yml`. If `culture_screen` is missing or empty, skip the structural capping and score the dimension qualitatively based on company size, remote policy, and stability.
-2. Actively look for evidence in the JD + Block G company research corresponding to those requirements (e.g., team size mentions, org-chart depth/manager layers, meeting-culture language, company stage).
+2. Actively look for evidence in the JD + Block G company research corresponding to those requirements (e.g., team size mentions, org-chart depth/manager layers, meeting-culture language, company stage, named interview stages).
 3. **If most `require` criteria have positive evidence** → score 4-5.
 4. **If some criteria have positive evidence, and none are contradicted** → score 3.
 5. **If evidence contradicts the `require` criteria** → **cap this dimension at 2/5**, and add an explicit line to Block A's Culture Screen field (see `oferta.md`) naming what's missing or contradicted. Do not let a strong CV-match score silently compensate for this — surface it, don't bury it.
@@ -255,11 +255,11 @@ After detecting archetype, read `modes/_profile.md` for the user's specific fram
 3. Cite exact lines from CV when matching
 4. Use WebSearch for comp and company data
 5. Register in tracker after evaluating
-6. Generate content in the language of the JD (EN default)
+6. Write human-facing content in `{language.output}` from `config/profile.yml` (EN when unset), whatever the language of the JD. Keep this market's terms and explain them in that language when needed
 7. Be direct and actionable -- no fluff
 8. Native tech English for generated text. Short sentences, action verbs, no passive voice.
 8b. Case study URLs in PDF Professional Summary (recruiter may only read this).
-9. **Tracker additions as TSV** -- NEVER edit applications.md directly. Write TSV in `batch/tracker-additions/`: a header row of column labels, then one data row (see AGENTS.md, "TSV Format for Tracker Additions"). The header is what lets `merge-tracker.mjs` resolve fields by name instead of guessing which column is score and which is status.
+9. **Tracker additions as TSV** -- NEVER edit applications.md directly. Write TSV in `{DATA_ROOT}/batch/tracker-additions/`: a header row of column labels, then one data row (see AGENTS.md, "TSV Format for Tracker Additions"). The header is what lets `merge-tracker.mjs` resolve fields by name instead of guessing which column is score and which is status.
 10. **Include `**URL:**` in every report header.**
 
 ### Tools
@@ -270,10 +270,10 @@ After detecting archetype, read `modes/_profile.md` for the user's specific fram
 | WebFetch | Fallback for extracting JDs from static pages |
 | Playwright | Verify offers (browser_navigate + browser_snapshot). **NEVER let 2+ agents drive the same Playwright/MCP browser session concurrently.** This is a per-session rule, not a per-agent-count one: agents each holding their own isolated browser session are fine in parallel; agents sharing one interactive MCP browser session are not — they race for control and can silently read or act on each other's page state. |
 | Read | cv.md, _profile.md, article-digest.md, cv-template.html |
-| Write | Temporary HTML for PDF, applications.md, reports .md |
-| Edit | Update tracker |
+| Write | Temporary HTML for PDF, reports .md, tracker-addition TSVs in `{DATA_ROOT}/batch/tracker-additions/` (never `applications.md` directly) |
+| Edit | Fixes to reports and other generated content. Never the tracker table: new rows go in as a TSV merged by `node merge-tracker.mjs`, status and notes changes go through `node set-status.mjs` |
 | Canva MCP | Optional visual CV generation. Duplicate base design, edit text, export PDF. Requires `cv.canva_resume_design_id` in profile.yml. |
-| Bash | `node generate-pdf.mjs` |
+| Bash | `node generate-pdf.mjs`, `node merge-tracker.mjs`, `node set-status.mjs` |
 
 ### Subagent delegation (cost guardrail)
 

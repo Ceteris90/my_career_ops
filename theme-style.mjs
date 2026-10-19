@@ -32,6 +32,7 @@
  */
 import { readFileSync, existsSync } from 'fs';
 import * as yaml from 'js-yaml';
+import { getProfilePath } from './path-resolver.mjs';
 
 // Recognized style tokens → the CSS custom property each maps to. Anything not
 // listed here is ignored, so a typo or an unrelated `style:` key is inert.
@@ -53,6 +54,20 @@ export const STYLE_VAR_MAP = {
   // knowing: "avoid" cannot help an entry taller than a full page — it still
   // splits, just after leaving a bottom gap on the page before it.
   job_break_inside: '--job-break-inside',
+  // Whether a Projects entry may split across a page break. Same opt-in shape
+  // as job_break_inside above, and every shipped template keeps its current
+  // behavior (auto — a project may split) as the default, so this changes
+  // nobody's layout unless they set it.
+  //
+  // What "avoid" buys: `.project-tech { break-before: avoid }` keeps a tech
+  // line attached to its description, and when the break would land there
+  // Chromium satisfies that by moving the description's LAST LINE over too.
+  // A description ending in one short word therefore opens the next page as a
+  // lone word above the tech line, with the project title left behind. Keeping
+  // the whole entry together removes that, at the cost of a bottom gap on the
+  // page before it — and on a CV already near its page budget, that gap can
+  // cost a page. That trade is why this is opt-in rather than a new default.
+  project_break_inside: '--project-break-inside',
 };
 
 /**
@@ -61,7 +76,7 @@ export const STYLE_VAR_MAP = {
  * @param {string} [profilePath]
  * @returns {Record<string,string>}
  */
-export function readStyleTokens(profilePath = 'config/profile.yml') {
+export function readStyleTokens(profilePath = getProfilePath()) {
   try {
     if (!existsSync(profilePath)) return {};
     const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
@@ -98,7 +113,7 @@ export function styleTokensFrom(style) {
  * @param {string} [profilePath]
  * @returns {string[]}
  */
-export function readCvSectionOrder(profilePath = 'config/profile.yml') {
+export function readCvSectionOrder(profilePath = getProfilePath()) {
   try {
     if (!existsSync(profilePath)) return [];
     const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};

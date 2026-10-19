@@ -25,9 +25,11 @@ import {
 } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { pass, fail, linkRepoPackage, ROOT, NODE } from './helpers.mjs';
+import { pass, fail, linkRepoPackage, ownRootEnv, ROOT, NODE, SANDBOX_DATA_ROOT } from './helpers.mjs';
 
-const outputRoot = join(ROOT, 'output');
+// Under the suite's own data root, not the checkout's output/: that directory
+// is the developer's, and an interrupted run left this fixture in it (#5113).
+const outputRoot = join(SANDBOX_DATA_ROOT, 'output');
 mkdirSync(outputRoot, { recursive: true });
 // realpathSync, not the raw mkdtemp path: Node resolves both `import.meta.url`
 // and a module's node_modules walk from a file's REALPATH, while
@@ -63,6 +65,8 @@ copyFileSync(join(ROOT, 'lib', 'is-main-module.mjs'), join(sandbox, 'lib', 'is-m
 // lib/page-format.mjs owns the paper size generate-pdf.mjs imports at module
 // scope, so the copy needs it for the same reason.
 copyFileSync(join(ROOT, 'lib', 'page-format.mjs'), join(sandbox, 'lib', 'page-format.mjs'));
+// pipeline-lock.mjs runs the shared lock protocol from lib/dir-lock.mjs (#5358).
+copyFileSync(join(ROOT, 'lib', 'dir-lock.mjs'), join(sandbox, 'lib', 'dir-lock.mjs'));
 
 // theme-style.mjs and tracker-utils.mjs both `import * as yaml from 'js-yaml'`,
 // which resolves by walking up into the repo's node_modules -- from the
@@ -165,7 +169,7 @@ function run(args, { env, cwd } = {}) {
     cwd: cwd || sandbox,
     encoding: 'utf-8',
     timeout: 30_000,
-    env: env ? { ...process.env, ...env } : process.env,
+    env: ownRootEnv(env),
   });
   return { ...result, output: `${result.stdout || ''}${result.stderr || ''}` };
 }
@@ -289,7 +293,7 @@ await renderHtmlToPdf(${JSON.stringify(htmlDoc('Solo CV'))}, outputPath, {
     const result = spawnSync(NODE, [directRunner, join(sandbox, 'out', outputName), sandbox,
       ...(tokens === undefined ? [] : [JSON.stringify(tokens)])], {
       cwd: otherCwd, encoding: 'utf-8', timeout: 30_000,
-      env: { ...process.env, ...themedEnv },
+      env: ownRootEnv(themedEnv),
     });
     if (result.status === 0 && accepts(renderedHtml(outputName))) {
       pass(`imported PDF rendering honors ${label} theme selection from a different working directory`);

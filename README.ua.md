@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Створено <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center">
 <strong>Місяці надсилання резюме в&nbsp;тишу.</strong><br>
@@ -120,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-Найм сам себе не виправить. Люди, які через нього проходять, можуть, і вони вже в кімнаті: звіряють нотатки й лагодять одне одному налаштування. [Саме тут пишеться виправлення](CONTRIBUTING.md). Кімната, а не клуб. **Будуймо разом.**
+Найм сам себе не виправить. Люди, які через нього проходять, можуть, і вони вже в кімнаті: звіряють нотатки й лагодять одне одному налаштування.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ua" alt="Анімована стіна з GitHub-аватарів учасників, що заповнюється в порядку приходу з квітень 2026 р.; наступна клітинка лишається вільною." width="100%"></a></p>
+
+[Саме тут пишеться виправлення](CONTRIBUTING.md). Кімната, а не клуб. **Будуймо разом.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: кількість учасників сервера career-ops наживо"></a></p>
 
@@ -180,7 +186,7 @@ career-ops безкоштовний для кандидатів, назавжд�
 | **Банк історій для співбесід** | Накопичує історії STAR+Reflection між оцінками: 5-10 головних історій, які можна адаптувати під поставлені вам поведінкові питання             |
 | **Скрипти переговорів**  | Фреймворки переговорів про зарплату, відповідь на географічну знижку, важіль конкурентних оферів                                          |
 | **Чернетки листів-заявок** | Формальні листи рекрутеру, за рекомендацією або холодні заявки зі звіту чи вставленого опису, з темою, чеклістом вкладень, обґрунтованими пунктами відповідності та блоком контактів із профілю. Лише чернетки: career-ops ніколи не надсилає, не подає і не клікає нічого. |
-| **Сканер порталів**      | 100+ попередньо налаштованих компаній (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + власні запити по Ashby, Greenhouse, Lever, Wellfound |
+| **Сканер порталів**      | 100+ попередньо налаштованих компаній (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + власні пошукові веб-запити по Ashby, Greenhouse, Lever, Wellfound |
 | **Пошук профінансованих компаній** | Команда `company:funded` (спершу перегляд) показує компанії з нещодавнім фінансуванням і діагностику джерел зі структурованих публічних стрічок, не змінюючи ваші дані |
 | **Пакетна обробка**      | Паралельна оцінка headless CLI-воркерами (`claude -p` / `opencode run`)                                                                 |
 | **Dashboard TUI**        | Термінальний інтерфейс для перегляду, фільтрації та сортування вашого конвеєра                                                           |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` іде разом із [Node.js](https://nodejs.org): він запускає інсталятор один раз,
 > нічого не встановлюючи глобально. Ще немає Node? Спершу встановіть його.
-> (Уже користуєтеся CLI Claude Code / Gemini / Codex? Тоді він у вас уже є.)
+> (Уже користуєтеся CLI Claude Code / Codex? Тоді він у вас уже є.)
 
 Це клонує останній реліз у `./career-ops` і встановлює залежності. Потім:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-Скіл визначено за відкритим стандартом у `.agents/skills/career-ops/SKILL.md` і підключено символічним посиланням або посиланням для кожного підтримуваного CLI (наприклад `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`).
+Скіл визначено за відкритим стандартом у `.agents/skills/career-ops/SKILL.md` і підключено символічним посиланням або посиланням для кожного підтримуваного CLI (наприклад `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`). Cursor автоматично виявляє спільний скіл у `.agents/skills/`.
 
 ## Інтеграція з Codex
 

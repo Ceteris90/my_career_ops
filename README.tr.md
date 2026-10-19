@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>@santifer</strong></a> tarafından oluşturuldu</p>
 
 <p align="center">
 <strong>Aylarca sessizliğe CV&nbsp;gönderdim.</strong><br>
@@ -120,7 +122,11 @@ Gönder'e bastıktan sonraki sessizlik seninle ilgili değil. Aynı şeyi gören
 
 <br>
 
-İşe alım kendi kendine düzelmeyecek. Onu yaşayanlar düzeltebilir ve onlar zaten odadalar: notları karşılaştırıyor, birbirlerinin kurulumlarını onarıyorlar. [Düzeltme burada yazılıyor](CONTRIBUTING.md). Bir kulüp değil, bir oda. **Birlikte inşa edelim.**
+İşe alım kendi kendine düzelmeyecek. Onu yaşayanlar düzeltebilir ve onlar zaten odadalar: notları karşılaştırıyor, birbirlerinin kurulumlarını onarıyorlar.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=tr" alt="Katkıda bulunanların GitHub avatarlarından oluşan hareketli duvar; Nisan 2026 tarihinden beri geliş sırasına göre doluyor ve sıradaki kare boş bırakılıyor." width="100%"></a></p>
+
+[Düzeltme burada yazılıyor](CONTRIBUTING.md). Bir kulüp değil, bir oda. **Birlikte inşa edelim.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: career-ops sunucusunun canlı üye sayısı"></a></p>
 
@@ -180,7 +186,7 @@ CV'ni yeniden ifade eder; asla uydurmamalıdır. Koddaki bir denetim, CV'nde de 
 | **Mülakat Hikâye Bankası** | Değerlendirmeler boyunca STAR+Refleksiyon hikâyeleri biriktirir: karşına çıkan davranışsal sorulara uyarlayabileceğin 5-10 ana hikâye                    |
 | **Pazarlık Senaryoları** | Maaş pazarlığı çerçeveleri, coğrafi indirime karşı duruş, rakip tekliflerden kaldıraç                                                    |
 | **Başvuru E-postası Taslakları** | Bir rapordan veya yapıştırılan iş tanımından işe alım uzmanına, referansla ya da soğuk başvuru için resmî e-postalar: konu satırı, ek listesi, kaynaklı uyum noktaları ve profilden gelen iletişim bloğu ile. Yalnızca taslak: career-ops asla göndermez, iletmez veya hiçbir şeye tıklamaz. |
-| **Portal Tarayıcı**      | 100+ önceden yapılandırılmış şirket (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + Ashby, Greenhouse, Lever, Wellfound üzerinde özel sorgular |
+| **Portal Tarayıcı**      | 100+ önceden yapılandırılmış şirket (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + Ashby, Greenhouse, Lever, Wellfound üzerinde özel web arama sorguları |
 | **Yatırım Almış Şirket Keşfi** | Önce incele yaklaşımlı `company:funded` komutu, yapılandırılmış açık akışlardan yakın zamanda yatırım almış şirketleri ve kaynak tanılamalarını verilerini düzenlemeden ortaya çıkarır |
 | **Toplu İşleme**         | Başsız CLI işçileriyle paralel değerlendirme (`claude -p` / `opencode run`)                                                              |
 | **Dashboard TUI**        | Hattını gezmek, filtrelemek ve sıralamak için terminal arayüzü                                                                           |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx`, [Node.js](https://nodejs.org) ile birlikte gelir: yükleyiciyi bir kez çalıştırır,
 > global olarak hiçbir şey kurmaz. Node henüz yok mu? Önce onu kur.
-> (Zaten bir Claude Code / Gemini / Codex CLI kullanıyor musun? O zaman zaten var.)
+> (Zaten bir Claude Code / Codex CLI kullanıyor musun? O zaman zaten var.)
 
 Bu, en son sürümü `./career-ops` içine klonlar ve bağımlılıkları kurar. Sonra:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-Beceri, açık standarda göre `.agents/skills/career-ops/SKILL.md` içinde tanımlanır ve desteklenen her CLI için (ör. `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`) sembolik bağ ile bağlanır veya referans verilir.
+Beceri, açık standarda göre `.agents/skills/career-ops/SKILL.md` içinde tanımlanır ve desteklenen her CLI için (ör. `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`) sembolik bağ ile bağlanır veya referans verilir. Cursor, `.agents/skills/` içindeki ortak beceriyi otomatik olarak keşfeder.
 
 ## Codex Entegrasyonu
 

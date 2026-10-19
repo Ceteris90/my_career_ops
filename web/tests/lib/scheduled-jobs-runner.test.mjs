@@ -149,6 +149,40 @@ test("scheduled overlay falls back to portal title keywords and preserves hard l
   }
 });
 
+test("scheduled scan hands core the profile path the web resolves, not the raw relative value", () => {
+  // The scanner runs with cwd = the checkout, but the web resolves a relative
+  // CAREER_OPS_PROFILE under the data root it passes, so forwarding the raw value
+  // would let a data root outside the checkout read a different profile.
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-profile-"));
+  fs.writeFileSync(path.join(temp, "portals.yml"), "title_filter:\n  positive: [engineer]\nlocation_filter: {}\n", "utf8");
+  const job = { id: "22222222-2222-4222-8222-222222222222", engine: "full", filters: { positive: ["engineer"] } };
+  const saved = process.env.CAREER_OPS_PROFILE;
+  const seen = (value) => {
+    if (value === undefined) delete process.env.CAREER_OPS_PROFILE;
+    else process.env.CAREER_OPS_PROFILE = value;
+    let profile;
+    const result = executeJob(temp, job, {
+      spawnFn: (_node, _args, options) => {
+        profile = options.env.CAREER_OPS_PROFILE;
+        return { status: 0, stdout: JSON.stringify({ postingsKept: 0 }), stderr: "" };
+      },
+    });
+    assert.equal(result.state, "success");
+    return profile;
+  };
+  try {
+    assert.equal(seen("profiles/me.yml"), path.join(temp, "profiles", "me.yml"));
+    assert.equal(seen("  profiles/me.yml  "), path.join(temp, "profiles", "me.yml"));
+    const absolute = path.join(os.tmpdir(), "elsewhere", "profile.yml");
+    assert.equal(seen(absolute), absolute);
+    assert.equal(seen(undefined), undefined);
+  } finally {
+    if (saved === undefined) delete process.env.CAREER_OPS_PROFILE;
+    else process.env.CAREER_OPS_PROFILE = saved;
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
+
 test("scheduled scan never starts without title keywords", () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-no-titles-"));
   fs.writeFileSync(path.join(temp, "portals.yml"), "title_filter: {}\n", "utf8");
@@ -236,6 +270,83 @@ test("lock creation cleans directories when owner metadata writes fail", async (
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+// Windows answers mkdir on a directory another process is removing at that
+// instant (pending delete) with EPERM/EACCES rather than EEXIST. Seen on
+// windows-latest as `EPERM: operation not permitted, mkdir '…resource.recovery.lock'`
+// out of the real-contender race test below. `platform` is passed explicitly so
+// both halves are exercised on every runner.
+function injectMkdirFailures(target, code, failures = Number.POSITIVE_INFINITY) {
+  const originalMkdir = fs.mkdirSync;
+  const state = { attempts: 0, restore: () => { fs.mkdirSync = originalMkdir; } };
+  fs.mkdirSync = (dir, ...args) => {
+    if (String(dir) === target) {
+      state.attempts += 1;
+      if (state.attempts <= failures) {
+        const error = new Error(`${code}: operation not permitted, mkdir '${dir}'`);
+        error.code = code;
+        throw error;
+      }
+    }
+    return originalMkdir(dir, ...args);
+  };
+  return state;
+}
+
+for (const [label, suffix] of [["recovery guard", ".recovery.lock"], ["resource lock", ".lock"]]) {
+  for (const code of ["EPERM", "EACCES"]) {
+    test(`${label} mkdir retries a Windows ${code} as contention instead of crashing`, async () => {
+      const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-mkdir-retry-"));
+      const resource = path.join(temp, "resource");
+      const injected = injectMkdirFailures(`${resource}${suffix}`, code, 3);
+      try {
+        let entered = false;
+        await withResourceLock(resource, async () => { entered = true; }, { platform: "win32", retryMs: 1 });
+        assert.equal(entered, true);
+        assert.equal(injected.attempts, 4);
+        assert.equal(fs.existsSync(`${resource}.lock`), false);
+        assert.equal(fs.existsSync(`${resource}.recovery.lock`), false);
+      } finally {
+        injected.restore();
+        fs.rmSync(temp, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test(`${label} mkdir still throws a persistent Windows EPERM once the deadline passes`, async () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-mkdir-deadline-"));
+    const resource = path.join(temp, "resource");
+    const injected = injectMkdirFailures(`${resource}${suffix}`, "EPERM");
+    try {
+      await assert.rejects(
+        withResourceLock(resource, async () => {}, { platform: "win32", retryMs: 1, timeoutMs: 40 }),
+        (error) => error.code === "EPERM",
+      );
+      assert.ok(injected.attempts > 1, "the guard gave up without retrying");
+      assert.equal(fs.existsSync(`${resource}.lock`), false);
+      assert.equal(fs.existsSync(`${resource}.recovery.lock`), false);
+    } finally {
+      injected.restore();
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  test(`${label} mkdir EPERM stays an immediate failure off Windows`, async () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-mkdir-posix-"));
+    const resource = path.join(temp, "resource");
+    const injected = injectMkdirFailures(`${resource}${suffix}`, "EPERM");
+    try {
+      await assert.rejects(
+        withResourceLock(resource, async () => {}, { platform: "linux", retryMs: 1 }),
+        (error) => error.code === "EPERM",
+      );
+      assert.equal(injected.attempts, 1);
+    } finally {
+      injected.restore();
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+}
 
 test("roles-found parsing matches both scanner output formats", () => {
   assert.equal(extractRolesFound("full", JSON.stringify({ postingsKept: 7 })), 7);
@@ -331,6 +442,68 @@ test("concurrent real contenders never overlap while taking over or releasing a 
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+// The interleaving behind the race test's intermittent ENOENT, replayed in one
+// process. Our guard mkdir gets EEXIST. The holder then releases before we read
+// its owner.json, and our stat of the guard fails. Before we act on that, a
+// second contender wins the mkdir and starts writing its owner.json. A stat we
+// could not complete proves nothing about staleness, so we must wait and leave
+// the contender's new guard alone. ENOENT is the POSIX face; EPERM is how
+// Windows answers for a directory that is mid-removal.
+for (const statCode of ["ENOENT", "EPERM"]) {
+  test(`a guard whose stat fails with ${statCode} is not taken from the contender who re-creates it`, async () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-vanish-"));
+    const resource = path.join(temp, "resource");
+    const guardDir = `${resource}.recovery.lock`;
+    const guardOwner = path.join(guardDir, "owner.json");
+    const originalRead = fs.readFileSync;
+    const originalStat = fs.statSync;
+    let contender = null;
+    fs.mkdirSync(guardDir);
+    fs.writeFileSync(guardOwner, JSON.stringify({ pid: process.pid, token: "holder" }), "utf8");
+    try {
+      fs.readFileSync = (file, ...args) => {
+        if (String(file) === guardOwner && contender === null && fs.existsSync(guardOwner)) {
+          fs.unlinkSync(guardOwner);
+          fs.rmdirSync(guardDir);
+        }
+        return originalRead(file, ...args);
+      };
+      fs.statSync = (file, ...args) => {
+        if (String(file) !== guardDir || contender !== null) return originalStat(file, ...args);
+        try {
+          originalStat(file, ...args);
+        } catch {
+          // The released guard is gone, as the real stat just proved.
+        }
+        fs.mkdirSync(guardDir);
+        contender = new Promise((resolve) => setTimeout(() => {
+          let error = null;
+          try {
+            fs.writeFileSync(guardOwner, JSON.stringify({ pid: process.pid, token: "contender" }), "utf8");
+          } catch (writeError) {
+            error = writeError;
+          }
+          fs.rmSync(guardDir, { recursive: true, force: true });
+          resolve(error);
+        }, 30));
+        const error = new Error(`${statCode}: injected stat failure, stat '${file}'`);
+        error.code = statCode;
+        throw error;
+      };
+      let entered = false;
+      await withResourceLock(resource, async () => { entered = true; }, { retryMs: 5, timeoutMs: 2_000 });
+      assert.equal(entered, true);
+      assert.ok(contender, "the injected interleaving never ran");
+      assert.equal(await contender, null, "the contender's new guard was taken over before it could write owner.json");
+    } finally {
+      fs.readFileSync = originalRead;
+      fs.statSync = originalStat;
+      await contender;
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+}
 
 test("a worker crash after a persisted claim leaves the queue recoverable", async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-scheduled-claim-crash-"));

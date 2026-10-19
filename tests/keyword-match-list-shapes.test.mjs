@@ -1,29 +1,21 @@
-// tests/keyword-match-list-shapes.test.mjs — keyword-match.mjs has to read the
-// keyword section in the list shapes agents write, not only `a, b, c`.
+// tests/keyword-match-list-shapes.test.mjs — extractKeywords() reads the list
+// shapes an evaluation report actually arrives in, not only the ASCII comma one.
 //
-// No evaluation mode fixes the list's format: each says only "list of 15-20
-// keywords", so the agent picks one. extractKeywords() split on the ASCII comma
-// and stripped `-`/`*` bullets, and every other shape skewed the coverage it
-// reports:
-// - a ` · ` list came back as ONE keyword, so coverage read 0%;
-// - a numbered list kept its `1. ` marker, so no keyword could ever match;
-// - a code fence wrapping the list, or a `---` under it, became a keyword of its
-//   own that no CV contains, which lowered every coverage figure;
-// - Chinese and Japanese separate list items with `、`, Arabic with `،`, so those
-//   modes' lists came back as one keyword too. Splitting on `、` brings two more
-//   cases along: Chinese numbering (`1、`, `一、`) must not leave a bare numeral
-//   keyword, and a closing `。` must not stick to the last keyword.
+// No evaluation mode fixes the format of the keyword block. Every placeholder
+// says just "list of 15-20 keywords", so the agent that wrote the report picks
+// the shape, and extractKeywords() read one. Measured by the reporter on their
+// own 503 local reports, 236 (47%) hit at least one shape it could not parse,
+// and 43 of those reported 0% coverage against a CV that plainly contained the
+// keywords. The figure is copied into the report and into step 22 of pdf mode,
+// so one line of separator is a coverage score that reads as a clean miss.
 //
-// The guards are the other half: they pass before and after the fix, and fail
-// if the separator rule is widened to split a word (a middle dot with no spaces
-// round it) or the marker rule to eat a keyword that starts with a digit.
+// Each case below is a shape that shipped. The guards are the other half: they
+// pass before and after, and fail if the separator set is widened carelessly —
+// a bare U+00B7 would cut Catalan `col·laboració` and the vowel-length marks
+// Unicode's NamesList records across much of Amerindian orthography in half.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { extractKeywords } from '../keyword-match.mjs';
-import { pass, fail, NODE, ROOT, rmSync } from './helpers.mjs';
+import { analyzeCoverage, extractKeywords } from '../keyword-match.mjs';
+import { pass, fail } from './helpers.mjs';
 
 console.log('\nkeyword-match: keyword list shapes');
 
@@ -31,89 +23,170 @@ function check(label, run) {
   try { run(); pass(label); } catch (error) { fail(`${label}: ${error.message}`); }
 }
 
-/** A report whose keyword section holds `body`, followed by another section. */
-const report = (body) => `# Evaluation\n\n## Keywords extracted\n\n${body}\n\n## Job Description (archived verbatim)\n\nIgnored.`;
-const kws = (body) => extractKeywords(report(body));
+// The keyword block as a report carries it, with the level-2 heading that ends it.
+const block = (body) => `## Keywords extracted\n\n${body}\n\n## Next\n`;
 
-check('a list separated by spaced middle dots yields one keyword per item', () => {
-  assert.deepEqual(kws('SQL · Tableau · user growth · forecasting'),
-    ['SQL', 'Tableau', 'user growth', 'forecasting']);
+// U+00B7 MIDDLE DOT, U+3001 IDEOGRAPHIC COMMA, U+FF0C FULLWIDTH COMMA,
+// U+060C ARABIC COMMA, U+3002/U+FF0E sentence enders, U+0964 DEVANAGARI DANDA.
+const MIDDOT = '\u00B7';
+const IDEO_COMMA = '\u3001';
+const FULLWIDTH_COMMA = '\uFF0C';
+const ARABIC_COMMA = '\u060C';
+const IDEO_STOP = '\u3002';
+const FW_STOP = '\uFF0E';
+const DANDA = '\u0964';
+
+check('the reporter\'s repro: a middle-dot list now reads as three keywords', () => {
+  const report = block(`SQL ${MIDDOT} Tableau ${MIDDOT} forecasting`);
+  assert.deepEqual(extractKeywords(report), ['SQL', 'Tableau', 'forecasting']);
+
+  // The number that reaches the report, end to end.
+  const r = analyzeCoverage(extractKeywords(report), 'Built Tableau dashboards on SQL.');
+  assert.equal(r.total, 3);
+  assert.equal(r.coveragePct, 67);
+  assert.deepEqual(r.missing, ['forecasting']);
 });
 
-check('a numbered list loses its markers, with . or ) after the number', () => {
-  assert.deepEqual(kws('1. SQL\n2. Tableau\n10) user growth'), ['SQL', 'Tableau', 'user growth']);
-});
-
-check('a code fence round the list is not itself a keyword', () => {
-  assert.deepEqual(kws('```\nSQL, Tableau\n```'), ['SQL', 'Tableau']);
-  assert.deepEqual(kws('```text\nSQL, Tableau\n```'), ['SQL', 'Tableau']);
-  assert.deepEqual(kws('~~~\nSQL, Tableau\n~~~'), ['SQL', 'Tableau']);
-});
-
-check('a thematic break under the list is not a keyword', () => {
-  for (const rule of ['---', '***', '___', '* * *', '- - -']) {
-    assert.deepEqual(kws(`SQL, Tableau\n\n${rule}`), ['SQL', 'Tableau'], rule);
+check('every separator shape in the report splits into its keywords', () => {
+  const table = [
+    ['spaced middle dot', `SQL ${MIDDOT} Tableau ${MIDDOT} forecasting`, ['SQL', 'Tableau', 'forecasting']],
+    ['ideographic comma', `Python${IDEO_COMMA}SQL`, ['Python', 'SQL']],
+    ['fullwidth comma', `Python${FULLWIDTH_COMMA}SQL`, ['Python', 'SQL']],
+    ['arabic comma', `Python${ARABIC_COMMA} SQL`, ['Python', 'SQL']],
+    ['ascii comma', 'Python, SQL', ['Python', 'SQL']],
+    ['plus bullet', '+ SQL\n+ Tableau', ['SQL', 'Tableau']],
+    ['dash bullet', '- SQL\n- Tableau', ['SQL', 'Tableau']],
+    ['star bullet', '* SQL\n* Tableau', ['SQL', 'Tableau']],
+    ['ordered markers', '1. SQL\n2. Tableau', ['SQL', 'Tableau']],
+    ['ordered paren markers', '1) SQL\n2) Tableau', ['SQL', 'Tableau']],
+    ['cjk numbering', `1${IDEO_COMMA}SQL`, ['SQL']],
+    ['cjk numeral numbering', `\u4e00${IDEO_COMMA}SQL`, ['SQL']],
+    ['fullwidth stop numbering', `1${FW_STOP}Python\n2${FW_STOP}SQL`, ['Python', 'SQL']],
+    ['fullwidth paren numbering', '1\uFF09Python\n2\uFF09SQL', ['Python', 'SQL']],
+    ['trailing ideographic stop', `SQL${IDEO_STOP}`, ['SQL']],
+    ['trailing fullwidth stop', `SQL${FW_STOP}`, ['SQL']],
+    ['trailing danda', `SQL${DANDA}`, ['SQL']],
+    ['trailing ascii period', 'SQL.', ['SQL']],
+  ];
+  for (const [label, body, expected] of table) {
+    assert.deepEqual(extractKeywords(block(body)), expected, label);
   }
 });
 
-check('the list separators of the Chinese, Japanese and Arabic modes split items', () => {
-  assert.deepEqual(kws('Python、SQL、数据分析'), ['Python', 'SQL', '数据分析']);
-  assert.deepEqual(kws('Python，SQL，Tableau'), ['Python', 'SQL', 'Tableau']);
-  assert.deepEqual(kws('Python، SQL، Tableau'), ['Python', 'SQL', 'Tableau']);
+check('a fenced keyword block is content, and its delimiters are not keywords', () => {
+  // The biggest single shape in the report: 186 of 503 sections. A fence that
+  // leaked its delimiter produced a keyword no CV can ever contain.
+  const report = `## Keywords extracted\n\n\`\`\`\nSQL, Tableau\n\`\`\`\n\n## Next\n`;
+  assert.deepEqual(extractKeywords(report), ['SQL', 'Tableau']);
+
+  // A tilde fence, and a closing fence of a different length than the opener.
+  const tilde = `## Keywords extracted\n\n~~~~\nSQL\n~~~~~\n\n## Next\n`;
+  assert.deepEqual(extractKeywords(tilde), ['SQL']);
+
+  // A "## " line inside the fence cannot close the section early.
+  const inner = `## Keywords extracted\n\n\`\`\`\nSQL, Tableau\n## not a heading\n\`\`\`\n\n## Next\n`;
+  assert.deepEqual(extractKeywords(inner), ['SQL', 'Tableau', '## not a heading']);
+
+  // A fence the report never closes must not swallow every section after it.
+  // With no closer the opener stays an ordinary line, so the section ends at the
+  // next heading and the keywords after the opener are still read — exactly what
+  // this did before the fix.
+  const unclosed = '## Keywords extracted\n\n```\nSQL, Tableau\n\n## Verdict\n\nstrong fit\n';
+  assert.deepEqual(extractKeywords(unclosed), ['```', 'SQL', 'Tableau']);
 });
 
-check('a Chinese ordinal marker is stripped, not left behind as a numeral keyword', () => {
-  // `、` now splits items, so without this a bare `1` survives as a keyword and
-  // matches any standalone number in the CV, inflating coverage.
-  assert.deepEqual(kws('1、Python\n2、SQL\n10、Docker'), ['Python', 'SQL', 'Docker']);
-  assert.deepEqual(kws('一、Python\n十二、SQL'), ['Python', 'SQL']);
-  assert.deepEqual(kws('1．Python\n2）SQL'), ['Python', 'SQL']);
+check('a thematic break inside a fenced list is skipped too', () => {
+  // Found by CodeRabbit review. Fenced lines went straight to collect(), which
+  // is where the thematic-break test used to live — so a `---` written inside
+  // the fence became a keyword and moved the coverage total.
+  const fenced = '## Keywords extracted\n\n```\nSQL\n---\nTableau\n```\n\n## Next\n';
+  assert.deepEqual(extractKeywords(fenced), ['SQL', 'Tableau']);
+
+  const spaced = '## Keywords extracted\n\n```\nSQL\n- - -\nTableau\n```\n\n## Next\n';
+  assert.deepEqual(extractKeywords(spaced), ['SQL', 'Tableau']);
 });
 
-check('a CJK or Devanagari full stop does not stick to the last keyword', () => {
-  assert.deepEqual(kws('Python、SQL、Docker。'), ['Python', 'SQL', 'Docker']);
-  assert.deepEqual(kws('数据分析，财务建模．'), ['数据分析', '财务建模']);
-  assert.deepEqual(kws('Python, SQL, Docker।'), ['Python', 'SQL', 'Docker']);
-  assert.deepEqual(kws('Node.js, ASP.NET.'), ['Node.js', 'ASP.NET']);
+check('a shorter run of the same fence character does not close the fence', () => {
+  // Also found by CodeRabbit review. CommonMark 0.31.2 §4.5: the closer is the
+  // same character AND at least as long as the opener. Matching on the character
+  // alone let a 3-backtick line close a 4-backtick fence, and every line after it
+  // became ordinary content — which is how the rest of a report can leak into the
+  // keyword list. The discriminating marker is the "## " line below: inside the
+  // fence it is content, outside it would end the section.
+  const quoted = '## Keywords extracted\n\n````\nSQL\n```\n## not a heading\n````\n\n## Next\n';
+  assert.deepEqual(extractKeywords(quoted), ['SQL', '```', '## not a heading']);
+
+  // A longer closer still closes it, which is the CommonMark direction.
+  const longer = '## Keywords extracted\n\n```\nSQL, Tableau\n`````\n\n## Next\n';
+  assert.deepEqual(extractKeywords(longer), ['SQL', 'Tableau']);
 });
 
-check('a middle dot inside a word does not split it', () => {
-  assert.deepEqual(kws('col·laboració, SQL'), ['col·laboració', 'SQL']);
-  assert.deepEqual(kws('SQL·Tableau'), ['SQL·Tableau']);
+check('fence indentation decides what a delimiter is', () => {
+  // Also found by CodeRabbit review, on #5362. FENCE_RE's `^ {0,3}` is what
+  // separates a fence from an indented code block (§4.9), but both the opener
+  // and the closer were matched on a TRIMMED line, so no line ever carried an
+  // indent into the test. An indented run of the same character could
+  // therefore close a real fence, and a `## ` heading after it left the keyword
+  // list with nothing to show for the loss.
+  const B = '```';
+  const B4 = '````';
+
+  // A real fence (0-3 spaces) is not closed by a four-space indented run. The
+  // heading is the witness: inside the fence it is a keyword, outside it would
+  // have ended the section. The indented run is longer than the opener, so the
+  // length rule ACCEPTS it and indentation is the only thing that can reject it
+  // — which is what makes this case isolate the indent bug.
+  const indentedNoClose = `## Keywords extracted\n\n${B}\nSQL\n    ${B4}\n## not a heading\n${B}\n\n## Next\n`;
+  assert.deepEqual(extractKeywords(indentedNoClose), ['SQL', B4, '## not a heading']);
+
+  // The other half, and the reason this needed more than a one-line change: an
+  // indented code block's own closer is indented too. Reading those delimiters
+  // as fences is what lets the contents through instead of leaking ``` as
+  // keywords, so the stricter rule must not be applied to them.
+  const indentedBlock = `## Keywords extracted\n\n    ${B}\n    SQL, Tableau\n    ${B}\n\n## Next\n`;
+  assert.deepEqual(extractKeywords(indentedBlock), ['SQL', 'Tableau']);
+
+  // Up to three spaces is still inside the fence's own range, so it closes.
+  const threeSpaces = `## Keywords extracted\n\n${B}\nSQL\n   ${B}\n\n## Next\n`;
+  assert.deepEqual(extractKeywords(threeSpaces), ['SQL']);
 });
 
-check('a keyword that starts with a digit keeps it', () => {
-  assert.deepEqual(kws('3D modeling, 401(k) plans, 5G'), ['3D modeling', '401(k) plans', '5G']);
-  assert.deepEqual(kws('2.5D packaging'), ['2.5D packaging']);
-});
-
-check('a + bullet loses its marker like - and * do', () => {
-  assert.deepEqual(kws('+ CI/CD\n+ C++'), ['CI/CD', 'C++']);
-});
-
-check('the shapes that already worked still do', () => {
-  assert.deepEqual(kws('- Python\n- FastAPI, gRPC\n* C++, C#'),
-    ['Python', 'FastAPI', 'gRPC', 'C++', 'C#']);
-  assert.deepEqual(kws('(list of 15-20 keywords from the JD for ATS optimization)'), []);
-});
-
-check('the CLI scores a fenced, numbered, middle-dot report the way pdf mode calls it', () => {
-  // Every shape in one report, run through the same command line modes/pdf.md
-  // step 22 uses, so a regression shows up as the coverage figure the user sees.
-  const work = mkdtempSync(join(tmpdir(), 'keyword-match-shapes-'));
-  try {
-    const reportPath = join(work, '042-acme-2026-10-07.md');
-    const cvPath = join(work, 'cv-acme.html');
-    writeFileSync(reportPath, report('```\n1. SQL\n2. Tableau · forecasting\n```\n\n---'));
-    writeFileSync(cvPath, '<html><body><p>Built Tableau dashboards on SQL.</p></body></html>');
-    const out = execFileSync(NODE, [join(ROOT, 'keyword-match.mjs'), reportPath, '--cv', cvPath, '--json'], {
-      encoding: 'utf-8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const result = JSON.parse(out);
-    assert.equal(result.total, 3);
-    assert.equal(result.coveragePct, 67);
-    assert.deepEqual(result.missing, ['forecasting']);
-  } finally {
-    rmSync(work, { recursive: true, force: true });
+check('a thematic break under the list is skipped, not read as keywords', () => {
+  for (const rule of ['---', '***', '___', '- - -', '*****']) {
+    assert.deepEqual(extractKeywords(block(`SQL, Tableau\n${rule}`)), ['SQL', 'Tableau'], rule);
   }
+});
+
+check('a bare middle dot inside a word stays one keyword', () => {
+  // Unicode's NamesList records U+00B7 inside words, not only between items, so
+  // the split requires whitespace on both sides. These are real spellings.
+  assert.deepEqual(extractKeywords(block(`col${MIDDOT}laboració`)), [`col${MIDDOT}laboració`]);
+  assert.deepEqual(extractKeywords(block(`k${MIDDOT}am`)), [`k${MIDDOT}am`]);
+  // ...while the spaced form still splits.
+  assert.deepEqual(extractKeywords(block(`col ${MIDDOT} lab`)), ['col', 'lab']);
+});
+
+check('a keyword starting with digits or a dot keeps its head', () => {
+  // The ordered-list marker needs digits AND punctuation AND a space, so a
+  // leading number that is part of the term is untouched.
+  const table = ['3D modeling', 'C# 12', 'Node.js tooling', 'k8s orchestration', 'S3 buckets', '.NET 6'];
+  for (const kw of table) {
+    assert.deepEqual(extractKeywords(block(kw)), [kw], kw);
+  }
+});
+
+check('the plain comma list is byte-identical to before', () => {
+  // The shape every existing report and every mode uses. The change must be
+  // invisible here or it is a regression, not a fix.
+  assert.deepEqual(extractKeywords(block('- SQL, Tableau, forecasting')), ['SQL', 'Tableau', 'forecasting']);
+  assert.deepEqual(extractKeywords(block('SQL')), ['SQL']);
+  assert.deepEqual(extractKeywords(block('one keyword per line\nsecond\nthird')), [
+    'one keyword per line', 'second', 'third',
+  ]);
+});
+
+check('a parenthetical placeholder is still skipped and a missing block is still empty', () => {
+  assert.deepEqual(extractKeywords(block('(the agent writes 15-20 here)')), []);
+  assert.deepEqual(extractKeywords('## Something else\n\nSQL, Tableau\n'), []);
+  assert.deepEqual(extractKeywords(''), []);
 });

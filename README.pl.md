@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Stworzone przez <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center">
 <strong>Miesiące wysyłania CV w&nbsp;ciszę.</strong><br>
@@ -120,7 +122,11 @@ Cisza po kliknięciu „wyślij” nie mówi nic o tobie. Dość ludzi zobaczył
 
 <br>
 
-Rekrutacja sama się nie naprawi. Ludzie, którzy przez nią przechodzą, mogą, i już są w pokoju: porównują notatki i naprawiają sobie nawzajem konfiguracje. [Tu pisze się poprawkę](CONTRIBUTING.md). Pokój, nie klub. **Budujmy razem.**
+Rekrutacja sama się nie naprawi. Ludzie, którzy przez nią przechodzą, mogą, i już są w pokoju: porównują notatki i naprawiają sobie nawzajem konfiguracje.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=pl" alt="Animowana ściana awatarów GitHub osób współtworzących projekt, wypełniana w kolejności dołączania od kwiecień 2026, z kolejnym polem pozostawionym wolnym." width="100%"></a></p>
+
+[Tu pisze się poprawkę](CONTRIBUTING.md). Pokój, nie klub. **Budujmy razem.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: liczba członków serwera career-ops na żywo"></a></p>
 
@@ -180,7 +186,7 @@ Przeredagowuje twoje CV; nigdy nie wolno mu go zmyślać. Kontrola w kodzie zatr
 | **Bank historii na rozmowy** | Gromadzi historie STAR+Refleksja między ocenami: 5-10 głównych historii, które możesz dopasować do pytań behawioralnych, jakie dostaniesz |
 | **Skrypty negocjacyjne** | Frameworki negocjacji wynagrodzenia, odpowiedź na obniżkę geograficzną, wykorzystanie konkurencyjnych ofert                              |
 | **Szkice maili aplikacyjnych** | Formalne maile do rekrutera, z polecenia lub na zimno z raportu albo wklejonego opisu, z tematem, checklistą załączników, udokumentowanymi punktami dopasowania i blokiem kontaktowym z profilu. Tylko szkice: career-ops nigdy nie wysyła, nie składa i nie klika niczego. |
-| **Skaner portali**       | 100+ wstępnie skonfigurowanych firm (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + własne zapytania po Ashby, Greenhouse, Lever, Wellfound |
+| **Skaner portali**       | 100+ wstępnie skonfigurowanych firm (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + własne zapytania wyszukiwania w sieci po Ashby, Greenhouse, Lever, Wellfound |
 | **Odkrywanie firm po finansowaniu** | Komenda `company:funded` (najpierw przegląd) pokazuje firmy z niedawnym finansowaniem i diagnostykę źródeł z ustrukturyzowanych publicznych feedów, bez edytowania twoich danych |
 | **Przetwarzanie wsadowe** | Równoległa ocena przez headless workery CLI (`claude -p` / `opencode run`)                                                             |
 | **Dashboard TUI**        | Interfejs terminalowy do przeglądania, filtrowania i sortowania pipeline'u                                                               |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` jest dostarczany z [Node.js](https://nodejs.org): uruchamia instalator raz,
 > nie instalując niczego globalnie. Nie masz jeszcze Node? Zainstaluj go najpierw.
-> (Używasz już CLI Claude Code / Gemini / Codex? To już go masz.)
+> (Używasz już CLI Claude Code / Codex? To już go masz.)
 
 To klonuje najnowsze wydanie do `./career-ops` i instaluje zależności. Potem:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-Skill jest zdefiniowany według otwartego standardu w `.agents/skills/career-ops/SKILL.md` i podlinkowany lub wskazany dla każdego wspieranego CLI (np. `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`).
+Skill jest zdefiniowany według otwartego standardu w `.agents/skills/career-ops/SKILL.md` i podlinkowany lub wskazany dla każdego wspieranego CLI (np. `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`). Cursor automatycznie wykrywa wspólny skill w `.agents/skills/`.
 
 ## Integracja z Codex
 

@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;만든 사람: <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center">
 <strong>몇 달 동안 이력서를 보내도 답&#8288;이&nbsp;없&#8288;었&#8288;습&#8288;니&#8288;다.</strong><br>
@@ -120,7 +122,11 @@ npx @santifer/career-ops init
 
 <br>
 
-채용은 저절로 고쳐지지 않습니다. 그것을 겪는 사람들은 고칠 수 있고, 이미 그 방에 모여 서로 메모를 비교하고 서로의 설정을 고쳐 주고 있습니다. [고치는 코드는 여기서 쓰입니다](CONTRIBUTING.md). 클럽이 아니라 방입니다. **함께 만들어 갑시다.**
+채용은 저절로 고쳐지지 않습니다. 그것을 겪는 사람들은 고칠 수 있고, 이미 그 방에 모여 서로 메모를 비교하고 서로의 설정을 고쳐 주고 있습니다.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ko-KR" alt="기여자들의 GitHub 아바타가 2026년 4월부터 도착한 순서대로 채워지는 애니메이션 벽. 다음 칸은 비워 두었습니다." width="100%"></a></p>
+
+[고치는 코드는 여기서 쓰입니다](CONTRIBUTING.md). 클럽이 아니라 방입니다. **함께 만들어 갑시다.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: career-ops 서버의 실시간 멤버 수"></a></p>
 
@@ -180,7 +186,7 @@ career-ops는 구직자에게 영원히 무료입니다. 다음 기업들이 이
 | **면접 스토리 뱅크**   | 평가 데이터 기반 STAR+Reflection 스토리 축적: 실제로 받는 행동 면접 질문에 맞춰 다듬어 쓸 수 있는 5~10개의 마스터 답변                                     |
 | **협상 전략 스크립트** | 연봉 협상 프레임워크, 거주지 기반 연봉 차등(Geographic Discount) 대응 논리, 경쟁 오퍼 활용 전략                                     |
 | **지원 이메일 초안**   | 리포트나 붙여넣은 JD로부터 리크루터, 추천, 콜드 지원용 정식 이메일을 작성: 제목, 첨부 체크리스트, 근거가 있는 적합성 포인트, 프로필 기반 연락처 블록 포함. 초안만 작성하며, career-ops는 절대 보내거나 제출하거나 클릭하지 않습니다. |
-| **포털 스캐너**        | 100개 이상의 기업 사전 설정 (Anthropic, OpenAI, ElevenLabs, Retool, n8n 등) + Ashby, Greenhouse, Lever, Wellfound 전반의 커스텀 검색 |
+| **포털 스캐너**        | 100개 이상의 기업 사전 설정 (Anthropic, OpenAI, ElevenLabs, Retool, n8n 등) + Ashby, Greenhouse, Lever, Wellfound 전반의 커스텀 웹 검색 |
 | **투자 유치 기업 발견** | 검토 우선 방식의 `company:funded` 명령이 구조화된 공개 피드에서 최근 투자를 유치한 기업과 소스 진단을 보여주며, 당신의 데이터는 수정하지 않습니다 |
 | **일괄 처리**          | 헤드리스 CLI 워커(`claude -p` / `opencode run`)로 병렬 평가                                                                          |
 | **Dashboard TUI**      | 터미널 UI에서 파이프라인 탐색, 필터링, 정렬                                                                                         |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx`는 [Node.js](https://nodejs.org)에 포함되어 있습니다: 전역으로 아무것도 설치하지 않고
 > 설치 프로그램을 한 번 실행합니다. Node가 아직 없나요? 먼저 설치하세요.
-> (이미 Claude Code / Gemini / Codex CLI를 쓰고 있나요? 그러면 이미 있습니다.)
+> (이미 Claude Code / Codex CLI를 쓰고 있나요? 그러면 이미 있습니다.)
 
 이 명령은 최신 릴리스를 `./career-ops`에 클론하고 의존성을 설치합니다. 그다음:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-스킬은 오픈 표준에 따라 `.agents/skills/career-ops/SKILL.md`에 정의되어 있으며, 지원되는 각 CLI(예: `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`)에 심볼릭 링크되거나 참조됩니다.
+스킬은 오픈 표준에 따라 `.agents/skills/career-ops/SKILL.md`에 정의되어 있으며, 지원되는 각 CLI(예: `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`)에 심볼릭 링크되거나 참조됩니다. Cursor는 `.agents/skills/`의 공유 스킬을 자동으로 발견합니다.
 
 ## Codex 연동
 

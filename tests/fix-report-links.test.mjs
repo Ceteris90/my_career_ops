@@ -3,12 +3,13 @@
 // fictional data only.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { fixReportLinks } from '../fix-report-links.mjs';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const CODE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HEADER = [
@@ -36,7 +37,11 @@ function run(root, args = [], envExtra = { CAREER_OPS_ROOT: root }) {
   Object.assign(env, envExtra);
   const r = spawnSync(process.execPath, [join(CODE_ROOT, 'fix-report-links.mjs'), ...args], { cwd: CODE_ROOT, env, encoding: 'utf-8', timeout: 30_000 });
   assert.equal(r.error, undefined);
-  return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+  // Spread the real result, so describeSpawn() can still reach stdout, stderr,
+  // signal and error. Returning only { status, out } made the failure message
+  // print "(empty)" for both streams even when the script had written its
+  // usage text (#5380).
+  return { ...r, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 const withRoot = (fn) => () => { const root = makeRoot(); try { fn(root); } finally { rmSync(root, { recursive: true, force: true }); } };
 
@@ -127,6 +132,78 @@ test('an uninspectable report target is preserved and reported separately', with
   assert.ok(result.inspectionErrors[0].errors.every(({ error }) => error.code === 'EACCES'));
 }));
 
+// verify-pipeline shares that helper, but its Check 3 is a script with no stat
+// to inject. So this case arranges a report that really cannot be inspected
+// and runs the script against it (#4780).
+//
+// What "cannot be inspected" takes differs by platform. Both halves were
+// measured rather than assumed:
+//   POSIX    a directory with no search permission: stat on a file inside it
+//            answers EACCES. Root is not bound by that.
+//   Windows  denying the FILE alone, or the DIRECTORY alone, changes nothing:
+//            stat still succeeds, because the parent's list right is enough to
+//            read a child's attributes. Only a deny the children inherit makes
+//            stat answer EPERM. An elevated token is not bound by that.
+// The lock is checked by statting the file before the script runs. If it does
+// not bind this process, the case is skipped by name, not passed.
+function lockDirectory(dir) {
+  if (process.platform === 'win32') {
+    execFileSync('icacls', [dir, '/deny', '*S-1-1-0:(OI)(CI)(RX)'], { stdio: 'ignore' });
+    return () => execFileSync('icacls', [dir, '/remove:d', '*S-1-1-0'], { stdio: 'ignore' });
+  }
+  chmodSync(dir, 0o000);
+  return () => chmodSync(dir, 0o755);
+}
+function runVerify(root) {
+  const env = { ...process.env };
+  for (const k of ['CAREER_OPS_ROOT', 'CAREER_OPS_DATA_DIR', 'CAREER_OPS_TRACKER']) delete env[k];
+  env.CAREER_OPS_ROOT = root;
+  const r = spawnSync(process.execPath, [join(CODE_ROOT, 'verify-pipeline.mjs')], { cwd: CODE_ROOT, env, encoding: 'utf-8', timeout: 30_000 });
+  assert.equal(r.error, undefined);
+  // Spread the real result, so describeSpawn() can still reach stdout, stderr,
+  // signal and error. Returning only { status, out } made the failure message
+  // print "(empty)" for both streams even when the script had written its
+  // usage text (#5380).
+  return { ...r, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+}
+
+test('verify-pipeline warns about a report it cannot inspect instead of passing it', (t) => {
+  const root = makeRoot();
+  const locked = join(root, 'locked');
+  const reportFile = join(locked, '001-acme-widgets-2026-07-15.md');
+  mkdirSync(locked);
+  writeFileSync(reportFile, '# Eval\n');
+  writeTracker(root, [...HEADER, row(1, 'Acme Widgets', '[1](../locked/001-acme-widgets-2026-07-15.md)')]);
+  let unlock = () => {};
+  try {
+    // Control first: with the report readable, the same row is simply valid.
+    const open = runVerify(root);
+    assert.match(open.out, /All report links valid/, open.out);
+    assert.doesNotMatch(open.out, /could not be inspected/);
+
+    unlock = lockDirectory(locked);
+    let code = null;
+    try { statSync(reportFile); } catch (e) { code = e.code; }
+    if (code === null || code === 'ENOENT' || code === 'ENOTDIR') {
+      t.skip(`the lock does not bind this process (stat answered ${code ?? 'success'}): elevated shell or root`);
+      return;
+    }
+
+    const shut = runVerify(root);
+    assert.match(
+      shut.out,
+      /#1: Report could not be inspected \((EPERM|EACCES)\), so it may exist: \.\.\/locked\/001-acme-widgets-2026-07-15\.md/,
+      shut.out,
+    );
+    assert.doesNotMatch(shut.out, /Report not found/, 'a report that cannot be inspected is not a missing one');
+    assert.doesNotMatch(shut.out, /All report links valid/, 'and it is not a valid one either');
+    assert.equal(shut.status, open.status, 'a warning does not change the exit code');
+  } finally {
+    try { unlock(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('legacy root-relative link resolves from the data root', withRoot((root) => {
   report(root, '001-acme-widgets-2026-07-15.md');
   writeTracker(root, [
@@ -188,7 +265,7 @@ test('unknown flag is rejected; --help prints usage', withRoot((root) => {
   assert.match(bad.out, /--dryrun/);
   assert.equal(tracker(root), before, 'a mistyped flag must not fall through to a live run');
   const help = run(root, ['--help']);
-  assert.equal(help.status, 0);
+  assert.equal(help.status, 0, describeSpawn(help));
   assert.match(help.out, /Usage: node fix-report-links\.mjs/);
 }));
 
@@ -274,4 +351,32 @@ test('a symlinked CAREER_OPS_TRACKER: the backup sits beside the real file and h
   assert.match(readFileSync(real, 'utf-8'), /\| — \|/, 'the real file was rewritten');
   assert.equal(readFileSync(`${real}.bak`, 'utf-8'), original, 'backup beside the real file, original bytes');
   assert.equal(existsSync(`${link}.bak`), false, 'no backup beside the link');
+}));
+
+test('a symlinked tracker FILE: links resolve from the link\'s own folder, not only the target\'s (#5374)', withRoot((root) => {
+  // The tracker lives in another repo and data/applications.md links to it;
+  // reports/ sits next to the link, not next to the target. Editors resolve
+  // ../reports/ from data/, so both scripts must too.
+  const privateData = join(root, 'private', 'data');
+  mkdirSync(privateData, { recursive: true });
+  const real = join(privateData, 'applications.md');
+  report(root, '001-acme-widgets-2026-07-15.md');
+  const original = [...HEADER, row(1, 'Acme Widgets', DEAD), row(2, 'Bolt Gadgets', '[2](../reports/gone.md)'), ''].join('\n');
+  writeFileSync(real, original);
+  try { symlinkSync(real, trackerPath(root)); } catch (e) {
+    if (e.code === 'EPERM' || e.code === 'EACCES') return; // symlinks need privileges on some Windows setups
+    throw e;
+  }
+  assert.equal(existsSync(join(privateData, '..', 'reports')), false, 'no reports/ next to the target');
+
+  const r = run(root);
+  assert.equal(r.status, 0, r.out);
+  assert.doesNotMatch(r.out, /#1 Acme Widgets/, 'the live link is not rewritten');
+  assert.match(r.out, /#2 Bolt Gadgets/, 'a genuinely dead link still is');
+  assert.match(r.out, /1 dead report link\(s\) fixed/);
+  assert.match(readFileSync(real, 'utf-8'), /\[1\]\(\.\.\/reports\/001-acme-widgets-2026-07-15\.md\)/);
+
+  const v = runVerify(root);
+  assert.doesNotMatch(v.out, /Report not found/, v.out);
+  assert.match(v.out, /All report links valid/, v.out);
 }));

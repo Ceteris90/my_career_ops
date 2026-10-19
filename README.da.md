@@ -19,12 +19,14 @@
   <a href="README.ta.md">தமிழ்</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
-  <a href="README.tr.md">Türkçe</a>
+  <a href="README.tr.md">Türkçe</a> |
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;<a href="https://github.com/santifer"><strong>santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Skabt af <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
 
 <p align="center">
 <strong>Måneder med at sende CV'er ud i&nbsp;stilheden.</strong><br>
@@ -120,7 +122,11 @@ Stilheden, efter du trykker send, handler ikke om dig. Nok mennesker så det sam
 
 <br>
 
-Rekruttering reparerer ikke sig selv. Det kan de, der går igennem den, og de er allerede i rummet, hvor de sammenligner noter og fikser hinandens opsætninger. [Det er her, rettelsen bliver skrevet](CONTRIBUTING.md). Et rum, ikke en klub. **Lad os bygge sammen.**
+Rekruttering reparerer ikke sig selv. Det kan de, der går igennem den, og de er allerede i rummet, hvor de sammenligner noter og fikser hinandens opsætninger.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=da" alt="Animeret væg med bidragydernes GitHub-avatarer, der fyldes op i den rækkefølge, de kom til siden april 2026, med det næste felt holdt åbent." width="100%"></a></p>
+
+[Det er her, rettelsen bliver skrevet](CONTRIBUTING.md). Et rum, ikke en klub. **Lad os bygge sammen.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: antal medlemmer på career-ops-serveren, live"></a></p>
 
@@ -180,7 +186,7 @@ Den omformulerer dit CV; den må aldrig opdigte det. En kontrol i koden stopper 
 | **Interview-historiebank** | Samler STAR+Reflection-historier på tværs af vurderinger: 5-10 masterhistorier, du kan tilpasse til de adfærdsspørgsmål, du får          |
 | **Forhandlingsscripts**  | Rammer for lønforhandling, modsvar til geografisk rabat, brug af konkurrerende tilbud                                                    |
 | **Udkast til ansøgningsmails** | Formelle mails til rekrutterer, henvisning eller uopfordret ansøgning fra en rapport eller indsat jobbeskrivelse, med emnelinje, tjekliste over vedhæftninger, dokumenterede matchpunkter og en kontaktblok fra din profil. Kun udkast: career-ops sender, indsender eller klikker aldrig på noget. |
-| **Portalscanner**        | 100+ forudkonfigurerede virksomheder (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + egne søgninger på tværs af Ashby, Greenhouse, Lever, Wellfound |
+| **Portalscanner**        | 100+ forudkonfigurerede virksomheder (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + egne websøgninger på tværs af Ashby, Greenhouse, Lever, Wellfound |
 | **Find finansierede virksomheder** | Kommandoen `company:funded` (gennemse først) viser nyligt finansierede virksomheder og kildediagnostik fra strukturerede offentlige feeds uden at redigere dine data |
 | **Batch-behandling**     | Parallel vurdering med headless CLI-workers (`claude -p` / `opencode run`)                                                               |
 | **Dashboard TUI**        | Terminal-UI til at gennemse, filtrere og sortere din pipeline                                                                            |
@@ -202,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` følger med [Node.js](https://nodejs.org): det kører installationen én gang
 > uden at installere noget globalt. Ingen Node endnu? Installer den først.
-> (Bruger du allerede en Claude Code / Gemini / Codex CLI? Så har du den allerede.)
+> (Bruger du allerede en Claude Code / Codex CLI? Så har du den allerede.)
 
 Det kloner den seneste udgivelse ind i `./career-ops` og installerer afhængigheder. Derefter:
 
@@ -366,7 +372,7 @@ agy
 /career-ops tracker
 ```
 
-Skillet er defineret efter den åbne standard i `.agents/skills/career-ops/SKILL.md` og symlinket/refereret for hver understøttet CLI (fx `.claude/`, `.cursor/`, `.qwen/`, `.antigravitycli/`, `.grok/`).
+Skillet er defineret efter den åbne standard i `.agents/skills/career-ops/SKILL.md` og symlinket/refereret for hver understøttet CLI (fx `.claude/`, `.qwen/`, `.antigravitycli/`, `.grok/`). Cursor finder automatisk det fælles skill i `.agents/skills/`.
 
 ## Codex-integration
 
