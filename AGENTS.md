@@ -302,7 +302,7 @@ After the basics, proactively ask for more context:
 
 Store insights in `config/profile.yml` (narrative), `modes/_profile.md`, or `article-digest.md` (proof points) — never in `modes/_shared.md`.
 
-**After every evaluation, learn.** "This score is too high" or "you missed my experience in X" → update `modes/_profile.md`, `config/profile.yml`, or `article-digest.md`. The system gets smarter with every interaction without putting personalization into system-layer files.
+**Learn through `retro`.** When the user corrects you ("this score is too high", "stop writing my summary in third person"), propose the rule through the `retro` mode, which writes only what the user accepts. A missed fact ("you missed my experience in X") goes through `add` or `expand`, which confirm before writing `cv.md` or `article-digest.md`. Personalization stays out of system-layer files.
 
 #### Step 6: Ready
 Once all files exist, record the agent CLI you are running in, so `doctor.mjs`, `rank-pipeline.mjs` and the web UI use it instead of guessing:
@@ -448,6 +448,7 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 | Wants to broaden the search with adjacent job titles suggested from the CV | `titles` |
 | Asks what skills to learn, wants a skill-gap analysis of their pipeline | `upskill` |
 | Wants to build or enrich the profile from documents they already have (master CV, LinkedIn export, diplomas, references) | `intake` — scans `documents/`, extracts text locally (`intake.mjs`), proposes source-annotated additions to `config/profile.yml`/`cv.md`/`modes/_profile.md`; writes nothing without explicit confirm |
+| Wants to end the session with a review, or asks you to remember a correction next time | `retro`, which proposes up to five rules from the user's own words, checks them with `learn.mjs`, and writes only the ids the user accepts to `modes/_custom.md` or `modes/_profile.md` |
 | Asks about follow-ups or application cadence | `followup` |
 | Wants to classify application replies and review updates | `reply-watch` — classifies replies, matches to applications, suggests tracker updates |
 | Wants to record application outcome & archive artifacts | `outcome` |
