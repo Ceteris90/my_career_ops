@@ -20,9 +20,9 @@ const NOT_A_PLACE = /^(remote|hybrid|anywhere|on-?site)$/i;
 const USAGE = `
   onboard-write.mjs: write config/profile.yml and portals.yml from onboarding answers
 
-  node onboard-write.mjs --answers <file.json | -> [--target <dir>] [--force]
+  node onboard-write.mjs --answers <file.json | -> [--target <dir>] [--force] [--only profile|portals]
 
-  Existing files are kept unless --force. Prints {"written":[],"kept":[]} as JSON.
+  Existing files are kept unless --force. --only limits the run to one file. Prints {"written":[],"kept":[]} as JSON.
   Answers shape:
   {
     "candidate": { "full_name", "email", "location", "phone"?, "linkedin"?, "portfolio_url"?, "github"?, "twitter"? },
@@ -51,8 +51,12 @@ function parseArgs(argv) {
     if (a === '--answers') opts.answers = argv[++i];
     else if (a === '--target') opts.target = argv[++i];
     else if (a === '--force') opts.force = true;
+    else if (a === '--only') opts.only = argv[++i];
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new AnswerError(`unknown argument: ${a}`);
+  }
+  if (opts.only !== undefined && !['profile', 'portals'].includes(opts.only)) {
+    throw new AnswerError(`--only takes profile or portals, got "${opts.only}"`);
   }
   return opts;
 }
@@ -106,7 +110,7 @@ export function normalizeAnswers(raw) {
     target_roles: roles,
     compensation: {
       target_range: required(compensation.target_range, 'compensation.target_range'),
-      currency: compensation.currency?.trim() || 'USD',
+      currency: required(compensation.currency, 'compensation.currency'),
       minimum: compensation.minimum?.trim() || '',
       location_flexibility: compensation.location_flexibility?.trim() || '',
     },
@@ -283,6 +287,7 @@ export function main(argv = process.argv.slice(2)) {
   const root = opts.target ? resolve(opts.target) : getCareerOpsRoot();
   const targets = [
     {
+      key: 'profile',
       rel: 'config/profile.yml',
       path: getProfilePath(opts.target ? root : undefined),
       build: () => {
@@ -292,6 +297,7 @@ export function main(argv = process.argv.slice(2)) {
       },
     },
     {
+      key: 'portals',
       rel: 'portals.yml',
       path: opts.target ? join(root, 'portals.yml') : (process.env.CAREER_OPS_PORTALS || join(root, 'portals.yml')),
       build: () => {
@@ -302,7 +308,10 @@ export function main(argv = process.argv.slice(2)) {
       },
     },
   ];
-  const planned = targets.map((t) => ({ ...t, keep: existsSync(t.path) && !opts.force }));
+  const planned = targets.map((t) => ({
+    ...t,
+    keep: (opts.only !== undefined && opts.only !== t.key) || (existsSync(t.path) && !opts.force),
+  }));
   const texts = planned.map((t) => (t.keep ? null : t.build()));
   planned.forEach((t, i) => {
     if (t.keep) return;
