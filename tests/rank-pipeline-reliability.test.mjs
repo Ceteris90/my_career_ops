@@ -46,7 +46,7 @@ console.log(JSON.stringify(Array.from({ length: n }, (_, id) => ({ id, score: 3,
 
 test('each CLI is asked for one answer with no tools or extra turns', () => {
   const args = bin => CLI_CANDIDATES.find(c => c.bin === bin).args('PROMPT');
-  assert.deepEqual(args('claude'), ['-p', 'PROMPT', '--tools', '']);
+  assert.deepEqual(args('claude'), ['-p', 'PROMPT', '--tools', '', '--disallowedTools', '*']);
   const grok = args('grok');
   assert.deepEqual(grok.slice(0, 3), ['-p', 'PROMPT', '--disable-web-search']);
   const denied = grok[grok.indexOf('--disallowed-tools') + 1].split(',');
@@ -81,7 +81,7 @@ test('CAREER_OPS_RANK_TIMEOUT_MS bounds each call', POSIX, (t) => {
 });
 
 test('an unset or invalid timeout falls back to the default', () => {
-  assert.equal(resolveRankTimeoutMs(undefined), 180_000);
+  assert.equal(resolveRankTimeoutMs(''), 180_000);
   assert.equal(resolveRankTimeoutMs('abc'), 180_000);
   assert.equal(resolveRankTimeoutMs('0'), 180_000);
   assert.equal(resolveRankTimeoutMs('90000'), 90_000);
