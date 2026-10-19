@@ -86,24 +86,6 @@ function readSpendTier() {
   return 'standard';
 }
 
-/**
- * Read 'years-cap' setting from config/profile.yml (#5297).
- * Allows candidates to cap evaluated experience years in single-pass match mode.
- */
-export function readYearsCap() {
-  try {
-    if (existsSync(PATHS.profileYml)) {
-      const content = readFileSync(PATHS.profileYml, 'utf-8');
-      const match = content.match(/^[ \t]*(?:years[-_]cap)[ \t]*:[ \t]*(.+)$/m);
-      if (match) {
-        const val = match[1].trim().replace(/^['"](.*)['"]$/, '$1');
-        const num = parseInt(val, 10);
-        return isNaN(num) ? val : num;
-      }
-    }
-  } catch (err) {}
-  return null;
-}
 
 export function parseCliMode(args = process.argv.slice(2)) {
   if (hasFlag(args, '--single-pass')) return 'match';
@@ -128,101 +110,6 @@ export function parseLegitimacy(raw) {
   return 'Proceed with Caution';
 }
 
-/**
- * Enforces candidate experience cap (#5297) using JavaScript logic on cv.md.
- * Filters out experience entries whose end date is strictly older than currentYear - yearsCap.
- */
-export function filterCvByYearsCap(cvText, yearsCap, currentYear = new Date().getFullYear()) {
-  if (!yearsCap || typeof cvText !== 'string') return cvText;
-  const numCap = parseInt(yearsCap, 10);
-  if (isNaN(numCap) || numCap <= 0) return cvText;
-  const cutoffYear = currentYear - numCap;
-
-  const lines = cvText.split(/\r?\n/);
-  const result = [];
-  let inExperience = false;
-  let skippingEntry = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^##\s+(?:professional\s+)?experience/i.test(line)) {
-      inExperience = true;
-      skippingEntry = false;
-      result.push(line);
-      continue;
-    }
-    if (/^##\s+[^#]/i.test(line) && !/^##\s+(?:professional\s+)?experience/i.test(line)) {
-      inExperience = false;
-      skippingEntry = false;
-      result.push(line);
-      continue;
-    }
-
-    if (inExperience) {
-      const dateMatch = line.match(/\b(19\d\d|20\d\d)\s*[-–—]\s*(19\d\d|20\d\d|present|current)\b/i);
-      const isHeading = /^###\s+/.test(line);
-      const isBullet = /^[*-]\s+/.test(line);
-
-      if (isHeading) {
-        if (dateMatch) {
-          const endPart = dateMatch[2].toLowerCase();
-          const endYear = (endPart === 'present' || endPart === 'current') ? currentYear : parseInt(endPart, 10);
-          skippingEntry = endYear < cutoffYear;
-        } else {
-          const nextLine = lines[i + 1] || '';
-          const nextDateMatch = nextLine.match(/\b(19\d\d|20\d\d)\s*[-–—]\s*(19\d\d|20\d\d|present|current)\b/i);
-          if (nextDateMatch) {
-            const endPart = nextDateMatch[2].toLowerCase();
-            const endYear = (endPart === 'present' || endPart === 'current') ? currentYear : parseInt(endPart, 10);
-            skippingEntry = endYear < cutoffYear;
-          } else {
-            skippingEntry = false;
-          }
-        }
-      } else if (isBullet && !skippingEntry && dateMatch) {
-        const endPart = dateMatch[2].toLowerCase();
-        const endYear = (endPart === 'present' || endPart === 'current') ? currentYear : parseInt(endPart, 10);
-        skippingEntry = endYear < cutoffYear;
-      }
-
-      if (skippingEntry) continue;
-    }
-
-    result.push(line);
-  }
-
-  return result.join('\n');
-}
-
-/**
- * Validates and enforces the years-cap constraint (#5297) on LLM evaluation output.
- * Ensures the candidate is not penalized for experience requirements exceeding yearsCap.
- */
-export function validateYearsCap(evaluationText, yearsCap) {
-  if (!yearsCap || typeof evaluationText !== 'string') return evaluationText;
-  const numCap = parseInt(yearsCap, 10);
-  if (isNaN(numCap) || numCap <= 0) return evaluationText;
-
-  const gapRegex = new RegExp(`(\\b(?:require[s]?|demands?|needs?|minimum(?: of)?)\\s+(\\d+)\\+?\\s*years?\\b[\\s\\S]{0,120}?\\b(?:lacks?|only has|short of|missing|gap)\\b|\\b(?:lacks?|only has|short of|missing)\\s+(\\d+)\\+?\\s*years?\\b)`, 'gi');
-
-  let penalizedForCap = false;
-  let match;
-  while ((match = gapRegex.exec(evaluationText)) !== null) {
-    const requiredYears = parseInt(match[2] || match[3] || '0', 10);
-    if (requiredYears > numCap) {
-      penalizedForCap = true;
-    }
-  }
-
-  let sanitized = evaluationText;
-  if (penalizedForCap && !sanitized.includes('years-cap constraint')) {
-    sanitized = sanitized.replace(
-      /(##\s*Executive Match Summary[\s\S]*?\n\n)/i,
-      `$1*[Note: Candidate experience cap enforced at ${numCap} years per config/profile.yml (#5297). Requirements exceeding ${numCap} years are waived.]*\n\n`
-    );
-  }
-  return sanitized;
-}
 
 function spendTierToModel(tier) {
   switch (tier) {
@@ -275,11 +162,6 @@ export function loadContext(mode = 'full') {
     const cvContent = readFile(PATHS.cv, 'cv.md');
     const profileContent = existsSync(PATHS.profile) ? readFileSync(PATHS.profile, 'utf-8').trim() : '';
     const profileYml = existsSync(PATHS.profileYml) ? readFileSync(PATHS.profileYml, 'utf-8').trim() : '';
-    const yearsCap = readYearsCap();
-    const effectiveCv = yearsCap !== null ? filterCvByYearsCap(cvContent, yearsCap) : cvContent;
-    const yearsCapInstruction = yearsCap !== null
-      ? `\nCANDIDATE EXPERIENCE CAP (issue #5297): config/profile.yml enforces years-cap: ${yearsCap}. Only count and evaluate the candidate's last ${yearsCap} years of relevant experience. Do not penalize for older unlisted history or require experience beyond this window.\n`
-      : '';
 
     systemPromptTemplate = `You are career-ops, an AI job search assistant evaluating a job offer in single-pass CV match mode.
 Your objective is to extract candidate CV facts and evaluate candidate alignment with the Job Description in a single, fast inference call to minimize token overhead, bypassing the multi-step reasoning chain (Blocks A through G).
@@ -287,8 +169,8 @@ Your objective is to extract candidate CV facts and evaluate candidate alignment
 ═══════════════════════════════════════════════════════
 CANDIDATE RESUME (cv.md)
 ═══════════════════════════════════════════════════════
-${effectiveCv}
-${yearsCapInstruction}
+${cvContent}
+
 ═══════════════════════════════════════════════════════
 TARGET ROLES & PREFERENCES (config/profile.yml & _profile.md)
 ═══════════════════════════════════════════════════════
@@ -303,7 +185,6 @@ INSTRUCTIONS (CONDENSED SINGLE-PASS EVALUATION)
 2. Extract the primary role requirements and must-have qualifications from the Job Description.
 3. Compare the candidate's verified background directly to the requirements in a single pass:
    - Identify Strong Matches, Partial Matches, and Critical Gaps.
-   - Enforce Candidate Experience Cap (#5297): ${yearsCap !== null ? `Strictly cap experience evaluation at ${yearsCap} years. Do not penalize the candidate for experience requirements beyond ${yearsCap} years or older unlisted roles.` : 'Evaluate verified experience on CV.'}
    - Calculate an overall Match Score from 1.0 to 5.0 (5.0 = ideal fit, 4.0 = strong match, 3.0 = acceptable, <3.0 = major gap).
    - Detect the closest role archetype.
    - Assess role legitimacy (High Confidence | Proceed with Caution | Suspicious):
@@ -489,12 +370,6 @@ export async function processOffer(browser, line, idx, _evaluate = evaluateWithR
       return await resolveDeadPosting();
     }
 
-    if (currentEvalMode === 'match' || currentEvalMode === 'single-pass') {
-      const yearsCap = readYearsCap();
-      if (yearsCap !== null) {
-        evaluationText = validateYearsCap(evaluationText, yearsCap);
-      }
-    }
 
     const summaryMatch = evaluationText.match(/---SCORE_SUMMARY---\s*([\s\S]*?)---END_SUMMARY---/);
     if (!summaryMatch) {

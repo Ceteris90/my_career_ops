@@ -36,7 +36,7 @@ Before writing any user-visible prose, read `config/profile.yml` if it exists.
 |------|------|------|
 | CV | `cv.md` | Primary candidate evidence |
 | Profile customizations | `modes/_profile.md` if it exists | User-specific archetypes and target roles |
-| Profile config | `config/profile.yml` if it exists | Identity, output language, years-cap (#5297) |
+| Profile config | `config/profile.yml` if it exists | Identity, output language |
 | States | `templates/states.yml` | Tracker status labels |
 
 Rules:
@@ -98,7 +98,6 @@ Bypass the multi-step reasoning chain (Blocks A-G, WebSearch, compensation resea
 
 1. **Read profile & CV:**
    - Read `cv.md` for candidate qualifications, roles, skills, and metrics.
-   - Check `config/profile.yml` for `'years-cap'` setting (issue #5297). If `years-cap` is set (e.g. `years-cap: 10`), **cap candidate experience evaluation at that number of years**. Only consider and credit experience within the candidate's most recent `years-cap` years; do not penalize the candidate for older unlisted roles or require experience beyond this window.
    - Read `modes/_profile.md` for target archetypes.
 2. **Extract JD Requirements:**
    - Extract key requirements from the JD (core technical competencies, seniority level, domain experience).
@@ -133,7 +132,7 @@ Write the report to `reports/{{REPORT_NUM}}-{company_slug}-{{DATE}}.md` (where `
 ---
 
 ## Executive Match Summary
-{1-2 paragraphs summarizing candidate fit against role requirements, citing verified CV facts and noting years-cap constraint if active.}
+{1-2 paragraphs summarizing candidate fit against role requirements, citing verified CV facts.}
 
 ## Requirements & Evidence Matrix
 
@@ -192,6 +191,5 @@ Print the final result as a real fenced code block (```json ... ```) on stdout:
 ## Global Rules
 
 1. Never fabricate candidate experience, metrics, or credentials.
-2. Respect `years-cap` from `config/profile.yml` if configured.
-3. Do not run WebSearch or launch browser subagents during single-pass match evaluation.
-4. Output the authoritative JSON code block as the last fenced block in your output.
+2. Do not run WebSearch or launch browser subagents during single-pass match evaluation.
+3. Output the authoritative JSON code block as the last fenced block in your output.
