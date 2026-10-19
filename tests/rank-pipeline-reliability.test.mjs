@@ -88,6 +88,17 @@ test('CAREER_OPS_RANK_TIMEOUT_MS bounds each call', POSIX, (t) => {
   assert.match(result.stderr, /CAREER_OPS_RANK_TIMEOUT_MS/);
 });
 
+test('the per-call timeout kills a child that ignores SIGTERM', POSIX, (t) => {
+  // A CLI that traps SIGTERM would hang forever under execFileSync's default
+  // killSignal. SIGKILL still reaps it so later batches and the unranked report run.
+  const root = sandbox(t, `process.on('SIGTERM', () => {});
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`);
+  const started = Date.now();
+  const result = rank(root, ['--dry-run'], { CAREER_OPS_RANK_TIMEOUT_MS: '400' });
+  assert.ok(Date.now() - started < 15_000, 'SIGTERM-ignoring child must not block the run');
+  assert.match(result.stderr, /grok timed out after 0\.4 s/);
+});
+
 test('an unset or invalid timeout falls back to the default', () => {
   assert.equal(resolveRankTimeoutMs(''), 180_000);
   assert.equal(resolveRankTimeoutMs('abc'), 180_000);

@@ -302,12 +302,16 @@ function callCli(cli, prompt, model, timeout) {
   try {
     // Explicit maxBuffer: a verbose response otherwise throws
     // ERR_CHILD_PROCESS_STDIO_MAXBUFFER and fails the batch for no good reason.
+    // killSignal SIGKILL: execFileSync's default SIGTERM leaves a CLI that
+    // traps the signal running until the parent gives up, which blocks later
+    // batches and the unranked report.
     return execFileSync(cli.bin, args, {
       cwd,
       env: { ...process.env, ...cli.env },
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
       timeout,
+      killSignal: 'SIGKILL',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } finally {
