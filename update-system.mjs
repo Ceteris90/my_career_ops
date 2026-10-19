@@ -4373,18 +4373,26 @@ export function updateCommitBranchDecision({ currentBranch, defaultBranch, optIn
  * Shared entry point for apply() and tests using real repositories.
  *
  * @param {string} [root=ROOT] - Repository to read.
- * @param {{optIn?: boolean}} [options] - Defaults to the CLI/env opt-in.
+ * @param {{optIn?: boolean, updatePaths?: string[]}} [options] - Optional concrete update paths restrict withholding to pending changes.
  * @returns {{commit: boolean, reason: string, currentBranch: string|null, defaultBranch: string|null}}
  */
 export function resolveUpdateCommitBranch(root = ROOT, options = {}) {
   const optIn = options.optIn ?? commitOnBranchOptIn();
   const currentBranch = currentBranchIn(root);
   const defaultBranch = defaultBranchIn(root);
-  return {
+  const decision = {
     ...updateCommitBranchDecision({ currentBranch, defaultBranch, optIn }),
     currentBranch,
     defaultBranch,
   };
+  if (!decision.commit && options.updatePaths) {
+    const staged = new Set(gitRawIn(root, 'diff', '--cached', '--name-only', '-z').split('\0'));
+    if (!options.updatePaths.some(path => staged.has(path))) {
+      // Nothing to commit for this update; leave unrelated staged work alone.
+      return { ...decision, commit: false, reason: 'no-staged-update' };
+    }
+  }
+  return decision;
 }
 
 /**
@@ -4499,7 +4507,7 @@ export function skippedBranchCommitNotice({
     `       ${commitCommand}`,
     `  2. Move it to '${defaultBranch}' (git 2.35+ for --staged):`,
     `       git stash push --staged -m ${stashMessage}`,
-    `       git switch ${branch} && git stash pop && ${commitCommand}`,
+    `       git switch ${branch} && git stash pop --index && ${commitCommand}`,
     // --staged takes the whole index and leaves unstaged work behind. Isolate
     // unrelated work by path before switching; unstaging alone is insufficient.
     // Quote every path and keep the full list so the printed command is runnable.
@@ -5327,8 +5335,11 @@ async function apply() {
       );
       usedIndexCommit = unrelated.length === 0;
       // Decide after staging so withholding a commit does not withhold the update.
-      const branchDecision = resolveUpdateCommitBranch(ROOT, { optIn: commitOnBranch });
-      if (!branchDecision.commit) {
+      const branchDecision = resolveUpdateCommitBranch(ROOT, {
+        optIn: commitOnBranch,
+        updatePaths: [...expandedPathsToStage, ...materializedSkillEntrypoints],
+      });
+      if (!branchDecision.commit && branchDecision.reason !== 'no-staged-update') {
         skippedBranchCommit = true;
         // Distinguish this update from user edits on the next run.
         recordStagedUpdate(remote, { preservedPaths });
@@ -5342,10 +5353,10 @@ async function apply() {
             [...ownedPaths, ...materializedSkillEntrypoints], preservedPaths,
           ),
         }));
-      } else if (usedIndexCommit) {
+      } else if (branchDecision.commit && usedIndexCommit) {
         git('commit', '-m', `chore: auto-update system files to v${remote}`);
         clearStagedUpdate();
-      } else {
+      } else if (branchDecision.commit) {
         commitPathspecs(`chore: auto-update system files to v${remote}`, expandedPathsToStage);
         clearStagedUpdate();
       }
