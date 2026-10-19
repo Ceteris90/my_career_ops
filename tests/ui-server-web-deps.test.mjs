@@ -70,10 +70,11 @@ test('a server that exits during startup is not blamed on the port', async () =>
     const nextDir = join(dir, 'web', 'node_modules', 'next');
     mkdirSync(nextDir, { recursive: true });
     writeFileSync(join(nextDir, 'package.json'), JSON.stringify({ name: 'next', version: '15.0.0', bin: { next: 'cli.js' } }));
+    writeFileSync(join(dir, 'web', 'server.mjs'), 'process.exit(3);\n');
     const run = await launch(dir);
-    assert.notEqual(run.status, 0);
+    assert.equal(run.status, 3);
     assert.doesNotMatch(run.stderr, /Port may be occupied/);
-    assert.match(run.stderr, /exited with code \d+ before it was ready/);
+    assert.match(run.stderr, /exited with code 3 before it was ready/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
