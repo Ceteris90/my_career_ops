@@ -12,11 +12,12 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildHtml } from '../generate-cover-letter.mjs';
 import { assertFacts, verifyFacts } from '../verify-cv-facts.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const COVER_PDF_REGISTER = pathToFileURL(join(ROOT, 'tests', 'fixtures', 'cover-pdf-register.mjs')).href;
 const PLAN = 'On day one I will read the last 6 months of incident reviews.';
 const HORIZON = 'In my first 90 days I will map every payout retry path.';
 const INVENTED = 'On day one I will read the last 9 months of incident reviews.';
@@ -88,6 +89,15 @@ test('a later percentage in the same sentence can still be the plan', () => {
   );
   assert.equal(result.verdict, 'block');
   assert.deepEqual(result.invented, ['40%']);
+});
+
+test('a later percentage stays the plan when the earlier past verb has no percentage', () => {
+  const result = check(
+    letter('I grew the team and will grow revenue 50%.'),
+    ['I will grow revenue 50%.'],
+  );
+  assert.equal(result.verdict, 'pass');
+  assert.deepEqual(result.invented, []);
 });
 
 test('a forward marker later in the same clause does not admit a past-experience metric', () => {
@@ -176,7 +186,7 @@ function runCover(payload) {
   const payloadPath = join(dir, 'payload.json');
   writeFileSync(payloadPath, JSON.stringify({ ...payload, output_path: 'output/letter.pdf' }));
   const result = spawnSync(process.execPath, [
-    '--import', join(ROOT, 'tests', 'fixtures', 'cover-pdf-register.mjs'),
+    '--import', COVER_PDF_REGISTER,
     join(ROOT, 'generate-cover-letter.mjs'),
     '--payload', payloadPath,
   ], {

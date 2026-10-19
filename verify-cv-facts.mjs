@@ -2140,21 +2140,23 @@ function sentenceBounds(text, index) {
   return { start, end };
 }
 
-/** Metrics a past-claim pattern matches. A forward marker ends that region, so a later metric stays eligible as a plan. */
 function pastClaimMetrics(span) {
-  const marker = span.match(FORWARD_MARKER_RE);
-  const region = marker ? span.slice(0, marker.index) : span;
   const claims = new Set();
-  for (const pattern of [PAST_TIME_CLAIM_RE, PAST_PERCENT_CLAIM_RE]) {
-    pattern.lastIndex = 0;
-    for (const match of region.matchAll(pattern)) {
-      for (const claim of metricClaims(match[0], { keepPlanHorizons: true })) claims.add(claim);
-    }
+  const add = (text) => {
+    for (const claim of metricClaims(text, { keepPlanHorizons: true })) claims.add(claim);
+  };
+  PAST_TIME_CLAIM_RE.lastIndex = 0;
+  for (const match of span.matchAll(PAST_TIME_CLAIM_RE)) add(match[0]);
+  PAST_PERCENT_CLAIM_RE.lastIndex = 0;
+  for (const match of span.matchAll(PAST_PERCENT_CLAIM_RE)) {
+    const markerAfterVerb = match[0].search(FORWARD_MARKER_RE) > 0;
+    if (markerAfterVerb) continue;
+    add(match[0]);
   }
   return claims;
 }
 
-/** True when a metric in this span can be a plan. A sentence-level marker counts only for a duration introduction. */
+/** A span states a plan when it has a forward marker, or it is a duration introduction in a sentence that has one. */
 function isPlanAssertion(span, sentence) {
   if (FORWARD_MARKER_RE.test(span)) return true;
   return DURATION_INTRO_RE.test(span) && FORWARD_MARKER_RE.test(sentence);
