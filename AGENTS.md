@@ -474,6 +474,17 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 
 ---
 
+## Apply scope
+
+Apply reads and searches only this checkout, plus the data root when `CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR` is set. Run `node apply-scope.mjs root` and use only the directories it prints.
+
+- Do not search `$HOME`. Do not grep or open another career-ops install.
+- Open forms in a Playwright browser this project launches. Run `node apply-scope.mjs launch-options` and pass that object to `chromium.launch`. Do not call `chromium.connect` or `connectOverCDP`. Do not read `DevToolsActivePort`. Do not pass a remote-debugging port or a Chrome user-data directory.
+- If Playwright is unavailable, ask the candidate to paste the questions or share a screenshot.
+- Do not submit the form. Ethical Use still holds. Stop before Submit, Send, or Apply until the candidate confirms they submitted it.
+
+---
+
 ## Offer Verification -- MANDATORY
 
 **NEVER decide whether an offer is active from a bare WebSearch/WebFetch snippet.** Start with `node check-liveness.mjs <url>`: it checks free public ATS APIs first, then falls back to Playwright only when the API returns `null`. A non-null `uncertain` result does not trigger Playwright; it remains unconfirmed.

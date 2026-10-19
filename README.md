@@ -316,7 +316,7 @@ career-ops uses a shared command router. In CLIs that register slash commands, i
 /career-ops project   → Evaluate portfolio project idea
 /career-ops tracker   → Application status overview
 /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-/career-ops apply     → Live application assistant (reads form + generates answers)
+/career-ops apply     → Live application assistant (Playwright from this checkout, does not submit)
 /career-ops scan      → Scan portals and discover new offers
 /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
 /career-ops batch     → Batch processing with parallel workers

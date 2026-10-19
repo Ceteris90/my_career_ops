@@ -148,24 +148,27 @@ test('apply command refuses a report path outside the project', () => {
   const outside = scratch();
   const report = join(outside, '001-other.md');
   writeFileSync(report, 'other-install secret');
+  const escaped = relative(ROOT, report);
   try {
-    const result = spawnSync(NODE, [join(ROOT, 'openrouter-runner.mjs'), 'apply', report], {
-      cwd: ROOT,
-      env: {
-        ...process.env,
-        CAREER_OPS_ROOT: '',
-        CAREER_OPS_DATA_DIR: '',
-        CAREER_OPS_TRACKER: '',
-        CAREER_OPS_MODEL: 'offline-test',
-        OPENROUTER_API_KEY: '',
-      },
-      encoding: 'utf8',
-      timeout: 20_000,
-    });
-    const out = `${result.stdout || ''}${result.stderr || ''}`;
-    assert.equal(out.includes('other-install secret'), false);
-    assert.match(out, /outside the project/);
-    assert.equal(out.includes('Generating application form answers'), false);
+    for (const ref of [report, escaped]) {
+      const result = spawnSync(NODE, [join(ROOT, 'openrouter-runner.mjs'), 'apply', ref], {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          CAREER_OPS_ROOT: '',
+          CAREER_OPS_DATA_DIR: '',
+          CAREER_OPS_TRACKER: '',
+          CAREER_OPS_MODEL: 'offline-test',
+          OPENROUTER_API_KEY: '',
+        },
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+      const out = `${result.stdout || ''}${result.stderr || ''}`;
+      assert.equal(out.includes('other-install secret'), false, ref);
+      assert.match(out, /outside the project/);
+      assert.equal(out.includes('Generating application form answers'), false, ref);
+    }
   } finally {
     rmSync(outside, { recursive: true, force: true });
   }

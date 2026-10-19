@@ -9,6 +9,7 @@ import { resolveCli } from "../clis";
 import { fencingReport } from "../cli-fencing.mjs";
 import { CAPS } from "../worker-capabilities.mjs";
 import { assertSafeApplyUrl, installApplyEgressGuard, isUnsafeApplyUrlError, isBlockedNavigation, UnsafeApplyUrlError } from "./url-guard.mjs";
+import { BUNDLED_HEADED_LAUNCH, HEADED_APPLY_LAUNCH } from "../../../../apply-scope.mjs";
 
 /** The frame with the most interactive controls — where the agentic interpreter
  *  should look when deterministic extraction found nothing usable. */
@@ -117,10 +118,10 @@ async function enrichFromAts(url: string, fields: ApplyField[]): Promise<void> {
   }
 }
 
-// A persistent apply SESSION keeps one real-form page open (headed-but-off-screen)
-// so we can: extract → (user verifies pre-filled answers) → FILL the real form →
-// bringToFront() for the human to submit it themselves. Headed (channel:chrome) =
-// the user's own Chrome on their residential IP (best ATS success); never submits.
+// One headed page stays open so the user can review the filled form and submit
+// it themselves. apply-scope.mjs builds the launch object. Playwright starts a
+// new window with a temporary profile. channel:chrome selects the Chrome
+// binary for ATS sites that reject bundled Chromium.
 type Session = { id: string; url: string; title: string; fields: ApplyField[]; context: BrowserContext; page: Page; frame: Frame; createdAt: number; formShot?: string };
 
 declare global {
@@ -138,16 +139,12 @@ async function headedBrowser(): Promise<Browser> {
   if (b && b.isConnected()) return b;
   let nb: Browser;
   try {
-    nb = await chromium.launch({
-      channel: "chrome",
-      headless: false,
-      args: ["--window-position=-3200,-3200", "--window-size=1280,940"], // off-screen during fill; moved on-screen at handoff
-    });
+    nb = await chromium.launch(HEADED_APPLY_LAUNCH);
   } catch {
     // No system Google Chrome → fall back to Playwright's bundled Chromium if
     // present; otherwise a clear, actionable error.
     try {
-      nb = await chromium.launch({ headless: false, args: ["--window-position=-3200,-3200", "--window-size=1280,940"] });
+      nb = await chromium.launch(BUNDLED_HEADED_LAUNCH);
     } catch {
       throw new Error("The apply feature needs Google Chrome. Install Chrome (or run: npx playwright install chromium) and try again.");
     }
