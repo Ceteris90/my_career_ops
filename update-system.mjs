@@ -3011,9 +3011,14 @@ export function planSystemCheckout(updatePaths, preservedPaths, upstreamFiles) {
 /**
  * apply()'s batched system checkout: every path planSystemCheckout() says needs
  * one, in argvBatches() runs so no single git call outgrows a Windows command
- * line, each with the update's `:(exclude)` specs. Throws on the first failed
- * run; `ctx.attempted` then holds every path a run was started for, which is
- * what the caller has to restore.
+ * line, the fixed git arguments counted in the budget. A directory with
+ * preserved files under it is named file by file, its upstream files minus the
+ * preserved ones, instead of as `dir/` plus one `:(exclude)` per preserved
+ * file: a long preserved list would otherwise ride on the command line however
+ * the paths were split. `git checkout <tree> -- <paths>` only adds and updates,
+ * so the two name the same files. Throws on the first failed run;
+ * `ctx.attempted` then holds every manifest entry a run was started for, which
+ * is what the caller has to restore.
  *
  * @param {string[]} updatePaths
  * @param {string[]} preservedPaths
@@ -3026,10 +3031,23 @@ export function checkoutSystemPathsBatched(updatePaths, preservedPaths, upstream
   const runGitQuiet = ctx.git || gitQuiet;
   const attempted = ctx.attempted || [];
   const plan = planSystemCheckout(updatePaths, preservedPaths, upstreamFiles);
-  const preserveSpecs = preservedPaths.map((file) => `${EXCLUDE_PATHSPEC_PREFIX}${file}`);
-  for (const batch of argvBatches(plan.checkout)) {
-    attempted.push(...batch);
-    runGitQuiet('checkout', targetCommit, '--', ...batch, ...preserveSpecs);
+  const preservedSet = new Set(preservedPaths);
+  // Each pathspec, and the manifest entry it came from. A file entry that is
+  // itself preserved never reaches plan.checkout, so only a directory entry can
+  // have preserved files under it.
+  const entryOf = new Map();
+  for (const path of plan.checkout) {
+    const hasPreserved = path.endsWith('/') && preservedPaths.some((file) => file.startsWith(path));
+    const specs = hasPreserved ? upstreamFiles.filter((file) => file.startsWith(path) && !preservedSet.has(file)) : [path];
+    for (const spec of specs) entryOf.set(spec, path);
+  }
+  // Literal: with no `:(exclude)` magic left, a file name from the target tree
+  // can never be read as a glob.
+  const fixedArgs = ['--literal-pathspecs', 'checkout', targetCommit, '--'];
+  const fixed = fixedArgs.reduce((total, arg) => total + arg.length + 1, 0);
+  for (const batch of argvBatches([...entryOf.keys()], { budget: ARGV_BUDGET - fixed })) {
+    attempted.push(...new Set(batch.map((spec) => entryOf.get(spec))));
+    runGitQuiet(...fixedArgs, ...batch);
   }
   return { updated: plan.checkout, skipped: plan.absent };
 }
@@ -3396,21 +3414,27 @@ const ARGV_BUDGET = 8000;
  * any git call that names files one by one. A single path wider than the
  * budget still goes out on its own.
  *
+ * `cost` is what one path adds to the command line (by default the path and a
+ * separator), and `budget` what the paths may use, for a caller whose command
+ * also carries fixed arguments or per-path extras.
+ *
  * @param {string[]} paths
+ * @param {{cost?: (path: string) => number, budget?: number}} [options]
  * @returns {string[][]}
  */
-function argvBatches(paths) {
+function argvBatches(paths, { cost = (path) => path.length + 1, budget: limit = ARGV_BUDGET } = {}) {
   const batches = [];
   let batch = [];
   let budget = 0;
   for (const path of paths) {
-    if (batch.length > 0 && budget + path.length + 1 > ARGV_BUDGET) {
+    const size = cost(path);
+    if (batch.length > 0 && budget + size > limit) {
       batches.push(batch);
       batch = [];
       budget = 0;
     }
     batch.push(path);
-    budget += path.length + 1;
+    budget += size;
   }
   if (batch.length > 0) batches.push(batch);
   return batches;
