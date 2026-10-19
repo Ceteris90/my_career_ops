@@ -106,6 +106,11 @@ handle_result
     assert.equal(fields[7], 'dealbreaker: "No on-site roles"');
   });
 
+  check('the reserved number matches the SKIP row with or without zero padding', () => {
+    const { fields } = handle(skipPayload(), { tsv: skipRow({ num: '42' }) });
+    assert.equal(fields[2], 'skipped');
+  });
+
   check('a dealbreaker skip without a tracker row fails and can be retried', () => {
     const { fields } = handle(skipPayload());
     assert.equal(fields[2], 'failed');
@@ -117,6 +122,7 @@ handle_result
     ['a row that is not SKIP', skipRow({ status: 'Evaluated' })],
     ['a row for another URL', skipRow({ url: 'https://jobs.example.test/other' })],
     ['a row without the quoted rule', skipRow({ notes: 'on-site' })],
+    ['a row with another number than the reserved one', skipRow({ num: '041' })],
   ]) {
     check(`${name} is quarantined and the job fails`, () => {
       const { fields } = handle(skipPayload(), { tsv });
