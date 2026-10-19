@@ -462,15 +462,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     // Same as the scan path: do not replaceState while /api/explore/ai is in
     // flight. The URL is written once the hunt has settled.
 
-    let knownUrls = new Set<string>();
-    try {
-      const k = await fetch("/api/explore/ai/known").then((r) => r.json());
-      knownUrls = new Set<string>(Array.isArray(k.urls) ? k.urls : []);
-    } catch {
-      /* best-effort dedup */
-    }
-    if (!runs.current.owns(run)) return;
-    const parser = makeAiStreamParser({ knownUrls });
+    // Offers the user already has (scan history, inbox) are dropped by
+    // /api/explore/ai itself, so the parser only dedups within this run.
+    const parser = makeAiStreamParser();
 
     const acc: DiscoveredOffer[] = [];
     let sawError = "";
