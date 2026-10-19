@@ -39,6 +39,18 @@ try {
   } else {
     fail('parseCliMode failed on --single-pass');
   }
+
+  if (parseCliMode(['--single-pass=false', '--mode', 'full']) === 'full') {
+    pass('parseCliMode rejects --single-pass with assigned value and respects --mode full');
+  } else {
+    fail('parseCliMode failed when --single-pass had an assigned value');
+  }
+
+  if (parseCliMode(['--single-pass=false']) === 'full') {
+    pass('parseCliMode rejects standalone --single-pass=false and defaults to full');
+  } else {
+    fail('parseCliMode failed on standalone --single-pass=false');
+  }
 } catch (err) {
   fail(`parseCliMode tests threw: ${err.message}`);
 }
@@ -234,6 +246,17 @@ try {
       fail('batch-prompt-match.md missing one or more placeholders');
     }
 
+    if (content.includes('one decimal place') && content.includes('4.45')) {
+      pass('batch-prompt-match.md instructs score rounding to exactly one decimal place');
+    } else {
+      fail('batch-prompt-match.md missing score rounding instruction');
+    }
+
+    if (content.includes('language.output') && content.includes('Single-pass match evaluation')) {
+      pass('batch-prompt-match.md instructs notes translation according to language.output');
+    } else {
+      fail('batch-prompt-match.md missing notes translation instruction');
+    }
   } else {
     fail('batch/batch-prompt-match.md not found');
   }

@@ -24,7 +24,7 @@ import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { TSV_ADDITION_HEADER } from './tracker-parse.mjs';
-import { hasFlag, flagValue } from './lib/cli-flags.mjs';
+import { flagValue } from './lib/cli-flags.mjs';
 import {
   normalizedTrackerScore, slugifyCompany, tsvSafe,
 } from './lib/tracker-addition.mjs';
@@ -88,7 +88,7 @@ function readSpendTier() {
 
 
 export function parseCliMode(args = process.argv.slice(2)) {
-  if (hasFlag(args, '--single-pass')) return 'match';
+  if (Array.isArray(args) && args.includes('--single-pass')) return 'match';
   const mode = flagValue(args, '--mode');
   return mode ? mode.trim() : 'full';
 }

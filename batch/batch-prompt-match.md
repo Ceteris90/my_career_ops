@@ -108,6 +108,7 @@ Bypass the multi-step reasoning chain (Blocks A-G, WebSearch, compensation resea
      - 4.0–4.4: Strong match with minor gaps in non-critical areas.
      - 3.0–3.9: Moderate match; core skills present but missing secondary requirements.
      - 1.0–2.9: Major gaps in core competencies or seniority.
+   - Round all match scores to exactly **one decimal place** (e.g., 4.5) before writing them to reports, tracker rows, or final JSON data. Do not allow multi-decimal outputs (like 4.45).
    - Detect closest archetype (e.g., AI Platform Engineer, ML Engineer, Tech Lead).
     - Assess legitimacy tier (must be one of: `High Confidence`, `Proceed with Caution`, or `Suspicious`):
       - `High Confidence`: Direct company posting, verified employer domain, standard transparent hiring signals, no red flags.
@@ -164,7 +165,8 @@ The file MUST start with the canonical TSV header on line 1, followed by the dat
 
 Field rules:
 - `PDF` is always `❌` (single-pass match mode skips PDF rendering).
-- `Status` is `Evaluated`.
+- `Status` is always `Evaluated` (never translate or alter this canonical machine-readable status value).
+- `Notes`: Translate "Single-pass match evaluation" according to the user's output language settings (`language.output`), while strictly preserving the TSV columns, delimiter structure, and the machine-readable status value.
 - Clean tabs and newlines from company, role, and notes.
 
 ### Step 5 — Output Final JSON Summary
