@@ -150,8 +150,6 @@ Simpan evaluasi lengkap ke `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 (daftar 15-20 kata kunci dari lowongan untuk optimasi ATS)
 ```
 
-Baris **Keputusan:** mengulang `final_decision` dengan empat kata di atas, dan baris di bawah bidang header menyalin kalimatnya apa adanya. Jangan tulis Verdict.
-
 ### 2. Catat ke tracker
 
 **SELALU** catat ke tracker. Tulis TSV (aturan 9 di `_shared.md`) dan gabungkan dengan `node merge-tracker.mjs`; jangan pernah menulis baris langsung ke `data/applications.md`. Field:

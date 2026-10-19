@@ -152,8 +152,6 @@ WebSearch를 사용합니다.
 (ATS 최적화를 위한 공고 키워드 15-20개)
 ```
 
-**결정:** 줄은 위 네 단어로 `final_decision` 을 반복하고, 헤더 칸 아래 줄은 그 문장을 그대로 복사한다. Verdict 라고 쓰지 않는다.
-
 ### 2. tracker 추가 항목 작성
 
 새 tracker row를 위해 `data/applications.md`를 직접 수정하지 않습니다. 평가마다 `batch/tracker-additions/{num}-{company-slug}.tsv`에 탭으로 구분된 **두 줄** — 먼저 **컬럼 이름 줄**, 그 아래 데이터 줄 정확히 하나 — 을 쓰고, 이후 `node merge-tracker.mjs`로 병합합니다.

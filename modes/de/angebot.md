@@ -149,8 +149,6 @@ Die vollständige Bewertung in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` ab
 (Liste mit 15-20 Keywords aus der Stellenanzeige für ATS-Optimierung)
 ```
 
-Die Zeile **Entscheidung:** wiederholt `final_decision` mit den vier Wörtern oben, und die Zeile unter den Kopffeldern kopiert den Bewerbungssatz wortgleich. Nicht Verdict schreiben.
-
 ### 2. Im Tracker eintragen
 
 **IMMER** im Tracker eintragen. Dazu eine TSV schreiben (Regel 9 in `_shared.md`) und mit `node merge-tracker.mjs` zusammenführen; niemals eine Zeile direkt in `data/applications.md` schreiben. Felder:

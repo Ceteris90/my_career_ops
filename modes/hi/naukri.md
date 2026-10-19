@@ -154,8 +154,6 @@ Offer की requirements पर mapped 6-10 STAR+R stories (STAR + **Reflection
 (ATS optimization के लिए offer के 15-20 keywords की list)
 ```
 
-**निर्णय:** वाली पंक्ति ऊपर के चार शब्दों में `final_decision` दोहराती है, और हेडर फ़ील्ड के नीचे वाली पंक्ति वाक्य को ज्यों का त्यों कॉपी करती है. Verdict मत लिखो.
-
 ### 2. Tracker में Record करें
 
 **हमेशा** tracker में record करें। एक TSV लिखें (`_shared.md` का rule 9) और उसे `node merge-tracker.mjs` से merge करें; `data/applications.md` में सीधे row कभी न लिखें। Fields:

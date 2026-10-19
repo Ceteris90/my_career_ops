@@ -306,8 +306,6 @@
 (列出 15–20 個從該 JD 中擷取的高頻核心技術／業務關鍵字，用於履歷最佳化)
 ```
 
-**決定:** 這一行用上面的四個詞複述 `final_decision`，標題欄下方那一行逐字複製結論句。不要寫成 Verdict。
-
 ### 2. 登錄到 Tracker 紀錄簿
 
 將這筆紀錄登記到 tracker：寫入 TSV 檔（`_shared.md` 的規則 9），再以 `node merge-tracker.mjs` 合併；嚴禁直接在 `data/applications.md` 中手動新增資料列。欄位：

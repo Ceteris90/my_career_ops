@@ -150,8 +150,6 @@ Zapisz pełną ocenę w `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 (lista 15-20 słów kluczowych z oferty do optymalizacji ATS)
 ```
 
-Linia **Decyzja:** powtarza `final_decision` tymi czterema słowami powyżej, a linia pod polami nagłówka kopiuje zdanie słowo w słowo. Nie pisz Verdict.
-
 ### 2. Zapisz w trackerze
 
 **ZAWSZE** zapisz w trackerze. Zapisz TSV (reguła 9 w `_shared.md`) i scal go przez `node merge-tracker.mjs`; nigdy nie dopisuj wiersza bezpośrednio do `data/applications.md`. Pola:

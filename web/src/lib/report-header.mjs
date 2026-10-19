@@ -1,8 +1,3 @@
-// Bold header fields from an evaluation report. Client-safe: no fs or path.
-// Decision labels live here so a node test and parseReport share one map.
-// A label that matches /verdict\s*:/i is omitted on purpose. The job stream
-// reads the first such line as the run's score.
-
 const FIELD_KEYS = {
   date: "Date",
   fecha: "Date",

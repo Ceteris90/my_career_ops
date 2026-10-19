@@ -150,8 +150,6 @@ Sla de volledige evaluatie op in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 (lijst van 15-20 trefwoorden uit de vacature voor ATS-optimalisatie)
 ```
 
-De regel **Beslissing:** herhaalt `final_decision` in de vier woorden hierboven, en de regel onder de kopvelden kopieert de sollicitatiezin woordelijk. Schrijf niet Verdict.
-
 ### 2. Opslaan in tracker
 
 **ALTIJD** registreren via een TSV-bestand in `batch/tracker-additions/`; bewerk `data/applications.md` nooit rechtstreeks. Voer vóór voltooiing, in deze volgorde, `node merge-tracker.mjs`, `node verify-pipeline.mjs`, `node normalize-statuses.mjs` en `node dedup-tracker.mjs` uit:

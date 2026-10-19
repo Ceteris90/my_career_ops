@@ -182,8 +182,6 @@ Değerlendirmenin tamamını `reports/{###}-{sirket-slug}-{YYYY-MM-DD}.md` olara
 (ATS optimizasyonu için ilandan 15-20 anahtar kelime)
 ```
 
-**Karar:** satırı `final_decision` alanını yukarıdaki dört sözcükle yineler. Başlık alanlarının altındaki satır cümleyi kelimesi kelimesine kopyalar. Verdict yazmayın.
-
 ### 2. Takipçiye Kaydet
 
 **Yeni** kayıt için `data/applications.md`'yi doğrudan düzenleme. Bunun yerine `batch/tracker-additions/{num}-{sirket-slug}.tsv` dosyasına sekmeyle ayrılmış **iki** satır yaz: önce **sütun adları** satırı, hemen altına tam olarak bir veri satırı.

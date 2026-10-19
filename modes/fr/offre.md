@@ -150,8 +150,6 @@ Sauvegarder l'evaluation complete dans `reports/{###}-{company-slug}-{YYYY-MM-DD
 (liste de 15-20 mots-cles de l'offre pour l'optimisation ATS)
 ```
 
-La ligne **Décision:** reprend `final_decision` avec les quatre mots ci-dessus, et la ligne sous les champs d'en-tête copie la phrase telle quelle. Ne pas écrire Verdict.
-
 ### 2. Enregistrer dans le tracker
 
 **TOUJOURS** enregistrer dans le tracker. Ecrire un TSV (regle 9 de `_shared.md`) et le fusionner avec `node merge-tracker.mjs` ; ne jamais ecrire une ligne directement dans `data/applications.md`. Champs :

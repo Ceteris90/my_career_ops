@@ -290,8 +290,6 @@
 (列出 15-20 个从该 JD 中提取的高频核心技术/业务关键词，用于简历优化)
 ```
 
-**决定:** 这一行用上面的四个词复述 `final_decision`，标题栏下方那一行逐字复制结论句。不要写成 Verdict。
-
 ### 2. 登记到 Tracker 记录簿
 将此条记录登记到 tracker：写入 TSV 文件（`_shared.md` 的规则 9），再用 `node merge-tracker.mjs` 合并；严禁直接在 `data/applications.md` 中手动添加行。字段：
 - 顺序 ID 编号

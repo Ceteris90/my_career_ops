@@ -431,8 +431,6 @@ Guardar la evaluación completa en `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 (lista de 15-20 palabras clave de la oferta para optimización ATS)
 ```
 
-La línea **Decisión:** repite `final_decision` con las cuatro palabras de arriba, y la línea bajo los campos de cabecera copia la frase tal cual. No escribas Verdict.
-
 **Machine Summary (obligatorio):** YAML fence después del encabezado — mismo schema y reglas que `batch/batch-prompt.md` (fuente de verdad). Incluye `advertised_comp` (cifra textual de la JD o `null`), `risk_summary` (mapa), y `requirement_importance` (tabla del Bloque B fila por fila; tope `inferred` de la puerta se mantiene).
 
 ### 2. Registrar en el tracker

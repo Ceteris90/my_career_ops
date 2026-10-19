@@ -341,8 +341,6 @@ Full evaluation を `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` に保存す�
 (list of 15-20 keywords from the JD for ATS optimization)
 ```
 
-**決定:** の行は上の四語で `final_decision` を繰り返し、ヘッダ欄の下の行は判定の一文をそのまま写す。Verdict とは書かない。
-
 ### 2. Record in tracker
 
 **ALWAYS** record in the tracker. Write a TSV (rule 9 in `_shared.md`) and merge it with `node merge-tracker.mjs`; never write a row into `data/applications.md` by hand. Fields:

@@ -150,8 +150,6 @@ Salvar avaliação completa em `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 (lista de 15-20 keywords do JD para otimização ATS)
 ```
 
-A linha **Decisão:** repete `final_decision` com as quatro palavras acima, e a linha sob os campos do cabeçalho copia a frase palavra por palavra. Não escreva Verdict.
-
 ### 2. Registrar no tracker
 
 **SEMPRE** registrar no tracker. Escrever um TSV (regra 9 de `_shared.md`) e mesclá-lo com `node merge-tracker.mjs`; nunca escrever uma linha diretamente em `data/applications.md`. Campos:

@@ -150,8 +150,6 @@ Gem den fulde evaluering i `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 (liste med 15-20 nøgleord fra opslaget til ATS-optimering)
 ```
 
-Linjen **Beslutning:** gentager `final_decision` med de fire ord ovenfor, og linjen under headerfelterne kopierer ansøgningssætningen ordret. Skriv ikke Verdict.
-
 ### 2. Registrér i trackeren
 
 **ALTID** registrér i trackeren. Skriv en TSV (regel 9 i `_shared.md`) og flet den med `node merge-tracker.mjs`; skriv aldrig en række direkte i `data/applications.md`. Felter:
