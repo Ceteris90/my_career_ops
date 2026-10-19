@@ -66,7 +66,11 @@
  * the posting is still likely live, and the last moment before interview-prep
  * would go looking for a JD that may no longer exist (#4506). The outcome
  * travels in the JSON output as `jdArchiveTriggered`. Same never-fails-the-
- * status-change policy as follow-up seeding.
+ * status-change policy as follow-up seeding. With --detach-jd-archive the
+ * archive is started and not waited for (`jdArchiveTriggered.detached`), still
+ * bounded by CAREER_OPS_JD_ARCHIVE_TIMEOUT_MS. The web UI and the dashboard
+ * pass it: they kill this script after 30s, and the archive alone can take
+ * longer than that.
  *
  * Every real status change also appends one line to the transition ledger
  * (status-log.tsv, sibling of the tracker file):
@@ -102,7 +106,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname, resolve, sep, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import { createHash } from 'node:crypto';
 import { extractTrackerReportNumbers, resolveColumns, parseTrackerRow, normalizeTextKey, splitTrackerCells, trackerRowSeparator } from './tracker-parse.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
@@ -165,6 +169,9 @@ const USAGE = `Usage: node set-status.mjs <report#|company> <state> [--note "...
   --dry-run          Resolve and validate, but write nothing
   --repair-status-log  On an idempotent Applied retry, repair a missing ledger observation
   --repair-followup  On an idempotent Applied retry, repair a missing follow-up pin
+  --detach-jd-archive  On a transition into Interview, start the JD archive in the
+                     background instead of waiting for it (used by the web UI
+                     and the dashboard, whose status calls time out at 30s)
   --json             Machine-readable output on stdout (errors included)
 
   Tracker row IDs and report IDs are separate counters that diverge permanently
@@ -214,7 +221,7 @@ function renderStatesSection() {
 
 const rawArgs = process.argv.slice(2);
 const positional = [];
-const flags = { note: null, replaceNote: null, role: null, on: null, row: null, report: null, reportLink: null, source: null, force: false, dryRun: false, repairStatusLog: false, repairFollowup: false, json: false, expectTracker: null };
+const flags = { note: null, replaceNote: null, role: null, on: null, row: null, report: null, reportLink: null, source: null, force: false, dryRun: false, repairStatusLog: false, repairFollowup: false, detachJdArchive: false, json: false, expectTracker: null };
 const VALUE_FLAGS = { '--note': 'note', '--replace-note': 'replaceNote', '--role': 'role', '--on': 'on', '--row': 'row', '--report': 'report', '--report-link': 'reportLink', '--source': 'source', '--expect-tracker': 'expectTracker' };
 
 /**
@@ -290,6 +297,7 @@ for (let i = 0; i < rawArgs.length; i++) {
   else if (a === '--dry-run') { flags.dryRun = true; }
   else if (a === '--repair-status-log') { flags.repairStatusLog = true; }
   else if (a === '--repair-followup') { flags.repairFollowup = true; }
+  else if (a === '--detach-jd-archive') { flags.detachJdArchive = true; }
   else if (a === '--json') { flags.json = true; }
   else if (a === '-h' || a.startsWith('--')) { failUsage(`Unknown flag: ${a}`); }
   else { positional.push(a); }
@@ -1004,26 +1012,44 @@ if (statusChanged && newStatus === 'Interview' && !flags.dryRun) {
       } else if (!target.url) {
         jdArchiveTriggered = { attempted: false, reason: 'no-url' };
       } else {
-        if (!flags.json) console.log(`📄 No JD archived for #${target.num} yet — archiving report ${reportNum} now, before the posting can close:`);
-        execFileSync(
-          process.execPath,
-          [
-            join(CODE_ROOT, 'archive-posting.mjs'),
-            `--report=${reportNum}`,
-            `--company=${target.company}`,
-            target.url,
-          ],
-          {
+        const archiveArgs = [
+          join(CODE_ROOT, 'archive-posting.mjs'),
+          `--report=${reportNum}`,
+          `--company=${target.company}`,
+          target.url,
+        ];
+        // Keep the capture beside the selected tracker even when
+        // CAREER_OPS_TRACKER redirects it outside the checkout.
+        const archiveEnv = { ...process.env, CAREER_OPS_ROOT: workspaceRoot };
+        if (flags.detachJdArchive) {
+          // The caller has a fixed budget (30s in the web UI and the dashboard)
+          // and archive-posting can spend more than that on one page load, so
+          // waiting here turned a saved status into a reported timeout.
+          // lib/run-bounded.mjs keeps the timeout, since no parent is left to
+          // enforce it. stdio 'ignore' matters: an inherited pipe would hold
+          // the caller's read open until the archive exits.
+          if (!flags.json) console.log(`📄 No JD archived for #${target.num} yet — archiving report ${reportNum} in the background, before the posting can close.`);
+          const child = spawn(
+            process.execPath,
+            [join(CODE_ROOT, 'lib', 'run-bounded.mjs'), String(JD_ARCHIVE_TIMEOUT_MS), ...archiveArgs],
+            { detached: true, stdio: 'ignore', windowsHide: true, env: archiveEnv },
+          );
+          // A spawn failure arrives as an event after the status is written;
+          // unhandled, it would crash this process after its result printed.
+          child.on('error', (err) => console.warn(`⚠ JD archive could not start (status change itself succeeded): ${err.message}`));
+          child.unref();
+          jdArchiveTriggered = { attempted: true, detached: true };
+        } else {
+          if (!flags.json) console.log(`📄 No JD archived for #${target.num} yet — archiving report ${reportNum} now, before the posting can close:`);
+          execFileSync(process.execPath, archiveArgs, {
             // stdout is a protocol surface under --json: capture child
             // progress so the parent emits exactly one JSON document.
             stdio: flags.json ? ['ignore', 'pipe', 'inherit'] : 'inherit',
             timeout: JD_ARCHIVE_TIMEOUT_MS,
-            // Keep the capture beside the selected tracker even when
-            // CAREER_OPS_TRACKER redirects it outside the checkout.
-            env: { ...process.env, CAREER_OPS_ROOT: workspaceRoot },
-          },
-        );
-        jdArchiveTriggered = { attempted: true };
+            env: archiveEnv,
+          });
+          jdArchiveTriggered = { attempted: true };
+        }
       }
     } else {
       jdArchiveTriggered = { attempted: false, reason: alreadyEmbedded ? 'already-embedded' : 'already-captured' };

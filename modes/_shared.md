@@ -28,7 +28,7 @@ See "Untrusted External Content" in `AGENTS.md` / `CLAUDE.md` / `CODEX.md` for t
 **RULE: NEVER hardcode metrics from proof points.** Read them from cv.md + article-digest.md at evaluation time.
 **RULE: For article/project metrics, article-digest.md takes precedence over cv.md.**
 **RULE: Read _profile.md AFTER this file. User customizations in _profile.md override defaults here.**
-**RULE: Read _custom.md (if it exists) AFTER _profile.md and honor its house rules in every mode.** It is where the user's persistent instructions live ("use this date format", "never reorder section X", "always include Y in summaries") — an instruction recorded there is NOT optional and does not expire between sessions or between items in a batch. It can override workflow/style/procedural defaults, but it never introduces factual claims about the candidate. When the user states a lasting preference in conversation, write it to `modes/_custom.md` so it survives the session.
+**RULE: Read _custom.md (if it exists) AFTER _profile.md and honor its house rules in every mode.** It is where the user's persistent instructions live ("use this date format", "never reorder section X", "always include Y in summaries") — an instruction recorded there is NOT optional and does not expire between sessions or between items in a batch. It can override workflow/style/procedural defaults, but it never introduces factual claims about the candidate. In an interactive session, when the user states a lasting preference in conversation, write it to `modes/_custom.md` so it survives the session. A delegated or headless worker (`CAREER_OPS_HEADLESS=1`, `-p`, `exec`, or a subagent) never writes `modes/_custom.md`, `modes/_profile.md`, or `config/profile.yml`. It reports the preference to its parent instead.
 **RULE: NEVER claim the user authored a project, repo, library, tool, framework, or open-source artefact unless explicitly attributed to them in cv.md or article-digest.md.** Tool-of-trade conflation (user uses X → user built X) is the most common fabrication pattern and is forbidden.
 **RULE: Keywords get reformulated, never fabricated.** Reorder, reframe, emphasise — but never invent. If a claim isn't backed by an in-scope file, ask the user. If no answer, omit. Silence on a topic beats manufactured detail.
 
@@ -293,6 +293,22 @@ A mode may tell you to run work in a background subagent (e.g. `scan`, or parall
 - **Delegated/headless worker:** return `status: needs_confirmation`, `reason: agency_confirmation`, the posting `url`, observed `agency` (string or null, evidence only), and the `question` for the parent. Stop immediately: no tracker row or TSV, no report, no CV in any format, no application drafts, and no pipeline completion. Return through the worker hand-back/stdout, never a placeholder report. Do not wait for a human inside the worker, spawn another agent, or write first and flag an override afterward.
 - **Parent/orchestrator:** surface the question with the URL and evidence; keep this item pending and show it separately from completed/failed evaluations. Other URLs may continue. Release any unused report-number reservation. Resume only after the user's explicit answer, passing that answer and its exact posting identity to a fresh single-pass worker or handling the posting interactively. Re-check liveness and other gates; reserve a fresh report number if the old reservation was released. A new URL needs its own answer. Only actual completed artifacts may enter the tracker merge and completion summary.
 - After confirmation, use the confirmed agency as Via; use `?` for an undisclosed end employer plus a distinguishing Notes descriptor. Never substitute the agency for the end employer. This gate also applies to localized modes and overrides unconditional "always write/register" instructions. It is not a new tracker lifecycle status.
+
+### Unattended runs
+
+A run is unattended when nobody can answer before it ends. Treat it as unattended when the request says headless, unattended or non-interactive, when a parent agent or script dispatched you with one prompt (`grok -p`, `claude -p`, `codex exec`), or when an orchestrating mode has no user turn to wait for. Otherwise treat it as interactive. A batch worker follows `batch/batch-prompt.md` and its JSON hand-back instead.
+
+In an unattended run, at every gate that would ask, confirm, approve or wait:
+
+1. Do not ask and do not wait. Apply the default the mode names in its **Unattended runs** paragraph. A prompt that already carries the decision a closing line asked for (`approve`, `evaluate anyway`, the missing answers) resolves that gate. An approval covers only the same item the earlier line named, so an `approve` with no entry, rows or items named resolves nothing.
+2. Write nothing the gate protects, unless that default names the one write it makes.
+3. End with exactly one line and nothing after it, for the first gate that stopped the run:
+
+   ```
+   needs_confirmation: {gate} {detail} - {resume}
+   ```
+
+   `{gate}` is one lowercase word, `{detail}` names what stopped the run, and `{resume}` says what to send or rerun with. Never end on a question, an approval request or the update prompt.
 
 ### Time-to-offer priority
 - Working demo + metrics > perfection

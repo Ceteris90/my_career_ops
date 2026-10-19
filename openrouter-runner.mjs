@@ -32,7 +32,9 @@ import {
 import { TokenAccumulator, formatBreakdown, normalizeOpenAIUsage } from './utils/token-tracker.mjs';
 import { DEFAULT_USER_AGENT } from './user-agent.mjs';
 import { buildTitleFilter } from './title-keywords.mjs';
-import { appendToPipeline, appendToScanHistory } from './scan.mjs';
+import { appendToPipeline, appendToScanHistory, atomicWriteFile } from './scan.mjs';
+import { withPipelineLock } from './pipeline-lock.mjs';
+import { createAdmissionGate, formatSkipCounts } from './lib/admission-gate.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -522,7 +524,7 @@ export function parsePortals(rawOverride) {
     .filter(c => c && c.api && c.enabled !== false)
     .map(c => ({ name: String(c.name ?? c.company ?? 'Unknown'), api: String(c.api).trim() }));
 
-  return { companies, titleMatches };
+  return { companies, titleMatches, config };
 }
 
 // ---------------------------------------------------------------------------
@@ -545,14 +547,20 @@ function readPipeline() {
   return pending;
 }
 
-function markPipelineDone(url) {
-  let content = readFile('data/pipeline.md') ?? '';
-  const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  content = content.replace(
-    new RegExp(`^(- \\[ \\] ${escaped}.*)$`, 'm'),
-    (ln) => ln.replace('- [ ]', '- [x]')
-  );
-  writeFile('data/pipeline.md', content);
+// Tick the pending row whose URL is exactly `url`. The previous version matched
+// `- [ ] {url}.*`, so with `.../jobs/12` still pending above `.../jobs/1`,
+// finishing jobs/1 ticked jobs/12. It also rewrote the file with an unlocked,
+// truncating writeFileSync, which erased any row a scanner appended through
+// appendToPipeline in between. The URL is read the way readPipeline reads it.
+export async function markPipelineDone(url, { pipelinePath = path.join(DATA_ROOT, 'data', 'pipeline.md') } = {}) {
+  await withPipelineLock(pipelinePath, async () => {
+    if (!fs.existsSync(pipelinePath)) return;
+    const lines = fs.readFileSync(pipelinePath, 'utf-8').split('\n');
+    const i = lines.findIndex(line => /^- \[ \] /.test(line) && line.slice(6).split(' | ')[0].trim() === url);
+    if (i === -1) return;
+    lines[i] = lines[i].replace('- [ ]', '- [x]');
+    atomicWriteFile(pipelinePath, lines.join('\n'));
+  });
 }
 
 // Both writes go through the shared writers in scan.mjs rather than this
@@ -572,32 +580,16 @@ function markPipelineDone(url) {
 //
 // It also picks up CAREER_OPS_DATA_DIR support for free: the shared paths are
 // DATA_ROOT-anchored, while the __dirname-relative paths here ignored it.
-async function addToPipeline(entries) {
-  const history = readFile('data/scan-history.tsv') ?? 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation\n';
-  const seenUrls = new Set(history.split('\n').slice(1).map(l => l.split('\t')[0]).filter(Boolean));
-
-  const existingPipeline = readFile('data/pipeline.md') ?? '# Pipeline\n\n## Pending\n';
-  const existingApps     = readFile('data/applications.md') ?? '';
-  // extract URLs already tracked in applications.md (mirrors scan.mjs dedup logic)
-  const appliedUrls = new Set(
-    existingApps.split('\n')
-      .map(l => l.match(/https?:\/\/[^\s|)]+/))
-      .filter(Boolean).map(m => m[0])
-  );
-
-  const newEntries = entries.filter(e => {
-    if (seenUrls.has(e.url)) return false;
-    if (appliedUrls.has(e.url)) return false;
-    // skip if already queued in pipeline
-    if (existingPipeline.includes(e.url)) return false;
-    return true;
-  });
-
-  if (newEntries.length === 0) return 0;
-
+//
+// Admission goes through the shared gate (#5478): the seen set compares
+// normalized URLs across scan-history, the pipeline and the tracker, and the
+// blacklist and location filter apply as they do in scan.mjs. The raw-URL sets
+// this built before re-queued a posting whose URL differed by a tracking
+// parameter, and nothing here read data/blacklist.md.
+export async function addToPipeline(entries, config = {}, gate = createAdmissionGate({ config })) {
   // The shared writers take {url, company, title, location}; this module calls
   // the title `role`.
-  const offers = newEntries.map(e => ({
+  const offers = entries.map(e => ({
     url: e.url,
     company: e.company,
     title: e.role,
@@ -605,9 +597,14 @@ async function addToPipeline(entries) {
     source: 'openrouter scan',
   }));
 
-  await appendToPipeline(offers);
-  await appendToScanHistory(offers, localToday());
-  return newEntries.length;
+  const { admitted } = gate.partition(offers);
+  const skipped = formatSkipCounts(gate.counts);
+  if (skipped) console.log(`Skipped: ${skipped}`);
+  if (admitted.length === 0) return 0;
+
+  await appendToPipeline(admitted);
+  await appendToScanHistory(admitted, localToday());
+  return admitted.length;
 }
 
 function extractCompanySlug(text, url) {
@@ -640,7 +637,7 @@ async function cmdScan() {
   try { portals = parsePortals(); }
   catch (e) { console.error(e.message); return; }
 
-  const { companies, titleMatches } = portals;
+  const { companies, titleMatches, config } = portals;
   console.log(`Greenhouse API companies: ${companies.length}\n`);
 
   const found = [];
@@ -665,7 +662,7 @@ async function cmdScan() {
     }
   }
 
-  const added = await addToPipeline(found);
+  const added = await addToPipeline(found, config);
   console.log(`\n✅ Scan complete. ${found.length} matches, ${added} new entries added to pipeline.md.`);
   if (added > 0) {
     console.log('\n→  node openrouter-runner.mjs pipeline\n   to evaluate pending listings.\n');
@@ -806,7 +803,7 @@ async function cmdPipeline(ctx) {
     console.log(`\n[${i + 1}/${pending.length}] ${item.company} — ${item.role}`);
     try {
       const report = await cmdEvaluate(item.url, ctx);
-      if (report) markPipelineDone(item.url);
+      if (report) await markPipelineDone(item.url);
     } catch (e) {
       console.error(`  Error: ${e.message}`);
     }
