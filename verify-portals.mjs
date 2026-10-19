@@ -1058,7 +1058,7 @@ export async function findUnmined(cfg, { fetchJson = defaultFetchJson, onProgres
   return results;
 }
 
-export async function runUnmined(filePath, { fetchJson }) {
+export async function runUnmined(filePath, { fetchJson } = {}) {
   if (!existsSync(filePath)) {
     console.log(`verify-portals: no portals file at ${filePath} — nothing to check.`);
     return 0;

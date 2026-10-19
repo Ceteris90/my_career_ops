@@ -294,3 +294,15 @@ test('runUnmined counts unverified names for --strict and says so', async () => 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('runUnmined can be called without options', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'unmined-noopts-'));
+  const log = console.log;
+  try {
+    console.log = () => {};
+    assert.equal(await runUnmined(join(dir, 'absent.yml')), 0);
+  } finally {
+    console.log = log;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
