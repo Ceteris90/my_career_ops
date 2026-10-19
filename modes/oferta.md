@@ -673,9 +673,12 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
      Naming the default row still helps the reader place the role; what it must
      not do is stand in for a target the user actually has. -->
 **Score:** {X/5}
+**Decision:** {Apply | Consider | Research first | Skip}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **Work Auth:** {✅ Sponsors | ➖ Not needed | ⚠️ Unstated | ⛔ No sponsorship}
 **PDF:** {path or pending}
+
+{the `## Verdict (lead)` sentence, copied verbatim}
 
 ---
 
@@ -726,6 +729,8 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Job Description (archived verbatim)
 (the posting's full text, pasted verbatim — see requirement below)
 ```
+
+**Decision line (required):** `**Decision:**` is Machine Summary `final_decision`, and the line under the header fields is the `## Verdict (lead)` sentence copied word for word, so the answer is on screen when the file opens. Fill both in last, from the finished lead block; they add nothing of their own. Keep the label `Decision`, never `Verdict:`: the web app reads the first `VERDICT:` in a worker's output as its score line.
 
 **Machine Summary (required):** every report carries a `## Machine Summary` YAML fence directly after the header — same schema, exact field names, and rules as the "Machine Summary" block in `batch/batch-prompt.md` (do not duplicate the schema here; that file is the source of truth). It includes `advertised_comp`: the JD's own salary figure **verbatim** (e.g. `"80-90k EUR"`), or `null` when the JD states nothing — never estimated, never replaced with researched market data. This key seeds the advertised salary observation read by `node salary-gap.mjs`. It also includes `risk_summary`: the Risk Summary block mirrored as a map (schema and enum values in `batch/batch-prompt.md`), and `requirement_importance`: Block B's table mirrored row by row, carrying each row's evidence tier, importance band and match (`[]` when the JD yields no usable requirement list). The `inferred` cap from Block B's gate holds in the YAML too — `importance` is never `critical` or `high` when `evidence: inferred`.
 

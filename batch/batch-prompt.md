@@ -572,12 +572,14 @@ Report header:
 **Date:** {{DATE}}
 **Archetype:** {detected}
 **Score:** {X.X/5}
+**Decision:** {Apply | Consider | Research first | Skip}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **Work Auth:** {✅ Sponsors | ➖ Not needed | ⚠️ Unstated | ⛔ No sponsorship}
 **URL:** {{URL}}
 **PDF:** {output/cv-candidate-{{REPORT_NUM}}-{company-slug}-{{DATE}}.pdf if score >= resolved auto_pdf_score_threshold, otherwise a localized equivalent of `not generated — run /career-ops pdf {company-slug} to create on demand` in `language.output`}
 **Batch ID:** {{ID}}
 
+{the `## Verdict (lead)` sentence, copied verbatim}
 
 ---
 
@@ -640,6 +642,8 @@ risk_summary:
   unpaid_placement: "{states_unpaid | school_placement | not_evaluated}"
 ```
 ```
+
+`**Decision:**` is Machine Summary `final_decision`, and the line under the header fields is the `## Verdict (lead)` sentence copied word for word. The JD archive and the YAML push the lead block a few hundred lines down, so these two lines are what a reader sees on opening the file. Fill them in last, from the finished `final_decision` and lead block; they add nothing of their own. Keep the label `Decision`, never `Verdict:`: the web app reads the first `VERDICT:` in a worker's output as its score line.
 
 Then include:
 
