@@ -98,6 +98,7 @@ RATE_LIMIT_SLEEP=300
 WORKER_TIMEOUT=1800
 BATCH_PAUSED=false
 STATUS_ONLY=false
+STATUS_FULL=true
 WATCH_MODE=false
 LIMIT=0  # internal sentinel only; explicit --limit must be positive
 
@@ -135,7 +136,9 @@ Options:
   --rate-limit-sleep N Maximum adaptive retry delay in seconds; 0 pauses immediately
                        (default: 300; range: 0–2147483647; claude only)
   --status             Show batch progress and a per-job table, then exit
-  --watch              Live-refresh progress until the run completes
+  --summary            With --status, print the totals only (the table is one row per offer)
+  --full               With --status, print the per-job table (the default)
+  --watch              Live-refresh progress (always with the per-job table) until the run completes
   -h, --help           Show this help
 
 Files:
@@ -216,6 +219,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --status) STATUS_ONLY=true; shift ;;
+    --summary) STATUS_FULL=false; shift ;;
+    --full) STATUS_FULL=true; shift ;;
     --watch) WATCH_MODE=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -1665,6 +1670,8 @@ print_summary() {
 }
 
 print_status_table() {
+  # $1 = "full" forces the per-job table whatever STATUS_FULL says (--watch).
+  local force_full="${1:-}"
   if [[ ! -f "$STATE_FILE" ]]; then
     echo "No state file found at $STATE_FILE"
     return
@@ -1713,6 +1720,10 @@ print_status_table() {
     avg=$(LC_ALL=C awk -v sum="$score_sum" -v count="$score_count" 'BEGIN{printf "%.1f", sum / count}' 2>/dev/null || echo "N/A")
     echo "Average score: $avg/5 ($score_count scored)"
   fi
+
+  if [[ "$force_full" != "full" && "$STATUS_FULL" != "true" ]]; then
+    return
+  fi
   echo ""
 
   # Format the per-job table:
@@ -1756,7 +1767,7 @@ watch_status() {
     while kill -0 "$active_pid" 2>/dev/null; do
       clear || printf "\033[c"
       echo "=== Watching Batch Progress (PID $active_pid) ==="
-      print_status_table
+      print_status_table full
       sleep 2
     done
     echo ""
@@ -1766,7 +1777,7 @@ watch_status() {
   fi
 
   echo "Showing final status:"
-  print_status_table
+  print_status_table full
 
   # Chain verify-pipeline.mjs
   if [[ -f "$PROJECT_DIR/verify-pipeline.mjs" ]]; then
