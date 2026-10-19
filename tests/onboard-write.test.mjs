@@ -92,6 +92,39 @@ test('portals.yml gets the user titles, keeps the shipped negatives, and keeps e
   } finally { cleanup(dir); }
 });
 
+test('portals.yml keeps the template title-keyword guidance comments', () => {
+  const { dir, res, read } = run(ANSWERS);
+  try {
+    assert.equal(res.status, 0, res.stderr);
+    const portals = read('portals.yml');
+    assert.match(portals, /word:Intern/);
+    assert.match(portals, /Healthcare example/);
+    assert.match(portals, /Finance\/Operations example/);
+    assert.match(portals, /Marketing\/Sales\/Customer Success example/);
+    assert.deepEqual(yaml.load(portals).title_filter.positive, ANSWERS.portals.positive);
+  } finally { cleanup(dir); }
+});
+
+test('a shipped negative that conflicts with a user positive is dropped', () => {
+  const answers = {
+    ...ANSWERS,
+    portals: { ...ANSWERS.portals, positive: ['Junior Data Analyst'], negative: [] },
+  };
+  const { dir, res, read } = run(answers);
+  try {
+    assert.equal(res.status, 0, res.stderr);
+    const neg = yaml.load(read('portals.yml')).title_filter.negative.map((n) => String(n).toLowerCase());
+    assert.equal(neg.includes('junior'), false);
+    assert.ok(neg.includes('word:intern') || neg.includes('internship'));
+  } finally { cleanup(dir); }
+});
+
+test('AGENTS.md states remote-only location labels will not match a country allow-list', () => {
+  const agents = readFileSync(join(ROOT, 'AGENTS.md'), 'utf8');
+  assert.match(agents, /posting labeled only ["']Remote["']/i);
+  assert.match(agents, /do not add ["']Remote["'] as an unconditional country match/i);
+});
+
 test('countries become an allow-list, and posting age defaults to 45 days', () => {
   const { dir, res, read } = run(ANSWERS);
   try {

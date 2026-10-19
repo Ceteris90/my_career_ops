@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
+import { compileKeyword, foldTitle } from './title-keywords.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { writeFileAtomic } from './tracker-utils.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -227,16 +228,36 @@ function blockAfter(lines, header, nextHeader) {
 export function buildPortals(template, a) {
   const p = a.portals;
   const lines = template.split('\n');
-  const shippedNegatives = yaml.load(template).title_filter.negative.map((n) => String(n).toLowerCase());
+  const shippedNegatives = yaml.load(template).title_filter.negative.map((n) => foldTitle(String(n)));
 
-  const [, negEnd] = blockAfter(lines, '  negative:', '  seniority_boost:');
-  let negInsert = negEnd;
+  // Drop shipped negatives that would reject a user positive under the same
+  // word:/stem:/substring rules the scanner uses.
+  const conflicting = new Set(shippedNegatives.filter((negative) => {
+    const matches = compileKeyword(negative);
+    return p.positive.some((positive) => matches(foldTitle(positive)));
+  }));
+  const [negStart, negEnd] = blockAfter(lines, '  negative:', '  seniority_boost:');
+  for (let i = negEnd - 1; i > negStart; i--) {
+    const match = lines[i].match(/^\s+-\s+(.+)$/);
+    if (!match) continue;
+    let value;
+    try { value = yaml.load(match[1]); } catch { continue; }
+    if (typeof value === 'string' && conflicting.has(foldTitle(value))) lines.splice(i, 1);
+  }
+  const [, filteredNegEnd] = blockAfter(lines, '  negative:', '  seniority_boost:');
+  let negInsert = filteredNegEnd;
   while (lines[negInsert - 1].trim() === '') negInsert--;
-  const extra = [...new Set(p.negative)].filter((n) => !shippedNegatives.includes(n.toLowerCase()));
+  const extra = [...new Set(p.negative)].filter((n) => !shippedNegatives.includes(foldTitle(n)));
   lines.splice(negInsert, 0, ...extra.map((n) => `    - ${q(n)}`));
 
+  // Replace active positive entries only; keep the template's keyword guidance.
   const [posStart, posEnd] = blockAfter(lines, '  positive:', '  negative:');
-  lines.splice(posStart + 1, posEnd - posStart - 1, ...p.positive.map((s) => `    - ${q(s)}`));
+  const keptPositiveNotes = [];
+  for (let i = posStart + 1; i < posEnd; i++) {
+    const line = lines[i];
+    if (/^\s*#/.test(line) || line.trim() === '') keptPositiveNotes.push(line);
+  }
+  lines.splice(posStart + 1, posEnd - posStart - 1, ...keptPositiveNotes, ...p.positive.map((s) => `    - ${q(s)}`));
 
   if (p.max_posting_age_days > 0) {
     const age = lines.findIndex((l) => /^# max_posting_age_days: \d+$/.test(l));

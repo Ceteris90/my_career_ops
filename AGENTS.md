@@ -281,6 +281,7 @@ JSON
   - When they name only countries ("remote in the US", "anywhere in Canada"), pass those countries. For the United States, `always_allow` also admits "City, ST" locations. For other countries, add the main cities to `cities` too, since a posting may name only the city.
   - When they name cities, pass the cities and leave `countries` empty, since a country in `always_allow` admits every city in it.
   - "Remote" and "Hybrid" are not places, and the writer refuses them, because an allow-list entry like that admits every country.
+  - A posting labeled only "Remote" (no country) will not match a US `always_allow` / `allow` list. Tell the candidate that limitation during onboarding; do not add "Remote" as an unconditional country match. Titles that themselves signal remote work can still match on the title filter.
 - `max_posting_age_days` defaults to 45. Tell them it also hides long-open roles on a company's own board. Set 0 only when they ask for older postings.
 - Contact fields they did not give are blanked, so the example person never reaches a CV.
 - Existing files are kept. Pass `--force` only when the user asks to redo setup. `node onboard-write.mjs --help` shows every field.
