@@ -674,7 +674,8 @@ export const JD_TEXT_API_ATS = new Set(['greenhouse', 'greenhouse-embedded', 'le
  * @param {{ boardCache?: Map<string, unknown> }} [options]
  *   boardCache: for a provider whose API is the whole board (Ashby), the parsed
  *   board is kept here under its API URL and reused for the next posting on the
- *   same board. Only a 200 that parsed is kept; a failure is retried next time.
+ *   same board. Only a 200 that parsed into a board is kept; anything else is
+ *   retried next time.
  *   Without it, every posting fetches its board, as before.
  * @returns {Promise<{ result: 'active' | 'expired' | 'uncertain', code: string, reason: string } | null>}
  *   null = not a known ATS posting, or inconclusive → caller should fall back to Playwright.
@@ -734,8 +735,11 @@ export async function checkLivenessViaApi(url, { boardCache } = {}) {
       } catch {
         return null; // unparseable body → inconclusive, and not cached
       }
-      boardCache.set(apiUrl, json);
-      return interpretBoard(json, parts);
+      // Kept only when it classifies: a 200 whose body is not a board (no
+      // `jobs` array) stays uncached, so the next posting retries the API.
+      const verdict = interpretBoard(json, parts);
+      if (verdict) boardCache.set(apiUrl, json);
+      return verdict;
     }
     if (interpret && (interpretStatuses || [200]).includes(res.status)) return await interpret(res, parts);
     if (res.status === 200) {

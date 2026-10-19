@@ -58,17 +58,21 @@ test('without a boardCache every posting still fetches its board', async () => {
   assert.equal(calls.length, 2);
 });
 
-test('a failed or unparseable board is not cached', async () => {
+test('a failed, unparseable or board-less 200 is not cached', async () => {
   const boardCache = new Map();
   const results = [];
   const calls = await withFetch(
-    (_url, n) => (n === 1 ? new Response('rate limited', { status: 429 }) : n === 2 ? new Response('{not json', { status: 200 }) : json(BOARD)),
+    (_url, n) => (n === 1 ? new Response('rate limited', { status: 429 })
+      : n === 2 ? new Response('{not json', { status: 200 })
+      : n === 3 ? json({ error: 'not a board' })
+      : json(BOARD)),
     async () => {
-      for (let i = 0; i < 3; i++) results.push(await checkLivenessViaApi(`https://jobs.ashbyhq.com/acme/${LIVE}`, { boardCache }));
+      for (let i = 0; i < 4; i++) results.push(await checkLivenessViaApi(`https://jobs.ashbyhq.com/acme/${LIVE}`, { boardCache }));
     },
   );
-  assert.equal(calls.length, 3, 'each failure must leave the next posting free to retry');
-  assert.deepEqual(results.map((r) => r?.code ?? null), [null, null, 'ashby_api_ok']);
+  assert.equal(calls.length, 4, 'each failure must leave the next posting free to retry');
+  assert.deepEqual(results.map((r) => r?.code ?? null), [null, null, null, 'ashby_api_ok']);
+  assert.equal(boardCache.size, 1, 'only the classifiable board is cached');
 });
 
 test('check-liveness fetches a shared Ashby board once per run', () => {
@@ -76,15 +80,18 @@ test('check-liveness fetches a shared Ashby board once per run', () => {
   try {
     const countFile = join(dir, 'fetches.json');
     const preload = join(dir, 'mock-fetch.mjs');
+    // Values reach the preload through the environment, never spliced into
+    // its source.
     writeFileSync(preload, [
       "import { writeFileSync } from 'node:fs';",
       'const calls = [];',
-      `const board = ${JSON.stringify(BOARD)};`,
+      'const board = process.env.MOCK_ASHBY_BOARD;',
+      'const countFile = process.env.MOCK_FETCH_LOG;',
       'globalThis.fetch = async (url) => {',
       '  calls.push(String(url));',
-      "  return new Response(JSON.stringify(board), { status: 200, headers: { 'content-type': 'application/json' } });",
+      "  return new Response(board, { status: 200, headers: { 'content-type': 'application/json' } });",
       '};',
-      `process.on('exit', () => writeFileSync(${JSON.stringify(countFile)}, JSON.stringify(calls)));`,
+      "process.on('exit', () => writeFileSync(countFile, JSON.stringify(calls)));",
     ].join('\n'));
     const out = execFileSync(process.execPath, [
       '--import', pathToFileURL(preload).href,
@@ -92,7 +99,11 @@ test('check-liveness fetches a shared Ashby board once per run', () => {
       `https://jobs.ashbyhq.com/acme/${LIVE}`,
       `https://jobs.ashbyhq.com/acme/${GONE}`,
       `https://jobs.ashbyhq.com/acme/${OTHER}`,
-    ], { encoding: 'utf-8', env: { ...process.env, CAREER_OPS_ROOT: dir }, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+    ], {
+      encoding: 'utf-8',
+      env: { ...process.env, CAREER_OPS_ROOT: dir, MOCK_ASHBY_BOARD: JSON.stringify(BOARD), MOCK_FETCH_LOG: countFile },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).toString();
     const calls = JSON.parse(readFileSync(countFile, 'utf-8'));
     assert.equal(calls.filter((u) => u.includes('posting-api/job-board/acme')).length, 1, `board fetched ${calls.length} times: ${out}`);
     assert.match(out, /active.*\(api\).*11111111/);
