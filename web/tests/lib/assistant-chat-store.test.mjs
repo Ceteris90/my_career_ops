@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, existsSync, utimesSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -59,10 +59,17 @@ test('invalid ids, empty chats, oversized payloads, and corrupt files never over
 test('an in-progress writer is reported rather than bypassed', t => {
   const root = fixture(t), id = randomUUID();
   saveChat(root, id, { revision: 0, messages });
-  // A live holder: this process's pid, so the lock is never judged stale.
+  // A live holder: another live process, so the lock is never judged stale,
+  // however old. Not this process's pid: a stamp of ours with no handle behind
+  // it is aged out (#5390), so it would pass here only while young. Backdated a
+  // day, so "busy" can only come from the liveness rule.
+  const holder = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)'], { stdio: 'ignore' });
+  t.after(() => holder.kill());
   const lockDir = join(root, '.career-ops-web', 'chats', `${id}.json.lock`);
   mkdirSync(lockDir);
-  writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, token: 'peer', started_at: new Date().toISOString() }));
+  writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: holder.pid, token: 'peer', started_at: new Date().toISOString() }));
+  const dayAgo = new Date(Date.now() - 86_400_000);
+  utimesSync(lockDir, dayAgo, dayAgo);
   assert.throws(() => saveChat(root, id, { revision: 1, messages }), /busy/);
   assert.throws(() => deleteChat(root, id, 1), /busy/);
   assert.equal(readChat(root, id).revision, 1);
