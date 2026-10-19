@@ -68,4 +68,6 @@ function main(argv) {
   if (ids.length) process.stdout.write(ids.join('\n') + '\n');
 }
 
-if (isMainModule(import.meta.url)) main(process.argv.slice(2));
+if (isMainModule(import.meta.url) && process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+  console.log('Usage: node batch/company-scope.mjs --input <batch-input.tsv> --company "A,B"  (prints matching offer ids)');
+} else if (isMainModule(import.meta.url)) main(process.argv.slice(2));
