@@ -297,8 +297,11 @@ Full evaluation を `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` に保存す�
 **URL:**
 **Archetype:** {detected}
 **Score:** {X/5}
+**決定:** {応募する | 検討する | 先に調べる | 見送る}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **PDF:** {path or pending}
+
+{`## 判定 (lead)` の一文をそのまま写す}
 
 ---
 
@@ -337,6 +340,8 @@ Full evaluation を `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` に保存す�
 ## Keywords extracted
 (list of 15-20 keywords from the JD for ATS optimization)
 ```
+
+**決定:** の行は上の四語で `final_decision` を繰り返し、ヘッダ欄の下の行は判定の一文をそのまま写す。Verdict とは書かない。
 
 ### 2. Record in tracker
 

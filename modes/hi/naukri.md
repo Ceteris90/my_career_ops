@@ -119,8 +119,11 @@ Offer की requirements पर mapped 6-10 STAR+R stories (STAR + **Reflection
 **Date:** {YYYY-MM-DD}
 **Archetype:** {detected}
 **Score:** {X/5}
+**निर्णय:** {आवेदन करें | विचार करें | पहले जाँचें | छोड़ें}
 **URL:** {offer URL}
 **PDF:** {path या pending}
+
+{आवेदन वाला वाक्य, ज्यों का त्यों}
 
 ---
 
@@ -150,6 +153,8 @@ Offer की requirements पर mapped 6-10 STAR+R stories (STAR + **Reflection
 ## निकाले गए Keywords
 (ATS optimization के लिए offer के 15-20 keywords की list)
 ```
+
+**निर्णय:** वाली पंक्ति ऊपर के चार शब्दों में `final_decision` दोहराती है, और हेडर फ़ील्ड के नीचे वाली पंक्ति वाक्य को ज्यों का त्यों कॉपी करती है. Verdict मत लिखो.
 
 ### 2. Tracker में Record करें
 

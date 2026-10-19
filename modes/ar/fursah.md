@@ -218,8 +218,11 @@
 **URL:**
 **Archetype:** {detected}
 **Score:** {X/5}
+**القرار:** {تقدّم | فكّر | ابحث أولاً | تجاوز}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **PDF:** {path or pending}
+
+{جملة `## القرار (lead)` منسوخة حرفياً}
 
 ---
 
@@ -258,6 +261,8 @@
 ## Keywords extracted
 (قائمة تحتوي على 15-20 كلمة مفتاحية مستخرجة من الـ JD ومهمة لتحسين الـ ATS)
 ```
+
+سطر **القرار:** يعيد `final_decision` بالكلمات الأربع أعلاه، والسطر تحت حقول الترويسة ينسخ جملة القرار حرفياً. لا تكتب Verdict.
 
 ### 2. التسجيل في نظام التتبع
 

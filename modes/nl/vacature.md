@@ -115,8 +115,11 @@ Sla de volledige evaluatie op in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Datum:** {YYYY-MM-DD}
 **Archetype:** {gedetecteerd}
 **Score:** {X/5}
+**Beslissing:** {Solliciteren | Overwegen | Eerst onderzoeken | Overslaan}
 **URL:** {URL van de vacature}
 **PDF:** {pad of in afwachting}
+
+{de zin over wel of niet solliciteren, woordelijk gekopieerd}
 
 ---
 
@@ -146,6 +149,8 @@ Sla de volledige evaluatie op in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Geextraheerde trefwoorden
 (lijst van 15-20 trefwoorden uit de vacature voor ATS-optimalisatie)
 ```
+
+De regel **Beslissing:** herhaalt `final_decision` in de vier woorden hierboven, en de regel onder de kopvelden kopieert de sollicitatiezin woordelijk. Schrijf niet Verdict.
 
 ### 2. Opslaan in tracker
 

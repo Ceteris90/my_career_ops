@@ -115,8 +115,11 @@ Salvar avaliação completa em `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Data:** {YYYY-MM-DD}
 **Arquétipo:** {detectado}
 **Score:** {X/5}
+**Decisão:** {Candidatar | Considerar | Pesquisar primeiro | Não candidatar}
 **URL:** {URL da vaga}
 **PDF:** {caminho ou pendente}
+
+{a frase de candidatar ou não, copiada palavra por palavra}
 
 ---
 
@@ -146,6 +149,8 @@ Salvar avaliação completa em `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Keywords extraídas
 (lista de 15-20 keywords do JD para otimização ATS)
 ```
+
+A linha **Decisão:** repete `final_decision` com as quatro palavras acima, e a linha sob os campos do cabeçalho copia a frase palavra por palavra. Não escreva Verdict.
 
 ### 2. Registrar no tracker
 

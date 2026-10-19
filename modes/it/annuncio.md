@@ -115,8 +115,11 @@ Salvare la valutazione completa in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 **Data:** {YYYY-MM-DD}
 **Archetipo:** {rilevato}
 **Punteggio:** {X/5}
+**Decisione:** {Candidarsi | Valutare | Approfondire prima | Scartare}
 **URL:** {URL dell'annuncio}
 **PDF:** {percorso del file o in attesa}
+
+{la frase candidarsi o no, copiata parola per parola}
 
 ---
 
@@ -146,6 +149,8 @@ Salvare la valutazione completa in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 ## Parole chiave estratte
 (15-20 parole chiave estratte dall'annuncio per il superamento dei filtri ATS)
 ```
+
+La riga **Decisione:** ripete `final_decision` con le quattro parole sopra, e la riga sotto i campi di testata copia la frase parola per parola. Non scrivere Verdict.
 
 ### 2. Registrare nel tracker
 

@@ -137,9 +137,12 @@ Değerlendirmenin tamamını `reports/{###}-{sirket-slug}-{YYYY-MM-DD}.md` olara
      eder; yapmaması gereken, kullanıcının gerçekten sahip olduğu bir hedefin yerine
      geçmektir. -->
 **Puan:** {X.X}/5
+**Karar:** {Başvur | Değerlendir | Önce araştır | Geç}
 **URL:** {ilan URL'si}
 **PDF:** ✅/❌
 **Meşruiyet:** {Güvenilir | Dikkatli İlerle | Şüpheli}
+
+{`## Karar (lead)` cümlesi, kelimesi kelimesine}
 
 ---
 
@@ -178,6 +181,8 @@ Değerlendirmenin tamamını `reports/{###}-{sirket-slug}-{YYYY-MM-DD}.md` olara
 ## Çıkarılan Anahtar Kelimeler
 (ATS optimizasyonu için ilandan 15-20 anahtar kelime)
 ```
+
+**Karar:** satırı `final_decision` alanını yukarıdaki dört sözcükle yineler. Başlık alanlarının altındaki satır cümleyi kelimesi kelimesine kopyalar. Verdict yazmayın.
 
 ### 2. Takipçiye Kaydet
 

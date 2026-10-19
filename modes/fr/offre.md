@@ -115,8 +115,11 @@ Sauvegarder l'evaluation complete dans `reports/{###}-{company-slug}-{YYYY-MM-DD
 **Date :** {YYYY-MM-DD}
 **Archetype :** {detecte}
 **Score :** {X/5}
+**Décision:** {Postuler | Envisager | Chercher d'abord | Passer}
 **URL :** {URL de l'offre}
 **PDF :** {chemin ou en attente}
+
+{la phrase postuler ou non, copiée telle quelle}
 
 ---
 
@@ -146,6 +149,8 @@ Sauvegarder l'evaluation complete dans `reports/{###}-{company-slug}-{YYYY-MM-DD
 ## Mots-cles extraits
 (liste de 15-20 mots-cles de l'offre pour l'optimisation ATS)
 ```
+
+La ligne **Décision:** reprend `final_decision` avec les quatre mots ci-dessus, et la ligne sous les champs d'en-tête copie la phrase telle quelle. Ne pas écrire Verdict.
 
 ### 2. Enregistrer dans le tracker
 

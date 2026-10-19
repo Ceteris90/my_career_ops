@@ -383,9 +383,12 @@ Guardar la evaluación completa en `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 **Via:** {agencia/firma de reclutamiento, o — para candidaturas directas}
 **Archetype:** {detectado}
 **Score:** {X/5}
+**Decisión:** {Presentarse | Valorar | Investigar primero | Descartar}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **Work Auth:** {✅ Sponsors | ➖ Not needed | ⚠️ Unstated | ⛔ No sponsorship}
 **PDF:** {ruta o pendiente}
+
+{la frase de `## Veredicto (lead)`, copiada tal cual}
 
 ---
 
@@ -427,6 +430,8 @@ Guardar la evaluación completa en `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 ## Palabras clave extraídas
 (lista de 15-20 palabras clave de la oferta para optimización ATS)
 ```
+
+La línea **Decisión:** repite `final_decision` con las cuatro palabras de arriba, y la línea bajo los campos de cabecera copia la frase tal cual. No escribas Verdict.
 
 **Machine Summary (obligatorio):** YAML fence después del encabezado — mismo schema y reglas que `batch/batch-prompt.md` (fuente de verdad). Incluye `advertised_comp` (cifra textual de la JD o `null`), `risk_summary` (mapa), y `requirement_importance` (tabla del Bloque B fila por fila; tope `inferred` de la puerta se mantiene).
 

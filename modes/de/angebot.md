@@ -114,8 +114,11 @@ Die vollständige Bewertung in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` ab
 **Datum:** {YYYY-MM-DD}
 **Archetyp:** {erkannt}
 **Score:** {X/5}
+**Entscheidung:** {Bewerben | Prüfen | Zuerst recherchieren | Überspringen}
 **URL:** {URL der Stellenanzeige}
 **PDF:** {Pfad oder ausstehend}
+
+{der Bewerbungssatz, wortgleich kopiert}
 
 ---
 
@@ -145,6 +148,8 @@ Die vollständige Bewertung in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` ab
 ## Extrahierte Keywords
 (Liste mit 15-20 Keywords aus der Stellenanzeige für ATS-Optimierung)
 ```
+
+Die Zeile **Entscheidung:** wiederholt `final_decision` mit den vier Wörtern oben, und die Zeile unter den Kopffeldern kopiert den Bewerbungssatz wortgleich. Nicht Verdict schreiben.
 
 ### 2. Im Tracker eintragen
 

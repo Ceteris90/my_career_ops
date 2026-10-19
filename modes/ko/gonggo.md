@@ -117,8 +117,11 @@ WebSearch를 사용합니다.
 **Date:** {YYYY-MM-DD}
 **Archetype:** {detected}
 **Score:** {X/5}
+**결정:** {지원 | 검토 | 먼저 조사 | 건너뛰기}
 **URL:** {job URL}
 **PDF:** {path or pending}
+
+{지원 여부를 한 문장으로, 그대로 복사}
 
 ---
 
@@ -148,6 +151,8 @@ WebSearch를 사용합니다.
 ## 추출한 키워드
 (ATS 최적화를 위한 공고 키워드 15-20개)
 ```
+
+**결정:** 줄은 위 네 단어로 `final_decision` 을 반복하고, 헤더 칸 아래 줄은 그 문장을 그대로 복사한다. Verdict 라고 쓰지 않는다.
 
 ### 2. tracker 추가 항목 작성
 

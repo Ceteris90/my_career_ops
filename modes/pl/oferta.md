@@ -115,8 +115,11 @@ Zapisz pełną ocenę w `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Data:** {YYYY-MM-DD}
 **Archetyp:** {wykryty}
 **Score:** {X/5}
+**Decyzja:** {Aplikuj | Rozważ | Najpierw sprawdź | Pomiń}
 **URL:** {URL oferty}
 **PDF:** {ścieżka lub w toku}
+
+{zdanie o aplikacji, skopiowane słowo w słowo}
 
 ---
 
@@ -146,6 +149,8 @@ Zapisz pełną ocenę w `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Wyekstrahowane słowa kluczowe
 (lista 15-20 słów kluczowych z oferty do optymalizacji ATS)
 ```
+
+Linia **Decyzja:** powtarza `final_decision` tymi czterema słowami powyżej, a linia pod polami nagłówka kopiuje zdanie słowo w słowo. Nie pisz Verdict.
 
 ### 2. Zapisz w trackerze
 

@@ -115,8 +115,11 @@ Simpan evaluasi lengkap ke `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Tanggal:** {YYYY-MM-DD}
 **Arketipe:** {terdeteksi}
 **Score:** {X/5}
+**Keputusan:** {Lamar | Pertimbangkan | Teliti dulu | Lewati}
 **URL:** {URL lowongan}
 **PDF:** {path atau menunggu}
+
+{kalimat lamar atau tidak, disalin apa adanya}
 
 ---
 
@@ -146,6 +149,8 @@ Simpan evaluasi lengkap ke `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Kata kunci terekstraksi
 (daftar 15-20 kata kunci dari lowongan untuk optimasi ATS)
 ```
+
+Baris **Keputusan:** mengulang `final_decision` dengan empat kata di atas, dan baris di bawah bidang header menyalin kalimatnya apa adanya. Jangan tulis Verdict.
 
 ### 2. Catat ke tracker
 

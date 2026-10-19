@@ -115,8 +115,11 @@ Gem den fulde evaluering i `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Dato:** {YYYY-MM-DD}
 **Arketype:** {detekteret}
 **Score:** {X/5}
+**Beslutning:** {Søg | Overvej | Undersøg først | Spring over}
 **URL:** {opslagets URL}
 **PDF:** {sti eller afventer}
+
+{sætningen om at søge, kopieret ordret}
 
 ---
 
@@ -146,6 +149,8 @@ Gem den fulde evaluering i `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 ## Udtrukne nøgleord
 (liste med 15-20 nøgleord fra opslaget til ATS-optimering)
 ```
+
+Linjen **Beslutning:** gentager `final_decision` med de fire ord ovenfor, og linjen under headerfelterne kopierer ansøgningssætningen ordret. Skriv ikke Verdict.
 
 ### 2. Registrér i trackeren
 
