@@ -441,7 +441,12 @@ export function unminedHints(cfg) {
   for (const entry of cfg?.search_queries ?? []) {
     if (entry?.enabled === false || typeof entry?.query !== 'string') continue;
     for (const hint of companyHintsFromQuery(entry.query, stopwords)) {
-      if (tracked.has(hint)) continue;
+      // The joined form only ("scale nova" → "scalenova"), so a tracked
+      // "ScaleNova" or "Scale-Nova" is recognised. Not every candidate: those
+      // include the first word, and a tracked "Scale" would then hide an
+      // untracked "Scale Nova" — the miss this report exists to surface.
+      const [joined] = deriveSlugCandidates(hint);
+      if (tracked.has(hint) || (joined && tracked.has(joined))) continue;
       if (!byHint.has(hint)) byHint.set(hint, new Set());
       byHint.get(hint).add(String(entry.name ?? '(unnamed)'));
     }

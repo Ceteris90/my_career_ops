@@ -8,6 +8,11 @@
 // exercised without touching the rate-limited ATS directories.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   buildHintStopwords,
   companyFromHost,
@@ -194,4 +199,37 @@ test('probing stops at the first hit for a company', async () => {
   };
   await findUnmined(cfg, { fetchJson });
   assert.ok(calls <= 3, `stopped early, took ${calls} probes for a first-candidate hit`);
+});
+
+test('a tracked name spelled without the space still counts as tracked', () => {
+  // CodeRabbit on #2730: the raw hint "scale nova" matched neither the tracked
+  // name "scalenova" nor its slug shapes, so a tracked company was reported as
+  // unmined and `--strict --unmined` failed for nothing.
+  const query = '"Scale Nova" OR Cerebras';
+  for (const name of ['ScaleNova', 'Scale-Nova', 'Scale Nova']) {
+    const cfg = { ...CFG, tracked_companies: [{ name }], search_queries: [{ name: 'q', query }] };
+    assert.ok(!unminedHints(cfg).some((h) => h.hint === 'scale nova'), `tracked as "${name}"`);
+  }
+});
+
+test('a tracked first word does not hide a different company', () => {
+  // Matching on every slug candidate would include the first word, so a
+  // tracked "Scale" would swallow an untracked "Scale Nova".
+  const cfg = { ...CFG, tracked_companies: [{ name: 'Scale' }], search_queries: [{ name: 'q', query: '"Scale Nova"' }] };
+  assert.deepEqual(unminedHints(cfg).map((h) => h.hint), ['scale nova']);
+});
+
+test('the CLI accepts --unmined and no-ops without a portals file', () => {
+  // main() validates flags before any network work; --unmined has to be a
+  // known flag or the command exits 1 before it starts.
+  const dir = mkdtempSync(join(tmpdir(), 'unmined-cli-'));
+  try {
+    const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'verify-portals.mjs');
+    const out = execFileSync(process.execPath, [script, '--unmined', '--file', join(dir, 'absent.yml')], {
+      encoding: 'utf-8', timeout: 20000,
+    });
+    assert.match(out, /no portals file at .*nothing to check/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
