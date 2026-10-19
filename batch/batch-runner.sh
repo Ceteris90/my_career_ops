@@ -205,7 +205,14 @@ while [[ $# -gt 0 ]]; do
         echo "ERROR: --worker-timeout must be a non-negative integer (seconds)."
         exit 1
       fi
-      WORKER_TIMEOUT=$((10#$2))
+      # Strip leading zeroes, then compare as a decimal string: Bash arithmetic
+      # wraps past 2^63-1, and a wrapped value at or below 0 disables the watchdog.
+      WORKER_TIMEOUT="${2#"${2%%[!0]*}"}"
+      WORKER_TIMEOUT="${WORKER_TIMEOUT:-0}"
+      if [[ ${#WORKER_TIMEOUT} -gt 19 ]] || { [[ ${#WORKER_TIMEOUT} -eq 19 ]] && [[ "$WORKER_TIMEOUT" > 9223372036854775807 ]]; }; then
+        echo "ERROR: --worker-timeout must be at most 9223372036854775807 seconds."
+        exit 1
+      fi
       shift 2
       ;;
     --status) STATUS_ONLY=true; shift ;;
