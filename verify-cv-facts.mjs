@@ -2030,30 +2030,29 @@ function sourceContainsFact(sourceText, value) {
 
 /**
  * @param {string} targetText generated candidate-facing HTML/Markdown/text
- * @param {{ sourcePaths?: string[], sourceTexts?: string[], configPath?: string, cwd?: string }} options
- *   sourceTexts: extra evidence that is not a file, such as the answers the
- *   candidate typed for one cover letter. The rendered letter is not passed
- *   here, or every claim in it would support itself.
+ * @param {{ sourcePaths?: string[], planTexts?: string[], configPath?: string, cwd?: string }} options
+ *   planTexts: what the candidate wrote for one document, such as the answers
+ *   for a cover letter. They support only a number the document states as a
+ *   plan, never an employer, title, tool, or past experience. The rendered
+ *   letter is not passed here, or every claim in it would support itself.
  * @returns {{ verdict: 'pass'|'warn'|'block', invented: string[], unsupportedFacts: object[], advisoryFacts: object[], forbidden: string[], warnings: string[] }}
  * @throws when the config is invalid
  */
 export function verifyFacts(targetText, {
   sourcePaths = DEFAULT_SOURCES,
-  sourceTexts = [],
+  planTexts = [],
   configPath = DEFAULT_CONFIG,
   cwd = process.cwd(),
 } = {}) {
   // Per file, before the join: stripMarkup keeps only the body of a LaTeX
   // document, and run on the joined text it would discard every source read
   // ahead of a .tex one as if it were that document's preamble.
-  const fileText = sourcePaths.map(path => latexBody(readIfExists(resolveInputPath(path, cwd)))).join('\n');
-  const extraList = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
-  const extraText = extraList.filter(text => typeof text === 'string' && text.trim()).join('\n');
-  const sourceText = [fileText, extraText].filter(part => part.trim()).join('\n');
+  const sourceText = sourcePaths.map(path => latexBody(readIfExists(resolveInputPath(path, cwd)))).join('\n');
   const { missing: configMissing, config } = loadFactConfig(resolveInputPath(configPath, cwd));
   const allowed = allowedMetricSet(sourceText, config.allow_metrics);
   const targetClaims = metricClaims(targetText);
-  const invented = [...targetClaims].filter(claim => !allowed.has(claim));
+  const planned = plannedClaims(targetText, planTexts);
+  const invented = [...targetClaims].filter(claim => !allowed.has(claim) && !planned.has(claim));
   const sourceNormalized = normalizeFact(stripMarkup(sourceText));
   const allowedFacts = new Set(config.allow_facts.map(normalizeFact));
   const unsourced = ({ value }) => !sourceContainsFact(sourceNormalized, value) && !allowedFacts.has(value);
@@ -2112,14 +2111,42 @@ export function verifyFacts(targetText, {
   };
 }
 
-/** A plan the candidate wrote for one letter is not career evidence. */
-export function factSourceAdvice() {
+/**
+ * Metric claims in `targetText` that `planTexts` support: the plan texts hold
+ * the claim, and every clause of the target that states it is a plan. "I will
+ * read the last 6 months of incident reviews" qualifies. "I have 6 months of
+ * incident-response experience" does not, whatever the answers say.
+ *
+ * @param {string} targetText
+ * @param {string[]} planTexts
+ * @returns {Set<string>}
+ */
+function plannedClaims(targetText, planTexts) {
+  const planText = planTexts.filter(text => typeof text === 'string').join('\n');
+  if (!planText.trim()) return new Set();
+  const inPlans = metricClaims(planText);
+  const clean = spellNumbers(stripMarkup(targetText, { keepLineBreaks: true }));
+  const forward = new Set();
+  const past = new Set();
+  for (let i = 0; i < clean.length;) {
+    const { start, end } = clauseBounds(clean, i);
+    const tense = FORWARD_MARKER_RE.test(clean.slice(start, end)) ? forward : past;
+    for (const claim of metricClaims(clean.slice(i, end))) tense.add(claim);
+    i = end + 1;
+  }
+  return new Set([...forward].filter(claim => inPlans.has(claim) && !past.has(claim)));
+}
+
+/** Say which sources the gate read, so nobody looks for evidence it never checked. */
+export function factSourceAdvice({ letterAnswers = false } = {}) {
+  if (!letterAnswers) {
+    return 'cv.md and article-digest.md do not contain these claims. Add career evidence to one of them. A verified exception belongs in config/cv-facts.json.';
+  }
   return [
-    'The checked sources do not contain these claims.',
-    'Those sources are cv.md, article-digest.md, and the answers and inputs supplied for this letter.',
+    'These claims are not in cv.md, article-digest.md, or the answers and inputs supplied for this letter.',
+    'Those answers support only a number the letter states as a plan, never an employer, title, tool, or past experience.',
     'Add career evidence to cv.md or article-digest.md.',
-    'A plan the candidate already gave stays in those answers.',
-    'Do not copy that plan into cv.md.',
+    'A plan stays in those answers. Do not copy that plan into cv.md.',
     'A verified exception belongs in config/cv-facts.json.',
   ].join(' ');
 }
@@ -2145,7 +2172,7 @@ export function assertFacts(targetText, options = {}) {
       return sourceLine ? `${kind}=${value} (source says: ${sourceLine})` : `${kind}=${value}`;
     }).join(', ')}`);
     if (result.forbidden.length) details.push(`forbidden phrases found: ${result.forbidden.join(', ')}`);
-    throw new Error(`Fact check failed${options.label ? ` for ${options.label}` : ''}: ${details.join('; ')}. ${factSourceAdvice()}`);
+    throw new Error(`Fact check failed${options.label ? ` for ${options.label}` : ''}: ${details.join('; ')}. ${factSourceAdvice({ letterAnswers: Array.isArray(options.planTexts) })}`);
   }
   return result;
 }
@@ -2186,8 +2213,8 @@ Checks generated candidate-facing text for unsupported metrics and explicitly as
 non-metric facts (employers, titles, tools, delegated-work authorship, scope-verb
 inflation, and unsourced adoption claims) absent from source files.
 Default sources: cv.md and article-digest.md.
-A cover letter also checks the answers and inputs supplied for that letter.
-The rendered letter is not a source.
+A cover letter also reads the answers supplied for that letter, which support
+only a number the letter states as a plan. The rendered letter is not a source.
 Default config:  config/cv-facts.json (optional)`;
 }
 

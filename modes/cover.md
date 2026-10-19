@@ -290,15 +290,18 @@ Only after explicit user approval.
 
 Before rendering, run the shared fact validator against the assembled cover
 letter HTML. It checks metric-like claims plus explicitly asserted employers,
-titles, and tools against `cv.md`, `article-digest.md`, the optional
-`config/cv-facts.json` allowlist, and the answers on this payload. The
-validator returns a stable `pass`, `warn`, or `block` verdict. Advisory
+titles, and tools against `cv.md`, `article-digest.md`, and the optional
+`config/cv-facts.json` allowlist. The answers on this payload count only for a
+number the letter states as a plan. The validator returns a stable `pass`, `warn`, or `block` verdict. Advisory
 `warn_phrases` do not stop PDF generation. A block verdict stops PDF generation.
 
 Copy each Step 5 answer and each Step 6 answer into `user_inputs` verbatim.
-A number the candidate wrote there is a source for this letter. A number that
-is in none of `cv.md`, `article-digest.md`, and `user_inputs` still blocks the
-PDF. Do not rewrite the candidate's wording to get past the gate, and do not
+A number the candidate wrote there supports the same number when the letter
+states it as a plan, as in "I will read the last 6 months of incident reviews".
+It never supports an employer, a title, a tool, or past experience. "I have 6
+months of incident-response experience" still needs `cv.md` or
+`article-digest.md`, whatever the answers say. A number that is in none of
+`cv.md`, `article-digest.md`, and `user_inputs` still blocks the PDF. Do not rewrite the candidate's wording to get past the gate, and do not
 add a plan to cv.md to make the gate pass. Career evidence belongs in `cv.md`
 or `article-digest.md`. A verified exception belongs in `config/cv-facts.json`.
 
@@ -337,7 +340,8 @@ Assemble the JSON payload:
     "{each Step 5 answer, verbatim}",
     "{Step 6 answer A, verbatim}",
     "{Step 6 answer B, verbatim}",
-    "{Step 6 answer C, verbatim}"
+    "{Step 6 answer C, verbatim}",
+    "{Step 6 answer D, verbatim}"
   ],
   "output_path": "output/{company-slug}-{role-slug}-cover.pdf"
 }

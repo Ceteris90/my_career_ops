@@ -492,7 +492,7 @@ Usage:
     // cannot leave behind a misleading artifact.
     const factCheck = assertFacts(html, {
       label: "cover letter",
-      sourceTexts: letterInputTexts(payload),
+      planTexts: letterInputTexts(payload),
     });
     // Ahead of the verdict, because it qualifies it: with no config the phrase
     // lists are empty, so a silent gate here covers metrics and facts only.
