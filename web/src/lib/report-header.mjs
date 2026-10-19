@@ -34,7 +34,9 @@ const DECISION_LABELS = {
 
 function fieldName(raw) {
   const key = raw.trim().toLowerCase();
-  return DECISION_LABELS[key] ?? FIELD_KEYS[key];
+  if (Object.hasOwn(DECISION_LABELS, key)) return DECISION_LABELS[key];
+  if (Object.hasOwn(FIELD_KEYS, key)) return FIELD_KEYS[key];
+  return undefined;
 }
 
 export function readReport(md) {

@@ -105,6 +105,20 @@ Example Labs is a fictional employer.
     return null;
   });
 
+  check('prototype names are not header fields', () => {
+    const report = `# Evaluation: Example Labs — Researcher
+
+**constructor:** Apply
+**__proto__:** Skip
+**toString:** Consider
+
+---
+`;
+    const fields = readReport(report).fields;
+    if (fields.length !== 0) return JSON.stringify(fields.map((f) => String(f.label)));
+    return null;
+  });
+
   check('a Verdict label is not a decision', () => {
     const report = `# Evaluation: Example Labs — Researcher
 

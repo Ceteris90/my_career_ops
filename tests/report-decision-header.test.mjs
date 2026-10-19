@@ -33,8 +33,15 @@ function templateHeader(text, opener) {
   const start = text.indexOf(opener);
   if (start < 0) return `(template opener ${JSON.stringify(opener)} not found)`;
   const body = text.slice(start + opener.length);
-  return body.slice(0, body.indexOf('\n---\n'));
+  const end = body.indexOf('\n---\n');
+  if (end < 0) return '(template header terminator "---" not found)';
+  return body.slice(0, end);
 }
+
+check('a template with no header terminator fails the check', () => {
+  const got = templateHeader('**Report format:**\n\n```markdown\n**Score:** 1/5\n', '**Report format:**\n\n```markdown\n');
+  return got.startsWith('(template header terminator') ? null : `got ${JSON.stringify(got)}`;
+});
 
 const HEADERS = {
   'batch/batch-prompt.md': templateHeader(read('batch/batch-prompt.md'), 'Report header:\n\n```markdown\n'),
