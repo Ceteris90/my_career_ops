@@ -29,7 +29,9 @@ import {
 import { loadRegistry, findInRegistry, classifySource, sourceBadge, successorFor } from './plugins/_registry.mjs';
 import { readLock, writeLockEntry, removeLockEntry, hashPluginTree, consentSurface } from './plugins/_lock.mjs';
 import { installFromRepo, scaffoldNew, parseRepoArg } from './plugin-install.mjs';
-import { appendToPipeline } from './scan.mjs';
+import { appendToPipeline, appendToScanHistory, PORTALS_PATH } from './scan.mjs';
+import { createAdmissionGate, formatSkipCounts } from './lib/admission-gate.mjs';
+import { localToday } from './lib/local-today.mjs';
 import { postingKey } from './url-key.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
@@ -83,6 +85,17 @@ function existingPipelineUrls() {
   const text = readFileSync(PIPELINE_PATH, 'utf8');
   for (const m of text.matchAll(/- \[[ xX]\]\s+(\S+)/g)) urls.add(m[1]);
   return urls;
+}
+
+/** portals.yml, for its title_filter and location_filter. An unreadable file stops the run, as in scan.mjs. */
+function loadPortalsConfig() {
+  if (!existsSync(PORTALS_PATH)) return {};
+  try {
+    return yaml.load(readFileSync(PORTALS_PATH, 'utf8')) || {};
+  } catch (err) {
+    console.error(`Error: failed to parse ${PORTALS_PATH}: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 /** Jobs whose posting is not in the pipeline yet, one per posting. */
@@ -181,10 +194,22 @@ async function cmdRun(args) {
     if (hook === 'search' && !payload) { console.error(`search needs a query: node plugins.mjs run ${id} search "<query>"`); process.exit(1); }
     const results = filterResultsForId(await runHook(hook, payload, { root: ROOT, dataRoot: DATA_ROOT, dryRun, pluginId: id }), id);
     const found = results.filter(r => r.ok && Array.isArray(r.result)).flatMap(r => r.result).map(sanitizeJob).filter(Boolean);
-    const jobs = newPipelineJobs(found, existingPipelineUrls());
-    console.log(`${id} ${hook}: ${found.length} found, ${jobs.length} new.`);
+    // newPipelineJobs collapses one posting's alert and job-page URLs; the
+    // shared gate then applies what scan.mjs applies before a row is queued:
+    // the tracker and scan-history (normalized URLs), data/blacklist.md and the
+    // title and location filters (#5478). Checking the pipeline alone re-queued
+    // roles already applied to and roles the scanner had filtered out.
+    const gate = createAdmissionGate({ config: loadPortalsConfig() });
+    const { admitted: jobs } = gate.partition(newPipelineJobs(found, existingPipelineUrls()).map(j => ({ ...j, source: `plugin:${id}` })));
+    const skipped = formatSkipCounts(gate.counts);
+    console.log(`${id} ${hook}: ${found.length} found, ${jobs.length} new${skipped ? ` (skipped: ${skipped})` : ''}.`);
     if (dryRun) { jobs.slice(0, 20).forEach(j => console.log(`  • ${j.title} — ${j.url}`)); console.log('(--dry-run: pipeline not written)'); return; }
-    if (jobs.length) { await appendToPipeline(jobs); console.log(`→ Appended ${jobs.length} to data/pipeline.md. Run /career-ops pipeline to evaluate.`); }
+    if (jobs.length) {
+      await appendToPipeline(jobs);
+      // Recorded so the next ingest, and every scanner, sees these as known.
+      await appendToScanHistory(jobs, localToday(), 'added');
+      console.log(`→ Appended ${jobs.length} to data/pipeline.md. Run /career-ops pipeline to evaluate.`);
+    }
     return;
   }
 

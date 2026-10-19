@@ -54,7 +54,11 @@ A plugin is a directory with a `manifest.json` (validated before any code is
 imported), an `index.mjs` (default-exports your hooks), and optionally a
 `skill.md` + `_helpers`. Hooks: **provider / ingest / search / notify / export**
 — there is no auto-submit hook. Producers **return** `Job[]`; the engine writes
-them. Reach the network **only** through `ctx.fetch` (your manifest
+them. Before it does, an `ingest` or `search` result passes the same admission
+checks as `scan.mjs`: postings already in the tracker, the pipeline or
+`data/scan-history.tsv` are dropped, as are `data/blacklist.md` matches and
+titles or locations that `portals.yml`'s `title_filter` / `location_filter`
+reject. What is admitted is also recorded in `data/scan-history.tsv`. Reach the network **only** through `ctx.fetch` (your manifest
 `allowedHosts` is enforced, with SSRF protection). Keys arrive via `ctx.env`,
 non-secret settings via `ctx.settings`. To deduplicate the postings you return —
 or to compare a posting against one you have already seen — use
