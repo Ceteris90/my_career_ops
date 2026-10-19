@@ -181,7 +181,7 @@ function applyReport(report, sentence, desired) {
   }
   const nextYaml = insertHardStop(replaceDecision(replaceYamlScore(fence[2], desired)), sentence);
   const next = replaceHeader(report, desired);
-  return next.replace(fence[0], `${fence[1]}${nextYaml}${fence[3]}`);
+  return next.replace(fence[0], () => `${fence[1]}${nextYaml}${fence[3]}`);
 }
 
 function readTracker(text) {
@@ -338,7 +338,6 @@ export async function applyDebriefSync(plan) {
     const pin = await replaceNextPin(normalized.appNum, {
       date: normalized.nextDate,
       why: normalized.nextWhy,
-      followupsPath: join(root, 'data', 'follow-ups.md'),
     });
     if (pin.changed) wrote = true;
   }

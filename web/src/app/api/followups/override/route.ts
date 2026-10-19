@@ -11,13 +11,17 @@ export const dynamic = "force-dynamic";
 
 type ReplaceNextPin = (
   appNum: number,
-  options: { date: string; followupsPath: string },
+  options: { date: string; followupsPath: string; lockTimeoutMs?: number },
 ) => Promise<{ changed: boolean }>;
 
 type ClearNextPin = (
   appNum: number,
-  options: { followupsPath: string },
+  options: { followupsPath: string; lockTimeoutMs?: number },
 ) => Promise<{ cleared: boolean }>;
+
+function webLockTimeoutMs(): number {
+  return Number(process.env.CAREER_OPS_WEB_FOLLOWUPS_LOCK_TIMEOUT_MS) || 5_000;
+}
 
 async function pinApi(): Promise<{ replaceNextPin: ReplaceNextPin; clearNextPin: ClearNextPin }> {
   // The core script is chosen at runtime. A static import would make the
@@ -55,7 +59,7 @@ export async function POST(req: Request) {
     return await withLogLock(async () => {
       const { replaceNextPin } = await pinApi();
       try {
-        await replaceNextPin(appNum, { date, followupsPath: file });
+        await replaceNextPin(appNum, { date, followupsPath: file, lockTimeoutMs: webLockTimeoutMs() });
       } catch (error) {
         rethrowBusy(error);
       }
@@ -81,7 +85,7 @@ export async function DELETE(req: Request) {
       const { clearNextPin } = await pinApi();
       let cleared = false;
       try {
-        cleared = (await clearNextPin(appNum, { followupsPath: file })).cleared;
+        cleared = (await clearNextPin(appNum, { followupsPath: file, lockTimeoutMs: webLockTimeoutMs() })).cleared;
       } catch (error) {
         rethrowBusy(error);
       }

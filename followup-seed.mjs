@@ -453,7 +453,7 @@ export async function replaceNextPin(appNum, options = {}) {
     mkdirSync(dirname(followupsPath), { recursive: true });
     writeFileAtomic(followupsPath, appendPinLine(existing, appNum, pinText(appNum, options.date, setDate, why)));
     return { changed: true, date: options.date, setDate };
-  });
+  }, { timeoutMs: options.lockTimeoutMs, lockDir: options.lockDir });
 }
 
 export async function clearNextPin(appNum, options = {}) {
@@ -468,7 +468,7 @@ export async function clearNextPin(appNum, options = {}) {
     if (next === existing) return { cleared: false };
     writeFileAtomic(followupsPath, next);
     return { cleared: true };
-  });
+  }, { timeoutMs: options.lockTimeoutMs, lockDir: options.lockDir });
 }
 
 export async function seedFollowup(appNum, options = {}) {

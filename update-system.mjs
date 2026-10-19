@@ -498,6 +498,7 @@ const SYSTEM_PATHS = [
   'coverage-check.mjs',
   'agent-inbox.mjs',
   'followup-seed.mjs',
+  'debrief-sync.mjs',
   'profile-language.mjs',
   'title-keywords.mjs',
   'gemini-eval.mjs',

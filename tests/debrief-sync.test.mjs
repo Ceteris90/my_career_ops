@@ -3,10 +3,25 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { replaceNextPin } from '../followup-seed.mjs';
 import { ROOT, pass, fail } from './helpers.mjs';
 
 const SCRIPT = join(ROOT, 'debrief-sync.mjs');
 const SENTENCE = 'No on-site roles outside the home city';
+const DOLLAR_SENTENCE = "Pay floor $'quoted";
+
+function localISO(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function daysAhead(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return localISO(date);
+}
+
+const FUTURE = daysAhead(60);
 const LOW_SENTENCE = 'Requires a clearance the candidate does not hold';
 const REPORT_REL = 'reports/007-northwind-2026-01-05.md';
 
@@ -19,31 +34,29 @@ function check(label, fn) {
   }
 }
 
-function run(root, args) {
+function childEnv(root, extraEnv = {}) {
+  return {
+    ...process.env,
+    CAREER_OPS_ROOT: root,
+    CAREER_OPS_DATA_DIR: '',
+    CAREER_OPS_TRACKER: '',
+    CAREER_OPS_FOLLOWUPS: '',
+    CAREER_OPS_PROFILE: '',
+    ...extraEnv,
+  };
+}
+
+function run(root, args, extraEnv = {}) {
   return spawnSync(process.execPath, [SCRIPT, ...args], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      CAREER_OPS_ROOT: root,
-      CAREER_OPS_DATA_DIR: '',
-      CAREER_OPS_TRACKER: '',
-      CAREER_OPS_FOLLOWUPS: '',
-      CAREER_OPS_PROFILE: '',
-    },
+    env: childEnv(root, extraEnv),
   });
 }
 
-function summary(root, script, args) {
+function summary(root, script, args, extraEnv = {}) {
   return spawnSync(process.execPath, [join(ROOT, script), ...args], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      CAREER_OPS_ROOT: root,
-      CAREER_OPS_DATA_DIR: '',
-      CAREER_OPS_TRACKER: '',
-      CAREER_OPS_FOLLOWUPS: '',
-      CAREER_OPS_PROFILE: '',
-    },
+    env: childEnv(root, extraEnv),
   });
 }
 
@@ -124,7 +137,7 @@ const fullArgs = [
   '--contact-type', 'interviewer',
   '--contact-name', 'Casey Bloom',
   '--contact-email', 'casey.bloom@northwind.example',
-  '--next', '2026-12-15',
+  '--next', FUTURE,
   '--why', 'panel debrief',
 ];
 
@@ -163,11 +176,12 @@ const fullArgs = [
       assert.match(tsv, /Casey Bloom\tNorthwind\t\t\t\tcasey\.bloom@northwind\.example/);
       const cadence = summary(root, 'followup-cadence.mjs', ['--summary']);
       assert.equal(cadence.status, 0, cadence.stderr);
+      assert.ok(FUTURE > localISO(new Date()));
       assert.doesNotMatch(cadence.stdout, /OVERDUE/);
-      assert.match(cadence.stdout, /2026-12-15/);
+      assert.ok(cadence.stdout.includes(FUTURE));
       const pins = readRoot(root, 'data/follow-ups.md');
       assert.equal((pins.match(/^- next #7 /gm) || []).length, 1);
-      assert.match(pins, /^- next #7 2026-12-15 \(set \d{4}-\d{2}-\d{2}\) — panel debrief$/m);
+      assert.match(pins, new RegExp(`^- next #7 ${FUTURE} \\(set \\d{4}-\\d{2}-\\d{2}\\) — panel debrief$`, 'm'));
     });
 
     if (first.status !== 0) {
@@ -274,6 +288,88 @@ refuses('a header and YAML score mismatch writes nothing', ['--app', '7', '--dea
 });
 refuses('a tracker score that is neither the header nor the cap writes nothing', ['--app', '7', '--dealbreaker', SENTENCE], {
   trackerScore: '2.0',
+});
+
+{
+  const root = freshRoot();
+  try {
+    writeFixture(root, { followups: null });
+    const reportPath = join(root, REPORT_REL);
+    const report = readFileSync(reportPath, 'utf8').replace(
+      'soft_gaps: []',
+      () => 'soft_gaps: []\ncomp_note: "$$ range"',
+    );
+    writeFileSync(reportPath, `${report}## After\n\nKeep this tail.\n`);
+    const result = run(root, ['--app', '7', '--dealbreaker', DOLLAR_SENTENCE]);
+    check('a dollar sign in the report is written literally', () => {
+      assert.equal(result.status, 0, result.stderr);
+      const next = readRoot(root, REPORT_REL);
+      assert.ok(next.includes(DOLLAR_SENTENCE));
+      assert.ok(next.includes('comp_note: "$$ range"'));
+      assert.ok(next.includes('Keep this tail.'));
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+{
+  const root = freshRoot();
+  const custom = join(root, 'pinned-follow-ups.md');
+  try {
+    writeFixture(root);
+    const result = run(root, ['--app', '7', '--next', FUTURE, '--why', 'panel debrief'], {
+      CAREER_OPS_FOLLOWUPS: custom,
+    });
+    check('a CAREER_OPS_FOLLOWUPS pin is the file the cadence summary reads', () => {
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(readFileSync(custom, 'utf8'), new RegExp(`^- next #7 ${FUTURE} `, 'm'));
+      assert.match(readRoot(root, 'data/follow-ups.md'), /2026-02-01/);
+      const cadence = summary(root, 'followup-cadence.mjs', ['--summary'], {
+        CAREER_OPS_FOLLOWUPS: custom,
+      });
+      assert.equal(cadence.status, 0, cadence.stderr);
+      assert.ok(cadence.stdout.includes(FUTURE));
+      assert.doesNotMatch(cadence.stdout, /OVERDUE/);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+{
+  const followups = join(tmpdir(), `career-ops-debrief-pin-${process.pid}.md`);
+  const lock = join(tmpdir(), `career-ops-followups-debrief-${process.pid}.lock`);
+  mkdirSync(lock, { recursive: true });
+  writeFileSync(join(lock, 'owner.json'), JSON.stringify({
+    pid: process.pid,
+    token: 'held',
+    startedAt: new Date().toISOString(),
+  }));
+  const started = Date.now();
+  let code = null;
+  try {
+    await replaceNextPin(7, {
+      date: FUTURE,
+      followupsPath: followups,
+      lockDir: lock,
+      lockTimeoutMs: 200,
+    });
+  } catch (err) {
+    code = err?.code ?? null;
+  }
+  check('replaceNextPin uses the caller lock timeout', () => {
+    assert.equal(code, 'LOCK_TIMEOUT');
+    assert.ok(Date.now() - started < 5000);
+  });
+  rmSync(lock, { recursive: true, force: true });
+  rmSync(followups, { force: true });
+}
+
+check('the override route keeps the web lock timeout', () => {
+  const route = readFileSync(join(ROOT, 'web/src/app/api/followups/override/route.ts'), 'utf8');
+  assert.match(route, /CAREER_OPS_WEB_FOLLOWUPS_LOCK_TIMEOUT_MS/);
+  assert.equal((route.match(/lockTimeoutMs: webLockTimeoutMs\(\)/g) || []).length, 2);
 });
 
 check('Step 10 tells the agent how to record the call', () => {
