@@ -376,6 +376,8 @@ Two separate axes:
 2. `browser_snapshot` to read content
 3. Only footer/navbar without JD = closed. Title + description + Apply = active.
 
+**Known WebFetch failure mode — "Related jobs" sidebars:** a career page that lists sibling postings in a "Related jobs"/"Similar openings" sidebar can carry a per-item status badge (e.g. "Job removed") next to one of those *other* listings. WebFetch's HTML-to-markdown pass flattens the page into one text stream, and its summarization step has been observed misattributing that sidebar badge to the **primary** posting, reporting a live job as closed. Confirmed on `jobs.uber.com` (2026-10-17): two independent WebFetch calls on the same URL, a day apart, both claimed "Job removed" while a Playwright render showed a complete, live JD with no removal notice on the primary job. This is exactly why rule 1 above says never trust WebFetch for this: when it disagrees with a Playwright read, or the page carries any kind of sibling-postings list, trust Playwright.
+
 **Exception for batch workers (headless mode):** Playwright is unavailable in headless pipe mode. Use WebFetch as fallback and mark the report header `**Verification:** unconfirmed (batch mode)`; the user can verify manually later.
 
 ---
