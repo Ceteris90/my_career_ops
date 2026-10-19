@@ -12,6 +12,7 @@ import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
 import dotenv from 'dotenv';
+import { AGENT_CLIS } from './lib/agent-cli.mjs';
 import { findTitleFilterConflicts } from './lib/title-filter-conflicts.mjs';
 import { sectionState, scanHeadings, SECTIONS } from './lib/personalization.mjs';
 import { discoverPlugins, pluginRoots, pluginStatus } from './plugins/_engine.mjs';
@@ -29,7 +30,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 
 // CLIs the doctor recognises.
-const VALID_CLIS = ['claude', 'codex', 'opencode', 'pi', 'antigravity', 'grok', 'qwen', 'kimi', 'copilot', 'gemini', 'hermes'];
 
 // --help ran the full diagnostic and printed the report at exit 0 (#2856), so
 // a mistyped flag was indistinguishable from a clean run — and --targe
@@ -50,7 +50,7 @@ const USAGE = `Usage:
   node doctor.mjs --cli <name>       # check a specific CLI's integration
   node doctor.mjs --help             # show this message
 
-CLIs: ${VALID_CLIS.join(', ')}`;
+CLIs: ${AGENT_CLIS.join(', ')}`;
 
 // requireOperand: without it, `--target --json` reads --json as the target
 // path (argv[targetIdx + 1] below has no adjacency check of its own), and the
@@ -202,6 +202,25 @@ function checkDependencies() {
     pass: false,
     label: `Dependencies missing: ${missing.join(', ')}`,
     fix: 'Run: npm install',
+  };
+}
+
+// The web UI is optional, so missing web/ dependencies are a warning: only
+// `npm run ui` needs them, and a CLI-only install never does.
+function checkWebDependencies() {
+  const webDir = join(codeRoot, 'web');
+  if (!existsSync(join(webDir, 'package.json'))) return null;
+  let missing;
+  try {
+    missing = findMissingDependencies(webDir);
+  } catch (err) {
+    return { warn: true, label: `Web UI dependencies could not be checked: web/package.json unreadable (${err.message})` };
+  }
+  if (missing.length === 0) return { pass: true, label: 'Web UI dependencies installed' };
+  return {
+    warn: true,
+    label: `Web UI dependencies are not installed (${missing.length} missing, including ${missing[0]}), so npm run ui cannot start`,
+    fix: 'Run: npm --prefix web ci',
   };
 }
 
@@ -600,14 +619,14 @@ function isPlaywrightMcpConfigured(root, activeCli) {
 // missing file is normal, malformed values are caught per call below.
 function resolveActiveCli() {
   if (cliFlag !== undefined && cliFlag !== null) {
-    if (!VALID_CLIS.includes(cliFlag)) {
-      return { cli: 'unknown', source: 'flag', warning: `Unknown --cli "${cliFlag}". Valid: ${VALID_CLIS.join(', ')}.` };
+    if (!AGENT_CLIS.includes(cliFlag)) {
+      return { cli: 'unknown', source: 'flag', warning: `Unknown --cli "${cliFlag}". Valid: ${AGENT_CLIS.join(', ')}.` };
     }
     return { cli: cliFlag, source: 'flag' };
   }
   if (process.env.CAREER_OPS_CLI) {
-    if (!VALID_CLIS.includes(process.env.CAREER_OPS_CLI)) {
-      return { cli: 'unknown', source: 'env', warning: `CAREER_OPS_CLI="${process.env.CAREER_OPS_CLI}" is not a recognized CLI. Valid: ${VALID_CLIS.join(', ')}.` };
+    if (!AGENT_CLIS.includes(process.env.CAREER_OPS_CLI)) {
+      return { cli: 'unknown', source: 'env', warning: `CAREER_OPS_CLI="${process.env.CAREER_OPS_CLI}" is not a recognized CLI. Valid: ${AGENT_CLIS.join(', ')}.` };
     }
     return { cli: process.env.CAREER_OPS_CLI, source: 'env' };
   }
@@ -618,8 +637,8 @@ function resolveActiveCli() {
   dotenv.config({ path: join(projectRoot, '.env'), quiet: true });
   if (!hadProfileOverride) delete process.env.CAREER_OPS_PROFILE;
   if (process.env.CAREER_OPS_CLI) {
-    if (!VALID_CLIS.includes(process.env.CAREER_OPS_CLI)) {
-      return { cli: 'unknown', source: '.env', warning: `CAREER_OPS_CLI in .env is not a recognized CLI. Valid: ${VALID_CLIS.join(', ')}.` };
+    if (!AGENT_CLIS.includes(process.env.CAREER_OPS_CLI)) {
+      return { cli: 'unknown', source: '.env', warning: `CAREER_OPS_CLI in .env is not a recognized CLI. Valid: ${AGENT_CLIS.join(', ')}.` };
     }
     return { cli: process.env.CAREER_OPS_CLI, source: '.env' };
   }
@@ -647,7 +666,7 @@ function resolveActiveCli() {
 }
 
 function checkPlaywrightMcp(root, activeCli) {
-  // Unknown CLI (typo / not in VALID_CLIS).
+  // Unknown CLI (typo / not in AGENT_CLIS).
   if (activeCli === 'unknown') return null;
 
   // Known CLI without an MCP file mapping.
@@ -1038,6 +1057,7 @@ async function main() {
     geminiNodeFloor(activeCli, process.versions.node),
     checkBillingSource(),
     checkDependencies(),
+    checkWebDependencies(),
     checkTrackedBakFiles(codeRoot),
     checkSkillEntrypoints(codeRoot),
     await checkPlaywright(),

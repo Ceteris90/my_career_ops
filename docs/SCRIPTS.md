@@ -30,9 +30,10 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `node check-liveness.mjs --tracker [--status=Evaluated,Applied]` | `check-liveness.mjs` | Check the postings of open tracker rows (`Evaluated` and `Applied` by default). Each row's posting is its URL cell or its report's `**URL:**`. Rows with neither are listed by number |
 | `node check-liveness.mjs --tracker --discard-expired [--apply]` | `check-liveness.mjs` | Check the postings of Evaluated and Applied tracker rows, then move Evaluated rows whose posting is `expired` to Discarded with the note `posting closed YYYY-MM-DD`. Without `--apply` it is a dry run. Uncertain verdicts and Applied rows stay as they are |
 | `npm run extract` | `browser-extract.mjs` | Headless read-only page extractor (opt-in `scan.extractor: cli`) — compact JSON for scan/JD; a posting whose ATS is in `JD_TEXT_API_ATS` (`liveness-api.mjs`) is first read without a browser, falling back to the page when that read is inconclusive, and an empty jd extraction exits 1 with `code: empty_text` |
-| `node fetch-jd.mjs <url>` | `fetch-jd.mjs` | JD text on stdout, read without a browser, for a posting whose ATS is in `JD_TEXT_API_ATS` (`liveness-api.mjs`) — exit 1 with empty stdout for any other ATS and for an inconclusive read, so a caller falls back to its browser/WebFetch path |
+| `node fetch-jd.mjs <url>` | `fetch-jd.mjs` | JD text on stdout, read without a browser (including canonical and short-link Workable postings with description, requirements and benefits), for a posting whose ATS is in `JD_TEXT_API_ATS` (`liveness-api.mjs`) — exit 1 with empty stdout for any other ATS and for an inconclusive read, so a caller falls back to its browser/WebFetch path |
 | `npm run scan` | `scan.mjs` | Zero-token portal scanner |
 | `npm run scan:full` | `scan-ats-full.mjs` | Reverse ATS discovery scanner |
+| `npm run scan:hn` | `scan-hn.mjs` | Hacker News "Who is hiring?" scanner, filtered by `hn_hiring.keywords` |
 | `node web/scripts/scheduled-jobs-runner.mjs` | `web/scripts/scheduled-jobs-runner.mjs` | Run one due local scheduled scan (normally invoked by the OS scheduler: Task Scheduler, launchd or cron) |
 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File web/scripts/install-scan-schedule.ps1` | `web/scripts/install-scan-schedule.ps1` | Install the 15-minute Windows scheduled-jobs queue worker for the logged-in current user |
 | `sh web/scripts/install-scan-schedule.sh` | `web/scripts/install-scan-schedule.sh` | Install the 15-minute scheduled-jobs queue worker on macOS (launchd) or Linux (cron) for the current user |
@@ -848,6 +849,8 @@ Give a lane its own `CAREER_OPS_SCAN_HISTORY`, not just its own pipeline. That f
 
 Defaults are unchanged, so a single-lane setup needs none of this. Note that the remaining outputs (`data/scan-runs.tsv`, `data/portal-health.tsv`, `data/applications.md`) are still shared across lanes, so `stats.mjs` and the other analytics scripts pool lanes together.
 
+**Progress:** every 25 sources, and once at the end, the scan prints a line such as `[14:02:31] scan: 50/120 sources done` to stderr. It prints under `--quiet` too, so a long unattended scan never looks stalled, and it stays out of the `--json` receipt on stdout.
+
 **Exit codes:** `0` scan completed, `1` configuration error or no portals.yml found.
 
 ---
@@ -958,6 +961,19 @@ The cost is real: a full Workday + iCIMS + BambooHR sweep becomes DNS-bound at r
 **Exit codes:** `0` scan completed, `1` configuration error (no portals.yml, unknown `--ats` source) or fatal scan error.
 
 ---
+
+## scan:hn
+
+Scans the newest Hacker News "Ask HN: Who is hiring?" thread and queues the top-level posts whose header line ("Company | Role | Location | URL") matches `hn_hiring.keywords`:
+
+```yaml
+hn_hiring:
+  keywords: [Software Engineer, Data Engineer]   # default: [Software Engineer]
+```
+
+The keywords are this scanner's positive list, since a post header is not an ATS title. `title_filter.negative`, `location_filter` and `data/blacklist.md` apply as in `scan.mjs`, and postings already in the tracker, the pipeline or `data/scan-history.tsv` are skipped by normalized URL. The run summary counts each skip reason. A post that links nowhere is queued under its own `news.ycombinator.com/item?id=` permalink.
+
+With `GEMINI_API_KEY` set (also read by `gemini-eval`), Gemini extracts the company, title and location of each post that already matched the keywords; a post that matches none is never sent. `GEMINI_MODEL` overrides the model. If every Gemini call fails, the run exits 1.
 
 ## company:funded
 
