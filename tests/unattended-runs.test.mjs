@@ -38,10 +38,10 @@ test('_shared.md defines when a run is unattended and the one closing line', () 
 });
 
 const GATE_DETAILS = {
-  oferta: [/needs_confirmation: posting_closed /, /needs_confirmation: jd_unavailable /],
-  'auto-pipeline': [/needs_confirmation: posting_closed /, /needs_confirmation: jd_unavailable /],
-  apply: [/needs_confirmation: blacklist /, /tailored CV/],
-  add: [/needs_confirmation: add_input /, /unless the prompt already approves/i],
+  oferta: [/needs_confirmation: posting_closed /, /needs_confirmation: jd_unavailable /, /needs_confirmation: agency \{url or company\/role\} /],
+  'auto-pipeline': [/needs_confirmation: posting_closed /, /needs_confirmation: jd_unavailable /, /needs_confirmation: agency \{url or company\/role\} /],
+  apply: [/needs_confirmation: blacklist /, /tailored CV/, /needs_confirmation: posting_closed /, /needs_confirmation: liveness_unverified /, /answers the prompt gives/i],
+  add: [/needs_confirmation: add_input /, /unless the prompt already approves/i, /same source/i],
   expand: [/github-evidence\.mjs/, /unless the prompt already approves/i],
   intake: [/unless the prompt already approves/i],
 };
