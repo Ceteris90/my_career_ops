@@ -119,6 +119,71 @@ test('a shipped negative that conflicts with a user positive is dropped', () => 
   } finally { cleanup(dir); }
 });
 
+test('a user negative that rejects a user positive exits 1 and writes nothing', () => {
+  const answers = {
+    ...ANSWERS,
+    portals: { ...ANSWERS.portals, positive: ['Data Analyst'], negative: ['Analyst'] },
+  };
+  const { dir, res } = run(answers);
+  try {
+    assert.equal(res.status, 1, res.stdout);
+    assert.match(res.stderr, /"Analyst"/);
+    assert.match(res.stderr, /"Data Analyst"/);
+    assert.equal(existsSync(join(dir, 'config', 'profile.yml')), false);
+    assert.equal(existsSync(join(dir, 'portals.yml')), false);
+  } finally { cleanup(dir); }
+});
+
+test('a user negative that does not reject a user positive is written', () => {
+  const answers = {
+    ...ANSWERS,
+    portals: { ...ANSWERS.portals, positive: ['Data Analyst'], negative: ['Intern'] },
+  };
+  const { dir, res, read } = run(answers);
+  try {
+    assert.equal(res.status, 0, res.stderr);
+    assert.ok(yaml.load(read('portals.yml')).title_filter.negative.includes('Intern'));
+  } finally { cleanup(dir); }
+});
+
+test('a word-boundary negative rejects the whole word and keeps a longer word', () => {
+  const conflict = {
+    ...ANSWERS,
+    portals: { ...ANSWERS.portals, positive: ['Operations Intern'], negative: ['word:Intern'] },
+  };
+  const hit = run(conflict);
+  try {
+    assert.equal(hit.res.status, 1, hit.res.stdout);
+    assert.match(hit.res.stderr, /"word:Intern"/);
+    assert.match(hit.res.stderr, /"Operations Intern"/);
+    assert.equal(existsSync(join(hit.dir, 'portals.yml')), false);
+  } finally { cleanup(hit.dir); }
+
+  const clear = {
+    ...ANSWERS,
+    portals: { ...ANSWERS.portals, positive: ['Internal Tools'], negative: ['word:Intern'] },
+  };
+  const ok = run(clear);
+  try {
+    assert.equal(ok.res.status, 0, ok.res.stderr);
+    assert.deepEqual(yaml.load(ok.read('portals.yml')).title_filter.positive, ['Internal Tools']);
+  } finally { cleanup(ok.dir); }
+});
+
+test('an accented negative rejects the same title without accents', () => {
+  const answers = {
+    ...ANSWERS,
+    portals: { ...ANSWERS.portals, positive: ['Produccion'], negative: ['Producción'] },
+  };
+  const { dir, res } = run(answers);
+  try {
+    assert.equal(res.status, 1, res.stdout);
+    assert.match(res.stderr, /"Producción"/);
+    assert.match(res.stderr, /"Produccion"/);
+    assert.equal(existsSync(join(dir, 'portals.yml')), false);
+  } finally { cleanup(dir); }
+});
+
 test('AGENTS.md states remote-only location labels will not match a country allow-list', () => {
   const agents = readFileSync(join(ROOT, 'AGENTS.md'), 'utf8');
   assert.match(agents, /posting labeled only ["']Remote["']/i);
