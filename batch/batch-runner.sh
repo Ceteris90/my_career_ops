@@ -1417,7 +1417,7 @@ process_offer() {
       if (( ${#skip_reports[@]} == 0 )); then
         skip_rule=$(node -e '
           const fs = require("fs");
-          const [json, url, id, tsv] = process.argv.slice(1);
+          const [json, url, id, tsv, reserved] = process.argv.slice(1);
           const flat = (s) => String(s).replace(/[\x00-\x1f\x7f]+/g, " ").replace(/ +/g, " ").trim();
           const result = JSON.parse(json);
           if (result.reason !== "dealbreaker" || result.url !== url || String(result.id) !== id) process.exit(1);
@@ -1428,8 +1428,11 @@ process_offer() {
           const row = lines[1].split("\t");
           const field = (name) => row[head.indexOf(name)] ?? "";
           if (field("status") !== "SKIP" || field("url") !== url || !field("notes").startsWith("Dealbreaker: \"")) process.exit(1);
+          // merge-tracker keeps the TSV num as the row id, so it must be the
+          // number this runner reserved (zero padding aside).
+          if (!/^\d+$/.test(field("num")) || Number(field("num")) !== Number(reserved)) process.exit(1);
           process.stdout.write(flat(result.rule));
-        ' "$worker_result_json" "$url" "$id" "$skip_tracker" 2>/dev/null) || skip_rule=""
+        ' "$worker_result_json" "$url" "$id" "$skip_tracker" "$report_num" 2>/dev/null) || skip_rule=""
       fi
       if [[ -n "$skip_rule" ]]; then
         # Keep the reservation. The SKIP row uses this number and no report
