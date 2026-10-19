@@ -1346,11 +1346,12 @@ function isDisclosedRequirement(clean, match, allMatches) {
  * @param {string} clean
  * @returns {RegExpMatchArray[]}
  */
-function countMatches(clean) {
+function countMatches(clean, { keepPlanHorizons = false } = {}) {
   COUNT_CLAIM_RE.lastIndex = 0;
   const allMatches = [...clean.matchAll(COUNT_CLAIM_RE)];
   return allMatches.filter((match) => {
     if (isDisclosedRequirement(clean, match, allMatches)) return false;
+    if (keepPlanHorizons) return true;
     if (!TIME_NOUNS.has(match[2].toLowerCase())) return true;
     const lead = clean.slice(Math.max(0, match.index - 40), match.index);
     if (!HORIZON_LEAD_RE.test(lead)) return true;
@@ -1739,13 +1740,13 @@ function compactMagnitude(raw) {
 }
 
 /** Extract metric-like claims that require source evidence. */
-export function metricClaims(text) {
+export function metricClaims(text, { keepPlanHorizons = false } = {}) {
   const clean = spellNumbers(stripMarkup(text, { keepLineBreaks: true }));
   const claims = new Set();
   for (const pattern of SIMPLE_CLAIM_PATTERNS) {
     for (const match of clean.matchAll(pattern)) claims.add(canonicalMetric(match[0]));
   }
-  for (const match of countMatches(clean)) {
+  for (const match of countMatches(clean, { keepPlanHorizons })) {
     const noun = match[2].toLowerCase();
     claims.add(normalizeClaim(`${compactMagnitude(match[1])} ${NOUN_SYNONYMS.get(noun) ?? noun}`));
   }
@@ -2112,10 +2113,44 @@ export function verifyFacts(targetText, {
 }
 
 /**
+ * A past-experience framing of a time metric inside an assertion span, e.g.
+ * "I have 6 months of experience". When a forward marker appears later in the
+ * same clause ("…and will review incidents"), that marker must not pull the
+ * past metric into the plan set.
+ */
+const PAST_TIME_CLAIM_RE = /\b(?:have|has|had|spent|worked)\s+(?:[\p{L}\p{M}-]+\s+){0,4}\d[\d,.]*\s*\+?\s*(?:months|years|weeks|days)\b/iu;
+
+/**
+ * Sentence bounds at `.`, `!`, `?`, or newline — used so a duration intro
+ * ("Over 6 months, …") can inherit a forward marker from the next clause.
+ */
+function sentenceBounds(text, index) {
+  const isSentenceEnd = (i) => {
+    const c = text[i];
+    if (c === '\n') return true;
+    if (c !== '.' && c !== '!' && c !== '?') return false;
+    return !(/\d/.test(text[i - 1] ?? '') && /\d/.test(text[i + 1] ?? ''));
+  };
+  let start = 0;
+  for (let i = index - 1; i >= 0; i--) if (isSentenceEnd(i)) { start = i + 1; break; }
+  let end = text.length;
+  for (let i = index; i < text.length; i++) if (isSentenceEnd(i)) { end = i; break; }
+  return { start, end };
+}
+
+/** True when the assertion states a plan for its metrics, not past experience. */
+function isPlanAssertion(span, sentence) {
+  if (PAST_TIME_CLAIM_RE.test(span)) return false;
+  return FORWARD_MARKER_RE.test(span) || FORWARD_MARKER_RE.test(sentence);
+}
+
+/**
  * Metric claims in `targetText` that `planTexts` support: the plan texts hold
- * the claim, and every clause of the target that states it is a plan. "I will
- * read the last 6 months of incident reviews" qualifies. "I have 6 months of
- * incident-response experience" does not, whatever the answers say.
+ * the claim, and the target states that claim as a plan. "I will read the last
+ * 6 months of incident reviews" qualifies. "I have 6 months of
+ * incident-response experience" does not, even when a forward marker appears
+ * later in the same clause. Plan answers keep forward-looking horizon numbers
+ * so a letter can restate them ("Over 6 months, I will…").
  *
  * @param {string} targetText
  * @param {string[]} planTexts
@@ -2124,13 +2159,19 @@ export function verifyFacts(targetText, {
 function plannedClaims(targetText, planTexts) {
   const planText = planTexts.filter(text => typeof text === 'string').join('\n');
   if (!planText.trim()) return new Set();
-  const inPlans = metricClaims(planText);
+  // keepPlanHorizons: answers often say "In my first 6 months I will…"; the
+  // target-side horizon rule still drops those from invented claims, but the
+  // plan evidence must retain the number so the letter can restate it.
+  const inPlans = metricClaims(planText, { keepPlanHorizons: true });
   const clean = spellNumbers(stripMarkup(targetText, { keepLineBreaks: true }));
   const forward = new Set();
   const past = new Set();
   for (let i = 0; i < clean.length;) {
     const { start, end } = clauseBounds(clean, i);
-    const tense = FORWARD_MARKER_RE.test(clean.slice(start, end)) ? forward : past;
+    const span = clean.slice(start, end);
+    const { start: s0, end: s1 } = sentenceBounds(clean, i);
+    const sentence = clean.slice(s0, s1);
+    const tense = isPlanAssertion(span, sentence) ? forward : past;
     for (const claim of metricClaims(clean.slice(i, end))) tense.add(claim);
     i = end + 1;
   }

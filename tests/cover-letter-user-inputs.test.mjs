@@ -51,6 +51,22 @@ test('a number in neither the career files nor the candidate inputs still blocks
   assert.deepEqual(result.invented, ['9 months']);
 });
 
+test('a plan-horizon number in the answers still supports the letter restating it', () => {
+  const plan = 'In my first 6 months, I will audit the service.';
+  const result = check(letter('Over 6 months, I will audit the service.'), [plan]);
+  assert.equal(result.verdict, 'pass', result);
+  assert.deepEqual(result.invented, []);
+});
+
+test('a forward marker later in the same clause does not admit a past-experience metric', () => {
+  const result = check(
+    letter('I have 6 months of experience and will review incidents.'),
+    ['I will review incidents over 6 months.'],
+  );
+  assert.equal(result.verdict, 'block');
+  assert.deepEqual(result.invented, ['6 months']);
+});
+
 test('a plan answer does not support a past-experience claim with the same number', () => {
   const result = check(letter('I have 6 months of incident-response experience.'), ['I plan to review the last 6 months of incidents.']);
   assert.equal(result.verdict, 'block');
@@ -142,12 +158,14 @@ test('generate-cover-letter counts user_inputs as a source for this letter', () 
   assert.notEqual(blocked.status, 0);
 
   const passed = runCover(coverPayload(PLAN, { user_inputs: [PLAN] }));
+  assert.equal(passed.status, 0, passed.text);
   assert.doesNotMatch(passed.text, /Fact check failed/, passed.text);
   assert.doesNotMatch(passed.text, /6 months/, passed.text);
 });
 
 test('generate-cover-letter counts an answers object as a source', () => {
   const passed = runCover(coverPayload(PLAN, { answers: { approach: PLAN, tone: 'direct' } }));
+  assert.equal(passed.status, 0, passed.text);
   assert.doesNotMatch(passed.text, /Fact check failed/, passed.text);
   assert.doesNotMatch(passed.text, /6 months/, passed.text);
 });
