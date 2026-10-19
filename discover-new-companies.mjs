@@ -144,6 +144,10 @@ for (let i = hasHeader ? 1 : 0; i < rows.length; i++) {
   if (!scanHistoryLineHasColumn(rows[i], 'status')) continue;
   const row = parseScanHistoryLine(rows[i]);
 
+  // A title-filtered row is evidence the company posted something the user
+  // does not want, not a reason to track it (#2695).
+  if (row.status.trim() === 'skipped_title') continue;
+
   const rawName = row.company.trim();
   if (!rawName) continue;
 
