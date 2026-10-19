@@ -4,6 +4,7 @@
  *
  *   node learn.mjs check <candidates.json> [--summary]
  *   node learn.mjs apply <pending.json> --accept 1,3 [--reject 2] --reply "<the user's reply, verbatim>"
+ *   node learn.mjs apply <pending.json> --accept 1,3 [--reject 2] --reply-file <reply.txt>
  *   node learn.mjs --self-test
  *
  * `check` validates up to five proposed rules, numbers them, and stores a
@@ -38,6 +39,7 @@ const MAX_CANDIDATES = 5;
 const MAX_TEXT = 300;
 const MAX_QUOTE = 500;
 const NGRAM = 8;
+const MIN_OVERLAP_WORDS = 5;
 
 const PENDING_DIR = 'data/learning/pending';
 const LEDGER = 'data/learning/ledger.jsonl';
@@ -136,7 +138,7 @@ function decisionKey(c) {
 
 function overlapsUntrusted(text, corpus) {
   const w = words(text);
-  if (w.length === 0) return false;
+  if (w.length < MIN_OVERLAP_WORDS) return false;
   const n = Math.min(NGRAM, w.length);
   for (let i = 0; i + n <= w.length; i++) {
     const gram = ` ${w.slice(i, i + n).join(' ')} `;
@@ -311,14 +313,28 @@ function readPending(root, pendingPath) {
   return { name: inside, hashes: pending.hashes, candidates };
 }
 
+function readReply(root, args) {
+  if (hasFlag(args, '--reply') && hasFlag(args, '--reply-file')) throw new InputError('pass the reply with --reply or --reply-file, not both');
+  let reply = flagValue(args, '--reply');
+  if (hasFlag(args, '--reply-file')) {
+    const path = flagValue(args, '--reply-file');
+    try {
+      reply = readFileSync(resolve(root, path), 'utf8').replace(/\s+$/, '');
+    } catch {
+      throw new InputError(`cannot read the reply from ${path}`);
+    }
+  }
+  if (typeof reply !== 'string' || !reply.trim()) throw new InputError('--reply or --reply-file must carry the user\'s reply verbatim');
+  return reply;
+}
+
 async function apply(root, pendingPath, args) {
   refuseHeadless();
   const accept = hasFlag(args, '--accept') ? parseIds(flagValue(args, '--accept'), '--accept') : [];
   const reject = hasFlag(args, '--reject') ? parseIds(flagValue(args, '--reject'), '--reject') : [];
   if (accept.length + reject.length === 0) throw new InputError('name the ids the user decided with --accept and/or --reject');
   if (accept.some((id) => reject.includes(id))) throw new InputError('an id cannot be both accepted and rejected');
-  const reply = flagValue(args, '--reply');
-  if (typeof reply !== 'string' || !reply.trim()) throw new InputError('--reply must carry the user\'s reply verbatim');
+  const reply = readReply(root, args);
 
   const lock = await acquireDirLock(join(root, LOCK_DIR), { timeoutMs: 10_000, retryMs: 50, staleMs: 30_000, createParent: true });
   try {
@@ -360,7 +376,9 @@ async function apply(root, pendingPath, args) {
       const entry = { at, pending: pending.name, id: c.id, decision, kind: c.kind, file: c.file, key: decisionKey(c), change: c.change, reply };
       appendFileSync(join(root, LEDGER), `${JSON.stringify(entry)}\n`);
     }
-    return { accepted: accept, rejected: reject, written, recorded: decisions.length };
+    const idsWith = (decision) => decisions.filter((d) => d.decision === decision).map((d) => d.c.id);
+    const alreadyDecided = [...accept, ...reject].filter((id) => stamped.has(id));
+    return { accepted: idsWith('accepted'), rejected: idsWith('rejected'), alreadyDecided, written, recorded: decisions.length };
   } finally {
     releaseOrWarn(lock);
   }
@@ -415,12 +433,14 @@ function selfTest() {
 const USAGE = `Usage:
   node learn.mjs check <candidates.json> [--summary]
   node learn.mjs apply <pending.json> --accept 1,3 [--reject 2] --reply "<the user's reply, verbatim>"
+  node learn.mjs apply <pending.json> --accept 1,3 [--reject 2] --reply-file <reply.txt>
   node learn.mjs --self-test
 
   --summary   print the numbered candidates for the user instead of JSON
   --accept    ids the user accepted, comma-separated; there is no "all"
   --reject    ids the user rejected, comma-separated
   --reply     the user's reply, recorded verbatim in data/learning/ledger.jsonl
+  --reply-file a file that holds the reply, so no shell quoting touches it
   --self-test run the pure-function checks and exit
   -h, --help  show this help`;
 
