@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
@@ -47,6 +47,14 @@ function nearestExisting(abs) {
       return { existing: realpathSync(current), missing };
     } catch (e) {
       if (!e || e.code !== 'ENOENT') throw e;
+      let present = false;
+      try {
+        lstatSync(current);
+        present = true;
+      } catch (le) {
+        if (!le || le.code !== 'ENOENT') throw le;
+      }
+      if (present) throw new ApplyScopeError('Apply refused a path outside the project.');
       const parent = dirname(current);
       if (parent === current) {
         throw new ApplyScopeError('Apply refused a path outside the project.');

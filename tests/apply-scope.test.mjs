@@ -62,6 +62,11 @@ test('resolveInsideProject accepts a file inside the root and rejects escapes', 
     const link = join(root, 'link');
     symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
     assert.throws(() => resolveInsideProject(root, join(link, 'new.md')), ApplyScopeError);
+
+    const dangling = join(root, 'dangling');
+    symlinkSync(join(outside, 'not-yet'), dangling);
+    assert.throws(() => resolveInsideProject(root, dangling), ApplyScopeError);
+    assert.throws(() => resolveInsideProject(root, join(dangling, 'new.md')), ApplyScopeError);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
@@ -252,6 +257,16 @@ test('check-path and launch-options stay inside the project browser', () => {
     });
     assert.equal(escaped.status, 1);
     assert.match(escaped.stderr, /outside the project/);
+
+    const dangling = join(data, 'dangling');
+    symlinkSync(join(outside, 'not-yet'), dangling);
+    const danglingCheck = spawnSync(NODE, [join(ROOT, 'apply-scope.mjs'), 'check-path', dangling], {
+      cwd: ROOT,
+      env: { ...process.env, CAREER_OPS_ROOT: '', CAREER_OPS_DATA_DIR: data },
+      encoding: 'utf8',
+    });
+    assert.equal(danglingCheck.status, 1);
+    assert.match(danglingCheck.stderr, /outside the project/);
   } finally {
     rmSync(outside, { recursive: true, force: true });
     rmSync(data, { recursive: true, force: true });
