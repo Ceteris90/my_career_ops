@@ -125,19 +125,25 @@ ok('the report-file tier does not stat every existing row\'s report', () => {
     writeFileSync(counter, [
       "import fs from 'node:fs';",
       "import { syncBuiltinESMExports } from 'node:module';",
-      // Both spellings: macOS reports a tmpdir path as /var or /private/var.
-      `const dirs = ${JSON.stringify([env.reportsDir, realpathSync(env.reportsDir)])};`,
+      // Values come from the environment, never spliced into this source.
+      'const dirs = JSON.parse(process.env.COUNT_STAT_DIRS);',
       'let n = 0;',
       'for (const name of ["statSync", "existsSync"]) {',
       '  const orig = fs[name];',
       '  fs[name] = function (p, ...rest) { if (dirs.some((d) => String(p).startsWith(d))) n++; return orig.call(this, p, ...rest); };',
       '}',
       'syncBuiltinESMExports();',
-      `process.on('exit', () => fs.writeFileSync(${JSON.stringify(countFile)}, String(n)));`,
+      "process.on('exit', () => fs.writeFileSync(process.env.COUNT_STAT_FILE, String(n)));",
     ].join('\n'));
     execFileSync('node', ['--import', pathToFileURL(counter).href, MERGE], {
       encoding: 'utf-8',
-      env: { ...process.env, CAREER_OPS_TRACKER: env.tracker, CAREER_OPS_ADDITIONS: env.addDir, CAREER_OPS_BATCH_STATE: isolatedBatchStatePath(env.addDir) },
+      env: {
+        ...process.env,
+        CAREER_OPS_TRACKER: env.tracker, CAREER_OPS_ADDITIONS: env.addDir, CAREER_OPS_BATCH_STATE: isolatedBatchStatePath(env.addDir),
+        // Both spellings: macOS reports a tmpdir path as /var or /private/var.
+        COUNT_STAT_DIRS: JSON.stringify([env.reportsDir, realpathSync(env.reportsDir)]),
+        COUNT_STAT_FILE: countFile,
+      },
     });
     assert.equal(trackerRows(env).length, N + 1, 'the new posting is appended as its own row');
     const probes = Number(readFileSync(countFile, 'utf-8'));
