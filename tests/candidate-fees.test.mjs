@@ -76,7 +76,8 @@ check('UK row cites s. 6(1)(a)-(c), s. 6(2) and reg. 26(1)-(5) and describes Sch
   'citation missing or occupation list copied');
 check('UK official_source is the s. 6 page and what_it_shows names the reg. 26 URL',
   uk?.official_source?.url === 'https://www.legislation.gov.uk/ukpga/1973/35/section/6'
-    && (uk?.official_source?.what_it_shows || '').includes('https://www.legislation.gov.uk/uksi/2003/3319/regulation/26'),
+    && (uk?.official_source?.what_it_shows || '').match(/https?:\/\/[^\s)]+/g)?.map((u) => u.replace(/[.,;]+$/, ''))
+      .some((u) => u === 'https://www.legislation.gov.uk/uksi/2003/3319/regulation/26'),
   String(uk?.official_source?.url));
 
 // --- freshness validator discovers it ---
