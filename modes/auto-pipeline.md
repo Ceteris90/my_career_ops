@@ -2,7 +2,7 @@
 
 When the user pastes a JD (text or URL) without an explicit sub-command, execute the ENTIRE pipeline in sequence:
 
-**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. A blacklist hit stops before Step 1, writes nothing, and ends with `needs_confirmation: blacklist "{company}" - rerun with "evaluate anyway" to evaluate`. Confirmed closed evidence ends with `needs_confirmation: posting_closed {url} - share a live posting to evaluate`. A posting the gate could not read ends with `needs_confirmation: jd_unavailable {url} - paste the JD text to evaluate it`. An agency posting returns the **Agency confirmation handoff** and ends with `needs_confirmation: agency {url} - rerun naming the agency this posting came through`. Each of these also skips Steps 1 to 5.
+**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. A blacklist hit stops before Step 1, writes nothing, and ends with `needs_confirmation: blacklist "{company}" - rerun with "evaluate anyway" to evaluate`. Confirmed closed evidence ends with `needs_confirmation: posting_closed {url} - share a live posting to evaluate`. A posting the gate could not read ends with `needs_confirmation: jd_unavailable {url} - paste the JD text to evaluate it`. An agency posting returns the **Agency confirmation handoff** and ends with `needs_confirmation: agency {url or company/role} - rerun with the same posting and the agency it came through`. Each of these also skips Steps 1 to 5.
 
 ## Step 0 — Extract JD
 
