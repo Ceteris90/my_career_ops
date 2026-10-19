@@ -92,7 +92,7 @@ function existingPipelineUrls() {
 function loadPortalsConfig() {
   if (!existsSync(PORTALS_PATH)) return {};
   try {
-    return yaml.load(readFileSync(PORTALS_PATH, 'utf8')) || {};
+    return loadYaml(readFileSync(PORTALS_PATH, 'utf8')) || {};
   } catch (err) {
     console.error(`Error: failed to parse ${PORTALS_PATH}: ${err.message}`);
     process.exit(1);
