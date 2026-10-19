@@ -108,7 +108,7 @@ test("a runtime with no verified fencing mechanism runs and the notice reaches t
   assert.equal(run.buf, "PLANNED");
   assert.equal(run.code, 0);
   assert.ok(
-    lines.some((l) => l.includes("Gemini CLI") && l.includes("cannot be permission-restricted")),
+    lines.some((l) => l.includes("Gemini CLI") && l.includes("has no verified permission restrictions in Career Ops")),
     `unfenced-runtime notice is emitted through log(), got ${JSON.stringify(lines)}`,
   );
 });

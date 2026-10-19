@@ -166,6 +166,63 @@ export function codexStreamArgs(prompt) {
 }
 
 /**
+ * Antigravity's structured print mode provides a terminal result even when its
+ * plain-text renderer produces nothing. Keep args() plain for envelope callers;
+ * dashboard/chat callers pair this argv with parseAntigravityEvent below.
+ * @param {string} prompt
+ * @returns {string[]}
+ */
+export function antigravityStreamArgs(prompt) {
+  return ["--output-format", "stream-json", "-p", prompt];
+}
+
+/**
+ * Observed with the installed AGY on Windows, 2026-10-18. step_update includes private tool output
+ * and text deltas; result.response is the authoritative completed answer. Emit
+ * that answer once, never both the deltas and their repeated terminal response.
+ * Token figures come only from the run-total result (not each step's usage).
+ * No permission guarantees are inferred from init.permission_mode or --sandbox.
+ * @param {string} line
+ * @returns {ParsedEvent | null}
+ */
+export function parseAntigravityEvent(line) {
+  let event;
+  try { event = JSON.parse(line); } catch { return null; }
+  if (!event || typeof event !== "object") return null;
+  if (event.event === "init") return { status: STATUS_READY };
+  if (event.event === "step_update") {
+    const step = event.step_update;
+    if (step?.state === "ACTIVE" && step.step_type === "tool") {
+      return { tool: typeof step.tool_name === "string" && step.tool_name ? step.tool_name : "Working" };
+    }
+    return null;
+  }
+  if (event.event !== "result") return null;
+  const result = event.result;
+  if (!result || typeof result !== "object") return { error: "Antigravity returned an invalid result" };
+  /** @type {ParsedEvent} */
+  const parsed = {};
+  if (result.usage && typeof result.usage === "object") {
+    // AGY reports total_tokens separately from cache_read_tokens. Preserve the
+    // reported total rather than guessing a billing or subscription percentage.
+    parsed.tokens = tokenCount(result.usage.total_tokens);
+    parsed.tokensAreTotal = true;
+    parsed.costUsd = null;
+  }
+  if (result.status !== "SUCCESS") {
+    const diagnostic = typeof result.error === "string" ? result.error : result.error?.message;
+    parsed.error = typeof diagnostic === "string" && diagnostic
+      ? diagnostic
+      : `Antigravity did not complete the reply (${typeof result.status === "string" ? result.status : "unknown status"})`;
+  } else if (typeof result.response !== "string" || !result.response.trim()) {
+    parsed.error = "Antigravity returned no output";
+  } else {
+    parsed.text = result.response.endsWith("\n") ? result.response : result.response + "\n";
+  }
+  return parsed;
+}
+
+/**
  * Convert one `codex exec --json` JSONL event into dashboard-friendly data.
  * @param {string} line
  * @returns {ParsedEvent | null}

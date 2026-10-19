@@ -365,7 +365,7 @@ export function fencingReport({ cliId, cliName, capabilities }) {
   if (!Object.hasOwn(FENCERS, cliId)) {
     return {
       level: "none",
-      notice: `${cliName} ${UNFENCED_MARKER} — this agent runs with its default access`,
+      notice: `${cliName} ${UNFENCED_MARKER} — this run uses the CLI's default access`,
     };
   }
   // Codex only. Claude expresses both axes as tool flags, so it is never partial:
@@ -385,7 +385,8 @@ export function fencingReport({ cliId, cliName, capabilities }) {
 }
 
 /** Stable fragments of the two notices, so the UI can spot either without re-deriving a sentence. */
-const UNFENCED_MARKER = "cannot be permission-restricted";
+const UNFENCED_MARKER = "has no verified permission restrictions in Career Ops";
+const LEGACY_UNFENCED_MARKER = "cannot be permission-restricted";
 const PARTIAL_MARKER = "is only partly restricted";
 
 /**
@@ -400,7 +401,7 @@ const PARTIAL_MARKER = "is only partly restricted";
  * @returns {boolean}
  */
 export function isFencingNotice(label) {
-  return typeof label === "string" && (label.includes(UNFENCED_MARKER) || label.includes(PARTIAL_MARKER));
+  return typeof label === "string" && (label.includes(UNFENCED_MARKER) || label.includes(LEGACY_UNFENCED_MARKER) || label.includes(PARTIAL_MARKER));
 }
 
 /**

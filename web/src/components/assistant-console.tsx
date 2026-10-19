@@ -22,6 +22,8 @@ import { cleanMessages } from "@/lib/assistant-history.mjs";
 import { StatusConfirmationCard, type StatusConfirmationPart } from "@/components/assistant-status-confirmation";
 import { StatusWriteError, writeAssistantStatus } from "@/lib/assistant-status-write.mjs";
 import { cn } from "@/lib/cn";
+import { CLI_CONFIG_CHANGED } from "@/lib/saved-cli";
+import { assistantActionKey, displayAssistantReply } from "@/lib/assistant-reply.mjs";
 
 // ── message model: messages are PART arrays so a live worker card can render
 // inline next to text, both fed by the single JobsProvider store ──────────────
@@ -135,7 +137,8 @@ function describePage(p: string): string {
 
 // ── persistence migration: old {role,content:string} → parts[] ────────────────
 function msgText(m: Msg): string {
-  return m.parts.filter((p): p is Extract<Part, { type: "text" }> => p.type === "text").map((p) => p.text).join(" ").trim();
+  const text = m.parts.filter((p): p is Extract<Part, { type: "text" }> => p.type === "text").map((p) => p.text).join(" ").trim();
+  return m.role === "assistant" ? displayAssistantReply(text) : text;
 }
 
 export function AssistantConsole() {
@@ -289,7 +292,11 @@ export function AssistantConsole() {
     }
     read();
     window.addEventListener("storage", read);
-    return () => window.removeEventListener("storage", read);
+    window.addEventListener(CLI_CONFIG_CHANGED, read);
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener(CLI_CONFIG_CHANGED, read);
+    };
   }, []);
 
   async function chatRequest(url: string, init?: RequestInit) {
@@ -712,15 +719,15 @@ export function AssistantConsole() {
         setStreamText(display.trimStart());
 
         for (const e of complete) {
-          const key = `${e.start}|${e.id}|${e.argsJson}`;
-          if (handledRef.current.has(key)) continue;
-          handledRef.current.add(key);
           let args: Record<string, unknown>;
           try {
             args = JSON.parse(normalizeJson(e.argsJson));
           } catch {
             continue;
           }
+          const key = assistantActionKey(e.id, args);
+          if (handledRef.current.has(key)) continue;
+          handledRef.current.add(key);
           hasActionOutput = runDispatch(e.id, args) || hasActionOutput;
         }
         for (const p of shimNavs) {
@@ -742,7 +749,7 @@ export function AssistantConsole() {
       // action-only response still counts, without approving its confirmation.
       if (!display.trim() && !hasActionOutput) {
         failed = true;
-        setStreamText("_(no output — is the CLI authenticated?)_");
+        setStreamText("The AI tool returned no output. Try again, or check the selected AI tool in Config.");
       }
     } catch (error) {
       failed = true;
@@ -999,7 +1006,7 @@ function PartView({
     if (!part.text.trim()) return null;
     return (
       <div className="report-prose text-sm [&_*]:my-1 [&>:first-child]:mt-0 [&>:last-child]:mb-0">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayAssistantReply(part.text)}</ReactMarkdown>
       </div>
     );
   }

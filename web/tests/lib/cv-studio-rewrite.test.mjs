@@ -49,7 +49,7 @@ test("the instruction and the bullet reach the prompt as quoted data", () => {
 
 test("grok rewrites with the unfenced warning, claude without one, and other unfenced CLIs do not run", () => {
   const gate = (cliId, cliName) => rewriteGate(cliId, fencingReport({ cliId, cliName, capabilities: CAPS.localReadOnly }));
-  assert.deepEqual(gate("grok", "Grok Build CLI"), { run: true, warning: "Grok Build CLI cannot be permission-restricted — this agent runs with its default access" });
+  assert.deepEqual(gate("grok", "Grok Build CLI"), { run: true, warning: "Grok Build CLI has no verified permission restrictions in Career Ops — this run uses the CLI's default access" });
   assert.deepEqual(gate("claude", "Claude Code"), { run: true, warning: null });
   assert.deepEqual(gate("gemini", "Gemini CLI"), { run: false, warning: null });
 });
