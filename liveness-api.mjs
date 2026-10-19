@@ -211,6 +211,10 @@ const ATS_PROVIDERS = [
     // the slug is wrong. Neither says THIS posting is gone: removal shows as a
     // 200 board that no longer lists the id (`ashby_api_unlisted`).
     api404Authoritative: false,
+    // One board answers for every posting under the org, so a caller checking
+    // several postings can pass checkLivenessViaApi a `boardCache` and fetch it
+    // once (check-liveness.mjs does, per run).
+    interpretBoard: (json, { jobId }) => classifyAshbyBoard(json, jobId),
     async interpret(res, { jobId }) {
       let json;
       try {
@@ -638,6 +642,7 @@ export function resolveAtsApi(rawUrl) {
       interpret: provider.interpret,
       interpretStatuses: provider.interpretStatuses,
       api404Authoritative: provider.api404Authoritative !== false,
+      interpretBoard: provider.interpretBoard,
     };
   }
   return null;
@@ -666,15 +671,23 @@ export const JD_TEXT_API_ATS = new Set(['greenhouse', 'greenhouse-embedded', 'le
 /**
  * Zero-token liveness check via the posting's ATS API.
  * @param {string} url
+ * @param {{ boardCache?: Map<string, unknown> }} [options]
+ *   boardCache: for a provider whose API is the whole board (Ashby), the parsed
+ *   board is kept here under its API URL and reused for the next posting on the
+ *   same board. Only a 200 that parsed is kept; a failure is retried next time.
+ *   Without it, every posting fetches its board, as before.
  * @returns {Promise<{ result: 'active' | 'expired' | 'uncertain', code: string, reason: string } | null>}
  *   null = not a known ATS posting, or inconclusive → caller should fall back to Playwright.
  *   `uncertain` is a conclusion in its own right: the provider reached the posting
  *   and could not read it, and no other rung would do better.
  */
-export async function checkLivenessViaApi(url) {
+export async function checkLivenessViaApi(url, { boardCache } = {}) {
   const resolved = resolveAtsApi(url);
   if (!resolved) return null;
-  const { ats, apiUrl, parts, interpret, interpretStatuses, timeoutMs, throttleMs, accept, headers, followEmbed, api404Authoritative } = resolved;
+  const { ats, apiUrl, parts, interpret, interpretStatuses, timeoutMs, throttleMs, accept, headers, followEmbed, api404Authoritative, interpretBoard } = resolved;
+  const cacheBoard = Boolean(boardCache && interpretBoard);
+  // Checked before the throttle: a board already in hand costs no request.
+  if (cacheBoard && boardCache.has(apiUrl)) return interpretBoard(boardCache.get(apiUrl), parts);
 
   // Wait out any provider rate limit BEFORE arming the timeout, so the spacing
   // does not eat the budget the request itself needs.
@@ -714,6 +727,16 @@ export async function checkLivenessViaApi(url) {
     // Providers with an `interpret` step read the body of the statuses they
     // list (by default the 200: org-level Ashby, and per-job APIs whose 200 can
     // still describe a closed posting); any other 200 is proof the posting is live.
+    if (cacheBoard && res.status === 200) {
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        return null; // unparseable body → inconclusive, and not cached
+      }
+      boardCache.set(apiUrl, json);
+      return interpretBoard(json, parts);
+    }
     if (interpret && (interpretStatuses || [200]).includes(res.status)) return await interpret(res, parts);
     if (res.status === 200) {
       return { result: 'active', code: `${ats}_api_ok`, reason: 'ATS API returns the posting (live)' };
