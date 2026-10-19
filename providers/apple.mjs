@@ -138,6 +138,7 @@ function toJob(r, company) {
   const url = urlOf(r);
   if (!url) return null;
   const posted = Date.parse(r.postDateInGMT || '');
+  const externalId = coerceId(r.id);
   return {
     title: String(r.postingTitle || '').trim(),
     url,
@@ -145,7 +146,7 @@ function toJob(r, company) {
     location: locationOf(r),
     // Apple's own posting id, the same value the detail URL is built from. It
     // survives a title edit, which the URL does not (#4076's Job.externalId).
-    ...(coerceId(r.id) ? { externalId: /** @type {string} */ (coerceId(r.id)) } : {}),
+    ...(externalId ? { externalId } : {}),
     ...(Number.isNaN(posted) ? {} : { postedAt: posted }),
   };
 }
