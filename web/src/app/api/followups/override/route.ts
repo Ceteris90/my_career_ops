@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { isRealISODate, localISODate } from "@/lib/followups";
+import { parseFollowupId } from "@/lib/followup-id.mjs";
 import { followupsLogPath, withFollowupsWrite, followupsWriteError } from "@/lib/followups-server";
+import { readJsonObject } from "@/lib/json-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,14 +19,10 @@ export const dynamic = "force-dynamic";
 const pinRe = (appNum: number) => new RegExp(`^-\\s+next\\s+#${appNum}\\s`, "i");
 
 export async function POST(req: Request) {
-  let body: { appNum?: string | number; date?: string };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return Response.json({ error: "bad json" }, { status: 400 });
-  }
-  const appNum = Number.parseInt(String(body.appNum ?? ""), 10);
-  if (!Number.isInteger(appNum) || appNum < 0) {
+  const body = await readJsonObject<{ appNum?: string | number; date?: string }>(req);
+  if (!body) return Response.json({ error: "bad json" }, { status: 400 });
+  const appNum = parseFollowupId(body.appNum);
+  if (appNum === null) {
     return Response.json({ error: "appNum (application #) required" }, { status: 400 });
   }
   const date = (body.date ?? "").trim();
@@ -53,14 +51,10 @@ export async function POST(req: Request) {
 
 // Clear the pin for an application (the computed cadence takes over again).
 export async function DELETE(req: Request) {
-  let body: { appNum?: string | number };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return Response.json({ error: "bad json" }, { status: 400 });
-  }
-  const appNum = Number.parseInt(String(body.appNum ?? ""), 10);
-  if (!Number.isInteger(appNum) || appNum < 0) {
+  const body = await readJsonObject<{ appNum?: string | number }>(req);
+  if (!body) return Response.json({ error: "bad json" }, { status: 400 });
+  const appNum = parseFollowupId(body.appNum);
+  if (appNum === null) {
     return Response.json({ error: "appNum (application #) required" }, { status: 400 });
   }
 

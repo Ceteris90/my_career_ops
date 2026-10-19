@@ -38,10 +38,16 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { parseTrackerRow, resolveColumns, isSeparatorRow, isHeaderRow } from './tracker-parse.mjs';
 import { resolveTrackerPath, resolveWorkspaceRoot } from './tracker-utils.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { canonicalOutcome } from './lib/outcome-types.mjs';
 import { outcomeDirsFor } from './lib/outcome-dir.mjs';
 
-const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
+// The USER's data root, not this file's directory. It was __dirname under the
+// name CAREER_OPS, so resolveTrackerPath() looked inside the checkout and a user
+// with CAREER_OPS_ROOT (or a .career-ops-data marker) got "No tracker found ...
+// nothing to calibrate yet" — which reads as "you have no outcome data",
+// exactly the thing this advisory is meant to answer.
+const DATA_ROOT = getCareerOpsRoot();
 
 // --- Outcome semantics ---------------------------------------------------
 //
@@ -430,7 +436,24 @@ function selfTest() {
 // against the real tracker inside the test process.
 import { isMainModule } from './lib/is-main-module.mjs';
 
+// Derived from the flags this file actually accepts, so `--help` cannot
+// describe an option that does not exist.
+const USAGE = `Usage:
+  node calibrate.mjs [--json] [--min-band-n <n>] [--self-test]
+
+  --json           full JSON to stdout
+  --min-band-n <n> per-band sample floor (default 5)
+  --self-test      run the built-in checks
+  --help, -h   print this and exit`;
+
 if (isMainModule(import.meta.url)) {
+  // BEFORE any work. Unhandled, `--help` fell through to the analysis: this
+  // script printed a full report for it, which is not what the flag asks for
+  // and hides that it was never recognised.
+  if (process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
+    console.log(USAGE);
+    process.exit(0);
+  }
   const argv = process.argv.slice(2);
   if (argv.includes('--self-test')) selfTest();
 
@@ -440,7 +463,7 @@ if (isMainModule(import.meta.url)) {
     console.error('--min-band-n must be a positive integer');
     process.exit(2);
   }
-  const appsFile = resolveTrackerPath(CAREER_OPS);
+  const appsFile = resolveTrackerPath(DATA_ROOT);
   if (!existsSync(appsFile)) {
     console.error(`No tracker found at ${appsFile} — nothing to calibrate yet.`);
     process.exit(1);

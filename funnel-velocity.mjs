@@ -43,13 +43,25 @@ import * as yaml from 'js-yaml';
 import { computeFunnel, computeFunnelWithHistory, parseStatusLogStages, trackerStatusByNum, computeTrackerStats } from './stats.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { resolveTrackerPath, loadCanonicalStates, resolveCanonicalState } from './tracker-utils.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { parseAppliedDate, normalizeStatus } from './followup-cadence.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
-const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-const STATES_FILE = join(CAREER_OPS, 'templates/states.yml');
+// Two roots, because this file reads both layers and they are not the same
+// directory. CODE_ROOT is where the shipped templates live; DATA_ROOT is where
+// the USER's tracker and overrides live, and getCareerOpsRoot() is what honours
+// CAREER_OPS_ROOT / CAREER_OPS_DATA_DIR / the .career-ops-data marker.
+//
+// One name for both is how this went wrong: the constant was called CAREER_OPS
+// and held __dirname, so it read correctly for templates and silently pointed
+// the tracker lookup at the checkout. A user with a data root configured got
+// "No tracker found ... nothing to calibrate yet" — indistinguishable from
+// having no data.
+const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
+const DATA_ROOT = getCareerOpsRoot();
+const STATES_FILE = join(CODE_ROOT, 'templates/states.yml');
 
 const KNOWN_FLAGS = ['--summary', '--self-test', '--benchmarks', '--help', '-h'];
 const VALUE_FLAGS = ['--benchmarks'];
@@ -77,7 +89,11 @@ const DAY_MATH_SOURCES = new Set(['set-status', 'web', 'correction', 'reply-watc
 // mixes offers and rejections reads grim and means nothing.
 const HOPS = [
   { key: 'appliedToResponded', from: 'Applied', to: 'Responded' },
-  { key: 'respondedToInterview', from: 'Responded', to: 'Interview' },
+  { key: 'respondedToAssessment', from: 'Responded', to: 'Assessment' },
+  { key: 'assessmentToInterview', from: 'Assessment', to: 'Interview' },
+  // Keep the direct hop for legacy rows that moved from Responded straight to
+  // Interview before Assessment became a first-class lifecycle stage.
+  { key: 'respondedToInterview', from: 'Responded', to: 'Interview', excludeIntermediate: 'Assessment' },
   { key: 'interviewToOffer', from: 'Interview', to: 'Offer' },
   { key: 'appliedToRejected', from: 'Applied', to: 'Rejected' },
 ];
@@ -206,7 +222,10 @@ export function computeVelocity(timelines, todayStr) {
     for (const timeline of timelines.values()) {
       const fromIdx = timeline.findIndex(o => o.to === hop.from && o.dayMath);
       if (fromIdx === -1) continue;
-      const next = timeline.slice(fromIdx + 1).find(o => o.to === hop.to && o.dayMath);
+      const later = timeline.slice(fromIdx + 1);
+      const nextIdx = later.findIndex(o => o.to === hop.to && o.dayMath);
+      const next = nextIdx === -1 ? null : later[nextIdx];
+      if (next && hop.excludeIntermediate && later.slice(0, nextIdx).some(o => o.to === hop.excludeIntermediate)) continue;
       if (next) {
         const d = daysBetween(timeline[fromIdx].date, next.date);
         if (d === null || d < 0) continue;
@@ -236,7 +255,7 @@ export function computeVelocity(timelines, todayStr) {
 // --- Benchmarks ---
 export function loadBenchmarks(explicitPath) {
   const path = explicitPath
-    || (existsSync(join(CAREER_OPS, 'config/benchmarks.yml')) ? join(CAREER_OPS, 'config/benchmarks.yml') : join(CAREER_OPS, 'templates/benchmarks.yml'));
+    || (existsSync(join(DATA_ROOT, 'config/benchmarks.yml')) ? join(DATA_ROOT, 'config/benchmarks.yml') : join(CODE_ROOT, 'templates/benchmarks.yml'));
   let doc;
   try {
     doc = yaml.load(readFileSync(path, 'utf-8'));
@@ -583,6 +602,22 @@ function selfTest() {
   check(velocity.appliedToRejected.censored === 0, 'velocity: rejection hop does not double-count censoring');
   check(velocity.interviewToOffer.n === 1 && velocity.interviewToOffer.insufficientData, 'velocity: I→O n=1 insufficient');
 
+  const ASSESSMENT_FIXTURE = [
+    '10\t2026-06-01\tApplied\tResponded\tset-status\t',
+    '10\t2026-06-04\tResponded\tAssessment\tset-status\t',
+    '10\t2026-06-09\tAssessment\tInterview\tset-status\t',
+  ].join('\n');
+  const assessmentVelocity = computeVelocity(
+    foldObservations(parseStatusLog(ASSESSMENT_FIXTURE, states).observations),
+    TODAY,
+  );
+  check(assessmentVelocity.respondedToAssessment.n === 1,
+    `velocity: Responded→Assessment expected n=1, got ${assessmentVelocity.respondedToAssessment.n}`);
+  check(assessmentVelocity.assessmentToInterview.n === 1,
+    `velocity: Assessment→Interview expected n=1, got ${assessmentVelocity.assessmentToInterview.n}`);
+  check(assessmentVelocity.respondedToInterview.n === 0,
+    `velocity: Assessment path must not count as legacy Responded→Interview, got n=${assessmentVelocity.respondedToInterview.n}`);
+
   // three completed A→R measurements → median renders
   const logWithThird = LOG_FIXTURE + '\n4\t2026-06-27\tApplied\tResponded\tset-status\t';
   const v3 = computeVelocity(foldObservations(parseStatusLog(logWithThird, states).observations), TODAY);
@@ -590,7 +625,7 @@ function selfTest() {
   check(v3.appliedToResponded.censored === 2, 'velocity: censored drops to 2 after row 4 completes');
 
   // -- benchmarks + classification --
-  const bm = loadBenchmarks(join(CAREER_OPS, 'templates/benchmarks.yml')).benchmarks;
+  const bm = loadBenchmarks(join(CODE_ROOT, 'templates/benchmarks.yml')).benchmarks;
   check(bm.response_rate && Array.isArray(bm.response_rate.range_pct), 'benchmarks: shipped file loads');
   check(bm.days_first_response.range_days[1] === 14, 'benchmarks: first-response window upper bound');
   check(!('time_to_fill' in bm), 'benchmarks: employer-side time_to_fill must not exist');
@@ -653,7 +688,7 @@ function selfTest() {
   check(led.calibration.basis === 'ledger', 'ledger-funnel: log present → ledger basis');
   check(led.calibration.everApplied === 25, `ledger-funnel: everApplied still 25, got ${led.calibration.everApplied}`);
   check(led.calibration.interviewRate.ownPct === 8, `ledger-funnel: 2/25 reached Interview → 8%, got ${led.calibration.interviewRate.ownPct}`);
-  check(led.calibration.responseRate.ownPct === 12, `ledger-funnel: 3/25 reached Responded → 12%, got ${led.calibration.responseRate.ownPct}`);
+  check(led.calibration.responseRate.ownPct === 16, `ledger-funnel: 4/25 received a reply including rejection → 16%, got ${led.calibration.responseRate.ownPct}`);
   check(renderSummary(led, TODAY).includes('rates fold status-log history'), 'ledger-funnel: summary flags the folded basis');
   check(!renderSummary(snap, TODAY).includes('rates fold status-log history'), 'ledger-funnel: snapshot summary carries no fold note');
 
@@ -809,7 +844,7 @@ function main() {
     process.exit(1);
   }
   const states = loadCanonicalStates(STATES_FILE);
-  const trackerPath = resolveTrackerPath(CAREER_OPS);
+  const trackerPath = resolveTrackerPath(DATA_ROOT);
   const logPath = join(dirname(trackerPath), 'status-log.tsv');
   const trackerContent = existsSync(trackerPath) ? readFileSync(trackerPath, 'utf-8') : '';
   const logContent = existsSync(logPath) ? readFileSync(logPath, 'utf-8') : '';
