@@ -57,7 +57,7 @@ for (const { file, score: scoreLine, decision: decisionLine, lede, apply: applyW
     if (/verdict\s*:/i.test(header)) return 'header contains Verdict:';
     const label = decisionLine.match(/^\*\*(.+):\*\*/)[1];
     if (/verdict/i.test(label)) return `label ${label} collides with VERDICT`;
-    if (!applyWord || !decisionLine.includes(applyWord)) return 'apply word missing from the decision line';
+    if (!decisionLine.includes(applyWord)) return 'apply word missing from the decision line';
     return null;
   });
 }
@@ -105,7 +105,7 @@ Example Labs is a fictional employer.
     return null;
   });
 
-  check('a Verdict label is not a decision and not a score latch', () => {
+  check('a Verdict label is not a decision', () => {
     const report = `# Evaluation: Example Labs — Researcher
 
 **Verdict:** Apply
@@ -115,7 +115,6 @@ Example Labs is a fictional employer.
 `;
     const fields = readReport(report).fields;
     if (fields.some((f) => f.label === 'Decision')) return JSON.stringify(fields);
-    if (/verdict\s*:/i.test('**Verdict:** Apply') !== true) return 'fixture lost the latch shape';
     return null;
   });
 

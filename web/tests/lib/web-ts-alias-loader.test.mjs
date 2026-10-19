@@ -34,10 +34,6 @@ const stripAnsi = (str) => (str || "").replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
 function run(src, flags = [], cwd = WEB) {
   const childEnv = { ...process.env, NODE_DISABLE_COLORS: "1", NO_COLOR: "1" };
   delete childEnv.FORCE_COLOR;
-  // execFile does not inherit this process's flags. On 22.6-22.17, test-all
-  // turns stripping on here and the child still dies on .ts unless it gets the
-  // same flag. A caller that passes --no-experimental-strip-types is measuring
-  // that death, so it keeps the child bare.
   const inheritStrip = process.features?.typescript
     && !flags.includes("--experimental-strip-types")
     && !flags.includes("--no-experimental-strip-types");

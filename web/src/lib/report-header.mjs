@@ -15,8 +15,8 @@ const DECISION_LABELS = {
   القرار: "Decision",
   beslutning: "Decision",
   entscheidung: "Decision",
-  "decisión": "Decision",
-  "décision": "Decision",
+  decisión: "Decision",
+  décision: "Decision",
   निर्णय: "Decision",
   keputusan: "Decision",
   decisione: "Decision",
@@ -24,7 +24,7 @@ const DECISION_LABELS = {
   결정: "Decision",
   beslissing: "Decision",
   decyzja: "Decision",
-  "decisão": "Decision",
+  decisão: "Decision",
   решение: "Decision",
   karar: "Decision",
   рішення: "Decision",
@@ -33,12 +33,12 @@ const DECISION_LABELS = {
 };
 
 function fieldName(raw) {
-  const key = String(raw ?? "").trim().toLowerCase();
-  return DECISION_LABELS[key] ?? FIELD_KEYS[key] ?? null;
+  const key = raw.trim().toLowerCase();
+  return DECISION_LABELS[key] ?? FIELD_KEYS[key];
 }
 
 export function readReport(md) {
-  const lines = String(md ?? "").split("\n");
+  const lines = md.split("\n");
   let cut = lines.findIndex((l, i) => i > 0 && (/^\s*-{3,}\s*$/.test(l) || /^##\s/.test(l)));
   if (cut === -1) cut = Math.min(lines.length, 10);
 
@@ -66,5 +66,5 @@ export function readReport(md) {
     fields.push({ label, value });
   }
 
-  return { title, fields, legitimacy, body: body || String(md ?? "") };
+  return { title, fields, legitimacy, body: body || md };
 }
