@@ -151,12 +151,12 @@ Before drafting answers, read the matched report's Block G fixed-term finding an
 **Without Playwright:** Ask the candidate to:
 - Share a screenshot of the form (Read tool can read images)
 - Or paste the form questions as text
-- Or say the company and the role so we can search `reports/` in this checkout
+- Or say the company and the role so we can search `reports/` under the roots from `node apply-scope.mjs root`
 
 ## Step 2 — Identify and search for context
 
 1. Extract company name and role title from the page
-2. Search in `reports/` by company name (case-insensitive grep)
+2. Search `reports/` under every root printed by `node apply-scope.mjs root` (this checkout, plus the configured data root when set) by company name (case-insensitive grep). Do not search only the checkout when the data root holds the reports.
 3. If there is a match → load the full report
 4. If there is a `## Application Answers` section → recover it through the strict reader, never by re-reading the rendered markdown as prose:
 

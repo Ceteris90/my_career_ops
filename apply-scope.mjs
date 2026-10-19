@@ -106,7 +106,8 @@ export function locateApplyReport(dataRoot, ref, io) {
     return { ok: true, path: file };
   }
   const num = ref.trim().padStart(3, '0');
-  const names = io.list(join(dataRoot, 'reports'));
+  const reportsDir = resolveInsideProject(dataRoot, 'reports');
+  const names = io.list(reportsDir);
   const match = names.find((name) => name.startsWith(num));
   if (!match) return { ok: false, reason: 'missing' };
   return { ok: true, path: resolveInsideProject(dataRoot, join('reports', match)) };

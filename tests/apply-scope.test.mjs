@@ -132,17 +132,22 @@ test('locateApplyReport reads a report inside the data root and refuses another 
     writeFileSync(join(root, 'reports', '001-acme-2026-01-01.md'), 'score: 4.2/5');
     writeFileSync(join(other, '001-other.md'), 'other-install');
     const reads = [];
+    const listed = [];
     const io = {
       exists: (p) => {
         reads.push(p);
         return p === join(root, 'reports', '001-acme-2026-01-01.md');
       },
-      list: () => ['001-acme-2026-01-01.md'],
+      list: (p) => {
+        listed.push(p);
+        return ['001-acme-2026-01-01.md'];
+      },
     };
 
     const found = locateApplyReport(root, '1', io);
     assert.equal(found.ok, true);
     assert.equal(found.path, join(root, 'reports', '001-acme-2026-01-01.md'));
+    assert.deepEqual(listed, [join(root, 'reports')]);
 
     reads.length = 0;
     assert.throws(() => locateApplyReport(root, join(other, '001-other.md'), io), ApplyScopeError);
@@ -150,6 +155,30 @@ test('locateApplyReport reads a report inside the data root and refuses another 
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(other, { recursive: true, force: true });
+  }
+});
+
+test('locateApplyReport refuses a reports directory that escapes the data root', async () => {
+  const { locateApplyReport, ApplyScopeError } = await import('../apply-scope.mjs');
+  const root = scratch();
+  const outside = scratch();
+  try {
+    mkdirSync(join(outside, 'reports'));
+    writeFileSync(join(outside, 'reports', '001-secret.md'), 'secret');
+    symlinkSync(join(outside, 'reports'), join(root, 'reports'), process.platform === 'win32' ? 'junction' : 'dir');
+    let listed = false;
+    const io = {
+      exists: () => false,
+      list: () => {
+        listed = true;
+        return ['001-secret.md'];
+      },
+    };
+    assert.throws(() => locateApplyReport(root, '1', io), ApplyScopeError);
+    assert.equal(listed, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 
