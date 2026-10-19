@@ -107,6 +107,12 @@ export function normalizeAnswers(raw) {
   if (!Number.isInteger(age) || age < 0) {
     throw new AnswerError('portals.max_posting_age_days must be a whole number of days (0 turns it off)');
   }
+  const negative = list(portals.negative);
+  for (const n of negative) {
+    const matches = compileKeyword(foldTitle(n));
+    const title = positive.find((p) => matches(foldTitle(p)));
+    if (title) throw new AnswerError(`portals.negative "${n}" rejects the title "${title}"`);
+  }
   return {
     candidate: {
       full_name: required(candidate.full_name, 'candidate.full_name'),
@@ -143,7 +149,7 @@ export function normalizeAnswers(raw) {
     },
     portals: {
       positive,
-      negative: list(portals.negative),
+      negative,
       countries: list(portals.countries),
       cities: list(portals.cities),
       max_posting_age_days: age,
