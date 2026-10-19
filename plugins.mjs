@@ -26,7 +26,7 @@ import {
   runHook, filterResultsForId, loadDotenvOnce, HOOK_KINDS, loadSkill, resolveSuccessorIds,
   warnConfigLeftInCodeRoot,
 } from './plugins/_engine.mjs';
-import { loadRegistry, findInRegistry, classifySource, sourceBadge, successorFor, registryAuthor } from './plugins/_registry.mjs';
+import { loadRegistry, findInRegistry, classifySource, sourceBadge, successorFor } from './plugins/_registry.mjs';
 import { readLock, writeLockEntry, removeLockEntry, hashPluginTree, consentSurface } from './plugins/_lock.mjs';
 import { installFromRepo, scaffoldNew, parseRepoArg } from './plugin-install.mjs';
 import { appendToPipeline } from './scan.mjs';
@@ -297,6 +297,17 @@ export function capabilityCard(manifest, source) {
     `  Network:       ${manifest.allowedHosts.length ? manifest.allowedHosts.join(', ') : '(none declared)'}${localhostSuffix}`,
     `  Ships a skill: ${manifest.skill ? 'yes — instructs your AI tool when you run `plugins.mjs skill`' : 'no'}`,
   ].join('\n');
+}
+
+/**
+ * Who publishes a registry entry. Older entries carry no `author`, so fall back
+ * to the owner in the GitHub repo URL; null when neither says.
+ * @param {{ author?: unknown, repo?: unknown }} entry
+ */
+export function registryAuthor(entry) {
+  if (typeof entry.author === 'string' && entry.author.trim()) return entry.author.trim();
+  const owner = /^https:\/\/github\.com\/([^/]+)\//.exec(String(entry.repo ?? ''));
+  return owner ? owner[1] : null;
 }
 
 async function cmdAvailable() {

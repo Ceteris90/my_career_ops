@@ -1,77 +1,84 @@
 // `plugins.mjs available` names who publishes each community plugin, and
 // `plugins.mjs run h1b-sponsor` says why it finds nothing instead of printing a
 // bare "0 found, 0 new".
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
+import { pass, fail, ROOT, NODE, rmSync } from './helpers.mjs';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { registryAuthor } = await import(pathToFileURL(join(ROOT, 'plugins', '_registry.mjs')).href);
+console.log('\nplugins: community authors and the h1b-sponsor hint');
 
-function plugins(args, { env = {}, dataRoot } = {}) {
-  const childEnv = { ...process.env, ...env };
-  delete childEnv.CAREER_OPS_ROOT;
-  if (!('H1B_API_BASE' in env)) delete childEnv.H1B_API_BASE;
-  if (dataRoot) childEnv.CAREER_OPS_ROOT = dataRoot;
-  return spawnSync(process.execPath, [join(ROOT, 'plugins.mjs'), ...args], { cwd: ROOT, env: childEnv, encoding: 'utf8' });
+const { registryAuthor } = await import(pathToFileURL(join(ROOT, 'plugins.mjs')).href);
+
+function check(ok, msg, detail = '') {
+  if (ok) pass(msg);
+  else fail(detail ? `${msg}\n${detail}` : msg);
 }
 
-test('registryAuthor prefers author, then the GitHub repo owner', () => {
-  assert.equal(registryAuthor({ author: 'fabrikam-dev', repo: 'https://github.com/contoso/career-ops-plugin-x' }), 'fabrikam-dev');
-  assert.equal(registryAuthor({ repo: 'https://github.com/contoso/career-ops-plugin-x' }), 'contoso');
-  assert.equal(registryAuthor({ author: '  ', repo: 'https://github.com/contoso/career-ops-plugin-x.git' }), 'contoso');
-  assert.equal(registryAuthor({ repo: 'https://gitlab.example/contoso/x' }), null);
-  assert.equal(registryAuthor({}), null);
-});
+// CAREER_OPS_ROOT stays the scratch root tests/helpers.mjs pins.
+function plugins(args) {
+  return spawnSync(NODE, [join(ROOT, 'plugins.mjs'), ...args], { cwd: ROOT, env: process.env, encoding: 'utf8' });
+}
 
-test('available never prints "by undefined"', () => {
+{
+  const cases = [
+    [{ author: 'fabrikam-dev', repo: 'https://github.com/contoso/career-ops-plugin-x' }, 'fabrikam-dev'],
+    [{ repo: 'https://github.com/contoso/career-ops-plugin-x' }, 'contoso'],
+    [{ author: '  ', repo: 'https://github.com/contoso/career-ops-plugin-x.git' }, 'contoso'],
+    [{ repo: 'https://gitlab.example/contoso/x' }, null],
+    [{}, null],
+  ];
+  const wrong = cases.filter(([entry, want]) => registryAuthor(entry) !== want);
+  check(wrong.length === 0, 'registryAuthor prefers author, then the GitHub repo owner',
+    wrong.map(([e, want]) => `  ${JSON.stringify(e)} → ${registryAuthor(e)} (want ${want})`).join('\n'));
+}
+
+{
   const r = plugins(['available']);
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /Community plugins approved/);
-  assert.doesNotMatch(r.stdout, /by undefined/);
-});
-
-function h1bDataRoot() {
-  const dir = mkdtempSync(join(tmpdir(), 'co-h1b-hint-'));
-  mkdirSync(join(dir, 'config'));
-  mkdirSync(join(dir, 'data'));
-  writeFileSync(join(dir, 'config', 'plugins.yml'), 'plugins:\n  h1b-sponsor:\n    enabled: true\n');
-  writeFileSync(join(dir, 'data', 'pipeline.md'), '# Pipeline\n\n## Pendientes\n\n## Procesadas\n');
-  return dir;
+  check(r.status === 0 && /Community plugins approved/.test(r.stdout) && !/by undefined/.test(r.stdout),
+    'available lists community plugins without "by undefined"', r.stdout + r.stderr);
 }
 
-test('h1b-sponsor run points at the install command when no index is installed', (t) => {
-  const dir = h1bDataRoot();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const r = plugins(['run', 'h1b-sponsor', '--dry-run'], { dataRoot: dir, env: { H1B_INDEX_PATH: join(dir, 'no-index.jsonl.gz') } });
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /0 found, 0 new/);
-  assert.match(r.stdout, /node plugins\/h1b-sponsor\/install-h1b-index\.mjs/);
-  assert.match(r.stdout, /node plugins\/h1b-sponsor\/check\.mjs/);
-});
+// The hook is called directly: a real `plugins.mjs run` pins plugins.lock in
+// the code root, which a suite must not write.
+const { default: h1b } = await import(pathToFileURL(join(ROOT, 'plugins', 'h1b-sponsor', 'index.mjs')).href);
 
-test('h1b-sponsor run skips the install hint when an index is present', (t) => {
-  const dir = h1bDataRoot();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const index = join(dir, 'index.jsonl.gz');
-  writeFileSync(index, '');
-  const r = plugins(['run', 'h1b-sponsor', '--dry-run'], { dataRoot: dir, env: { H1B_INDEX_PATH: index } });
-  assert.equal(r.status, 0, r.stderr);
-  assert.doesNotMatch(r.stdout, /install-h1b-index/);
-  assert.match(r.stdout, /node plugins\/h1b-sponsor\/check\.mjs/);
-});
+async function h1bIngest({ index, apiBase }) {
+  const dir = mkdtempSync(join(tmpdir(), 'co-h1b-hint-'));
+  const saved = process.env.H1B_INDEX_PATH;
+  const lines = [];
+  try {
+    const indexPath = join(dir, index ? 'index.jsonl.gz' : 'no-index');
+    if (index) writeFileSync(indexPath, '');
+    process.env.H1B_INDEX_PATH = indexPath;
+    const env = apiBase ? { H1B_API_BASE: apiBase } : {};
+    const jobs = await h1b.ingest({ env, log: (...a) => lines.push(a.join(' ')) });
+    return { jobs, out: lines.join('\n') };
+  } finally {
+    if (saved === undefined) delete process.env.H1B_INDEX_PATH;
+    else process.env.H1B_INDEX_PATH = saved;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
-test('h1b-sponsor run skips the install hint when H1B_API_BASE is set', (t) => {
-  const dir = h1bDataRoot();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const r = plugins(['run', 'h1b-sponsor', '--dry-run'], {
-    dataRoot: dir,
-    env: { H1B_INDEX_PATH: join(dir, 'no-index.jsonl.gz'), H1B_API_BASE: 'https://h1b.example' },
-  });
-  assert.equal(r.status, 0, r.stderr);
-  assert.doesNotMatch(r.stdout, /install-h1b-index/);
-});
+{
+  const r = await h1bIngest({ index: false });
+  check(r.jobs.length === 0
+    && /node plugins\/h1b-sponsor\/install-h1b-index\.mjs/.test(r.out)
+    && /node plugins\/h1b-sponsor\/check\.mjs/.test(r.out),
+  'h1b-sponsor ingest names check.mjs and the index install command when no index is installed', r.out);
+}
+
+{
+  const r = await h1bIngest({ index: true });
+  check(r.jobs.length === 0 && !/install-h1b-index/.test(r.out) && /node plugins\/h1b-sponsor\/check\.mjs/.test(r.out),
+    'h1b-sponsor ingest skips the install hint when an index is present', r.out);
+}
+
+{
+  const r = await h1bIngest({ index: false, apiBase: 'https://h1b.example' });
+  check(r.jobs.length === 0 && !/install-h1b-index/.test(r.out),
+    'h1b-sponsor ingest skips the install hint when H1B_API_BASE is set', r.out);
+}

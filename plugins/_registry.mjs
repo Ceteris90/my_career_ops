@@ -66,17 +66,6 @@ export function loadRegistry(root) {
   }
 }
 
-/**
- * Who publishes a registry entry. Older entries carry no `author`, so fall back
- * to the owner in the GitHub repo URL; null when neither says.
- * @param {{ author?: unknown, repo?: unknown }} entry
- */
-export function registryAuthor(entry) {
-  if (typeof entry.author === 'string' && entry.author.trim()) return entry.author.trim();
-  const owner = /^https:\/\/github\.com\/([^/]+)\//.exec(String(entry.repo ?? ''));
-  return owner ? owner[1] : null;
-}
-
 /** Find a registry entry by bare id, full name, or `career-ops-plugin-<id>`. */
 export function findInRegistry(root, nameOrId) {
   const reg = loadRegistry(root);
