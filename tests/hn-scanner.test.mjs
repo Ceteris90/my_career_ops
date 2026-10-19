@@ -266,6 +266,15 @@ test('scan-hn AI mode admits only keyword matches that pass the blacklist and fi
     // the intern are never sent; the blacklist and location need the extraction.
     const calls = readFileSync(join(dir, 'gemini-calls'), 'utf8').trim().split('\n');
     assert.deepEqual(calls.sort(), ['Acme', 'Initech', 'Stripe']);
+
+    // A second run counts the queued post as already seen, as the no-key
+    // branch does, and does not send it to Gemini again.
+    const again = runScanHn(dir, preload, [], { GEMINI_API_KEY: 'test-key' });
+    assert.equal(again.status, 0, describeSpawn(again, `second scan failed\n`));
+    assert.match(again.stdout, /New offers:\s+0\b/, again.stdout);
+    assert.match(again.stdout, /Skipped:\s+1 already seen, 1 blacklisted, 2 title filter, 1 location filter/, again.stdout);
+    const callsAgain = readFileSync(join(dir, 'gemini-calls'), 'utf8').trim().split('\n');
+    assert.equal(callsAgain.filter(c => c === 'Stripe').length, 1, 'the seen post was sent to Gemini again');
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }

@@ -19,6 +19,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAdmissionGate, formatSkipCounts } from '../lib/admission-gate.mjs';
 import { parseBlacklist, collectSeenUrls } from '../scan.mjs';
+import { admitPluginJobs } from '../plugins.mjs';
+import { validateManifest } from '../plugins/_engine.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -99,6 +101,49 @@ test('partition and counts report every reason', () => {
 test('titleText lets a caller judge a different string than the stored title', () => {
   const g = gate();
   assert.equal(g.check(offer('Backend Engineer'), { titleText: 'Acme | AI Engineer | Berlin' }), null);
+});
+
+// Plugin ingest returns more than job postings: google-calendar and
+// outlook-interviews return interview events titled "Interview with Acme".
+// Only a plugin that declares jobPostings gets the discovery filters; every
+// plugin gets the tracker/pipeline/scan-history dedup.
+test('plugin results get the discovery filters only when the manifest declares jobPostings', () => {
+  const tracked = collectSeenUrls({
+    applicationsText: '| # | Company | Role | URL |\n|---|---|---|---|\n| 1 | Acme | AI Engineer | https://jobs.example/acme/42 |\n',
+  }).seen;
+  const found = [
+    { title: 'Interview with Initech', url: 'https://meet.example/abc', company: 'Initech' },
+    { title: 'Gardener', url: 'https://jobs.example/garden/1', company: 'Acme', location: 'Munich' },
+    { title: 'AI Engineer', url: 'https://jobs.example/acme/42?utm_source=alert', company: 'Acme' },
+  ];
+  const run = (jobPostings) => admitPluginJobs(found.map(j => ({ ...j })), {
+    id: 'demo', jobPostings, config: CONFIG,
+    // The blacklist is injected only where it applies, so the user's own file is never read.
+    gateOptions: jobPostings ? { blacklist: BLACKLIST, seen: new Set(tracked) } : { seen: new Set(tracked) },
+  });
+
+  const events = run(false);
+  assert.deepEqual(events.jobs.map(j => j.url), ['https://meet.example/abc', 'https://jobs.example/garden/1']);
+  assert.equal(events.counts.seen, 1, 'the tracked posting is dropped for every plugin');
+  assert.equal(events.jobs[0].source, 'plugin:demo');
+
+  const postings = run(true);
+  assert.deepEqual(postings.jobs, []);
+  assert.deepEqual(postings.counts, { admitted: 0, seen: 1, blacklisted: 1, title: 1, location: 0 });
+});
+
+test('the manifest jobPostings flag is validated and carried through', () => {
+  const base = { id: 'demo', apiVersion: 1, description: 'Demo.', humanInTheLoop: true, hooks: ['ingest'] };
+  const dir = mkdtempSync(join(tmpdir(), 'career-ops-manifest-'));
+  try {
+    assert.equal(validateManifest({ ...base, jobPostings: true }, dir, 'demo').jobPostings, true);
+    assert.equal(validateManifest(base, dir, 'demo').jobPostings, false);
+    assert.equal(validateManifest({ ...base, jobPostings: 'yes' }, dir, 'demo'), null);
+    const gmail = JSON.parse(readFileSync(join(ROOT, 'plugins', 'gmail', 'manifest.json'), 'utf8'));
+    assert.equal(gmail.jobPostings, true, 'the bundled gmail job-lead ingest opts in');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // A structural guard: a writer that drops the gate for a private matcher again

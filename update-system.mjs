@@ -307,6 +307,7 @@ const SYSTEM_PATHS = [
   'lib/scan-summary-marker.mjs',
   'lib/scan-history-columns.mjs',
   'lib/small-board.mjs',
+  'lib/admission-gate.mjs',
   'lib/tsv-formula-escape.mjs',
   'lib/is-main-module.mjs',
   'lib/mjs-files.mjs',

@@ -291,6 +291,11 @@ async function main() {
   const dateSkipped = [];
   const dupeSkipped = [];
   const errors = [];
+  // Searches overlap, so one offer often comes back under several keywords.
+  // Its first sighting already got the right verdict and scan-history row; a
+  // repeat must not add a skipped_dup row, which pins the URL, on top of a
+  // blacklist, location or date skip that is meant to be revisited later.
+  const handledThisRun = new Set();
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin' });
@@ -318,6 +323,8 @@ async function main() {
             postedAt: pubDate ? pubDate.getTime() : undefined,
           };
 
+          if (handledThisRun.has(canonical.url)) continue;
+          handledThisRun.add(canonical.url);
           const reason = gate.check(canonical);
           if (reason === 'seen') { dupeSkipped.push(canonical); continue; }
           // Blacklist skips are counted, not written to scan-history, as in

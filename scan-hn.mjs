@@ -142,7 +142,9 @@ async function main() {
     });
 
     for (const job of rawJobs) {
-      if (gate.isSeen(job)) continue;
+      // Through check(), not a bare continue, so the summary counts it as in
+      // the no-key branch.
+      if (gate.isSeen(job)) { gate.check(job); continue; }
       // The keywords decide before Gemini is paid to read the post. A post
       // whose header names none of them is recorded as a title skip here.
       if (!gate.titleFilter(job.title)) { gate.check(job); continue; }

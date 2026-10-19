@@ -109,6 +109,35 @@ export function newPipelineJobs(found, pipelineUrls) {
   });
 }
 
+/**
+ * The ingest/search results that go into data/pipeline.md (#5478).
+ *
+ * newPipelineJobs first collapses one posting's alert and job-page URLs. Every
+ * result is then checked against the tracker, the pipeline and scan-history by
+ * normalized URL: checking the pipeline alone re-queued roles already applied
+ * to. A plugin whose manifest declares `jobPostings: true` also gets the
+ * scanner's discovery filters, data/blacklist.md and the title and location
+ * filters. Other ingests (google-calendar and outlook-interviews return
+ * interview events titled "Interview with Acme") would lose every row to a
+ * title filter written for job titles, so they skip those filters.
+ *
+ * @param {Array<object>} found - Sanitized hook results.
+ * @param {object} options
+ * @param {string} options.id - Plugin id, recorded as the posting's source.
+ * @param {boolean} [options.jobPostings] - The manifest's jobPostings flag.
+ * @param {Set<string>} [options.pipelineUrls]
+ * @param {object} [options.config] - Parsed portals.yml.
+ * @param {object} [options.gateOptions] - Overrides for createAdmissionGate (tests).
+ */
+export function admitPluginJobs(found, { id, jobPostings = false, pipelineUrls = new Set(), config = {}, gateOptions = {} }) {
+  const discoveryFilters = jobPostings
+    ? { config }
+    : { titleFilter: () => true, locationFilter: () => true, blacklist: new Map() };
+  const gate = createAdmissionGate({ ...discoveryFilters, ...gateOptions });
+  const { admitted } = gate.partition(newPipelineJobs(found, pipelineUrls).map(j => ({ ...j, source: `plugin:${id}` })));
+  return { jobs: admitted, counts: gate.counts };
+}
+
 /** Frozen, read-only view of the user's tracker for `export` hooks. No file handle. */
 function buildSnapshot() {
   const applications = existsSync(APPLICATIONS_PATH)
@@ -194,20 +223,21 @@ async function cmdRun(args) {
     if (hook === 'search' && !payload) { console.error(`search needs a query: node plugins.mjs run ${id} search "<query>"`); process.exit(1); }
     const results = filterResultsForId(await runHook(hook, payload, { root: ROOT, dataRoot: DATA_ROOT, dryRun, pluginId: id }), id);
     const found = results.filter(r => r.ok && Array.isArray(r.result)).flatMap(r => r.result).map(sanitizeJob).filter(Boolean);
-    // newPipelineJobs collapses one posting's alert and job-page URLs; the
-    // shared gate then applies what scan.mjs applies before a row is queued:
-    // the tracker and scan-history (normalized URLs), data/blacklist.md and the
-    // title and location filters (#5478). Checking the pipeline alone re-queued
-    // roles already applied to and roles the scanner had filtered out.
-    const gate = createAdmissionGate({ config: loadPortalsConfig() });
-    const { admitted: jobs } = gate.partition(newPipelineJobs(found, existingPipelineUrls()).map(j => ({ ...j, source: `plugin:${id}` })));
-    const skipped = formatSkipCounts(gate.counts);
+    const { jobs, counts } = admitPluginJobs(found, {
+      id,
+      jobPostings: manifest.jobPostings,
+      pipelineUrls: existingPipelineUrls(),
+      config: manifest.jobPostings ? loadPortalsConfig() : {},
+    });
+    const skipped = formatSkipCounts(counts);
     console.log(`${id} ${hook}: ${found.length} found, ${jobs.length} new${skipped ? ` (skipped: ${skipped})` : ''}.`);
     if (dryRun) { jobs.slice(0, 20).forEach(j => console.log(`  • ${j.title} — ${j.url}`)); console.log('(--dry-run: pipeline not written)'); return; }
     if (jobs.length) {
       await appendToPipeline(jobs);
       // Recorded so the next ingest, and every scanner, sees these as known.
-      await appendToScanHistory(jobs, localToday(), 'added');
+      // Only postings: an interview event in scan-history would read as a
+      // scanned job everywhere scan-history is counted.
+      if (manifest.jobPostings) await appendToScanHistory(jobs, localToday(), 'added');
       console.log(`→ Appended ${jobs.length} to data/pipeline.md. Run /career-ops pipeline to evaluate.`);
     }
     return;
