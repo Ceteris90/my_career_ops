@@ -62,17 +62,19 @@ const REASON_MAX = 140;
 // Ranking needs one answer, not an agent. Left with tools, an agent CLI opens
 // each posting URL itself (grok ran curl and MCP scrapers on every row), which
 // spends the timeout and feeds untrusted pages to a shell. Where a CLI has a
-// documented switch, the call turns tools off. grok has no switch that removes
-// every tool, and --max-turns stops it before it answers, so it denies the
-// tools that run commands, fetch, write, or reach MCP servers. codex refuses to start outside a git repository
-// without --skip-git-repo-check, and every call runs in an empty temp dir.
+// documented switch, the call turns tools off. For claude, --tools "" drops
+// the built-in tools and --disallowedTools "*" drops MCP tools as well. grok
+// has no switch that removes every tool, and --max-turns stops it before it
+// answers, so it denies the tools that run commands, fetch, write, or reach
+// MCP servers. codex refuses to start outside a git repository without
+// --skip-git-repo-check, and every call runs in an empty temp dir.
 const GROK_DENIED_TOOLS = [
   'run_terminal_command', 'web_fetch', 'use_tool', 'search_tool', 'spawn_subagent', 'workflow',
   'monitor', 'scheduler_create', 'write', 'search_replace', 'read_file', 'list_dir', 'grep',
 ].join(',');
 
 export const CLI_CANDIDATES = [
-  { bin: 'claude', args: p => ['-p', p, '--tools', ''] },
+  { bin: 'claude', args: p => ['-p', p, '--tools', '', '--disallowedTools', '*'] },
   { bin: 'opencode', args: p => ['run', p] },
   { bin: 'codex', args: p => ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', p] },
   { bin: 'copilot', args: p => ['-p', p] },

@@ -1196,7 +1196,7 @@ before running this on sensitive CV content.
 
 Each call asks for one answer, not an agent session. It runs in an empty temp
 directory, and where the CLI has a switch for it, with tools off
-(`claude --tools ""`, `grok --disallowed-tools` for its shell, fetch, write and
+(`claude --tools "" --disallowedTools "*"`, `grok --disallowed-tools` for its shell, fetch, write and
 MCP tools, `codex exec --sandbox read-only`). The prompt asks for scores from
 the listed company, title and URL text, without opening the postings.
 A call times out after 180 s; set `CAREER_OPS_RANK_TIMEOUT_MS` to change that.
