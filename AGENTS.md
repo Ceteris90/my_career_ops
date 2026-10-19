@@ -239,7 +239,7 @@ Create `cv.md` from whatever they provide — clean markdown with standard secti
 #### Step 2: Profile (required)
 If `node doctor.mjs --json` `warnings` says the data-root `.env` sets `CAREER_OPS_PROFILE`, do not copy the example profile. Ask the user to export that variable in the shell (or shell profile) that starts the agent, then restart the session from it, or to remove the line from `.env`. A shell export does not reach an agent session that is already running, so run doctor again only after that.
 
-If `config/profile.yml` is missing, copy from `config/profile.example.yml` and ask:
+If `config/profile.yml` is missing, ask:
 > "I need a few details to personalize the system:
 > - Your full name and email
 > - Your location and timezone
@@ -252,21 +252,42 @@ If `config/profile.yml` is missing, copy from `config/profile.example.yml` and a
 >
 > I'll set everything up for you."
 
-Fill in `config/profile.yml` (including `spend_tier`, default `standard`). Archetypes and targeting narrative go to `modes/_profile.md` or `config/profile.yml` — never `modes/_shared.md`.
+Keep the answers for the writer in Step 3. Archetypes and targeting narrative go to `modes/_profile.md` or `config/profile.yml` — never `modes/_shared.md`.
 
 #### Step 3: Portals (recommended)
 If `portals.yml` is missing:
 > "I'll set up the job scanner with 45+ pre-configured companies. Want me to customize the search keywords for your target roles?"
 
-Copy `templates/portals.example.yml` → `portals.yml`; if they gave target roles in Step 2, update `title_filter.positive`.
+Then write both files in one run. Do not copy or hand-edit the templates. `templates/portals.example.yml` is about 160 KB, and the writer changes only the answered fields:
 
-Then tighten the filters to what they said, so the first scan does not fill the pipeline with roles they ruled out:
+```bash
+node onboard-write.mjs --answers - <<'JSON'
+{
+  "candidate": { "full_name": "...", "email": "...", "location": "City, Region" },
+  "target_roles": ["..."],
+  "compensation": { "target_range": "...", "currency": "USD", "minimum": "..." },
+  "location": { "country": "...", "city": "...", "timezone": "..." },
+  "spend_tier": "standard",
+  "archetypes": [{ "name": "...", "level": "...", "fit": "primary" }],
+  "narrative": { "headline": "...", "superpowers": ["..."], "proof_points": [{ "name": "...", "hero_metric": "..." }] },
+  "portals": { "positive": ["..."], "negative": [], "countries": ["..."], "cities": [] }
+}
+JSON
+```
 
-- **Location.** When they name only countries ("remote in the US", "anywhere in Canada"), list those countries under both `always_allow` and `allow`. `allow` turns the filter into an allow-list, so a city you did not think to block (Paris, Manila) is dropped. A `block` list alone drops only the places it names. For the United States, `always_allow` also admits "City, ST" locations. For other countries, add the main cities too, since a posting may name only the city. When they name cities, list the cities under `allow` and leave country names out of `always_allow`, since a country there admits every city in it. Leave "Remote" out of `allow`, since it would admit remote roles in any country.
-- **Posting age.** Set `max_posting_age_days: 45` unless they ask for older postings. Tell them it also hides long-open roles on a company's own board.
-- **Excluded titles.** Add their exclusions to `title_filter.negative`. Never replace the list. Replacing it drops the template's junior, intern and German student entries (Werkstudent, Praktikant).
+- `portals.positive` is the title keywords. Default to the target roles and their common variants.
+- `portals.negative` is the titles they ruled out. The writer adds them to `title_filter.negative` and never replaces the list, so the template's junior, intern and German student entries (Werkstudent, Praktikant) stay.
+- `countries` and `cities` become a `location_filter` allow-list, so the first scan does not fill the pipeline with roles in places they ruled out. Countries go under both `always_allow` and `allow`, and cities under `allow` only. Leave both empty when they want anywhere.
+  - When they name only countries ("remote in the US", "anywhere in Canada"), pass those countries. For the United States, `always_allow` also admits "City, ST" locations. For other countries, add the main cities to `cities` too, since a posting may name only the city.
+  - When they name cities, pass the cities and leave `countries` empty, since a country in `always_allow` admits every city in it.
+  - "Remote" and "Hybrid" are not places, and the writer refuses them, because an allow-list entry like that admits every country.
+- `max_posting_age_days` defaults to 45. Tell them it also hides long-open roles on a company's own board. Set 0 only when they ask for older postings.
+- Contact fields they did not give are blanked, so the example person never reaches a CV.
+- Existing files are kept. Pass `--force` only when the user asks to redo setup. `node onboard-write.mjs --help` shows every field.
 
-For "remote or hybrid in the US", the result looks like this:
+The writer prints `{"written": [...], "kept": [...]}`. Do not read the templates first, and do not edit `portals.yml` or the answered profile fields afterward. To change an answer, rerun with `--force`.
+
+For "remote or hybrid in the US", pass `"countries": ["United States", "USA"]`, and the writer adds this to `portals.yml`:
 
 ```yaml
 location_filter:
@@ -311,7 +332,11 @@ Once all files exist, record the agent CLI you are running in, so `doctor.mjs`, 
 node remember-cli.mjs <cli>   # claude, codex, opencode, gemini, grok, ...
 ```
 
-It writes `CAREER_OPS_CLI=<cli>` to the data root's `.env` and keeps every other line. Skip it if the user already set `CAREER_OPS_CLI`. Then confirm:
+It writes `CAREER_OPS_CLI=<cli>` to the data root's `.env` and keeps every other line. Skip it if the user already set `CAREER_OPS_CLI`.
+
+Then run `node doctor.mjs` once before you confirm. Mention a setup command only for a check that fails. For example, say `npx playwright install chromium` only when the "Playwright chromium" check fails, and never just because the README lists it.
+
+Then confirm:
 > "You're all set! You can now:
 > - Paste a job URL to evaluate it
 > - Run the scan entrypoint for your CLI to search portals: `/career-ops scan`, `/career-ops-scan`, or ask Codex to run `scan`
