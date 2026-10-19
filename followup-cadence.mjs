@@ -436,7 +436,7 @@ export function statusLogAppliedDates(statusLogContent) {
     return dates;
   }
   for (const [num, timeline] of foldObservations(parseStatusLog(statusLogContent, states).observations)) {
-    const applied = timeline.filter(o => o.to === 'Applied' && o.dayMath).pop();
+    const applied = timeline.filter(o => o.to === 'Applied' && o.dayMath && isRealCalendarDate(o.date)).pop();
     if (applied) dates.set(num, applied.date);
   }
   return dates;
