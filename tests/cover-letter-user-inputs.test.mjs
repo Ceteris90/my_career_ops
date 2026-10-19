@@ -99,6 +99,19 @@ test('a forward marker later in the same clause does not admit a past-experience
   assert.deepEqual(result.invented, ['6 months']);
 });
 
+test('a past-experience metric after a forward marker in the same clause stays unsupported', () => {
+  const plan = 'I will lead for 6 years.';
+  for (const opening of [
+    'Next I will lead, as I have 6 years of experience.',
+    'Next I will lead as I have 6 years of experience.',
+    'I will lead, and I have 6 years of experience.',
+  ]) {
+    const result = check(letter(opening), [plan]);
+    assert.equal(result.verdict, 'block', opening);
+    assert.deepEqual(result.invented, ['6 years'], opening);
+  }
+});
+
 test('a plan answer does not support a past-experience claim with the same number', () => {
   const result = check(letter('I have 6 months of incident-response experience.'), ['I plan to review the last 6 months of incidents.']);
   assert.equal(result.verdict, 'block');
