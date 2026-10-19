@@ -530,6 +530,7 @@ const SYSTEM_PATHS = [
   'outcome.mjs',
   'batch/batch-prompt.md',
   'batch/batch-runner.sh',
+  'batch/jd-rescue.mjs',
   'batch/aggregate-tokens.mjs',
   'batch/README.md',
   'utils/token-tracker.mjs',
