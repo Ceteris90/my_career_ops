@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 console.log('\nplugins: community authors and the h1b-sponsor hint');
 
 const { registryAuthor } = await import(pathToFileURL(join(ROOT, 'plugins.mjs')).href);
+const { loadRegistry } = await import(pathToFileURL(join(ROOT, 'plugins', '_registry.mjs')).href);
 
 function check(ok, msg, detail = '') {
   if (ok) pass(msg);
@@ -39,6 +40,11 @@ function plugins(args) {
   const r = plugins(['available']);
   check(r.status === 0 && /Community plugins approved/.test(r.stdout) && !/by undefined/.test(r.stdout),
     'available lists community plugins without "by undefined"', r.stdout + r.stderr);
+  // Every shipped entry names its publisher, from author or the repo owner.
+  const missing = loadRegistry(ROOT).plugins
+    .filter((p) => !r.stdout.includes(`${p.name}  `) || !r.stdout.includes(`(by ${registryAuthor(p)}, v${p.version})`))
+    .map((p) => p.name);
+  check(missing.length === 0, 'available names the publisher of every registry entry', `missing: ${missing.join(', ')}`);
 }
 
 // The hook is called directly: a real `plugins.mjs run` pins plugins.lock in
