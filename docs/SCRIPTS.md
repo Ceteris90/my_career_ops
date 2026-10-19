@@ -848,6 +848,8 @@ Give a lane its own `CAREER_OPS_SCAN_HISTORY`, not just its own pipeline. That f
 
 Defaults are unchanged, so a single-lane setup needs none of this. Note that the remaining outputs (`data/scan-runs.tsv`, `data/portal-health.tsv`, `data/applications.md`) are still shared across lanes, so `stats.mjs` and the other analytics scripts pool lanes together.
 
+**Progress:** every 25 sources, and once at the end, the scan prints a line such as `[14:02:31] scan: 50/120 sources done` to stderr. It prints under `--quiet` too, so a long unattended scan never looks stalled, and it stays out of the `--json` receipt on stdout.
+
 **Exit codes:** `0` scan completed, `1` configuration error or no portals.yml found.
 
 ---
