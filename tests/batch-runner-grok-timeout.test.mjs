@@ -5,8 +5,8 @@
 // dispatch block and run_worker() from batch/batch-runner.sh and runs them
 // with a stub CLI on PATH, so the test cannot drift from the script.
 import { pass, fail, rmSync, getBash } from './helpers.mjs';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -92,6 +92,34 @@ if (dispatchBlock && runWorker) {
     else fail(`slow worker: ${JSON.stringify({ out: slow.out, seconds: slow.seconds })}`);
     if (/worker timed out after 2s/.test(slow.log)) pass('the timeout is written to the worker log, where the failure message is read from');
     else fail(`no timeout line in the worker log: ${JSON.stringify(slow.log.slice(-160))}`);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+// Bash arithmetic wraps past 2^63-1, and a value that wraps to 0 or below
+// would silently turn the watchdog off. Same bound as --limit.
+{
+  const work = mkdtempSync(join(tmpdir(), 'batch-worker-timeout-flag-'));
+  try {
+    const batch = join(work, 'batch');
+    mkdirSync(batch);
+    copyFileSync(join(ROOT, 'batch/batch-runner.sh'), join(batch, 'batch-runner.sh'));
+    writeFileSync(join(batch, 'batch-prompt.md'), 'Test prompt');
+    writeFileSync(join(batch, 'batch-input.tsv'), 'id\turl\tsource\tnotes\n1\thttps://jobs.fabrikam.example/1\ttest\t\n');
+    // The prerequisite check wants a CLI on PATH; a dry run never calls it.
+    const fakeBin = join(work, 'bin');
+    mkdirSync(fakeBin);
+    writeFileSync(join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 99\n', { mode: 0o755 });
+    const env = { ...process.env, PATH: fakeBin + delimiter + process.env.PATH };
+    const flag = (value) => spawnSync(getBash(), [join(batch, 'batch-runner.sh'), '--dry-run', '--model', 'test-model', '--worker-timeout', value], { encoding: 'utf8', timeout: 10000, env });
+    const rejected = ['9223372036854775808', '18446744073709551616', '0009223372036854775808', '99999999999999999999']
+      .filter((v) => { const r = flag(v); return !(r.status === 1 && /--worker-timeout must be at most 9223372036854775807/.test(r.stdout)); });
+    if (rejected.length === 0) pass('--worker-timeout rejects values Bash arithmetic would wrap');
+    else fail(`--worker-timeout accepted oversized values: ${rejected.join(', ')}`);
+    const accepted = ['0', '0009', '9223372036854775807'].filter((v) => flag(v).status !== 0);
+    if (accepted.length === 0) pass('--worker-timeout accepts 0, leading zeroes and the largest 64-bit value');
+    else fail(`--worker-timeout rejected valid values: ${accepted.join(', ')}`);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
