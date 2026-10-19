@@ -319,7 +319,7 @@ function readReply(root, args) {
   if (hasFlag(args, '--reply-file')) {
     const path = flagValue(args, '--reply-file');
     try {
-      reply = readFileSync(resolve(root, path), 'utf8').replace(/\s+$/, '');
+      reply = readFileSync(resolve(root, path), 'utf8');
     } catch {
       throw new InputError(`cannot read the reply from ${path}`);
     }
