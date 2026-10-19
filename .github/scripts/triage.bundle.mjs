@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // GENERADO por github-src/scripts/build.mjs: no editar a mano. Fuente: github-src/scripts/triage.mjs + bin/lib/triage-core.mjs + policy/*.json
-// {"builtAt":"2026-10-19T10:50:57.216Z","core":"bin/lib/triage-core.mjs","policies":{"labels":"8 entradas","trivial":"21 entradas","priority":"7 entradas"}}
+// {"builtAt":"2026-10-19T12:00:42.791Z","core":"bin/lib/triage-core.mjs","policies":{"labels":"8 entradas","trivial":"21 entradas","priority":"7 entradas"}}
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -99,8 +99,12 @@ const CR_SKIP_BOTS = new Set(['renovate', 'dependabot', 'github-actions', 'allco
 const CR_SKIP_TITLE = /^(chore\(main\): release|chore: release main)\b/i;
 const crSkipIntended = (author, title) => CR_SKIP_BOTS.has(String(author || '').toLowerCase().replace(/\[bot\]$/, '')) || CR_SKIP_TITLE.test(String(title || ''));
 /** Texto de un bloque de estado hasta lo plegado (ficheros, configuración: no es el motivo), sin comentarios HTML ni «> ». */
+// Sin comentarios HTML: se repite hasta que no cambie y luego se quita cualquier «<!--» suelto (CodeQL «incomplete multi-character
+// sanitization» en #5513: «<!-<!---->-» dejaba un «<!--» tras una pasada). El texto solo se compara con regex, pero así no queda duda.
 function crBlockText(raw) {
-  return String(raw || '').split(/<details/i)[0].replace(/<!--[\s\S]*?--!?>/g, '').replace(/^\s*>\s?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 400);
+  let t = String(raw || '').split(/<details/i)[0], prev;
+  do { prev = t; t = t.replace(/<!--[\s\S]*?--!?>/g, ''); } while (t !== prev);
+  return t.replace(/<!--|--!?>/g, '').replace(/^\s*>\s?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 400);
 }
 /**
  * Lo que dice el comentario-resumen de CodeRabbit (uno por PR, se edita en cada pasada). `blocks`: sus avisos de estado (límite, salto,
