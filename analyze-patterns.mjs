@@ -18,7 +18,7 @@ import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { load as yamlLoad } from 'js-yaml';
-import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
+import { resolveColumns, parseTrackerRow, normalizeVia, firstLinkTarget } from './tracker-parse.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput } from './tracker-utils.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
@@ -1338,17 +1338,17 @@ export function analyze(entries = parseTracker()) {
 
   // Enrich entries with report data and classification
   const enriched = entries.map(e => {
-    const reportMatch = e.report.match(/\]\(([^)]+)\)/);
+    const reportTarget = firstLinkTarget(e.report);
     // Tracker links are relative to the tracker file's own directory (see
     // merge-tracker.mjs link normalization); fall back to repo root for
     // legacy root-relative links. Each candidate is guarded to reports/
     // before the read is attempted; parseReport returns null for a missing
     // file, so no pre-flight existsSync is needed (#2385).
     let reportData = null;
-    if (reportMatch) {
+    if (reportTarget != null) {
       const candidates = new Set([
-        join(dirname(APPS_FILE), reportMatch[1]),
-        join(CAREER_OPS, reportMatch[1]),
+        join(dirname(APPS_FILE), reportTarget),
+        join(CAREER_OPS, reportTarget),
       ]);
       for (const candidate of candidates) {
         if (!withinReports(candidate)) continue;

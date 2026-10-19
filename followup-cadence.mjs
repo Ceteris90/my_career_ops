@@ -16,7 +16,7 @@ import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
 import { loadCanonicalStates, foldStatusInput } from './tracker-utils.mjs';
-import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
+import { resolveColumns, parseTrackerRow, firstLinkTarget } from './tracker-parse.mjs';
 import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
@@ -772,13 +772,13 @@ export function contactLabel(contact) {
 
 // --- Resolve report path ---
 export function resolveReportPath(reportField, appsFile = APPS_FILE, repoRoot = CAREER_OPS) {
-  const match = reportField.match(/\]\(([^)]+)\)/);
-  if (!match) return null;
+  const target = firstLinkTarget(reportField);
+  if (target == null) return null;
   // Report links in the tracker are normalized relative to the tracker file's
   // own directory (see PR #760 — `merge-tracker.mjs --migrate`). Resolve against
   // dirname(APPS_FILE), not the project root, otherwise relative paths like
   // `../reports/...` (the data/applications.md layout) escape above the project.
-  const fullPath = join(dirname(appsFile), match[1]);
+  const fullPath = join(dirname(appsFile), target);
   const repoRelative = relative(repoRoot, fullPath).split(sep).join('/');
   if (repoRelative.startsWith('../') || repoRelative === '..' || !repoRelative.startsWith('reports/')) return null;
   return existsSync(fullPath) ? repoRelative : null;
