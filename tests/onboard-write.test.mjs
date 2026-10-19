@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -158,6 +158,36 @@ test('--force --only rewrites one file and leaves the other as the user edited i
     const bad = spawnSync(process.execPath, [SCRIPT, '--answers', join(dir, 'answers.json'), '--target', dir, '--only', 'cv'], { encoding: 'utf8', env });
     assert.equal(bad.status, 1);
     assert.match(bad.stderr, /--only takes profile or portals/);
+  } finally { cleanup(dir); }
+});
+
+test('a flag with no value, or with another flag as its value, exits 1 and writes nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'onboard-write-'));
+  try {
+    const file = join(dir, 'answers.json');
+    writeFileSync(file, JSON.stringify(ANSWERS));
+    const env = { ...process.env };
+    delete env.CAREER_OPS_ROOT;
+    for (const args of [['--answers', file, '--target', dir, '--only'], ['--answers', file, '--target', dir, '--only', '--force'], ['--answers', file, '--target'], ['--answers', '--force']]) {
+      const res = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env });
+      assert.equal(res.status, 1, args.join(' '));
+      assert.match(res.stderr, /needs a value/, args.join(' '));
+    }
+    assert.equal(existsSync(join(dir, 'portals.yml')), false);
+  } finally { cleanup(dir); }
+});
+
+test('a forced rewrite replaces the file whole and leaves no temp files behind', () => {
+  const { dir, res } = run(ANSWERS);
+  try {
+    assert.equal(res.status, 0, res.stderr);
+    const env = { ...process.env };
+    delete env.CAREER_OPS_ROOT;
+    const again = spawnSync(process.execPath, [SCRIPT, '--answers', join(dir, 'answers.json'), '--target', dir, '--force'], { encoding: 'utf8', env });
+    assert.equal(again.status, 0, again.stderr);
+    assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith('.tmp')), []);
+    assert.deepEqual(readdirSync(join(dir, 'config')).filter((f) => f.endsWith('.tmp')), []);
+    assert.ok(yaml.load(readFileSync(join(dir, 'portals.yml'), 'utf8')).title_filter);
   } finally { cleanup(dir); }
 });
 
