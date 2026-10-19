@@ -40,9 +40,11 @@ function plugins(args) {
   const r = plugins(['available']);
   check(r.status === 0 && /Community plugins approved/.test(r.stdout) && !/by undefined/.test(r.stdout),
     'available lists community plugins without "by undefined"', r.stdout + r.stderr);
-  // Every shipped entry names its publisher, from author or the repo owner.
+  // Each entry names its publisher, from author or the repo owner, and an
+  // entry with neither shows only its version.
+  const suffix = (p) => (registryAuthor(p) ? `(by ${registryAuthor(p)}, v${p.version})` : `(v${p.version})`);
   const missing = loadRegistry(ROOT).plugins
-    .filter((p) => !r.stdout.includes(`${p.name}  `) || !r.stdout.includes(`(by ${registryAuthor(p)}, v${p.version})`))
+    .filter((p) => !r.stdout.split('\n').some((l) => l.includes(`${p.name}  `) && l.includes(suffix(p))))
     .map((p) => p.name);
   check(missing.length === 0, 'available names the publisher of every registry entry', `missing: ${missing.join(', ')}`);
 }
