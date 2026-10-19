@@ -2118,7 +2118,9 @@ export function verifyFacts(targetText, {
  * same clause ("…and will review incidents"), that marker must not pull the
  * past metric into the plan set.
  */
-const PAST_TIME_CLAIM_RE = /\b(?:have|has|had|spent|worked)\s+(?:[\p{L}\p{M}-]+\s+){0,4}\d[\d,.]*\s*\+?\s*(?:months|years|weeks|days)\b/iu;
+const PAST_TIME_CLAIM_RE = /\b(?:have|has|had|spent|worked)\s+(?:[\p{L}\p{M}-]+\s+){0,4}\d[\d,.]*\s*\+?\s*(?:months|years|weeks|days)\b/giu;
+const PAST_PERCENT_CLAIM_RE = /\b(?:grew|increased|improved|reduced|generated|achieved|delivered|managed|led)\b[^.!?;\n]{0,80}?\d[\d,.]*\s*(?:%|(?:percent|per\s?cent|pct)\b)/giu;
+const DURATION_INTRO_RE = /^\s*(?:over|in|within|for|during|across)\b[^,;:]*?\d[\d,.]*\s*\+?\s*(?:days|weeks|months|years)\s*$/i;
 
 /**
  * Sentence bounds at `.`, `!`, `?`, or newline — used so a duration intro
@@ -2138,10 +2140,24 @@ function sentenceBounds(text, index) {
   return { start, end };
 }
 
-/** True when the assertion states a plan for its metrics, not past experience. */
+/** Metrics a past-claim pattern matches. A forward marker ends that region, so a later metric stays eligible as a plan. */
+function pastClaimMetrics(span) {
+  const marker = span.match(FORWARD_MARKER_RE);
+  const region = marker ? span.slice(0, marker.index) : span;
+  const claims = new Set();
+  for (const pattern of [PAST_TIME_CLAIM_RE, PAST_PERCENT_CLAIM_RE]) {
+    pattern.lastIndex = 0;
+    for (const match of region.matchAll(pattern)) {
+      for (const claim of metricClaims(match[0], { keepPlanHorizons: true })) claims.add(claim);
+    }
+  }
+  return claims;
+}
+
+/** True when a metric in this span can be a plan. A sentence-level marker counts only for a duration introduction. */
 function isPlanAssertion(span, sentence) {
-  if (PAST_TIME_CLAIM_RE.test(span)) return false;
-  return FORWARD_MARKER_RE.test(span) || FORWARD_MARKER_RE.test(sentence);
+  if (FORWARD_MARKER_RE.test(span)) return true;
+  return DURATION_INTRO_RE.test(span) && FORWARD_MARKER_RE.test(sentence);
 }
 
 /**
@@ -2171,8 +2187,13 @@ function plannedClaims(targetText, planTexts) {
     const span = clean.slice(start, end);
     const { start: s0, end: s1 } = sentenceBounds(clean, i);
     const sentence = clean.slice(s0, s1);
-    const tense = isPlanAssertion(span, sentence) ? forward : past;
-    for (const claim of metricClaims(clean.slice(i, end))) tense.add(claim);
+    const planAssertion = isPlanAssertion(span, sentence);
+    const pastInSpan = pastClaimMetrics(span);
+    for (const claim of metricClaims(clean.slice(i, end))) {
+      if (pastInSpan.has(claim)) past.add(claim);
+      else if (planAssertion) forward.add(claim);
+      else past.add(claim);
+    }
     i = end + 1;
   }
   return new Set([...forward].filter(claim => inPlans.has(claim) && !past.has(claim)));
