@@ -165,10 +165,12 @@ function resolveScore(stateScore, reportFile) {
   return 'N/A';
 }
 
+// The batch report header names the PDF path when one was generated, and
+// otherwise says "not generated" in the user's output language. Only the path
+// is the same in every language.
 function resolvePdf(reportFile) {
   const rep = readReportField(reportFile, 'PDF');
-  if (!rep) return '❌';
-  return /not generated/i.test(rep) ? '❌' : '✅';
+  return rep && (/\.pdf\b/i.test(rep) || rep.includes('✅')) ? '✅' : '❌';
 }
 
 // ---- parse pipeline.md ----
