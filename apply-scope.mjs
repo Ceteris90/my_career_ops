@@ -1,12 +1,3 @@
-// apply-scope.mjs is the boundary for apply.
-//
-// Apply may read this checkout and, when the user set one, the data root.
-// It may launch a new Playwright browser. It may not search the home
-// directory, open another install, or attach to a browser that is already
-// running. modes/apply.md and AGENTS.md tell the agent to call this module.
-// The checks live here so a script that imports them cannot widen the boundary
-// by passing a debugging port or an outside path.
-
 import { realpathSync } from 'node:fs';
 import { isAbsolute, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

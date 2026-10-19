@@ -118,10 +118,6 @@ async function enrichFromAts(url: string, fields: ApplyField[]): Promise<void> {
   }
 }
 
-// One headed page stays open so the user can review the filled form and submit
-// it themselves. apply-scope.mjs builds the launch object. Playwright starts a
-// new window with a temporary profile. channel:chrome selects the Chrome
-// binary for ATS sites that reject bundled Chromium.
 type Session = { id: string; url: string; title: string; fields: ApplyField[]; context: BrowserContext; page: Page; frame: Frame; createdAt: number; formShot?: string };
 
 declare global {
