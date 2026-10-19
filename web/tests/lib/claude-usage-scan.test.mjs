@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fsPromises from "node:fs/promises";
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, utimesSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createUsageScanner } from "../../src/lib/claude-usage-scan.mjs";
@@ -19,8 +19,9 @@ const line = (hoursAgo, input, extra = {}) =>
 
 // Counts bytes the scanner reads, so a test can tell "read the new part" from
 // "read the whole file again".
-function countingFs() {
-  const stats = { bytes: 0, opens: 0 };
+// `maxRead` caps what one read() returns, to exercise short reads.
+function countingFs({ maxRead = Infinity } = {}) {
+  const stats = { bytes: 0, opens: 0, reads: 0 };
   const fs = {
     ...fsPromises,
     async open(p, flags) {
@@ -28,10 +29,12 @@ function countingFs() {
       const h = await fsPromises.open(p, flags);
       return {
         async read(buf, off, len, pos) {
-          const r = await h.read(buf, off, len, pos);
+          stats.reads++;
+          const r = await h.read(buf, off, Math.min(len, maxRead), pos);
           stats.bytes += r.bytesRead;
           return r;
         },
+        stat: () => h.stat(),
         close: () => h.close(),
       };
     },
@@ -115,20 +118,102 @@ test("a file that got shorter is read again from the start", async () => {
   }
 });
 
-test("files untouched for over a week, or deleted, drop out", async () => {
+test("a file untouched for over a week is skipped, and a cached one drops out", async () => {
   const root = setup();
   try {
     const stale = join(root, "proj-a", "old.jsonl");
-    const live = join(root, "proj-a", "live.jsonl");
     writeFileSync(stale, line(1, 50));
     const old = new Date(NOW - 9 * 24 * HOUR);
     utimesSync(stale, old, old);
-    writeFileSync(live, line(1, 4));
+    // Dated three days ahead, so at NOW + 9 days its event is still inside the
+    // 7-day window: only the file's own mtime can drop it.
+    const cached = join(root, "proj-a", "cached.jsonl");
+    writeFileSync(cached, line(-3 * 24, 4));
+    utimesSync(cached, new Date(NOW), new Date(NOW));
     let t = NOW;
     const scanner = createUsageScanner({ root, now: () => t });
     assert.equal((await scanner.compute()).window7d.tokens, 4, "an old-mtime file is skipped");
+    t = NOW + 9 * 24 * HOUR;
+    assert.equal((await scanner.compute()).window7d.tokens, 0, "a cached file whose mtime aged out stops counting");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a deleted file stops counting", async () => {
+  const root = setup();
+  try {
+    const live = join(root, "proj-a", "live.jsonl");
+    writeFileSync(live, line(1, 4));
+    const scanner = createUsageScanner({ root, now: () => NOW });
+    assert.equal((await scanner.compute()).window7d.tokens, 4);
     rmSync(live);
-    assert.equal((await scanner.compute()).window7d.tokens, 0, "a deleted file stops counting");
+    assert.equal((await scanner.compute()).window7d.tokens, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a transcript larger than one read chunk counts every line, across chunk boundaries", async () => {
+  const root = setup();
+  try {
+    // ~2.6 MB: three 1 MiB chunks, with lines straddling both boundaries.
+    const one = line(1, 3, { cache_creation_input_tokens: 1 });
+    const n = Math.ceil((2.5 * (1 << 20)) / Buffer.byteLength(one));
+    writeFileSync(join(root, "proj-a", "big.jsonl"), one.repeat(n));
+    const r = await createUsageScanner({ root, now: () => NOW }).compute();
+    assert.equal(r.window5h.messages, n);
+    assert.equal(r.window5h.tokens, 4 * n);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("short reads are retried until the range is read", async () => {
+  const root = setup();
+  try {
+    const n = 500;
+    writeFileSync(join(root, "proj-a", "s1.jsonl"), line(1, 2).repeat(n));
+    const { fs, stats } = countingFs({ maxRead: 97 });
+    const scanner = createUsageScanner({ root, now: () => NOW, fs });
+    assert.equal((await scanner.compute()).window5h.messages, n);
+    assert.ok(stats.reads > 1, "test premise: the reads really were short");
+    stats.opens = 0;
+    assert.equal((await scanner.compute()).window5h.messages, n);
+    assert.equal(stats.opens, 0, "nothing left unread for the next scan to find");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a file replaced by a larger one is read again from the start", async () => {
+  const root = setup();
+  try {
+    const file = join(root, "proj-a", "s1.jsonl");
+    writeFileSync(file, line(1, 10) + line(1, 10));
+    const scanner = createUsageScanner({ root, now: () => NOW });
+    assert.equal((await scanner.compute()).window5h.tokens, 20);
+    // A new file (new inode) moved over the old one, longer than it was.
+    const replacement = join(root, "proj-a", "s1.jsonl.tmp");
+    writeFileSync(replacement, line(1, 1) + line(1, 1) + line(1, 1));
+    renameSync(replacement, file);
+    assert.equal((await scanner.compute()).window5h.tokens, 3);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the same size with a new mtime is a rewrite, not an append", async () => {
+  const root = setup();
+  try {
+    const file = join(root, "proj-a", "s1.jsonl");
+    writeFileSync(file, line(1, 10));
+    utimesSync(file, new Date(NOW - HOUR), new Date(NOW - HOUR));
+    const scanner = createUsageScanner({ root, now: () => NOW });
+    assert.equal((await scanner.compute()).window5h.tokens, 10);
+    writeFileSync(file, line(1, 20)); // same byte length, rewritten in place
+    utimesSync(file, new Date(NOW), new Date(NOW));
+    assert.equal((await scanner.compute()).window5h.tokens, 20);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
