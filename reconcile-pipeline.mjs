@@ -102,11 +102,14 @@ for (const line of readFileSync(STATE_FILE, 'utf-8').split(/\r?\n/)) {
   if (!line.trim() || line.startsWith('id\t')) continue;
   const c = line.split('\t');
   if (c.length < 7) continue;
-  const [, url, status, , , reportNum, score] = c;
-  // "completed" and "skipped" (below --min-score) both produced a report.
+  const [, url, status, , , reportNum, score, error] = c;
+  // "completed" and "skipped" (below --min-score) both produced a report. A
+  // dealbreaker skip (batch-prompt.md Step 1.6) is finished without one: its
+  // SKIP tracker row is the record.
   if (status !== 'completed' && status !== 'skipped') continue;
   if (!url || !url.trim()) continue;
-  DONE.set(url.trim(), { reportNum: (reportNum || '').trim(), score: (score || '').trim() });
+  const dealbreaker = status === 'skipped' && (error || '').startsWith('dealbreaker:');
+  DONE.set(url.trim(), { reportNum: (reportNum || '').trim(), score: (score || '').trim(), dealbreaker });
 }
 
 if (DONE.size === 0) {
@@ -240,6 +243,15 @@ function reconcile() {
       // Already recorded in Procesadas — just drop the stale Pendientes copy.
       removeIdx.add(i);
       moved.push({ url, role: '(already in Procesadas)', dup: true });
+      continue;
+    }
+
+    if (done.dealbreaker) {
+      const [, company = '', role = ''] = body.split('|').map(s => s.trim());
+      movedProcLines.push(`- [x] SKIP | ${url} | ${company} | ${role} | N/A | PDF ❌`);
+      moved.push({ url, company, role, num: '-', score: 'SKIP, dealbreaker' });
+      procUrls.add(url);
+      removeIdx.add(i);
       continue;
     }
 
