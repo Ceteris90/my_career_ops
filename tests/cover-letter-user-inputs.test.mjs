@@ -53,9 +53,41 @@ test('a number in neither the career files nor the candidate inputs still blocks
 
 test('a plan-horizon number in the answers still supports the letter restating it', () => {
   const plan = 'In my first 6 months, I will audit the service.';
-  const result = check(letter('Over 6 months, I will audit the service.'), [plan]);
-  assert.equal(result.verdict, 'pass', result);
-  assert.deepEqual(result.invented, []);
+  for (const opening of [
+    'Over 6 months, I will audit the service.',
+    'In my first 6 months, I will audit the service.',
+  ]) {
+    const result = check(letter(opening), [plan]);
+    assert.equal(result.verdict, 'pass', result);
+    assert.deepEqual(result.invented, []);
+  }
+});
+
+test('a sentence-level plan marker does not support a past headcount', () => {
+  const result = check(
+    letter('I managed 12 engineers, and I will do the same here.'),
+    ['I will manage 12 engineers.'],
+  );
+  assert.equal(result.verdict, 'block');
+  assert.deepEqual(result.invented, ['12 engineers']);
+});
+
+test('a plan answer does not support a past percentage the letter repeats', () => {
+  const result = check(
+    letter('I grew revenue 40% and will repeat it.'),
+    ['I will grow revenue 40%.'],
+  );
+  assert.equal(result.verdict, 'block');
+  assert.deepEqual(result.invented, ['40%']);
+});
+
+test('a later percentage in the same sentence can still be the plan', () => {
+  const result = check(
+    letter('I grew revenue 40% and will grow it 50%.'),
+    ['I will grow revenue 50%.'],
+  );
+  assert.equal(result.verdict, 'block');
+  assert.deepEqual(result.invented, ['40%']);
 });
 
 test('a forward marker later in the same clause does not admit a past-experience metric', () => {
@@ -130,7 +162,11 @@ function runCover(payload) {
   writeFileSync(join(dir, 'cv.md'), 'Avery Quinn builds ledger services.\n');
   const payloadPath = join(dir, 'payload.json');
   writeFileSync(payloadPath, JSON.stringify({ ...payload, output_path: 'output/letter.pdf' }));
-  const result = spawnSync(process.execPath, [join(ROOT, 'generate-cover-letter.mjs'), '--payload', payloadPath], {
+  const result = spawnSync(process.execPath, [
+    '--import', join(ROOT, 'tests', 'fixtures', 'cover-pdf-register.mjs'),
+    join(ROOT, 'generate-cover-letter.mjs'),
+    '--payload', payloadPath,
+  ], {
     cwd: dir,
     encoding: 'utf-8',
     timeout: 60_000,
