@@ -66,8 +66,10 @@ const REASON_MAX = 140;
 // the built-in tools and --disallowedTools "*" drops MCP tools as well. grok
 // has no switch that removes every tool, and --max-turns stops it before it
 // answers, so it denies the tools that run commands, fetch, write, or reach
-// MCP servers. codex refuses to start outside a git repository without
-// --skip-git-repo-check, and every call runs in an empty temp dir.
+// MCP servers. opencode has no flag, so its inline config denies every
+// permission, and pi takes --no-tools. codex refuses to start outside a git
+// repository without --skip-git-repo-check, and every call runs in an empty
+// temp dir.
 const GROK_DENIED_TOOLS = [
   'run_terminal_command', 'web_fetch', 'use_tool', 'search_tool', 'spawn_subagent', 'workflow',
   'monitor', 'scheduler_create', 'write', 'search_replace', 'read_file', 'list_dir', 'grep',
@@ -75,13 +77,13 @@ const GROK_DENIED_TOOLS = [
 
 export const CLI_CANDIDATES = [
   { bin: 'claude', args: p => ['-p', p, '--tools', '', '--disallowedTools', '*'] },
-  { bin: 'opencode', args: p => ['run', p] },
+  { bin: 'opencode', args: p => ['run', p], env: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'deny' }) } },
   { bin: 'codex', args: p => ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', p] },
   { bin: 'copilot', args: p => ['-p', p] },
   { bin: 'qwen', args: p => ['-p', p] },
   { bin: 'agy', id: 'antigravity', args: p => ['-p', p] },
   { bin: 'grok', args: p => ['-p', p, '--disable-web-search', '--disallowed-tools', GROK_DENIED_TOOLS] },
-  { bin: 'pi', args: p => ['-p', p] },
+  { bin: 'pi', args: p => ['--no-tools', '-p', p] },
 ];
 
 const USAGE = `
@@ -302,6 +304,7 @@ function callCli(cli, prompt, model, timeout) {
     // ERR_CHILD_PROCESS_STDIO_MAXBUFFER and fails the batch for no good reason.
     return execFileSync(cli.bin, args, {
       cwd,
+      env: { ...process.env, ...cli.env },
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
       timeout,
@@ -409,6 +412,7 @@ async function main(args) {
     if (!results.length) {
       console.error(`  ${label}: no usable JSON in response — entries left un-annotated`);
       skippedBatches += 1;
+      failedCalls += 1;
       unranked.push(...batch.map(entry => ({ entry, why: `${label}: no usable JSON` })));
       continue;
     }

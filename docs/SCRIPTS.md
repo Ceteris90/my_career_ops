@@ -1197,11 +1197,12 @@ before running this on sensitive CV content.
 Each call asks for one answer, not an agent session. It runs in an empty temp
 directory, and where the CLI has a switch for it, with tools off
 (`claude --tools "" --disallowedTools "*"`, `grok --disallowed-tools` for its shell, fetch, write and
-MCP tools, `codex exec --sandbox read-only`). The prompt asks for scores from
+MCP tools, `codex exec --sandbox read-only`, `pi --no-tools`, and opencode with
+`OPENCODE_CONFIG_CONTENT` denying every permission). The prompt asks for scores from
 the listed company, title and URL text, without opening the postings.
 A call times out after 180 s; set `CAREER_OPS_RANK_TIMEOUT_MS` to change that.
 Every row left unranked is listed with the reason, and a run where every call
-fails exits 1, `--dry-run` included.
+fails or returns no usable JSON exits 1, `--dry-run` included.
 
 ```bash
 node rank-pipeline.mjs                  # rank up to 20 pending entries
