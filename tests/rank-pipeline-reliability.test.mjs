@@ -18,20 +18,20 @@ import { CLI_CANDIDATES, buildPrompt, resolveRankTimeoutMs } from '../rank-pipel
 const POSIX = { skip: process.platform === 'win32' && 'POSIX executable fixture' };
 const ROWS = Array.from({ length: 12 }, (_, i) => `- [ ] https://example.test/${i} | Example | Engineer ${i}`);
 
-function sandbox(t, cliBody) {
+function sandbox(t, cliBody, bin = 'grok') {
   const root = mkdtempSync(join(tmpdir(), 'rank-reliability-'));
   t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   mkdirSync(join(root, 'data'));
   mkdirSync(join(root, 'bin'));
   writeFileSync(join(root, 'data', 'pipeline.md'), `${ROWS.join('\n')}\n`);
-  const binary = join(root, 'bin', 'grok');
+  const binary = join(root, 'bin', bin);
   writeFileSync(binary, `#!${process.execPath}\nconst fs = require('node:fs');\n${cliBody}\n`);
   chmodSync(binary, 0o755);
   return root;
 }
 
-function rank(root, args = [], extra = {}) {
-  const result = spawnSync(process.execPath, [join(ROOT, 'rank-pipeline.mjs'), '--cli', 'grok', ...args], {
+function rank(root, args = [], extra = {}, bin = 'grok') {
+  const result = spawnSync(process.execPath, [join(ROOT, 'rank-pipeline.mjs'), '--cli', bin, ...args], {
     cwd: root,
     encoding: 'utf8',
     timeout: 60_000,
@@ -54,6 +54,14 @@ test('each CLI is asked for one answer with no tools or extra turns', () => {
     assert.ok(denied.includes(tool), `grok keeps ${tool}`);
   }
   assert.deepEqual(args('codex'), ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', 'PROMPT']);
+  assert.deepEqual(args('pi'), ['--no-tools', '-p', 'PROMPT']);
+});
+
+test('opencode runs with every permission denied', POSIX, (t) => {
+  const root = sandbox(t, `fs.writeFileSync(process.env.RANK_ENV, process.env.OPENCODE_CONFIG_CONTENT ?? '');\n${SCORE_ALL}`, 'opencode');
+  const result = rank(root, ['--dry-run'], { RANK_ENV: join(root, 'env.txt'), OPENCODE_CONFIG_CONTENT: '' }, 'opencode');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(root, 'env.txt'), 'utf8')), { permission: 'deny' });
 });
 
 test('the prompt asks for a score from the listed text, not from fetching the postings', () => {
@@ -92,6 +100,13 @@ test('a dry run where every call fails exits 1', POSIX, (t) => {
   const result = rank(root, ['--dry-run']);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Every call to grok failed/);
+});
+
+test('a run where no call returns usable JSON exits 1', POSIX, (t) => {
+  const root = sandbox(t, `console.log('I could not score these postings.');`);
+  const result = rank(root, ['--dry-run']);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /no usable JSON/);
 });
 
 test('rows the model skipped are named, not left silently unranked', POSIX, (t) => {
