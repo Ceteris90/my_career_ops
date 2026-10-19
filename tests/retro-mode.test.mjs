@@ -40,6 +40,7 @@ const FILES = {
   'config/profile.yml': 'candidate:\n  full_name: Example Person\n',
 };
 const PROTECTED = ['cv.md', 'article-digest.md', 'config/profile.yml'];
+const REPLY = 'accept 1, reject 2. "Thanks" $(touch pwned) `id`, it\'s fine';
 
 function scratchRoot() {
   const root = mkdtempSync(join(tmpdir(), 'retro-mode-'));
@@ -53,7 +54,7 @@ function scratchRoot() {
 function argv(line, root, fill) {
   let text = line.replaceAll('{DATA_ROOT}', root);
   for (const [slot, value] of Object.entries(fill)) text = text.replaceAll(slot, value);
-  const words = [...text.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
+  const words = text.trim().split(/\s+/);
   assert(words[0] === 'node' && words[1] === 'learn.mjs', `not a learn.mjs command: ${line}`);
   return words.slice(2);
 }
@@ -94,12 +95,10 @@ if (checkCommand && applyCommand) {
       const pending = checked.stdout.match(/Pending: (\S+)/)?.[1];
       assert(pending, `the check output names no pending file:\n${checked.stdout}`);
 
-      const applied = run(root, argv(applyCommand, root, {
-        '{pending}': pending,
-        '{accepted ids}': '1',
-        '{rejected ids}': '2',
-        "{the user's reply, verbatim}": 'accept 1, reject 2',
-      }));
+      const replyFile = applyCommand.match(/--reply-file \{DATA_ROOT\}\/(\S+)/)?.[1];
+      assert(replyFile, `the apply command does not read the reply from a file under {DATA_ROOT}: ${applyCommand}`);
+      writeFileSync(join(root, replyFile), `${REPLY}\n`);
+      const applied = run(root, argv(applyCommand, root, { '{pending}': pending, '{accepted ids}': '1', '{rejected ids}': '2' }));
       assert(applied.status === 0, describeSpawn(applied, 'documented apply should succeed'));
       const after = Object.fromEntries(Object.keys(FILES).map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
       const [first, second] = candidates.map((c) => c.change.text);
@@ -109,7 +108,7 @@ if (checkCommand && applyCommand) {
       for (const rel of PROTECTED) assert(after[rel] === FILES[rel], `${rel} changed`);
       const ledger = readFileSync(join(root, 'data/learning/ledger.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
       assert(ledger.map((e) => `${e.id}:${e.decision}`).join(' ') === '1:accepted 2:rejected', `ledger: ${JSON.stringify(ledger)}`);
-      assert(ledger.every((e) => e.reply === 'accept 1, reject 2'), 'the ledger does not carry the reply verbatim');
+      assert(ledger.every((e) => e.reply === REPLY), `the ledger does not carry the reply verbatim: ${JSON.stringify(ledger[0].reply)}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
