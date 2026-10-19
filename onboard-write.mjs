@@ -3,11 +3,12 @@
 // answers. The templates are copied line for line and only the answered
 // fields change, so every comment and every tracked company survives.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
+import { writeFileAtomic } from './tracker-utils.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -46,12 +47,17 @@ class AnswerError extends Error {}
 
 function parseArgs(argv) {
   const opts = { force: false };
+  const value = (i, flag) => {
+    const v = argv[i];
+    if (v === undefined || (v.startsWith('-') && v !== '-')) throw new AnswerError(`${flag} needs a value`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--answers') opts.answers = argv[++i];
-    else if (a === '--target') opts.target = argv[++i];
+    if (a === '--answers') opts.answers = value(++i, a);
+    else if (a === '--target') opts.target = value(++i, a);
     else if (a === '--force') opts.force = true;
-    else if (a === '--only') opts.only = argv[++i];
+    else if (a === '--only') opts.only = value(++i, a);
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new AnswerError(`unknown argument: ${a}`);
   }
@@ -316,7 +322,7 @@ export function main(argv = process.argv.slice(2)) {
   planned.forEach((t, i) => {
     if (t.keep) return;
     mkdirSync(dirname(t.path), { recursive: true });
-    writeFileSync(t.path, texts[i]);
+    writeFileAtomic(t.path, texts[i]);
   });
   console.log(JSON.stringify({
     written: planned.filter((t) => !t.keep).map((t) => t.rel),
