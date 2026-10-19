@@ -636,7 +636,9 @@ export function extractTrackerReportNumbers(reportCell, notesCell = '') {
 }
 
 export function linkedReportNumbers(reportCell, notesCell) {
-  if (firstLinkTarget(reportCell) == null) return extractTrackerReportNumbers(reportCell, notesCell);
+  // Link syntax decides the Notes fallback, not a parsed target: `[1](<missing)`
+  // is a present-but-invalid link and must not borrow a number from Notes.
+  if (!/\[[^\]]*\]\(/.test(String(reportCell ?? ''))) return extractTrackerReportNumbers(reportCell, notesCell);
   // Reuse the tracker's canonical local-target validation. It rejects HTTP(S)
   // and protocol-relative links, and returns both numbers on a label/target
   // mismatch. Exactly one number therefore proves a local, self-consistent

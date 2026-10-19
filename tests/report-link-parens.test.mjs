@@ -66,12 +66,19 @@ test('linkedReportNumbers still reads a parenthesised Report link', () => {
   assert.deepEqual(linkedReportNumbers(LINK, ''), [1]);
 });
 
+test('a malformed Report link does not fall back to a Notes link', () => {
+  // Link syntax whose destination cannot be parsed is a present-but-invalid
+  // link, not an empty Report cell.
+  assert.deepEqual(linkedReportNumbers('[1](<missing)', '[2](../reports/002-b.md)'), []);
+  assert.deepEqual(linkedReportNumbers('—', '[2](../reports/002-b.md)'), [2]);
+});
+
 test('set-status --report-link updates a row whose report name holds parentheses', (t) => {
   const f = fixture(t);
   const r = run(f, 'set-status.mjs', ['--report-link', '1', 'Applied', '--json']);
   assert.equal(r.status, 0, describeSpawn(r));
   assert.equal(JSON.parse(r.stdout).newStatus, 'Applied');
-  assert.match(readFileSync(f.tracker, 'utf-8'), new RegExp(`\\| Applied \\| ❌ \\| ${LINK.replace(/[[\]().]/g, '\\$&')} \\|`));
+  assert.ok(readFileSync(f.tracker, 'utf-8').includes(`| Applied | ❌ | ${LINK} |`), 'the Report cell must be written back unchanged');
 });
 
 test('findDeadReportLink sees the whole parenthesised target', (t) => {

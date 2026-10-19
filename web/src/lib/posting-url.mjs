@@ -49,8 +49,7 @@ function linkDestination(raw) {
 }
 
 /**
- * Every markdown-link target in a tracker cell, in order, with any `<…>`
- * wrapper removed.
+ * Every markdown-link target in a tracker cell, in order.
  * The walk matches tracker-parse.mjs `parseMarkdownLinks`: the label ends at
  * an unescaped `]`, the destination ends at the matching `)`, and a `\` skips
  * the next character.
@@ -93,7 +92,7 @@ function markdownLinkTargets(value) {
     }
 
     const target = linkDestination(value.slice(labelEnd + 2, linkEnd));
-    if (target != null) targets.push(String(target).trim().replace(/^<|>$/g, ""));
+    if (target != null) targets.push(target);
     cursor = linkEnd + 1;
   }
   return targets;
@@ -105,13 +104,17 @@ function markdownLinkTargets(value) {
  * @returns {string|null}
  */
 function firstHttpMarkdownTarget(value) {
-  return markdownLinkTargets(value).find((href) => /^https?:\/\//i.test(href)) ?? null;
+  // The `<…>` strip mirrors tracker-parse.mjs `extractCellUrl`, so both read
+  // the same href from a URL cell.
+  const hrefs = markdownLinkTargets(value).map((target) => String(target).trim().replace(/^<|>$/g, ""));
+  return hrefs.find((href) => /^https?:\/\//i.test(href)) ?? null;
 }
 
 /**
  * First markdown-link target in a tracker cell, such as the report path in
  * `[1](../reports/001-acme-(berlin)-2026-10-01.md)`, or null when the cell
- * holds no link. Balanced parentheses stay in the target (#5482).
+ * holds no link. Balanced parentheses stay in the target (#5482). Same result
+ * as tracker-parse.mjs `firstLinkTarget`.
  * @param {string | null | undefined} cell
  * @returns {string|null}
  */
