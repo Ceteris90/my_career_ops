@@ -81,3 +81,15 @@ function entryAfterApplying(notes, appliedOn) {
   eq('an apply date written in the notes still wins', entry?.appliedDate, notesDate);
   eq('the notes date keeps its notes label', entry?.appDateSource, 'notes');
 }
+
+{
+  const dir = makeRoot('careers page');
+  try {
+    run('set-status.mjs', ['1', 'Applied'], dir);
+    writeFileSync(join(dir, 'data', 'status-log.tsv'), '1\t2026-02-30\tEvaluated\tApplied\tset-status\t\n');
+    const entry = JSON.parse(run('followup-cadence.mjs', [], dir)).entries.find(e => e.num === 1);
+    eq('an impossible ledger date falls back to the evaluation date', entry?.appDateSource, 'evaluation-date-fallback');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
