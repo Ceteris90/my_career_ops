@@ -33,7 +33,25 @@ test('_shared.md defines when a run is unattended and the one closing line', () 
   assert.ok(section.includes('needs_confirmation: {gate} {detail} - {resume}'));
   assert.match(section, /never end on a question/i);
   assert.match(section, /update/i);
+  assert.match(section, /already carries[^.]*resolves that gate/i, 'a decision in the prompt must resolve its gate');
+  assert.match(section, /same item/i, 'an approval binds to the item it names');
 });
+
+const GATE_DETAILS = {
+  oferta: [/needs_confirmation: posting_closed /, /needs_confirmation: jd_unavailable /],
+  'auto-pipeline': [/needs_confirmation: posting_closed /, /needs_confirmation: jd_unavailable /],
+  apply: [/needs_confirmation: blacklist /, /tailored CV/],
+  add: [/needs_confirmation: add_input /, /unless the prompt already approves/i],
+  expand: [/github-evidence\.mjs/, /unless the prompt already approves/i],
+  intake: [/unless the prompt already approves/i],
+};
+
+for (const [mode, patterns] of Object.entries(GATE_DETAILS)) {
+  test(`${mode} covers each of its gates in the unattended paragraph`, () => {
+    const paragraph = unattendedParagraph(read(`modes/${mode}.md`));
+    for (const pattern of patterns) assert.match(paragraph, pattern);
+  });
+}
 
 test('the closing-line format also fits the dealbreaker gate line', () => {
   assert.match('needs_confirmation: dealbreaker "No fully on-site roles" - rerun with "evaluate anyway" to evaluate', LINE);
