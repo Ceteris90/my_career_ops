@@ -2,7 +2,7 @@
 
 Turn the user's corrections from this session into at most five proposed rules. `learn.mjs` checks each one, and only the ids the user accepts reach `modes/_custom.md` or `modes/_profile.md`. Run this mode when the user asks ("let's do a retro", "remember this next time") or accepts the offer at the end of a session.
 
-**Unattended runs.** A retro needs the user. In a delegated, batch, or headless run (`CAREER_OPS_HEADLESS=1`, `CAREER_OPS_BATCH_STATE`, `-p`, `exec`, or a subagent), do not ask, do not run `learn.mjs`, write nothing, and end with exactly this line:
+**Unattended runs.** A retro needs the user. A run is unattended when `CAREER_OPS_HEADLESS` or `CAREER_OPS_BATCH_STATE` is set, when the request says it is headless, unattended, or non-interactive, when it tells you not to ask or wait, or when a parent agent or script started you with one prompt (`grok -p`, `claude -p`, `codex exec`, or a subagent). An unset environment variable does not make a run interactive: a prompt that opens with "Non-interactive run" is unattended. In an unattended run, do not ask, do not write the candidates file, do not run `learn.mjs`, and end with exactly this line:
 
 ```text
 needs_confirmation: retro session review - run /career-ops retro in an interactive session
