@@ -1028,25 +1028,37 @@ async function runAdd(name, { fetchJson }) {
  * there a board here", and the ATS directories rate-limit hard enough that
  * exhaustively probing every variant of every hint would poison the run.
  *
- * @returns {Promise<{hint: string, sources: string[], hit: object|null}[]>}
+ * Only a 404/410 (`slug_gone`) is evidence that a slug has no board. Any other
+ * failure (429, network, auth, server, an unexpected body) leaves the question
+ * open, so a hint with no hit keeps the first such failure as `probeError`
+ * and is reported as unverified rather than as "no board".
+ *
+ * @returns {Promise<{hint: string, sources: string[], hit: object|null, probeError: object|null}[]>}
  */
 export async function findUnmined(cfg, { fetchJson = defaultFetchJson, onProgress } = {}) {
   const results = [];
   for (const { hint, sources } of unminedHints(cfg)) {
     let hit = null;
+    let probeError = null;
     outer: for (const slug of deriveSlugCandidates(hint)) {
       for (const ats of Object.keys(ATS)) {
-        const r = await probeSlug(ats, slug, { fetchJson });
-        if (r.status === 'live' || r.status === 'empty') { hit = r; break outer; }
+        // Lever is one registry key with an eu flag, so both instances are
+        // probed or an EU-only tenant reads as "no Lever board" (as in
+        // discoverAlternates).
+        for (const eu of ats === 'lever' ? [false, true] : [false]) {
+          const r = await probeSlug(ats, slug, { fetchJson, eu });
+          if (r.status === 'live' || r.status === 'empty') { hit = { ...r, eu }; break outer; }
+          if (r.errorKind !== 'slug_gone' && !probeError) probeError = r;
+        }
       }
     }
-    results.push({ hint, sources, hit });
+    results.push({ hint, sources, hit, probeError: hit ? null : probeError });
     onProgress?.({ hint, hit });
   }
   return results;
 }
 
-async function runUnmined(filePath, { fetchJson }) {
+export async function runUnmined(filePath, { fetchJson }) {
   if (!existsSync(filePath)) {
     console.log(`verify-portals: no portals file at ${filePath} — nothing to check.`);
     return 0;
@@ -1063,9 +1075,15 @@ async function runUnmined(filePath, { fetchJson }) {
   );
   const results = await findUnmined(cfg, { fetchJson });
   const found = results.filter((r) => r.hit);
+  const unverified = results.filter((r) => r.probeError);
 
   const probed = Object.keys(ATS).join('/');
-  for (const { hint, sources, hit } of results) {
+  for (const { hint, sources, hit, probeError } of results) {
+    if (probeError) {
+      const why = probeError.httpStatus ? `HTTP ${probeError.httpStatus}` : probeError.errorKind;
+      console.log(`  ⚠️  ${hint} — could not verify (${probeError.ats}/${probeError.slug}: ${why}); re-run later`);
+      continue;
+    }
     if (!hit) {
       // Deliberately not "no board": only the three slug-addressable ATSs are
       // probed. AMD and Apple genuinely do have boards — on Workday and their
@@ -1074,7 +1092,7 @@ async function runUnmined(filePath, { fetchJson }) {
       continue;
     }
     const detail = hit.status === 'live' ? `${hit.jobCount} jobs` : 'live but empty';
-    console.log(`  ${ICON[hit.status]} ${hint} — ${hit.ats}/${hit.slug} (${detail})`);
+    console.log(`  ${ICON[hit.status]} ${hint} — ${hit.ats}${hit.eu ? ' (EU)' : ''}/${hit.slug} (${detail})`);
     console.log(`       named in: ${sources.join(', ')}`);
   }
 
@@ -1083,10 +1101,16 @@ async function runUnmined(filePath, { fetchJson }) {
       `\n${found.length} of ${results.length} have a real board. A search_queries entry only ` +
         'produces links for a human;\nmove these to tracked_companies so the scanner actually reads them.',
     );
-  } else {
+  } else if (!unverified.length) {
     console.log('\nNo scannable boards behind these names — the search entries are earning their keep.');
   }
-  return found.length;
+  if (unverified.length) {
+    console.log(
+      `\n${unverified.length} of ${results.length} could not be checked, so they are not reported as having no board.`,
+    );
+  }
+  // Both count for --strict: an unverified name may still hide a board.
+  return found.length + unverified.length;
 }
 
 const KNOWN_FLAGS = ['--add', '--unmined', '--strict', '--file', '--help', '-h'];
