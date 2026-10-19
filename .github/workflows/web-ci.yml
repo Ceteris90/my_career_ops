@@ -31,14 +31,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            package.json
-            web/package-lock.json
-      # Web/core parity tests import scan.mjs and real providers. Node resolves
-      # their packages from the core checkout, not from web/node_modules.
-      # No browser install or other lifecycle script is needed for these tests.
-      - name: Install core dependencies for parity tests
-        run: npm install --ignore-scripts --no-package-lock
+          cache-dependency-path: web/package-lock.json
+      # The doctor parity test runs the real core doctor.mjs, which imports the
+      # core's own dependencies (js-yaml, dotenv). Installed the same way as
+      # test.yml: no lockfile at the root, and no browser download.
+      - name: Install core dependencies
+        run: npm install --ignore-scripts
         working-directory: .
       - run: npm ci
       - run: npm test
