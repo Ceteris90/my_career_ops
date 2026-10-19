@@ -4,9 +4,6 @@
 // error told them to paste that plan into cv.md. "first 90 days" already
 // passes, because it is a plan horizon, not a past claim.
 //
-// The candidate's answers and inputs for this letter are a source. A number
-// that appears in none of those texts and none of the career files still blocks.
-//
 // Run:  node --test tests/cover-letter-user-inputs.test.mjs
 
 import { test } from 'node:test';
@@ -156,5 +153,5 @@ test('cover mode tells the agent to pass those answers through as sources', () =
   assert.match(english, /user_inputs/);
   assert.match(turkish, /user_inputs/);
   assert.match(english, /verbatim/);
-  assert.match(english, /do not add (?:a |that )?plan to cv\.md/i);
+  assert.match(english, /do not\s+add\s+(?:a\s+|that\s+)?plan\s+to\s+cv\.md/i);
 });

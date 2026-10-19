@@ -290,11 +290,20 @@ Only after explicit user approval.
 
 Before rendering, run the shared fact validator against the assembled cover
 letter HTML. It checks metric-like claims plus explicitly asserted employers,
-titles, and tools against `cv.md`, `article-digest.md`, and the optional
-`config/cv-facts.json` allowlist. The validator returns a stable `pass`, `warn`,
-or `block` verdict. Advisory `warn_phrases` do not stop PDF generation; a
-`block` verdict does, so add the missing evidence or obtain a verified
-allowlist exception first.
+titles, and tools against `cv.md`, `article-digest.md`, the optional
+`config/cv-facts.json` allowlist, and the answers on this payload. The
+validator returns a stable `pass`, `warn`, or `block` verdict. Advisory
+`warn_phrases` do not stop PDF generation. A block verdict stops PDF generation.
+
+Copy each Step 5 answer and each Step 6 answer into `user_inputs` verbatim.
+A number the candidate wrote there is a source for this letter. A number that
+is in none of `cv.md`, `article-digest.md`, and `user_inputs` still blocks the
+PDF. Do not rewrite the candidate's wording to get past the gate, and do not
+add a plan to cv.md to make the gate pass. Career evidence belongs in `cv.md`
+or `article-digest.md`. A verified exception belongs in `config/cv-facts.json`.
+
+An `answers` object is also a source. Its string values count, including a
+nested list such as gap answers. The rendered letter is not a source for itself.
 
 Assemble the JSON payload:
 
@@ -324,6 +333,12 @@ Assemble the JSON payload:
     "closing": "{approved closing}",
     "language_closing": "{approved language sentence or null}"
   },
+  "user_inputs": [
+    "{each Step 5 answer, verbatim}",
+    "{Step 6 answer A, verbatim}",
+    "{Step 6 answer B, verbatim}",
+    "{Step 6 answer C, verbatim}"
+  ],
   "output_path": "output/{company-slug}-{role-slug}-cover.pdf"
 }
 ```

@@ -2030,19 +2030,26 @@ function sourceContainsFact(sourceText, value) {
 
 /**
  * @param {string} targetText generated candidate-facing HTML/Markdown/text
- * @param {{ sourcePaths?: string[], configPath?: string, cwd?: string }} options
+ * @param {{ sourcePaths?: string[], sourceTexts?: string[], configPath?: string, cwd?: string }} options
+ *   sourceTexts: extra evidence that is not a file, such as the answers the
+ *   candidate typed for one cover letter. The rendered letter is not passed
+ *   here, or every claim in it would support itself.
  * @returns {{ verdict: 'pass'|'warn'|'block', invented: string[], unsupportedFacts: object[], advisoryFacts: object[], forbidden: string[], warnings: string[] }}
  * @throws when the config is invalid
  */
 export function verifyFacts(targetText, {
   sourcePaths = DEFAULT_SOURCES,
+  sourceTexts = [],
   configPath = DEFAULT_CONFIG,
   cwd = process.cwd(),
 } = {}) {
   // Per file, before the join: stripMarkup keeps only the body of a LaTeX
   // document, and run on the joined text it would discard every source read
   // ahead of a .tex one as if it were that document's preamble.
-  const sourceText = sourcePaths.map(path => latexBody(readIfExists(resolveInputPath(path, cwd)))).join('\n');
+  const fileText = sourcePaths.map(path => latexBody(readIfExists(resolveInputPath(path, cwd)))).join('\n');
+  const extraList = Array.isArray(sourceTexts) ? sourceTexts : [sourceTexts];
+  const extraText = extraList.filter(text => typeof text === 'string' && text.trim()).join('\n');
+  const sourceText = [fileText, extraText].filter(part => part.trim()).join('\n');
   const { missing: configMissing, config } = loadFactConfig(resolveInputPath(configPath, cwd));
   const allowed = allowedMetricSet(sourceText, config.allow_metrics);
   const targetClaims = metricClaims(targetText);
@@ -2105,6 +2112,18 @@ export function verifyFacts(targetText, {
   };
 }
 
+/** A plan the candidate wrote for one letter is not career evidence. */
+export function factSourceAdvice() {
+  return [
+    'The checked sources do not contain these claims.',
+    'Those sources are cv.md, article-digest.md, and the answers and inputs supplied for this letter.',
+    'Add career evidence to cv.md or article-digest.md.',
+    'A plan the candidate already gave stays in those answers.',
+    'Do not copy that plan into cv.md.',
+    'A verified exception belongs in config/cv-facts.json.',
+  ].join(' ');
+}
+
 /**
  * Tell the user why a scope claim blocked and how to allow it once verified.
  *
@@ -2126,7 +2145,7 @@ export function assertFacts(targetText, options = {}) {
       return sourceLine ? `${kind}=${value} (source says: ${sourceLine})` : `${kind}=${value}`;
     }).join(', ')}`);
     if (result.forbidden.length) details.push(`forbidden phrases found: ${result.forbidden.join(', ')}`);
-    throw new Error(`Fact check failed${options.label ? ` for ${options.label}` : ''}: ${details.join('; ')}`);
+    throw new Error(`Fact check failed${options.label ? ` for ${options.label}` : ''}: ${details.join('; ')}. ${factSourceAdvice()}`);
   }
   return result;
 }
@@ -2166,7 +2185,9 @@ function usage() {
 Checks generated candidate-facing text for unsupported metrics and explicitly asserted
 non-metric facts (employers, titles, tools, delegated-work authorship, scope-verb
 inflation, and unsourced adoption claims) absent from source files.
-Default sources: cv.md, article-digest.md
+Default sources: cv.md and article-digest.md.
+A cover letter also checks the answers and inputs supplied for that letter.
+The rendered letter is not a source.
 Default config:  config/cv-facts.json (optional)`;
 }
 
@@ -2812,7 +2833,7 @@ export function runCli(args = process.argv.slice(2)) {
       console.error('\nForbidden phrases found:');
       for (const phrase of result.forbidden) console.error(`  - ${phrase}`);
     }
-    console.error('\nAdd real evidence to cv.md/article-digest.md, or allow a verified exception in config/cv-facts.json.');
+    console.error(`\n${factSourceAdvice()}`);
     return 1;
   } catch (err) {
     if (parsed.json) {
