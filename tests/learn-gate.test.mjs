@@ -366,6 +366,54 @@ test('a ledger line that is valid JSON but not an object stops check with a name
   }
 });
 
+test('a short quote that shares a few words with a posting is not blocked', () => {
+  const root = scratchRoot();
+  try {
+    const [c] = check(root, [{
+      kind: 'output-pref',
+      change: { op: 'add', text: 'Put the salary section last.' },
+      evidence: userSaid('never mention salary'),
+    }]).candidates;
+    assert(c.status === 'ok', `a three-word quote was blocked as ${c.reason}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a replayed apply reports only the decisions it recorded', () => {
+  const root = scratchRoot();
+  try {
+    const result = check(root, [FIRST_PERSON]);
+    assert(run(root, ['apply', result.pending, '--accept', '1', '--reply', 'accept 1']).status === 0, 'first apply failed');
+    const again = run(root, ['apply', result.pending, '--reject', '1', '--reply', 'reject 1']);
+    assert(again.status === 0, describeSpawn(again, 'the replay should succeed'));
+    const out = JSON.parse(again.stdout);
+    assert(out.rejected.length === 0 && out.alreadyDecided.join() === '1', `replay output: ${again.stdout}`);
+    const ledger = read(root, 'data/learning/ledger.jsonl').trim().split('\n');
+    assert(ledger.length === 1 && JSON.parse(ledger[0]).decision === 'accepted', 'the ledger changed on replay');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('--reply-file records the reply byte for byte, with no shell in between', () => {
+  const root = scratchRoot();
+  try {
+    const result = check(root, [FIRST_PERSON]);
+    const reply = 'accept 1, say "yes" $(touch pwned) `id` it\'s fine';
+    writeFileSync(join(root, 'reply.txt'), `${reply}\n`);
+    const both = run(root, ['apply', result.pending, '--accept', '1', '--reply', 'x', '--reply-file', 'reply.txt']);
+    assert(both.status !== 0, 'apply took both --reply and --reply-file');
+    const r = run(root, ['apply', result.pending, '--accept', '1', '--reply-file', 'reply.txt']);
+    assert(r.status === 0, describeSpawn(r, 'apply with --reply-file should succeed'));
+    const [entry] = read(root, 'data/learning/ledger.jsonl').trim().split('\n').map((l) => JSON.parse(l));
+    assert(entry.reply === reply, `ledger reply: ${JSON.stringify(entry.reply)}`);
+    assert(!existsSync(join(root, 'pwned')), 'something expanded the reply');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('learn.mjs imports no network module', () => {
   const src = readFileSync(join(ROOT, 'learn.mjs'), 'utf8');
   const imports = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
