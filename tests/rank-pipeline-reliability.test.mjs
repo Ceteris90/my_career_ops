@@ -55,6 +55,7 @@ test('each CLI is asked for one answer with no tools or extra turns', () => {
   }
   assert.deepEqual(args('codex'), ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', 'PROMPT']);
   assert.deepEqual(args('pi'), ['--no-tools', '-p', 'PROMPT']);
+  assert.deepEqual(args('copilot'), ['-p', 'PROMPT', '--deny-tool=read,write,shell,url,memory']);
 });
 
 test('opencode runs with every permission denied', POSIX, (t) => {
