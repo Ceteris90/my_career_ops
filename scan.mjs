@@ -374,7 +374,8 @@ export function matchedTitleKeywords(title, titleFilter) {
 //   - `block` matches → reject
 //   - `allow` empty → pass (already cleared block)
 //   - `allow` non-empty → must match at least one keyword, OR the TITLE carries
-//     an explicit remote marker (see titleSignalsRemote below)
+//     an explicit remote marker (see titleSignalsRemote below), unless
+//     `remote_title_fallback: false` disables that final rescue.
 
 // Normalize a keyword list from portals.yml: tolerates a bare string
 // (wrapped to a 1-item array), null/undefined (→ []), and non-string
@@ -648,7 +649,7 @@ export function buildLocationFilter(locationFilter) {
     // Last resort only. Deliberately placed AFTER `block` so a remote title can
     // never rescue a blocked location — "Program Manager - Remote" in Bengaluru
     // stays rejected. This widens `allow`, never `block`.
-    return titleSignalsRemote(title);
+    return locationFilter.remote_title_fallback !== false && titleSignalsRemote(title);
   };
 }
 
