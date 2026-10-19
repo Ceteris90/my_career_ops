@@ -1095,7 +1095,7 @@ const VALUE_FLAGS = ['--add', '--file'];
 const USAGE = `Usage:
   node verify-portals.mjs                 # sweep tracked_companies + job_boards in portals.yml
   node verify-portals.mjs --add cursor    # probe slug variants for one name
-  node verify-portals.mjs --unmined       # find companies named only in search_queries that have a board
+  node verify-portals.mjs --unmined       # companies named only in search_queries that have a Greenhouse/Ashby/Lever board
   node verify-portals.mjs --strict        # exit non-zero if any slug is unresolved
   node verify-portals.mjs --file <path>   # use a specific portals file
   node verify-portals.mjs --help          # print this usage block and exit`;
