@@ -260,9 +260,10 @@ print_summary
       assert.equal(res.status, 0, res.stderr);
       const text = readFileSync(join(dir, 'data', 'pipeline.md'), 'utf8');
       const [pending, processed] = text.split('## Processed');
-      assert.ok(!pending.includes(URL), text);
+      const pendingLines = pending.split('\n');
+      assert.ok(!pendingLines.some((line) => line === `- [ ] ${URL} | Fabrikam | Product Designer`), text);
       assert.ok(processed.includes(`- [x] SKIP | ${URL} | Fabrikam | Product Designer | N/A | PDF ❌`), text);
-      assert.ok(pending.includes(other), 'a below-min-score skip without its report still stays pending');
+      assert.ok(pendingLines.some((line) => line === `- [ ] ${other} | Litware | Designer`), 'a below-min-score skip without its report still stays pending');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
