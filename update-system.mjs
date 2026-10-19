@@ -306,6 +306,7 @@ const SYSTEM_PATHS = [
   'lib/tracker-addition.mjs',
   'lib/scan-summary-marker.mjs',
   'lib/scan-history-columns.mjs',
+  'lib/pipeline-sections.mjs',
   'lib/small-board.mjs',
   'lib/admission-gate.mjs',
   'lib/tsv-formula-escape.mjs',
