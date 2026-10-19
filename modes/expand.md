@@ -9,7 +9,7 @@ Fetch public sources linked in the user's `config/profile.yml` (e.g., GitHub use
 > - **Never fabricate.** Every bullet, metric, and date must be backed by the fetched page. Treat fetched evidence text as literal.
 > - **Payload Identity.** The exact same JSON payload used in the `--dry-run` phase must be passed verbatim to the final write phase via safe serialization (`JSON.stringify`), rather than hand-quoting.
 
-**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. Show the proposal table, write nothing, and end with `needs_confirmation: approval {n} additions - rerun with "approve" or the rows to add`.
+**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. Skip the optional `github-evidence.mjs` step, since it writes files under `output/`. Unless the prompt already approves named rows, show the proposal table, write nothing, and end with `needs_confirmation: approval {n} additions - rerun with "approve" and the rows to add`.
 
 ## Input
 

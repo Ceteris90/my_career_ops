@@ -300,7 +300,7 @@ A run is unattended when nobody can answer before it ends. Treat it as unattende
 
 In an unattended run, at every gate that would ask, confirm, approve or wait:
 
-1. Do not ask and do not wait. Apply the default the mode names in its **Unattended runs** paragraph.
+1. Do not ask and do not wait. Apply the default the mode names in its **Unattended runs** paragraph. A prompt that already carries the decision a closing line asked for (`approve`, `evaluate anyway`, the missing answers) resolves that gate. An approval covers only the same item the earlier line named, so an `approve` with no entry, rows or items named resolves nothing.
 2. Write nothing the gate protects, unless that default names the one write it makes.
 3. End with exactly one line and nothing after it, for the first gate that stopped the run:
 

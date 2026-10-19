@@ -1,6 +1,6 @@
 # Mode: intake — Multi-Source Profile Intake
 
-**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. Show the Step 4 proposal table, write nothing, and end with `needs_confirmation: approval {n} proposed edits - rerun with "approve" or the items to apply`.
+**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. Unless the prompt already approves named items, show the Step 4 proposal table, write nothing, and end with `needs_confirmation: approval {n} proposed edits - rerun with "approve" and the items to apply`.
 
 ## Purpose
 
