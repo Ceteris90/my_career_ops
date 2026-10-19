@@ -144,6 +144,32 @@ test('existing files are kept unless --force, and the summary says which', () =>
   } finally { cleanup(dir); }
 });
 
+test('--force --only rewrites one file and leaves the other as the user edited it', () => {
+  const { dir, res } = run(ANSWERS);
+  try {
+    assert.equal(res.status, 0, res.stderr);
+    writeFileSync(join(dir, 'config', 'profile.yml'), 'candidate:\n  full_name: "Edited By Hand"\n');
+    const env = { ...process.env };
+    delete env.CAREER_OPS_ROOT;
+    const again = spawnSync(process.execPath, [SCRIPT, '--answers', join(dir, 'answers.json'), '--target', dir, '--force', '--only', 'portals'], { encoding: 'utf8', env });
+    assert.equal(again.status, 0, again.stderr);
+    assert.deepEqual(JSON.parse(again.stdout), { written: ['portals.yml'], kept: ['config/profile.yml'] });
+    assert.match(readFileSync(join(dir, 'config', 'profile.yml'), 'utf8'), /Edited By Hand/);
+    const bad = spawnSync(process.execPath, [SCRIPT, '--answers', join(dir, 'answers.json'), '--target', dir, '--only', 'cv'], { encoding: 'utf8', env });
+    assert.equal(bad.status, 1);
+    assert.match(bad.stderr, /--only takes profile or portals/);
+  } finally { cleanup(dir); }
+});
+
+test('a salary range without its currency exits 1 instead of assuming USD', () => {
+  const answers = { ...ANSWERS, compensation: { target_range: '95-120K' } };
+  const { dir, res } = run(answers);
+  try {
+    assert.equal(res.status, 1);
+    assert.match(res.stderr, /compensation\.currency/);
+  } finally { cleanup(dir); }
+});
+
 test('a missing required answer exits 1, names the field, and writes nothing', () => {
   const answers = { ...ANSWERS, candidate: { ...ANSWERS.candidate, full_name: '' } };
   const { dir, res } = run(answers);
@@ -192,7 +218,8 @@ test('AGENTS.md onboarding calls the writer and builds the finish from doctor', 
   const steps23 = first.split('#### Step 2')[1].split('#### Step 4')[0];
   assert.match(steps23, /node onboard-write\.mjs --answers/);
   assert.match(steps23, /do not edit `portals\.yml`[^.]*afterward/i);
-  assert.match(steps23, /rerun with `--force`/);
+  assert.match(steps23, /rerun with `--force --only/);
+  assert.match(first.split('#### Step 2')[1].split('#### Step 3')[0], /salary target range and its currency/i);
   const step6 = first.split('#### Step 6')[1];
   assert.match(step6, /node doctor\.mjs/);
   assert.match(step6, /only[^.]*fail/i);
