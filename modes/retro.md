@@ -51,6 +51,6 @@ node learn.mjs check {DATA_ROOT}/data/learning/retro-candidates.json --summary
 node learn.mjs apply {pending} --accept {accepted ids} --reject {rejected ids} --reply-file {DATA_ROOT}/data/learning/retro-reply.txt
 ```
 
-   Leave out `--accept` or `--reject` when the user named no ids for it. An id the user did not name stays undecided. There is no "accept all": if the user says "all" or "yes", list the ids and ask which ones. If the user edits a candidate, write the edited version as a new candidates file and go back to step 5. If the user says "later", run nothing. The pending file stays for the next retro.
+   `{accepted ids}` and `{rejected ids}` are comma-separated whole numbers from the check output, such as `1,3`. Put nothing else in the command. Leave out `--accept` or `--reject` when the user named no ids for it. An id the user did not name stays undecided. There is no "accept all": if the user says "all" or "yes", list the ids and ask which ones. If the user edits a candidate, write the edited version as a new candidates file and go back to step 5. If the user says "later", run nothing. The pending file stays for the next retro.
 
 7. **Report the result.** Name each file and line that changed, from the apply output. If the session has no lessons, say "Nothing to keep from this session." and stop.
