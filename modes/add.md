@@ -15,6 +15,8 @@ preview it, and — after you confirm — append it to `cv.md` and (for projects
 > - **Zero-key, local.** Use only public, no-auth fetches (GitHub's public API,
 >   WebFetch). No API keys, no third-party services.
 
+**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask and never wait. Show the preview, write nothing to `cv.md` or `article-digest.md`, and end with `needs_confirmation: approval {entry title} - rerun with "approve" to add it`.
+
 ## Input
 
 `$mode` after `add` is the source. Accept any of:

@@ -4,6 +4,8 @@
 
 Interactive mode for when the candidate is filling out an application form in Chrome. It reads what is on the screen, loads the previous context of the job, and generates personalized responses for each form question.
 
+**Unattended runs** (`modes/_shared.md` → **Unattended runs**): never ask, never wait and never submit. A company or role mismatch, or an agency that needs acknowledgement, stops before drafting and ends with `needs_confirmation: apply_preflight {company} - confirm the company and role, then rerun`. Otherwise draft only answers backed by `cv.md`, `config/profile.yml` or the report, leave every other field blank, and end with `needs_confirmation: apply_input {n} questions - answer them, then rerun`.
+
 ## Requirements
 
 - **Best with Playwright in visible mode**: In visible mode, the candidate sees the browser and the agent can interact with the page.

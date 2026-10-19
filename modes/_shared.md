@@ -294,6 +294,22 @@ A mode may tell you to run work in a background subagent (e.g. `scan`, or parall
 - **Parent/orchestrator:** surface the question with the URL and evidence; keep this item pending and show it separately from completed/failed evaluations. Other URLs may continue. Release any unused report-number reservation. Resume only after the user's explicit answer, passing that answer and its exact posting identity to a fresh single-pass worker or handling the posting interactively. Re-check liveness and other gates; reserve a fresh report number if the old reservation was released. A new URL needs its own answer. Only actual completed artifacts may enter the tracker merge and completion summary.
 - After confirmation, use the confirmed agency as Via; use `?` for an undisclosed end employer plus a distinguishing Notes descriptor. Never substitute the agency for the end employer. This gate also applies to localized modes and overrides unconditional "always write/register" instructions. It is not a new tracker lifecycle status.
 
+### Unattended runs
+
+A run is unattended when nobody can answer before it ends. Treat it as unattended when the request says headless, unattended or non-interactive, when a parent agent or script dispatched you with one prompt (`grok -p`, `claude -p`, `codex exec`), or when an orchestrating mode has no user turn to wait for. Otherwise treat it as interactive. A batch worker follows `batch/batch-prompt.md` and its JSON hand-back instead.
+
+In an unattended run, at every gate that would ask, confirm, approve or wait:
+
+1. Do not ask and do not wait. Apply the default the mode names in its **Unattended runs** paragraph.
+2. Write nothing the gate protects, unless that default names the one write it makes.
+3. End with exactly one line and nothing after it, for the first gate that stopped the run:
+
+   ```
+   needs_confirmation: {gate} {detail} - {resume}
+   ```
+
+   `{gate}` is one lowercase word, `{detail}` names what stopped the run, and `{resume}` says what to send or rerun with. Never end on a question, an approval request or the update prompt.
+
 ### Time-to-offer priority
 - Working demo + metrics > perfection
 - Apply sooner > learn more
