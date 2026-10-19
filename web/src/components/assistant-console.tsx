@@ -24,6 +24,7 @@ import { StatusWriteError, writeAssistantStatus } from "@/lib/assistant-status-w
 import { cn } from "@/lib/cn";
 import { CLI_CONFIG_CHANGED } from "@/lib/saved-cli";
 import { assistantActionKey, displayAssistantReply } from "@/lib/assistant-reply.mjs";
+import { createAssistantResponseDecoder } from "@/lib/assistant-protocol.mjs";
 
 // ── message model: messages are PART arrays so a live worker card can render
 // inline next to text, both fed by the single JobsProvider store ──────────────
@@ -681,7 +682,7 @@ export function AssistantConsole() {
       reachedAssistant = true;
       const res = await fetch("/api/assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({ message: text, cliId, history, pageContext: describePage(pathname) + pipelineContext() + applyContext() }),
       });
       if (!res.ok || !res.body) {
@@ -691,14 +692,18 @@ export function AssistantConsole() {
         return;
       }
       const reader = res.body.getReader();
-      const dec = new TextDecoder();
       let acc = "";
       let display = "";
       let hasActionOutput = false;
+      const wire = createAssistantResponseDecoder({
+        structured: res.headers.get("content-type")?.includes("application/x-ndjson") ?? false,
+        onText: (text: string) => { acc += text; },
+        onDone: (ok: boolean) => { if (!ok) failed = true; },
+      });
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) break;
-        acc += dec.decode(value, { stream: true });
+        if (done) wire.finish();
+        else wire.push(value);
 
         const { complete, hidePartialFrom } = parseEnvelopes(acc);
         const cuts: [number, number][] = complete.map((e) => [e.start, e.end]);
@@ -744,6 +749,7 @@ export function AssistantConsole() {
             hasActionOutput = runDispatch("remember", { fact: f }) || hasActionOutput;
           }
         }
+        if (done) break;
       }
       // Hidden/truncated envelopes are wire data, not a usable reply. A valid
       // action-only response still counts, without approving its confirmation.

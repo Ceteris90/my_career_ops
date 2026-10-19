@@ -15,6 +15,7 @@ const ADVISOR_SCOPE = scopeFrom("Read,WebFetch,Glob,Grep");
 import { readPersonalizationState } from "@/lib/personalization-file.mjs";
 import { readJsonObject } from "@/lib/json-body";
 import { assistantFailureMessage, createAssistantStream } from "@/lib/assistant-stream.mjs";
+import { createAssistantDeadline } from "@/lib/assistant-deadline.mjs";
 import { parseClaudeEvent } from "@/lib/run-cli-support.mjs";
 
 /**
@@ -35,7 +36,7 @@ async function personalizationGeneric(): Promise<string[] | null> {
 
 export const runtime = "nodejs"; // child_process (spawn) requires the Node runtime
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 330; // five-minute CLI budget + response cleanup
 
 const SYSTEM_PREAMBLE = `You are the career-ops assistant — a proactive, friendly career co-pilot for a person who is actively job-hunting. You live inside their LOCAL career-ops web dashboard (a pipeline of evaluated jobs, A–F reports, their CV, analytics) and run on their own AI CLI.
 
@@ -183,29 +184,23 @@ export async function POST(req: Request) {
   }
 
   const encoder = new TextEncoder();
-  // `closed` + kill timer in the OUTER scope so cancel() can flip `closed` before
+  // `closed` + deadline in the OUTER scope so cancel() can flip `closed` before
   // the child's late handlers run — otherwise they enqueue onto an already-closed
   // controller and throw an uncaught "Controller is already closed" (see #1155).
   let closed = false;
-  let killer: ReturnType<typeof setTimeout> | undefined;
+  let deadline: ReturnType<typeof createAssistantDeadline> | undefined;
+  // Keep plain-text compatibility for existing consumers/older open tabs.
+  const structured = req.headers.get("accept")?.includes("application/x-ndjson") ?? false;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let emitted = false;
       let stderr = "";
       let streamError = "";
-      let timedOut = false;
-      killer = setTimeout(() => {
-        timedOut = true;
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
-      }, 90_000);
+      let lastProgressAt = 0;
       const safeClose = () => {
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
+          deadline?.stop();
           try {
             controller.close();
           } catch {
@@ -213,16 +208,31 @@ export async function POST(req: Request) {
           }
         }
       };
-      const safeEnqueue = (s: string): boolean => {
-        if (closed || !s) return false;
+      const safeFrame = (event: { type: string; text?: string; ok?: boolean }): boolean => {
+        if (closed) return false;
+        const s = structured ? JSON.stringify(event) + "\n" : event.type === "text" ? event.text : "";
+        if (!s) return false;
         try {
           controller.enqueue(encoder.encode(s));
           return true;
         } catch {
           closed = true; // controller already closed underneath us — stop, never crash
+          deadline?.stop();
+          try { child.kill("SIGTERM"); } catch { /* already exited */ }
           return false;
         }
       };
+      const safeEnqueue = (text: string) => safeFrame({ type: "text", text });
+      const finish = (ok: boolean, message?: string) => {
+        if (message) safeEnqueue(`\n\n${message}`);
+        safeFrame({ type: "done", ok });
+        safeClose();
+      };
+      deadline = createAssistantDeadline({ onTimeout: (reason: string, ms: number) => {
+        console.error(`[career-ops assistant: ${cliId}] ${reason} time limit (${ms}ms)`);
+        finish(false, assistantFailureMessage({ cliName: spec.name, timedOut: true, timeoutReason: reason, timeoutMs: ms }) ?? undefined);
+        try { child.kill("SIGTERM"); } catch { /* already exited */ }
+      } });
       const emit = (s: string) => {
         if (safeEnqueue(s)) emitted = true;
       };
@@ -231,11 +241,18 @@ export async function POST(req: Request) {
         emit,
         completeMessages: cliId === "codex" || cliId === "antigravity",
         onError: (message: string) => { streamError = message; },
+        onActivity: () => {
+          deadline?.activity();
+          if (Date.now() - lastProgressAt >= 5_000) {
+            lastProgressAt = Date.now();
+            safeFrame({ type: "progress" });
+          }
+        },
       });
       // Same honesty as /api/run: a runtime with no verified fencing mechanism
       // runs with its default access, and that must be visible rather than
       // inferred from which CLI happens to be selected (#2507). This stream is
-      // plain text, so the notice is a leading line rather than an event.
+      // assistant text, so the notice remains a leading line in the reply.
       const fencing = fencingReport({ cliId, cliName: spec.name, capabilities: CAPS.networkReadOnly });
       if (fencing.notice) safeEnqueue(`⚠️ ${fencing.notice}
 
@@ -252,22 +269,22 @@ export async function POST(req: Request) {
         stderr = (stderr + d.toString()).slice(-16_000);
       });
       child.on("error", (e) => {
-        safeEnqueue(`\n[error launching ${spec.name}: ${e.message}]`);
-        safeClose();
+        console.error(`[career-ops assistant: ${cliId}] launch error: ${e.message}`);
+        finish(false, `${spec.name} could not be started. Check the selected AI tool in Config.`);
       });
       child.on("close", (code) => {
+        if (closed) return;
         replies.flush();
-        const failure = assistantFailureMessage({ cliName: spec.name, timedOut, code, diagnostic: streamError, emitted });
+        const failure = assistantFailureMessage({ cliName: spec.name, code, diagnostic: streamError, emitted });
         if (failure && !closed) {
           console.error(`[career-ops assistant: ${cliId}] exited ${code}: ${streamError}\n${stderr}`);
-          safeEnqueue(`\n\n${failure}`);
         }
-        safeClose();
+        finish(!failure, failure ?? undefined);
       });
     },
     cancel() {
       closed = true;
-      if (killer) clearTimeout(killer);
+      deadline?.stop();
       try {
         child.kill("SIGTERM");
       } catch {
@@ -278,7 +295,7 @@ export async function POST(req: Request) {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": structured ? "application/x-ndjson; charset=utf-8" : "text/plain; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
     },

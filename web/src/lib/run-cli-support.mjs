@@ -19,7 +19,7 @@ import { claudeUsageTokens } from "./claude-usage.mjs";
  * distinguishable from the number alone, and guessing wrong is silent: summing
  * totals over-counts, and overwriting deltas under-counts. Absent means delta,
  * which is what Codex and Claude send.
- * @typedef {{status?: string, tool?: string, text?: string, tokens?: number, tokensAreTotal?: boolean, costUsd?: number | null, error?: string}} ParsedEvent
+ * @typedef {{status?: string, tool?: string, text?: string, progress?: boolean, tokens?: number, tokensAreTotal?: boolean, costUsd?: number | null, error?: string}} ParsedEvent
  */
 
 const STATUS_READY = "Agent ready";
@@ -195,6 +195,9 @@ export function parseAntigravityEvent(line) {
     if (step?.state === "ACTIVE" && step.step_type === "tool") {
       return { tool: typeof step.tool_name === "string" && step.tool_name ? step.tool_name : "Working" };
     }
+    // A live model step is activity, not assistant prose. In particular, never
+    // forward text_delta/tool_info (which can contain private reasoning/files).
+    if ((step?.state === "ACTIVE" || step?.state === "DONE") && typeof step.step_type === "string" && step.step_type) return { progress: true };
     return null;
   }
   if (event.event !== "result") return null;

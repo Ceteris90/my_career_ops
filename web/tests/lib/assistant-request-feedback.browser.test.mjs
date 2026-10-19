@@ -20,7 +20,7 @@ test("request feedback is transition-only, quiet when closed and user-navigated"
       res.writeHead(503, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Fixture unavailable" }));
     } else {
-      res.writeHead(200, { "Content-Type": req.url === "/run" ? "application/x-ndjson" : "text/plain" });
+      res.writeHead(200, { "Content-Type": req.url === "/run" || data.message === "timeout" ? "application/x-ndjson" : "text/plain" });
       res.flushHeaders();
       if (req.url === "/run") worker = res;
       else replies.set(data.message, res);
@@ -188,6 +188,16 @@ test("request feedback is transition-only, quiet when closed and user-navigated"
   await send("empty"); replies.get("empty").end();
   await until(async () => (await status.innerText()) === "Request failed. Review the error.");
   assert.equal((await notices()).filter((n) => n === "Request failed. Review the error.").length, 2, "an empty response is not reported ready");
+
+  await send("timeout");
+  replies.get("timeout").end([
+    { type: "progress" },
+    { type: "text", text: "Career Ops stopped the fixture CLI at its time limit. You can retry." },
+    { type: "done", ok: false },
+  ].map(JSON.stringify).join("\n") + "\n");
+  await until(async () => (await status.innerText()) === "Request failed. Review the error.");
+  assert.match(await latest.innerText(), /Career Ops stopped/);
+  assert.equal(await page.getByRole("button", { name: "Review error", exact: true }).count(), 1);
 
   for (const [message, response] of [
     ["partial-action", "<<act:setStatus "],

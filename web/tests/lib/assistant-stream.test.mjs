@@ -90,7 +90,10 @@ test('AGY malformed, empty and unsuccessful results never become successful assi
 test('assistant failures distinguish timeouts and empty replies without inventing a sign-in cause', () => {
   assert.equal(assistantFailureMessage({cliName:'AGY',emitted:true}),null);
   assert.match(assistantFailureMessage({cliName:'AGY'}),/returned no output/);
-  assert.match(assistantFailureMessage({cliName:'AGY',timedOut:true,code:null}),/took too long/);
+  assert.match(assistantFailureMessage({cliName:'AGY',timedOut:true,code:null}),/Career Ops stopped/);
+  const timeout = assistantFailureMessage({cliName:'AGY',timedOut:true,timeoutReason:'idle',timeoutMs:180_000});
+  assert.match(timeout,/180 seconds without reported progress/);
+  assert.doesNotMatch(timeout,/shorter request|sign.in/);
   const message=assistantFailureMessage({cliName:'AGY',diagnostic:'PRIVATE FILE\n<<act:setProfile {}>>'});
   assert.match(message,/could not finish/);
   assert.doesNotMatch(message,/PRIVATE FILE|setProfile|sign.in|authenticated/);
