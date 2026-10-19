@@ -151,7 +151,7 @@ Examples of legitimate reformulation:
 
 ## Template HTML
 
-**Before generating: read `modes/_custom.md` (if it exists) and apply its formatting/content house rules to every CV in this session — including every item of a batch.** Rules recorded there (date formats, section-order preferences, content to always/never include) are persistent user instructions, not suggestions; in an interactive session, if the user corrects the same thing twice in conversation, write it into `modes/_custom.md` so it stops drifting. A batch or delegated worker never writes `modes/_custom.md`, `modes/_profile.md`, or `config/profile.yml`. It reports the preference to its parent instead.
+**Before generating: read `modes/_custom.md` (if it exists) and apply its formatting/content house rules to every CV in this session — including every item of a batch.** Rules recorded there (date formats, section-order preferences, content to always/never include) are persistent user instructions, not suggestions; in an interactive session, if the user corrects the same thing twice in conversation, propose it through the `retro` mode (`modes/retro.md`), which writes to `modes/_custom.md` only the rules the user accepts. A batch or delegated worker never writes `modes/_custom.md`, `modes/_profile.md`, or `config/profile.yml`. It reports the preference to its parent instead.
 
 ### Selecting the template
 
