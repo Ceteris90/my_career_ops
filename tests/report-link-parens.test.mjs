@@ -71,6 +71,7 @@ test('a malformed Report link does not fall back to a Notes link', () => {
   // link, not an empty Report cell.
   assert.deepEqual(linkedReportNumbers('[1](<missing)', '[2](../reports/002-b.md)'), []);
   assert.deepEqual(linkedReportNumbers('[1\\]draft](<missing)', '[2](../reports/002-b.md)'), []);
+  assert.deepEqual(linkedReportNumbers('[1\\\n draft](<missing)', '[2](../reports/002-b.md)'), []);
   assert.deepEqual(linkedReportNumbers('—', '[2](../reports/002-b.md)'), [2]);
 });
 
