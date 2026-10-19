@@ -26,7 +26,7 @@ import {
   runHook, filterResultsForId, loadDotenvOnce, HOOK_KINDS, loadSkill, resolveSuccessorIds,
   warnConfigLeftInCodeRoot,
 } from './plugins/_engine.mjs';
-import { loadRegistry, findInRegistry, classifySource, sourceBadge, successorFor } from './plugins/_registry.mjs';
+import { loadRegistry, findInRegistry, classifySource, sourceBadge, successorFor, registryAuthor } from './plugins/_registry.mjs';
 import { readLock, writeLockEntry, removeLockEntry, hashPluginTree, consentSurface } from './plugins/_lock.mjs';
 import { installFromRepo, scaffoldNew, parseRepoArg } from './plugin-install.mjs';
 import { appendToPipeline } from './scan.mjs';
@@ -313,8 +313,9 @@ async function cmdAvailable() {
     console.log('  (none yet — publish yours as `career-ops-plugin-<name>` and open a registry PR; see docs/PLUGINS.md)');
   } else {
     for (const p of reg.plugins) {
+      const author = registryAuthor(p);
       const seed = p.supersedesBundled === true ? `  🔁 maintained successor of the bundled "${p.id}" reference` : '';
-      console.log(`  ${p.name}  [${p.hooks.join(', ')}]  ✓ approved (pinned ${String(p.sha).slice(0, 7)})  — ${p.description}  (by ${p.author}, v${p.version})${seed}`);
+      console.log(`  ${p.name}  [${p.hooks.join(', ')}]  ✓ approved (pinned ${String(p.sha).slice(0, 7)})  — ${p.description}  (${author ? `by ${author}, ` : ''}v${p.version})${seed}`);
     }
     console.log('\nInstall:  node plugins.mjs add <name>');
   }
