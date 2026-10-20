@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, e
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 // The lock protocol is lib/dir-lock.mjs, shared with every other core lock.
 // This module only picks the tracker's lock directory, timing and error.
 import { acquireDirLock } from './lib/dir-lock.mjs';
@@ -763,7 +763,7 @@ export function appendLedgerRows(path, text) {
  * @returns {{id:string,label:string,aliases:string[],description:string,terminal:boolean}[]} Parsed state entries.
  */
 export function loadCanonicalStates(statesPath) {
-  const doc = yaml.load(readFileSync(statesPath, 'utf-8'));
+  const doc = loadYaml(readFileSync(statesPath, 'utf-8'));
   if (!doc || !Array.isArray(doc.states)) {
     throw new Error(`Malformed states file at ${statesPath}: expected a top-level "states" list`);
   }

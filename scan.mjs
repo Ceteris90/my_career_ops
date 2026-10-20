@@ -55,7 +55,7 @@ import {
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 
 import { makeHttpCtx } from './providers/_http.mjs';
 import { buildTrustValidator } from './providers/_trust-validator.mjs';
@@ -95,7 +95,7 @@ try {
   // dotenv is optional — fall back to process.env if not installed
 }
 
-const parseYaml = yaml.load;
+const parseYaml = loadYaml;
 
 // ── Config ──────────────────────────────────────────────────────────
 import { resolveTrackerPath } from './path-resolver.mjs';
@@ -1274,7 +1274,7 @@ export function addDays(dateStr, days) {
 export function loadCandidateCountry(profilePath = PROFILE_PATH) {
   if (!existsSync(profilePath)) return '';
   try {
-    const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    const raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
     const country = raw?.location?.country;
     return typeof country === 'string' ? country.trim() : '';
   } catch {
@@ -1285,7 +1285,7 @@ export function loadCandidateCountry(profilePath = PROFILE_PATH) {
 export function loadReApplyWindows(profilePath = PROFILE_PATH) {
   if (!existsSync(profilePath)) return {};
   try {
-    const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    const raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
     const windows = raw.re_apply_windows || {};
     const validWindows = {};
     for (const [company, win] of Object.entries(windows)) {

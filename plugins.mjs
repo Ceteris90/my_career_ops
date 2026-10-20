@@ -20,6 +20,7 @@ import path from 'path';
 import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
+import { hasYamlContent, loadYaml } from './lib/yaml-document.mjs';
 
 import {
   discoverPlugins, pluginRoots, loadPluginConfig, pluginStatus,
@@ -91,7 +92,7 @@ function existingPipelineUrls() {
 function loadPortalsConfig() {
   if (!existsSync(PORTALS_PATH)) return {};
   try {
-    return yaml.load(readFileSync(PORTALS_PATH, 'utf8')) || {};
+    return loadYaml(readFileSync(PORTALS_PATH, 'utf8')) || {};
   } catch (err) {
     console.error(`Error: failed to parse ${PORTALS_PATH}: ${err.message}`);
     process.exit(1);
@@ -296,20 +297,11 @@ export function parsePluginConfig(raw, file) {
   // Absent is not unreadable: no file means a first enable, which is the whole
   // point of the function. Only an existing-but-unparseable file is a refusal.
   if (raw == null) return {};
-  // An empty or comment-only file is "no config yet", not a corrupt one, and it
-  // must take the same path as an absent one. Decided from the text rather than
-  // from what the parser does with it: js-yaml 4 returns undefined for an empty
-  // document and js-yaml 5 throws "expected a document, but the input is empty",
-  // so inferring it from the parser would make this refuse to write over a
-  // comment-only config on one major and not the other.
-  const hasContent = raw.split('\n').some((line) => {
-    const t = line.trim();
-    return t !== '' && !t.startsWith('#');
-  });
-  if (!hasContent) return {};
+  // An empty or comment-only file is "no config yet", not a corrupt one.
+  if (!hasYamlContent(raw)) return {};
   let cfg;
   try {
-    cfg = yaml.load(raw);
+    cfg = loadYaml(raw);
   } catch (err) {
     throw new Error(
       `${file} is not valid YAML (${String(err.message).split('\n')[0]}) — refusing to overwrite it. `

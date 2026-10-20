@@ -25,7 +25,7 @@
 import { readFileSync, existsSync, statSync, realpathSync, writeFileSync, symlinkSync, rmSync } from 'fs';
 import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { load as yamlLoad } from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId } from './tracker-utils.mjs';
@@ -154,7 +154,7 @@ export function yamlValueText(raw, onParseFailure) {
   if (!raw) return '';
   let doc;
   try {
-    doc = yamlLoad(raw);
+    doc = loadYaml(raw);
   } catch (err) {
     if (onParseFailure) onParseFailure(err);
     return raw;
@@ -166,7 +166,7 @@ export function yamlValueText(raw, onParseFailure) {
   // which js-yaml resolves into a real JS cycle (doc.root.self === doc.root).
   // An unguarded walk chases that forever and dies with a RangeError, killing
   // the whole run — the parse try/catch above cannot help, because the throw
-  // happens here, not in yamlLoad(). The WeakSet also collapses a non-cyclic
+  // happens here, not in loadYaml(). The WeakSet also collapses a non-cyclic
   // alias reused in several places, which is harmless: the caller turns this
   // into a Set of skills, so emitting a value once is sufficient.
   const seen = new WeakSet();
@@ -263,7 +263,7 @@ function parseMachineSummary(content) {
   const raw = fenceMatch[1].trim();
   if (!raw) return null;
   try {
-    const parsed = yamlLoad(raw);
+    const parsed = loadYaml(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return parsed;
   } catch {
