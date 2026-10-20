@@ -65,6 +65,12 @@ LEGITIMACY: High Confidence
       } else {
         fail('report missing the score');
       }
+      // The header is user-facing; it must carry no leftover HTML comments.
+      if (/^\*\*Score:\*\* 4\.5$/m.test(content) && /^\*\*Legitimacy:\*\* High Confidence$/m.test(content) && !content.includes('<!--')) {
+        pass('report header Score/Legitimacy lines carry no HTML comments');
+      } else {
+        fail(`report header has leftover comments: ${JSON.stringify(content.split('\n').filter(l => l.includes('<!--')))}`);
+      }
     } else {
       fail(`processOffer report write failed: ${reports}`);
     }
