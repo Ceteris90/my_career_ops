@@ -379,6 +379,26 @@ test('11b. host matching recognises LLM providers and not lookalikes', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 11b-ii. The PATH fallback for non-listed hosts is a boundary match, so an
+// unrelated path that merely contains a fragment is not scanned.
+// ---------------------------------------------------------------------------
+test('11b-ii. path hints match the tail on a boundary, not anywhere in the path', () => {
+  // Real endpoints on a self-hosted gateway still match.
+  assert.equal(isLlmRequestUrl('https://vllm.internal/v1/chat/completions'), true);
+  assert.equal(isLlmRequestUrl('https://gateway.corp/api/chat'), true);
+  assert.equal(isLlmRequestUrl('https://self.hosted/v1/completions'), true);
+  assert.equal(isLlmRequestUrl('https://x.example/feedback/completions'), true);
+
+  // Google's is a colon method, not a segment — substring match, still caught.
+  assert.equal(isLlmRequestUrl('https://proxy.corp/v1beta/models/gemini-2.5:generateContent'), true);
+
+  // A path that merely CONTAINS a fragment is not an LLM endpoint. The old
+  // `includes` treated this as one and scanned an unrelated request.
+  assert.equal(isLlmRequestUrl('https://x.example/completions-stats'), false);
+  assert.equal(isLlmRequestUrl('https://x.example/nothing/here'), false);
+});
+
+// ---------------------------------------------------------------------------
 // 11c. The Google helper inspects the same parts the SDK receives, in both the
 // systemInstruction and each turn — so gate and call cannot drift apart.
 // ---------------------------------------------------------------------------
