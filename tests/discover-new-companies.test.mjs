@@ -11,7 +11,7 @@
  * - --help exits 0; missing history/value → nonzero exit; bad --since → nonzero exit
  * - default user-layer inputs resolve through CAREER_OPS_ROOT, independent of cwd
  * - --json subtracts already-tracked companies (canonical-name + alias match,
- *   disabled entries count as tracked)
+ *   disabled entries count as tracked, and a row on a board an entry reads)
  * - --min-rows, --added-only, --since window (undated rows pass)
  * - skipped_title rows are ignored (#2695)
  * - ranking: 'added'-producing companies rank first
@@ -220,6 +220,35 @@ console.log('\n--- 2. Subtract already-tracked companies ---');
   const history = [row({ company: 'Hooli' }), row({ company: 'Hooli' })];
   const res = run(history, { tracked_companies: [{ name: 'Hooli', enabled: false }] }, ['--min-rows', '1', '--json']);
   eq('disabled tracked entry counts as tracked', res.companies.length, 0);
+}
+
+{
+  // The reverse sweep names companies by board slug, which no entry name
+  // matches: the board an entry reads must settle it instead.
+  const history = [
+    row({ company: 'injective-labs', url: 'https://jobs.ashbyhq.com/injective-labs/1' }),
+    row({ company: 'injective-labs', url: 'https://jobs.ashbyhq.com/injective-labs/2' }),
+    row({ company: 'ethereum-foundation', url: 'https://jobs.ashbyhq.com/ethereum-foundation/1' }),
+    row({ company: 'ethereum-foundation', url: 'https://jobs.ashbyhq.com/ethereum-foundation/2' }),
+    // One row off the tracked board, one on it: the tracked row decides.
+    row({ company: 'Foundation Co', url: 'https://jobs.example.org/foundation-co/1' }),
+    row({ company: 'Foundation Co', url: 'https://jobs.ashbyhq.com/foundation/9' }),
+    // The tracked-board row is outside the --since window; it still counts.
+    row({ company: 'Old Board Co', url: 'https://jobs.example.org/old-board-co/1' }),
+    row({ company: 'Old Board Co', url: 'https://jobs.lever.co/oldboard/1', seen: old }),
+    row({ company: 'Fresh Co', url: 'https://jobs.ashbyhq.com/fresh/1' }),
+    row({ company: 'Fresh Co', url: 'https://jobs.ashbyhq.com/fresh/2' }),
+  ];
+  const portals = {
+    tracked_companies: [
+      { name: 'Injective Labs', careers_url: 'https://jobs.ashbyhq.com/injective-labs' },
+      { name: 'Ethereum Foundation (EF)', api: 'https://api.ashbyhq.com/posting-api/job-board/ethereum-foundation', careers_url: 'https://jobs.ashbyhq.com/ethereum-foundation' },
+      { name: 'Injective Protocol', careers_url: 'https://jobs.ashbyhq.com/foundation' },
+      { name: 'Renamed Co', careers_url: 'https://jobs.lever.co/oldboard' },
+    ],
+  };
+  const res = run(history, portals, ['--min-rows', '1', '--json']);
+  eq('companies on a tracked board are excluded, whatever their name', res.companies.map((c) => c.name), ['Fresh Co']);
 }
 
 // ── 3. Filters ────────────────────────────────────────────────────────────────
