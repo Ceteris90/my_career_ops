@@ -503,6 +503,38 @@ test('an explicitly disabled config makes the guard a documented no-op', () => {
 });
 
 // ---------------------------------------------------------------------------
+// A boolean under `protected:` must not consume an entry number, or the
+// `entry N` label in a block error points at the wrong line of the file.
+// ---------------------------------------------------------------------------
+test('booleans under protected do not shift the entry N labels', () => {
+  withConfigFile(
+    [
+      'protected:',
+      '  active: true',                     // entry that must NOT count
+      `  full_name: "${FAKE.name}"`,        // entry 1
+      '  salary:',                          // entry 2 (nested)
+      '    target: 145000',
+      '',
+    ].join('\n'),
+    (path) => {
+      const config = readPrivacyConfig(path);
+      assert.ok(!config.values.includes(true), 'the boolean is not a protected value');
+
+      const guard = loadPrivacyGuard({ configPath: path });
+      let caught;
+      try {
+        guard.assertSafe(`my name is ${FAKE.name}`);
+      } catch (err) {
+        caught = err;
+      }
+      // full_name is the FIRST guarded value, so it must read "entry 1" — not
+      // "entry 2", which is where it would land if the boolean had counted.
+      assert.match(caught.message, /entry 1/);
+    }
+  );
+});
+
+// ---------------------------------------------------------------------------
 // The shipped sample is committed, so it must stay fictional and parseable.
 // ---------------------------------------------------------------------------
 test('config/privacy.example.yml parses and contains no real-looking secret', async () => {
