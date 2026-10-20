@@ -196,6 +196,37 @@ describe('tracker.mjs history: a hand edit in applications.md', SQLITE, () => {
   });
 });
 
+describe('tracker.mjs history: a hand edit reverted by hand to the ledger\'s state', SQLITE, () => {
+  let sb, reverted, again;
+  before(() => {
+    sb = sandbox();
+    run(sb, 'set-status.mjs', ['1', 'Applied', '--on', '2026-10-05']);
+    run(sb, 'set-status.mjs', ['1', 'Interview', '--on', '2026-10-09']);
+    run(sb, 'tracker.mjs', ['sync']);
+    // Interview → Offer → Interview, both by hand: the tracker ends where the
+    // ledger does, but the history must not end on Offer.
+    const interview = readFileSync(sb.tracker, 'utf-8');
+    writeFileSync(sb.tracker, interview.replace('| Interview |', '| Offer |'));
+    run(sb, 'tracker.mjs', ['sync']);
+    writeFileSync(sb.tracker, interview);
+    reverted = history(sb);
+    run(sb, 'tracker.mjs', ['sync']);
+    again = history(sb);
+  });
+
+  test('the revert is recorded after the edit it undoes', () => {
+    const lines = events(reverted);
+    assert.deepEqual(lines.slice(0, 3), ['2026-10-01 Evaluated', '2026-10-05 Applied', '2026-10-09 Interview'], reverted);
+    assert.equal(lines.length, 5, reverted);
+    assert.ok(lines[3].endsWith(`Offer ${OBSERVED}`), reverted);
+    assert.ok(lines[4].endsWith(`Interview ${OBSERVED}`), reverted);
+  });
+
+  test('a later sync keeps the revert once, with its original date', () => {
+    assert.equal(again, reverted);
+  });
+});
+
 describe('tracker.mjs history: an index written before #5555', SQLITE, () => {
   test('its observed events are replaced where the ledger explains them and kept where it does not', async () => {
     const sb = sandbox();

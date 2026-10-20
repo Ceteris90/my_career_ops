@@ -616,11 +616,16 @@ const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
  *   ledger line moved FROM, dated with the row's Date column. That start event
  *   is what a first sync records for the row, so deleting the index and syncing
  *   again gives the same history.
- * - An earlier observation stays until a ledger line names the same status;
- *   from then on the ledger explains it and the observation is dropped.
- * - When the tracker's status is neither the last event nor the ledger's
- *   latest state, nothing explains it: it is recorded as an observation, dated
- *   `today` (or, on a row with no events yet, with its Date column).
+ * - Every stored observation is merged in by date. Where two neighbouring
+ *   events carry the same status they are one state, so the run collapses to
+ *   one event, the ledger's when it has one: a pre-#5555 event the sync dated
+ *   after its ledger line is replaced by that line. An observation with no
+ *   same-status neighbour stays, including a hand edit that reverts to a state
+ *   the ledger reached earlier (Interview → Offer by hand → Interview by hand).
+ * - When the tracker's status is not the last event, nothing explains it: it
+ *   is recorded as an observation, dated `today` (or, on a row with no events
+ *   yet, with its Date column). Dated today, it sorts after the events it
+ *   followed on every later sync, so it is written once and keeps its date.
  *
  * @param {{date: string, status: string}} app - The indexed row.
  * @param {object[]} observations - This row's parseStatusLog() observations.
@@ -636,36 +641,37 @@ function buildStatusHistory(app, observations, timeline, observed, today) {
   const first = [...observations].sort(byDate)[0];
   const start = first?.from ?? null;
 
-  const explainedByLedger = new Set(timeline.map(t => t.to));
-  const kept = observed.filter(e => !explainedByLedger.has(e.status)
-    // The first status a sync saw, when the ledger starts from it too: the
-    // ledger's start event replaces it, so a rebuilt index stores the same row.
-    && !(e.source === EVENT_SOURCES.tracker && e.status === start));
-
-  // Each event sorts by `at` (a date) and then `rank`; stable otherwise. On
-  // one day: the first status a sync saw, the ledger's start, transitions,
-  // then changes a sync saw — except one the ledger later moved away FROM.
-  // That change happened before the ledger line, whatever day the sync saw
-  // it, so it sorts just ahead of that line. Its shown date stays the sync's.
+  // Each event sorts by date, then `rank`; stable otherwise. On one day: the
+  // first status a sync saw, the ledger's start, transitions, then changes a
+  // sync saw — except one a same-day ledger line moved away FROM, which
+  // happened before that line and sorts just ahead of it.
   const ranked = [];
-  if (start && !kept.some(e => e.status === start)) {
+  // A change a sync saw TO the start state precedes the ledger and carries the
+  // day it was seen; the row's Date column would misdate it.
+  if (start && !observed.some(e => e.source === EVENT_SOURCES.sync && e.status === start)) {
     const date = rowDate && rowDate <= first.date ? rowDate : first.date;
-    ranked.push({ status: start, date, source: EVENT_SOURCES.ledger, at: date, rank: 1 });
+    ranked.push({ status: start, date, source: EVENT_SOURCES.ledger, rank: 1 });
   }
-  for (const t of timeline) ranked.push({ status: t.to, date: t.date, source: EVENT_SOURCES.ledger, at: t.date, rank: 3 });
-  for (const e of kept) {
-    if (e.source === EVENT_SOURCES.tracker) { ranked.push({ ...e, at: e.date, rank: 0 }); continue; }
-    const leftBy = observations
-      .filter(o => o.from === e.status && o.date <= e.date)
-      .sort(byDate)[0];
-    ranked.push(leftBy ? { ...e, at: leftBy.date, rank: 2 } : { ...e, at: e.date, rank: 4 });
+  for (const t of timeline) ranked.push({ status: t.to, date: t.date, source: EVENT_SOURCES.ledger, rank: 3 });
+  for (const e of observed) {
+    if (e.source === EVENT_SOURCES.tracker) { ranked.push({ ...e, rank: 0 }); continue; }
+    const leftSameDay = observations.some(o => o.from === e.status && o.date === e.date);
+    ranked.push({ ...e, rank: leftSameDay ? 2 : 4 });
   }
-  ranked.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0) || a.rank - b.rank);
-  const events = ranked.map(({ status, date, source }) => ({ status, date, source }));
+  ranked.sort((a, b) => byDate(a, b) || a.rank - b.rank);
 
-  const ledgerState = timeline.length ? timeline[timeline.length - 1].to : start;
+  // Collapse runs of one status, keeping the ledger's event (else the first).
+  const events = [];
+  for (const { status, date, source } of ranked) {
+    const prev = events[events.length - 1];
+    if (prev?.status !== status) events.push({ status, date, source });
+    else if (prev.source !== EVENT_SOURCES.ledger && source === EVENT_SOURCES.ledger) {
+      events[events.length - 1] = { status, date, source };
+    }
+  }
+
   const last = events.length ? events[events.length - 1].status : null;
-  if (app.status !== last && app.status !== ledgerState) {
+  if (app.status !== last) {
     events.push(events.length === 0
       ? { status: app.status, date: rowDate ?? today, source: EVENT_SOURCES.tracker }
       : { status: app.status, date: today, source: EVENT_SOURCES.sync });
