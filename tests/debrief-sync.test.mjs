@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as yaml from 'js-yaml';
 import { replaceNextPin } from '../followup-seed.mjs';
 import { ROOT, pass, fail } from './helpers.mjs';
 
@@ -226,6 +227,42 @@ refuses('a dealbreaker with a semicolon writes nothing', ['--app', '7', '--dealb
 refuses('a Machine Summary holding only comments writes nothing', ['--app', '7', '--dealbreaker', SENTENCE], {
   report: reportText('4.2', 'Apply', '[]').replace(/```yaml\n[\s\S]*?```/, '```yaml\n# summary pending\n```'),
 });
+
+refuses('a tracker status set-status.mjs rejects writes nothing', ['--app', '7', '--dealbreaker', SENTENCE], {
+  status: 'Waiting on panel',
+});
+
+function machineSummary(report) {
+  return yaml.load(report.match(/```yaml\n([\s\S]*?)```/)[1]);
+}
+
+for (const [label, from, to] of [
+  ['hard_stops: null', 'hard_stops: []', 'hard_stops: null'],
+  ['hard_stops: ~', 'hard_stops: []', 'hard_stops: ~'],
+  ['a flow list with a trailing comment', 'hard_stops: []', 'hard_stops: ["Earlier stop"]  # from the evaluation'],
+  ['an unindented block list', 'hard_stops: []', 'hard_stops:\n- "Earlier stop"'],
+  ['a folded final_decision', 'final_decision: "Apply"', 'final_decision: >\n  Apply after\n  the panel'],
+]) {
+  const root = freshRoot();
+  try {
+    writeFixture(root, { followups: null, report: reportText('4.2', 'Apply', '[]').replace(from, to) });
+    const first = run(root, ['--app', '7', '--dealbreaker', SENTENCE]);
+    const second = run(root, ['--app', '7', '--dealbreaker', SENTENCE]);
+    check(`${label}: the dealbreaker is recorded once and the summary still parses`, () => {
+      assert.equal(first.status, 0, first.stderr);
+      assert.equal(second.status, 0, second.stderr);
+      assert.equal(JSON.parse(second.stdout).wrote, false);
+      const doc = machineSummary(readRoot(root, REPORT_REL));
+      assert.equal(doc.final_decision, 'Skip');
+      assert.ok(Array.isArray(doc.hard_stops), JSON.stringify(doc.hard_stops));
+      assert.equal(doc.hard_stops.filter((item) => item === SENTENCE).length, 1);
+      if (to.includes('Earlier stop')) assert.ok(doc.hard_stops.includes('Earlier stop'));
+      assert.equal(doc.soft_gaps.length, 0);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 {
   const root = freshRoot();
