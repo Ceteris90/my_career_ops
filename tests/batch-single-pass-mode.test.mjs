@@ -105,6 +105,20 @@ try {
     fail('match mode prompt missing CV facts');
   }
 
+  // Match mode prompt must NOT include profileContent or profileYml (relies strictly on CV evidence)
+  if (!matchPrompt.includes('TARGET ROLES & PREFERENCES') && !matchPrompt.includes('AI Engineer') && !matchPrompt.includes('spend_tier: standard')) {
+    pass('match mode prompt omits profileContent and profileYml (relies strictly on CV evidence)');
+  } else {
+    fail('match mode prompt unexpectedly included profileContent or profileYml');
+  }
+
+  // Full mode must retain profileContent and profileYml
+  if (fullPrompt.includes('CANDIDATE PROFILE & TARGETS (config/profile.yml)') && fullPrompt.includes('USER ARCHETYPES & NARRATIVE (_profile.md)')) {
+    pass('full mode retains profileContent and profileYml');
+  } else {
+    fail('full mode unexpectedly lost profileContent or profileYml');
+  }
+
   // Match prompt must enforce machine-readable summary block
   if (matchPrompt.includes('---SCORE_SUMMARY---') && matchPrompt.includes('---END_SUMMARY---')) {
     pass('match mode prompt includes ---SCORE_SUMMARY--- contract for tracker compatibility');
@@ -267,6 +281,19 @@ try {
     } else {
       fail(`batch-runner.sh unexpected rejection output: ${combinedOutput}`);
     }
+  }
+
+  // Verify batch/batch-runner.sh handles malformed match mode worker outputs and enforces valid scores
+  if (runnerSrc.includes('match_output_retries') && runnerSrc.includes('Malformed or missing match mode JSON summary')) {
+    pass('batch-runner.sh includes retry handling for malformed or missing match mode JSON output');
+  } else {
+    fail('batch-runner.sh missing retry handling for malformed match mode output');
+  }
+
+  if (runnerSrc.includes('missing or invalid match mode score') && runnerSrc.includes('missing or invalid numeric score in match mode')) {
+    pass('batch-runner.sh enforces required numeric score in match mode to prevent bypass or recording "-" as completed');
+  } else {
+    fail('batch-runner.sh missing score guard for match mode');
   }
 
 } catch (err) {

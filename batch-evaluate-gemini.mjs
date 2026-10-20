@@ -160,8 +160,6 @@ export function loadContext(mode = 'full') {
   if (mode === 'match' || mode === 'single-pass') {
     console.log('📂 Loading context for single-pass CV-match mode...');
     const cvContent = readFile(PATHS.cv, 'cv.md');
-    const profileContent = existsSync(PATHS.profile) ? readFileSync(PATHS.profile, 'utf-8').trim() : '';
-    const profileYml = existsSync(PATHS.profileYml) ? readFileSync(PATHS.profileYml, 'utf-8').trim() : '';
 
     systemPromptTemplate = `You are career-ops, an AI job search assistant evaluating a job offer in single-pass CV match mode.
 Your objective is to extract candidate CV facts and evaluate candidate alignment with the Job Description in a single, fast inference call to minimize token overhead, bypassing the multi-step reasoning chain (Blocks A through G).
@@ -170,13 +168,6 @@ Your objective is to extract candidate CV facts and evaluate candidate alignment
 CANDIDATE RESUME (cv.md)
 ═══════════════════════════════════════════════════════
 ${cvContent}
-
-═══════════════════════════════════════════════════════
-TARGET ROLES & PREFERENCES (config/profile.yml & _profile.md)
-═══════════════════════════════════════════════════════
-${profileYml}
-
-${profileContent}
 
 ═══════════════════════════════════════════════════════
 INSTRUCTIONS (CONDENSED SINGLE-PASS EVALUATION)

@@ -1294,6 +1294,8 @@ process_offer() {
   local terminal_failure_recorded=false
   local shim_retries=0
   local max_shim_retries=4
+  local match_output_retries=0
+  local max_match_output_retries=1
   while true; do
     exit_code=0
     case "$CLI" in
@@ -1317,6 +1319,49 @@ process_offer() {
         run_worker grok --always-approve --output-format plain ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         ;;
     esac
+
+    # In match mode, check if worker result JSON is malformed or missing required
+    # fields (parsed_status or parsed_score). If so, retry once before finalizing
+    # so a transient formatting glitch does not permanently fail or bypass gates.
+    if [[ "$MODE" == "match" && $exit_code -eq 0 ]]; then
+      local worker_check_json
+      worker_check_json=$(awk '
+        /^```json[[:space:]]*$/ { in_block=1; block=""; next }
+        in_block && /^```[[:space:]]*$/ { in_block=0; last=block; next }
+        in_block { block = block $0 "\n" }
+        END { printf "%s", last }
+      ' "$log_file" 2>/dev/null || true)
+      local check_status="" check_score=""
+      if [[ -n "$worker_check_json" ]]; then
+        local check_parsed
+        check_parsed=$(printf '%s' "$worker_check_json" | node -e '
+          let data = "";
+          process.stdin.on("data", d => data += d);
+          process.stdin.on("end", () => {
+            try {
+              const obj = JSON.parse(data);
+              const status = typeof obj.status === "string" ? obj.status : "";
+              const score = typeof obj.score === "number" ? String(obj.score) : "";
+              process.stdout.write(status + "\x1f" + score);
+            } catch {
+              process.stdout.write("");
+            }
+          });
+        ' 2>/dev/null || true)
+        if [[ -n "$check_parsed" ]]; then
+          IFS=$'\x1f' read -r check_status check_score <<< "$check_parsed"
+        fi
+      fi
+      if [[ -z "$check_status" || ( "$check_status" != "needs_confirmation" && "$check_status" != "skipped" && "$check_status" != "failed" && -z "$check_score" ) ]]; then
+        if (( match_output_retries < max_match_output_retries && retries < MAX_RETRIES )); then
+          match_output_retries=$((match_output_retries + 1))
+          retries=$((retries + 1))
+          echo "    ⚠️  Malformed or missing match mode JSON summary (attempt $retries/$MAX_RETRIES); retrying once..."
+          sleep 2
+          continue
+        fi
+      fi
+    fi
 
     # Non-claude CLIs run a single attempt: the session-limit and rate-limit
     # detection below greps generic phrases (429, quota, session limit) that
@@ -1444,6 +1489,20 @@ process_offer() {
         elif [[ -n "$parsed_score" ]]; then
           score="$parsed_score"
         fi
+      fi
+    fi
+
+    # In match mode, enforce valid JSON output and required fields. If malformed
+    # or missing parsed_status or parsed_score (and not a human-confirmation hold
+    # or dealbreaker skip), treat as a failed worker attempt so it cannot be
+    # recorded as completed with score "-" or bypass --min-score.
+    if [[ "$MODE" == "match" && -z "$worker_failed_match" ]]; then
+      if [[ -z "$worker_result_json" || -z "$parsed" || -z "$parsed_status" ]]; then
+        worker_failed_match="failed"
+        worker_error_match="malformed or missing match mode JSON summary (parsed_status missing)"
+      elif [[ "$parsed_status" != "needs_confirmation" && "$parsed_status" != "skipped" ]] && { [[ -z "$parsed_score" ]] || ! is_decimal_number "$score"; }; then
+        worker_failed_match="failed"
+        worker_error_match="missing or invalid match mode score: $score"
       fi
     fi
 
@@ -1599,6 +1658,17 @@ process_offer() {
         echo "    ⏭️  Skipped (score: $score < min-score: $MIN_SCORE)"
         return 0
       fi
+    fi
+
+    # Defensive guard: in match mode, an offer must never complete without a valid numeric score.
+    if [[ "$MODE" == "match" ]] && ! is_decimal_number "$score"; then
+      if (( retries < MAX_RETRIES )); then
+        retries=$((retries + 1))
+      fi
+      update_state_retrying "$id" "$url" "failed" "$started_at" "$completed_at" "$report_num" "-" "missing or invalid numeric score in match mode: $score" "$retries" || true
+      release_report_num "$report_num"
+      echo "    ❌ Failed (invalid match mode score: $score, attempt $retries)"
+      return 0
     fi
 
     update_state_retrying "$id" "$url" "completed" "$started_at" "$completed_at" "$report_num" "$score" "-" "$retries" || true
