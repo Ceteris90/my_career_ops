@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { outputLanguageInstruction, parseOutputLanguage } from './profile-language.mjs';
 import { TSV_ADDITION_HEADER } from './tracker-parse.mjs';
 import { normalizedTrackerScore } from './lib/tracker-addition.mjs';
@@ -501,7 +501,7 @@ async function fetchJobPage(url) {
 export function parsePortals(rawOverride) {
   const raw = rawOverride ?? readFile('portals.yml');
   if (!raw) throw new Error('portals.yml not found');
-  const config = yaml.load(raw) || {};
+  const config = loadYaml(raw) || {};
 
   // The shared predicate rather than a second copy of the matching rules. This
   // path kept its own `includes` loop, and the two had drifted three ways: an

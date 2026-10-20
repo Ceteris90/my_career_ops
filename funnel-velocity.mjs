@@ -39,7 +39,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { computeFunnel, computeFunnelWithHistory, parseStatusLogStages, trackerStatusByNum, computeTrackerStats } from './stats.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { resolveTrackerPath, loadCanonicalStates, resolveCanonicalState } from './tracker-utils.mjs';
@@ -258,7 +258,7 @@ export function loadBenchmarks(explicitPath) {
     || (existsSync(join(DATA_ROOT, 'config/benchmarks.yml')) ? join(DATA_ROOT, 'config/benchmarks.yml') : join(CODE_ROOT, 'templates/benchmarks.yml'));
   let doc;
   try {
-    doc = yaml.load(readFileSync(path, 'utf-8'));
+    doc = loadYaml(readFileSync(path, 'utf-8'));
   } catch (err) {
     throw new Error(`Cannot read benchmarks at ${path}: ${err.message}`);
   }

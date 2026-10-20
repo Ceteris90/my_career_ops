@@ -25,8 +25,8 @@
 import { readFileSync, existsSync, statSync, realpathSync, writeFileSync, symlinkSync, rmSync } from 'fs';
 import { join, dirname, relative, resolve, sep } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { load as yamlLoad } from 'js-yaml';
-import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
+import { loadYaml } from './lib/yaml-document.mjs';
+import { resolveColumns, parseTrackerRow, firstLinkTarget } from './tracker-parse.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId } from './tracker-utils.mjs';
 import { rankSkipBlockers, parseRequirementImportance } from './skip-blockers.mjs';
@@ -161,7 +161,7 @@ export function yamlValueText(raw, onParseFailure) {
   if (!raw) return '';
   let doc;
   try {
-    doc = yamlLoad(raw);
+    doc = loadYaml(raw);
   } catch (err) {
     if (onParseFailure) onParseFailure(err);
     return raw;
@@ -173,7 +173,7 @@ export function yamlValueText(raw, onParseFailure) {
   // which js-yaml resolves into a real JS cycle (doc.root.self === doc.root).
   // An unguarded walk chases that forever and dies with a RangeError, killing
   // the whole run — the parse try/catch above cannot help, because the throw
-  // happens here, not in yamlLoad(). The WeakSet also collapses a non-cyclic
+  // happens here, not in loadYaml(). The WeakSet also collapses a non-cyclic
   // alias reused in several places, which is harmless: the caller turns this
   // into a Set of skills, so emitting a value once is sufficient.
   const seen = new WeakSet();
@@ -270,7 +270,7 @@ function parseMachineSummary(content) {
   const raw = fenceMatch[1].trim();
   if (!raw) return null;
   try {
-    const parsed = yamlLoad(raw);
+    const parsed = loadYaml(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return parsed;
   } catch {
@@ -467,8 +467,8 @@ function analyze(minReports) {
   );
 
   for (const row of rows) {
-    const linkMatch = (row.report || '').match(/\]\(([^)]+)\)/);
-    if (!linkMatch) continue;
+    const linkTarget = firstLinkTarget(row.report);
+    if (linkTarget == null) continue;
     reportsLinked += 1;
     // Tracker links are normalized relative to the tracker file's directory
     // (see merge-tracker.mjs); resolve against it as spelled and as realpathed
@@ -476,9 +476,9 @@ function analyze(minReports) {
     // The read is attempted directly instead of probing with existsSync first,
     // which costs a full stat per report and races with the read (#2385).
     const candidates = new Set([
-      join(TRACKER_DIR, linkMatch[1]),
-      join(dirname(APPS_FILE), linkMatch[1]),
-      join(CAREER_OPS, linkMatch[1]),
+      join(TRACKER_DIR, linkTarget),
+      join(dirname(APPS_FILE), linkTarget),
+      join(CAREER_OPS, linkTarget),
     ]);
     let content = null;
     for (const p of candidates) {

@@ -42,7 +42,7 @@ import { pathToFileURL, fileURLToPath } from 'url';
 import { format } from 'util';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { localToday } from './lib/local-today.mjs';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import {
   resolveColumns, detectColumns, isHeaderRow, isSeparatorRow, LEGACY_COLMAP,
 } from './tracker-parse.mjs';
@@ -213,7 +213,7 @@ function loadStates(ctx) {
     ctx.error(`Error: ${STATES_PATH} not found — cannot validate statuses (broken install: templates/states.yml ships with career-ops).`);
     throw new TrackerExit(1);
   }
-  const doc = yaml.load(readFileSync(STATES_PATH, 'utf-8'));
+  const doc = loadYaml(readFileSync(STATES_PATH, 'utf-8'));
   const byKey = new Map(); // lowercased label/alias → canonical label
   const labels = [];
   for (const s of doc?.states || []) {

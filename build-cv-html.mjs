@@ -37,7 +37,7 @@ import { existsSync, readFileSync, realpathSync } from 'fs';
 import { resolve, dirname, basename, join, extname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { stripEmptySections } from './cv-sections-core.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { validateLockedSections, sectionKey } from './generate-pdf.mjs';
@@ -138,7 +138,7 @@ function sanitizeImageSrc(src) {
 // config/profile.yml (#5094). data: and http(s) URLs carry no local read.
 function profilePhotoValue() {
   try {
-    const doc = yaml.load(readFileSync(PROFILE_PATH, 'utf-8'));
+    const doc = loadYaml(readFileSync(PROFILE_PATH, 'utf-8'));
     const value = doc?.candidate?.photo;
     return typeof value === 'string' ? value.trim() : '';
   } catch {

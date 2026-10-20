@@ -1967,13 +1967,18 @@ main() {
         break
       fi
 
-      if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
-        PARALLEL=1
-        echo "=== Rate limited: running the remaining offers on 1 worker. ==="
-      fi
-
-      # Wait if we're at parallel limit
-      while (( running >= PARALLEL )); do
+      # Wait if we're at parallel limit. The throttle check opens every pass,
+      # so it also runs after the sleep below: a rate limit recorded while this
+      # loop slept drops the run to one worker before the next offer starts,
+      # not after it.
+      while :; do
+        if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
+          PARALLEL=1
+          echo "=== Rate limited: running the remaining offers on 1 worker. ==="
+        fi
+        if (( running < PARALLEL )); then
+          break
+        fi
         # Wait for any child to finish
         for j in "${!pids[@]}"; do
           if ! kill -0 "${pids[$j]}" 2>/dev/null; then
@@ -1998,10 +2003,6 @@ main() {
         if [[ "$BATCH_PAUSED" == "true" || -f "$PAUSE_FILE" ]]; then
           echo "=== Batch paused: session/rate limit reached. Waiting for running workers, not scheduling new offers. ==="
           break
-        fi
-        if (( PARALLEL > 1 )) && [[ -f "${THROTTLE_FILE:-}" ]]; then
-          PARALLEL=1
-          echo "=== Rate limited: running the remaining offers on 1 worker. ==="
         fi
         sleep 1
       done
