@@ -21,7 +21,7 @@
 import { readFileSync, existsSync, statSync } from 'fs';
 import { basename, resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -135,7 +135,7 @@ function readProfile() {
   if (!existsSync(profilePath)) return {};
   let profile;
   try {
-    profile = yaml.load(readFileSync(profilePath, 'utf-8')) ?? {};
+    profile = loadYaml(readFileSync(profilePath, 'utf-8')) ?? {};
     if (typeof profile !== 'object' || Array.isArray(profile)) throw new Error('expected a mapping');
   } catch (err) {
     console.error(`Error: invalid profile YAML at ${profilePath}: ${err.message}`);
