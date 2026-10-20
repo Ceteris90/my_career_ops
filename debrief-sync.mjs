@@ -108,49 +108,54 @@ function normalizePlan(plan) {
   return { appNum: plan.appNum, dealbreaker, contacts, nextDate, nextWhy };
 }
 
-function replaceDecision(yamlBody, summary) {
-  const decision = String(summary.final_decision ?? '').trim();
-  if (decision === 'Skip') return yamlBody;
-  if (!/^final_decision:.*$/m.test(yamlBody)) {
-    return `${yamlBody}${yamlBody.endsWith('\n') ? '' : '\n'}final_decision: "Skip"`;
-  }
-  return yamlBody.replace(/^final_decision:.*$/m, 'final_decision: "Skip"');
+function replaceEntry(yamlBody, key, entry) {
+  const lines = yamlBody.split('\n');
+  const idx = lines.findIndex((line) => line.startsWith(`${key}:`));
+  if (idx === -1) return `${yamlBody}${yamlBody.endsWith('\n') ? '' : '\n'}${entry.join('\n')}`;
+  let end = idx + 1;
+  while (end < lines.length && (lines[end].trim() === '' || /^(\s|-(\s|$))/.test(lines[end]))) end += 1;
+  while (end > idx + 1 && lines[end - 1].trim() === '') end -= 1;
+  lines.splice(idx, end - idx, ...entry);
+  return lines.join('\n');
 }
 
-function insertHardStop(yamlBody, summary, sentence) {
-  const stops = summary.hard_stops;
-  const existing = Array.isArray(stops) ? stops.map((item) => String(item)) : [];
-  if (existing.includes(sentence)) return yamlBody;
-  const quoted = JSON.stringify(sentence);
-  const lines = yamlBody.split('\n');
-  const idx = lines.findIndex((line) => /^hard_stops:/.test(line));
-  if (idx === -1) {
-    return `${yamlBody}${yamlBody.endsWith('\n') ? '' : '\n'}hard_stops:\n  - ${quoted}`;
+function hardStops(summary) {
+  return Array.isArray(summary?.hard_stops) ? summary.hard_stops.map((item) => String(item)) : [];
+}
+
+function rewriteSummary(yamlBody, summary, sentence) {
+  let next = yamlBody;
+  if (String(summary.final_decision ?? '').trim() !== 'Skip') {
+    next = replaceEntry(next, 'final_decision', ['final_decision: "Skip"']);
   }
-  if (/^hard_stops:\s*\[.*\]\s*$/.test(lines[idx])) {
-    const block = ['hard_stops:', ...existing.map((item) => `  - ${JSON.stringify(item)}`), `  - ${quoted}`];
-    lines.splice(idx, 1, ...block);
-    return lines.join('\n');
+  const stops = hardStops(summary);
+  if (!stops.includes(sentence)) {
+    const items = [...stops, sentence].map((item) => `  - ${JSON.stringify(item)}`);
+    next = replaceEntry(next, 'hard_stops', ['hard_stops:', ...items]);
   }
-  let end = idx + 1;
-  while (end < lines.length && (lines[end].trim() === '' || /^\s/.test(lines[end]))) end += 1;
-  lines.splice(end, 0, `  - ${quoted}`);
-  return lines.join('\n');
+  return next;
+}
+
+function parseSummary(yamlBody) {
+  try {
+    return loadYaml(yamlBody);
+  } catch (err) {
+    planError('BAD_PLAN', `Machine Summary YAML did not parse: ${err.message}`);
+  }
 }
 
 function applyReport(report, sentence) {
   const fence = report.match(FENCE);
   if (!fence) planError('BAD_PLAN', 'the report has no Machine Summary YAML');
-  let summary;
-  try {
-    summary = loadYaml(fence[2]);
-  } catch (err) {
-    planError('BAD_PLAN', `Machine Summary YAML did not parse: ${err.message}`);
-  }
+  const summary = parseSummary(fence[2]);
   if (summary == null || typeof summary !== 'object' || Array.isArray(summary)) {
     planError('BAD_PLAN', 'the Machine Summary YAML is not a mapping');
   }
-  const nextYaml = insertHardStop(replaceDecision(fence[2], summary), summary, sentence);
+  const nextYaml = rewriteSummary(fence[2], summary, sentence);
+  const written = parseSummary(nextYaml);
+  if (written?.final_decision !== 'Skip' || !hardStops(written).includes(sentence)) {
+    planError('BAD_PLAN', 'the Machine Summary could not be rewritten safely; edit final_decision and hard_stops by hand');
+  }
   return report.replace(fence[0], () => `${fence[1]}${nextYaml}${fence[3]}`);
 }
 
@@ -176,18 +181,29 @@ function loadRow(appsFile, appNum) {
   return row;
 }
 
-function appendDealbreakerNote(appNum, status, sentence, root) {
+function appendDealbreakerNote(appNum, status, sentence, root, { dryRun = false } = {}) {
   const stdout = execFileSync(process.execPath, [
     join(CODE_ROOT, 'set-status.mjs'),
     '--row', String(appNum),
     status,
     '--note', `Dealbreaker: ${sentence}`,
     '--json',
+    ...(dryRun ? ['--dry-run'] : []),
   ], {
     encoding: 'utf8',
     env: { ...process.env, CAREER_OPS_ROOT: root },
+    ...(dryRun ? { stdio: ['ignore', 'pipe', 'pipe'] } : {}),
   });
   return JSON.parse(stdout).changed === true;
+}
+
+function checkDealbreakerNote(appNum, status, sentence, root) {
+  try {
+    appendDealbreakerNote(appNum, status, sentence, root, { dryRun: true });
+  } catch (err) {
+    const detail = String(err.stderr || err.message).replace(/^❌\s*/, '').trim();
+    planError('BAD_PLAN', `set-status.mjs would not add the tracker note: ${detail}`);
+  }
 }
 
 export async function applyDebriefSync(plan) {
@@ -211,6 +227,7 @@ export async function applyDebriefSync(plan) {
       const reportPath = reportPathFor(row, resolveWorkspaceRoot(appsFile));
       const original = readFileSync(reportPath, 'utf8');
       const next = applyReport(original, normalized.dealbreaker);
+      checkDealbreakerNote(normalized.appNum, status, normalized.dealbreaker, root);
       if (next !== original) {
         writeFileAtomic(reportPath, next);
         wrote = true;
