@@ -16,6 +16,7 @@
  * - skipped_title rows are ignored (#2695)
  * - ranking: 'added'-producing companies rank first
  * - default YAML output is the `companies: [{name}]` shape discover-ats consumes
+ * - --json / --summary output larger than a pipe buffer arrives whole
  *
  * Run: node test-all.mjs --only discover-new-companies
  *      A discovered suite reports through the shared counters; running the file
@@ -308,6 +309,17 @@ console.log('\n--- 5. Output shape ---');
   const doc = yaml.load(text);
   ok('default YAML is the companies:[{name}] shape discover-ats consumes',
     Array.isArray(doc.companies) && doc.companies[0] && doc.companies[0].name === 'Acme');
+}
+
+{
+  // A pipe takes 64 KiB before the writer must wait for the reader; exiting
+  // straight after console.log dropped the rest of a larger result.
+  const history = Array.from({ length: 600 }, (_, i) => row({ company: `Company ${i}`, title: `Senior Software Engineer, Platform ${i}` }));
+  for (const flag of ['--json', '--summary']) {
+    const text = run(history, {}, ['--min-rows', '1', '--limit', '1000', flag], { parse: 'text' });
+    ok(`${flag} output over 64 KiB reaches a pipe whole (${text.length} bytes)`, text.length > 65536
+      && (flag === '--json' ? JSON.parse(text).companies.length === 600 : text.includes('Company 599') && text.includes('Next: ')));
+  }
 }
 
 // ── 6. Headerless legacy history ──────────────────────────────────────────────
