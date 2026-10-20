@@ -20,7 +20,7 @@ import { isMainModule } from './lib/is-main-module.mjs';
 import { load as yamlLoad } from 'js-yaml';
 import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
-import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerLinkDirsFor, resolveWorkspaceRootFor } from './tracker-utils.mjs';
+import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerLinkDirsFor, resolveWorkspaceRoot, resolveWorkspaceRootFor } from './tracker-utils.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
@@ -34,11 +34,14 @@ const APPS_FILE = resolveTrackerPath(CAREER_OPS);
 // compares lexically), then the data root.
 const TRACKER_DIRS = trackerLinkDirsFor(CAREER_OPS);
 // A CAREER_OPS_TRACKER that points at another workspace brings that
-// workspace's reports/ with it (see resolveWorkspaceRoot); the data root's own
-// reports/ stays allowed for a tracker kept apart from its reports.
+// workspace's reports/ with it (see resolveWorkspaceRoot): the workspace of
+// the tracker as spelled, and of its target when the tracker is a symlink into
+// another workspace. The data root's own reports/ stays allowed for a tracker
+// kept apart from its reports.
 const REPORTS_ROOTS = [...new Set([
   join(CAREER_OPS, 'reports'),
   join(resolveWorkspaceRootFor(CAREER_OPS), 'reports'),
+  join(resolveWorkspaceRoot(APPS_FILE), 'reports'),
 ])];
 const REPORTS_DIR = join(CAREER_OPS, 'reports');
 

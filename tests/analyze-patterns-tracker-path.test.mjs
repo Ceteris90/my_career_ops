@@ -175,6 +175,39 @@ try {
       fail(`analyze-patterns.mjs failed through a symlinked tracker file: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
     }
   }
+
+  // A CAREER_OPS_TRACKER that is a symlink into another workspace: the link's
+  // own workspace has no reports/, the target's does, and links are written
+  // relative to the target.
+  const linkSide = join(realpathSync(work), 'link-side');
+  const targetSide = join(realpathSync(work), 'target-side');
+  mkdirSync(join(linkSide, 'data'), { recursive: true });
+  mkdirSync(join(targetSide, 'data'), { recursive: true });
+  mkdirSync(join(targetSide, 'reports'), { recursive: true });
+  const t = writeReport(targetSide, 6, 'Target Workspace Archetype');
+  writeFileSync(join(targetSide, 'data', 'applications.md'),
+    [...HEADER, trackerRow(6, `../reports/${t}`)].join('\n') + '\n');
+  const linkedTracker = join(linkSide, 'data', 'applications.md');
+  let crossLinked = false;
+  try {
+    symlinkSync(join(targetSide, 'data', 'applications.md'), linkedTracker, 'file');
+    crossLinked = true;
+  } catch {
+    pass('tracker symlinked into another workspace: skipped (symlinks unavailable on this filesystem)');
+  }
+  if (crossLinked) {
+    try {
+      const result = analyze({ CAREER_OPS_ROOT: root, CAREER_OPS_TRACKER: linkedTracker });
+      const got = archetypesOf(result);
+      if (got.join('|') === 'Target Workspace Archetype') {
+        pass("tracker symlinked into another workspace: the target workspace's reports are read");
+      } else {
+        fail(`tracker symlinked into another workspace lost its report data: archetypes=${JSON.stringify(got)}`);
+      }
+    } catch (e) {
+      fail(`analyze-patterns.mjs failed on a tracker symlinked into another workspace: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
+    }
+  }
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
