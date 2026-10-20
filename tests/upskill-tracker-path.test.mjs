@@ -6,12 +6,14 @@
 // while withinReports() compares candidates lexically against the data root,
 // so through a symlinked data root (macOS's /var -> /private/var tmpdir is
 // one) every tracker-relative link failed containment and the skill-gap map
-// was built from no reports at all.
+// was built from no reports at all. Resolving only against the spelled path
+// breaks the opposite case: a tracker file that is itself a symlink, whose
+// links are relative to its target. Both must resolve.
 import { pass, fail, ROOT, NODE, rmSync } from './helpers.mjs';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 console.log('\nupskill — report links through the resolved tracker path');
 
@@ -33,11 +35,11 @@ function writeFixture(root) {
   ].join('\n') + '\n');
 }
 
-function reportsRead(root) {
+function reportsRead(root, tracker = '') {
   const out = execFileSync(NODE, [join(ROOT, 'upskill.mjs'), '--min-reports', '1'], {
     encoding: 'utf-8',
     timeout: 60000,
-    env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_TRACKER: '' },
+    env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_TRACKER: tracker },
   });
   // With no report read, upskill answers with its "Not enough data" error
   // instead of metadata; surface that rather than a bare undefined.
@@ -45,28 +47,48 @@ function reportsRead(root) {
   return result.metadata?.reportsRead ?? `none (${result.error})`;
 }
 
-const work = mkdtempSync(join(tmpdir(), 'co-upskill-tracker-'));
+// Canonical up front, so the symlinked-tracker case below is not also a
+// symlinked-root case on macOS.
+const work = realpathSync(mkdtempSync(join(tmpdir(), 'co-upskill-tracker-')));
 try {
   const root = join(work, 'root');
   writeFixture(root);
 
+  // Reached through /var on macOS, where tmpdir() is a symlink.
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'co-upskill-tmproot-'));
   try {
-    const read = reportsRead(root);
+    writeFixture(tmpRoot);
+    const read = reportsRead(tmpRoot);
     if (read === 1) pass('data root under the tmpdir: the tracker-relative report link is read');
     else fail(`data root under the tmpdir: reportsRead=${read}, expected 1`);
   } catch (e) {
-    fail(`upskill.mjs failed on the data root: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
+    fail(`upskill.mjs failed on a data root under the tmpdir: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true });
   }
 
+  // A tracker file that is itself a symlink: its links are written relative
+  // to the target's directory, which only the realpathed tracker path names.
   const link = join(work, 'linked-root');
+  const deepTracker = join(root, 'data', 'deep', 'applications.md');
   let linked = false;
   try {
     symlinkSync(root, link, 'dir');
+    mkdirSync(dirname(deepTracker));
+    symlinkSync(join('..', 'applications.md'), deepTracker, 'file');
     linked = true;
   } catch {
-    pass('symlinked data root: skipped (symlinks unavailable on this filesystem)');
+    pass('symlinked data root and tracker: skipped (symlinks unavailable on this filesystem)');
   }
   if (linked) {
+    try {
+      const read = reportsRead(root, deepTracker);
+      if (read === 1) pass('symlinked tracker file: links relative to its target still resolve');
+      else fail(`symlinked tracker file lost its reports: reportsRead=${read}, expected 1`);
+    } catch (e) {
+      fail(`upskill.mjs failed through a symlinked tracker file: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
+    }
+
     try {
       const read = reportsRead(link);
       if (read === 1) pass('symlinked data root: the tracker-relative report link still resolves after the tracker is realpathed');

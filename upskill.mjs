@@ -36,10 +36,12 @@ import { getCareerOpsRoot, getProfilePath, rawTrackerPath, resolveTrackerPath } 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
-// Report links resolve against the tracker's directory as spelled, not the
-// realpath above: withinReports() compares candidates lexically against
-// CAREER_OPS, so a canonicalized base (macOS /var -> /private/var, or any
-// symlinked data root) would push every valid link outside reports/.
+// Report links resolve against the tracker's directory as spelled first:
+// withinReports() compares candidates lexically against CAREER_OPS, so the
+// realpath above alone (macOS /var -> /private/var, or any symlinked data
+// root) would push every valid link outside reports/. The realpath's own
+// directory stays a candidate for a tracker file that is itself a symlink,
+// whose links are written relative to its target.
 const TRACKER_DIR = dirname(resolve(rawTrackerPath(CAREER_OPS)));
 const CV_FILE = join(CAREER_OPS, 'cv.md');
 const PROFILE_FILE = getProfilePath();
@@ -469,10 +471,15 @@ function analyze(minReports) {
     if (!linkMatch) continue;
     reportsLinked += 1;
     // Tracker links are normalized relative to the tracker file's directory
-    // (see merge-tracker.mjs); resolve against it, with a root-relative fallback.
+    // (see merge-tracker.mjs); resolve against it as spelled and as realpathed
+    // (see TRACKER_DIR), with a root-relative fallback.
     // The read is attempted directly instead of probing with existsSync first,
     // which costs a full stat per report and races with the read (#2385).
-    const candidates = new Set([join(TRACKER_DIR, linkMatch[1]), join(CAREER_OPS, linkMatch[1])]);
+    const candidates = new Set([
+      join(TRACKER_DIR, linkMatch[1]),
+      join(dirname(APPS_FILE), linkMatch[1]),
+      join(CAREER_OPS, linkMatch[1]),
+    ]);
     let content = null;
     for (const p of candidates) {
       if (!withinReports(p)) continue;
