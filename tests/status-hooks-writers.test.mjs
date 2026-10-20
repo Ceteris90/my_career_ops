@@ -79,7 +79,7 @@ test('reply-watch: an accepted Interview goes through set-status and attempts th
   assert.match(readFileSync(w.file, 'utf8'), /\| 1 \|.+\| Interview \|/);
   // The archive was attempted for this row's report. It fails only because
   // the fixture URL is a host archive-posting.mjs refuses.
-  assert.match(r.all, /JD archive failed for #1: .*archive-posting\.mjs --report=5 --company=Acme/);
+  assert.match(r.all, /JD archive trigger failed .*archive-posting\.mjs --report=5 --company=Acme/);
   assert.deepEqual(ledger(w).map(line => line.split('\t').slice(2, 5)), [['Applied', 'Interview', 'reply-watch']]);
 });
 

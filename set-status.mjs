@@ -649,7 +649,7 @@ if (flags.expectRow !== null && trackerRowIdentity(target) !== flags.expectRow) 
 // written rather than refused, so the caller still gets "status changed" and
 // not a usage error for a row it was right to show.
 const statusKey = value => resolveCanonicalState(value, states) ?? String(value ?? '').trim();
-if (flags.expectStatus !== null && oldStatus.trim() !== newStatus
+if (flags.expectStatus !== null && statusKey(oldStatus) !== newStatus
     && statusKey(oldStatus) !== statusKey(flags.expectStatus)) {
   failWith(EXIT_AMBIGUOUS, 'status-changed',
     `Tracker #${target.num} is now ${oldStatus}, not ${flags.expectStatus}; review it again before retrying`,

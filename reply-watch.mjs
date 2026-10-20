@@ -173,7 +173,10 @@ function runSetStatus(args) {
     const output = execFileSync(process.execPath, [path.join(CODE_ROOT, 'set-status.mjs'), ...args, '--json'], {
       encoding: 'utf8',
       env: { ...process.env, CAREER_OPS_ROOT: DATA_ROOT, CAREER_OPS_TRACKER: APPS_FILE },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // stdout is the JSON result. stderr is passed through: it carries what
+      // the hooks have to tell the user directly, such as another session
+      // already working this row, or a failed JD archive.
+      stdio: ['ignore', 'pipe', 'inherit'],
     });
     return { result: JSON.parse(output) };
   } catch (err) {
@@ -183,17 +186,16 @@ function runSetStatus(args) {
   }
 }
 
-// What the hooks did, from set-status's JSON. Its own warnings go to a stderr
-// this process captures, so they are restated here.
+// What the hooks did, from set-status's JSON. Under --json it prints only
+// failures (to the stderr passed through above), so successes are reported
+// here; the ledger warning is restated per row in reply-watch's own words.
 function reportHooks(result, ledgerWarning) {
   if (result.statusLogged === false) console.warn(ledgerWarning);
   if (result.followupSeeded?.seeded) {
     console.log(`   Follow-up seeded for #${result.num}: next ${result.followupSeeded.nextDate}`);
   }
   const archive = result.jdArchiveTriggered;
-  if (archive?.error) {
-    console.warn(`Warning: JD archive failed for #${result.num}: ${archive.error}`);
-  } else if (archive?.attempted) {
+  if (archive?.attempted && !archive.error) {
     console.log(`   Archived the JD for #${result.num} before the posting can close`);
   }
 }

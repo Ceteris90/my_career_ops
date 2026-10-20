@@ -107,6 +107,14 @@ test('a row already at the new status is a no-op, not a status conflict', (t) =>
   assert.equal(r.json.changed, false);
 });
 
+test('a row already at the new status under an alias is not a status conflict either', (t) => {
+  const f = fixture(t);
+  writeFileSync(f.file, tracker([ROW_1.replace('| Applied |', '| interview |'), ROW_2]));
+  const r = run(f, '--row', '1', 'Interview', '--expect-row', identityOf(ROW_1), '--expect-status', 'Applied');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(readFileSync(f.file, 'utf8'), /\| 1 \|.+\| Interview \|/);
+});
+
 test('an alias of the expected status still matches, and a malformed hash is a usage error', (t) => {
   const f = fixture(t);
   const r = run(f, '--row', '1', 'Interview', '--expect-row', identityOf(ROW_1), '--expect-status', 'applied');
