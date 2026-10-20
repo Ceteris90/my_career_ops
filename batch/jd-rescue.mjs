@@ -63,8 +63,8 @@ const HTML_ENTITIES = {
 /** Strip HTML to visible text, matching the runner's own normalization. */
 function htmlToText(html) {
   return String(html ?? '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script\s*>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style\s*>/gi, ' ')
     // Keep block boundaries as line breaks so requirement lists do not run
     // together into one unreadable paragraph for the worker.
     .replace(/<\/(p|div|li|h[1-6]|tr|section|article)>/gi, '\n')
@@ -110,7 +110,11 @@ function composeJd({ title, company, location, description, employmentType }) {
  * and only JobPosting nodes are kept.
  */
 function fromLdJson(html) {
-  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi;
+  // Collect every distinct JobPosting on the page. A listing page can carry
+  // several, and taking the first would hand the worker some other job's JD, so
+  // a rescue is only offered when exactly one posting qualifies.
+  const candidates = new Map();
   let m;
   while ((m = re.exec(html)) !== null) {
     let parsed;
@@ -146,10 +150,10 @@ function fromLdJson(html) {
         employmentType: Array.isArray(node.employmentType)
           ? node.employmentType.join(', ') : node.employmentType,
       });
-      if (wordCount(text) > 0) return { text, method: 'ld+json' };
+      if (wordCount(text) > 0) candidates.set(text, { text, method: 'ld+json' });
     }
   }
-  return null;
+  return candidates.size === 1 ? [...candidates.values()][0] : null;
 }
 
 /* ---------------------------------------------------------------- strategy 2
@@ -242,11 +246,12 @@ async function fromGreenhouseApi(url, html, timeoutMs, thin) {
  *
  * Fallback for the case where Ashby ships window.__appData but no ld+json.
  * Rather than parse the whole bootstrap object (its shape is not contractual),
- * pull the descriptionHtml/descriptionPlainText string values directly and take
- * the longest — the JD is by a wide margin the biggest such field on the page.
+ * pull the descriptionHtml/descriptionPlainText/jobDescriptionHtml string values
+ * directly (a bare `description` key is too generic: it also labels unrelated
+ * page content) and take the longest — the JD is by a wide margin the biggest such field on the page.
  */
 function fromEmbeddedDescription(html) {
-  const re = /"(descriptionHtml|descriptionPlainText|jobDescriptionHtml|description)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+  const re = /"(descriptionHtml|descriptionPlainText|jobDescriptionHtml)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
   let best = '';
   let m;
   while ((m = re.exec(html)) !== null) {
@@ -277,23 +282,31 @@ async function main() {
     process.exit(1);
   }
 
-  const found = fromLdJson(html)
-    ?? (await fromGreenhouseApi(url, html, timeoutMs, thin))
-    ?? fromEmbeddedDescription(html);
+  // First strategy that clears the word floor wins. A strategy that finds only a
+  // thin candidate must not stop the chain: a later one may hold the real JD.
+  let found = null;
+  let thinFound = null;
+  for (const run of [
+    () => fromLdJson(html),
+    () => fromGreenhouseApi(url, html, timeoutMs, thin),
+    () => fromEmbeddedDescription(html),
+  ]) {
+    const candidate = await run();
+    if (!candidate) continue;
+    if (wordCount(candidate.text) >= minWords) { found = candidate; break; }
+    thinFound ??= candidate;
+  }
 
   if (!found) {
-    process.stdout.write('0\tnone\n');
+    // A rescue that yields another thin page is not a rescue. Reporting it as
+    // one would put the worker back in exactly the position this module exists
+    // to avoid, so it is a failure and the caller routes the offer to Playwright.
+    if (thinFound) process.stdout.write(`${wordCount(thinFound.text)}\t${thinFound.method}:thin\n`);
+    else process.stdout.write('0\tnone\n');
     process.exit(1);
   }
 
   const words = wordCount(found.text);
-  // A rescue that yields another thin page is not a rescue. Reporting it as one
-  // would put the worker back in exactly the position this module exists to
-  // avoid, so it is a failure and the caller routes the offer to Playwright.
-  if (words < minWords) {
-    process.stdout.write(`${words}\t${found.method}:thin\n`);
-    process.exit(1);
-  }
 
   // Never overwrite a page that already had more JD than the rescue found —
   // see "WHEN A RESCUE IS ACCEPTED" above.
@@ -302,7 +315,16 @@ async function main() {
     process.exit(1);
   }
 
-  fs.writeFileSync(outFile, found.text);
+  // Write beside the target and rename, so a failed write leaves the existing
+  // JD file intact for the fallbacks that follow.
+  const tmp = `${outFile}.rescue-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, found.text);
+    fs.renameSync(tmp, outFile);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* nothing to clean */ }
+    throw err;
+  }
   process.stdout.write(`${words}\t${found.method}\n`);
 }
 

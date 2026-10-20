@@ -9,7 +9,7 @@
  * board API) is deliberately never reached, so this suite makes no HTTP calls.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pass, fail, ROOT, NODE } from './helpers.mjs';
@@ -250,4 +250,65 @@ console.log('\njd-rescue.mjs — JD recovery from structured page data');
   } else {
     fail(`missing-args path not handled: ${JSON.stringify(out)}`);
   }
+}
+
+// ── review follow-ups: end-tag spelling, ambiguity, chain order, key choice ──
+{
+  // `</script >` (a space before `>`) is a valid end tag; the strip must treat it as one.
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify(jobPosting({ description: longDesc('spaced') }))}</script ></head><body>shell</body></html>`;
+  const r = rescue(html);
+  if (r.ok && r.method === 'ld+json') pass('a JobPosting block closed with "</script >" is still read');
+  else fail(`"</script >" not handled: ${JSON.stringify(r)}`);
+}
+
+{
+  // Two different postings on one page: taking the first would hand the worker another job's JD.
+  const two = `<html><head><script type="application/ld+json">${JSON.stringify([
+    jobPosting({ title: 'Role A', description: longDesc('alpha') }),
+    jobPosting({ title: 'Role B', description: longDesc('beta') }),
+  ])}</script></head><body><div>Loading</div></body></html>`;
+  const r = rescue(two);
+  if (!r.ok && r.out === null) pass('two distinct JobPostings on one page are ambiguous: no rescue');
+  else fail(`ambiguous page was rescued: ${JSON.stringify(r)}`);
+}
+
+{
+  // The same posting repeated in two blocks is not ambiguous.
+  const one = jobPosting({ description: longDesc('dup') });
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify(one)}</script><script type="application/ld+json">${JSON.stringify(one)}</script></head><body>x</body></html>`;
+  const r = rescue(html);
+  if (r.ok && r.method === 'ld+json') pass('the same posting repeated in two blocks is still rescued');
+  else fail(`duplicate block not rescued: ${JSON.stringify(r)}`);
+}
+
+{
+  // A thin first candidate must not stop the chain when a later strategy holds the real JD.
+  const thinLd = jobPosting({ description: '<p>Short blurb only.</p>' });
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify(thinLd)}</script></head>` +
+    `<body><script>window.__appData={"descriptionHtml":${JSON.stringify(longDesc('embedded'))}}</script></body></html>`;
+  const r = rescue(html);
+  if (r.ok && r.method === 'embedded-description') pass('a thin ld+json candidate does not hide a full embedded description');
+  else fail(`chain stopped at the thin candidate: ${JSON.stringify(r)}`);
+}
+
+{
+  // A bare "description" key labels unrelated content and must not be taken as the JD.
+  const html = `<html><body><script>window.x={"description":${JSON.stringify(longDesc('unrelated'))}}</script></body></html>`;
+  const r = rescue(html);
+  if (!r.ok && r.out === null) pass('a bare "description" key is not treated as the job description');
+  else fail(`bare description key was used: ${JSON.stringify(r)}`);
+}
+
+{
+  // Output is written via a temp file and renamed: nothing is left beside the target.
+  const dir = mkdtempSync(join(tmpdir(), 'co-jdrescue-atomic-'));
+  const raw = join(dir, 'page.html');
+  const out = join(dir, 'jd.txt');
+  writeFileSync(raw, ldJson(jobPosting({ description: longDesc('atomic') })));
+  writeFileSync(out, 'previous contents');
+  execFileSync(NODE, [SCRIPT, 'https://x.test/j', raw, out, '0'], { encoding: 'utf-8', timeout: 20000 });
+  const leftovers = readdirSync(dir).filter((f) => f.includes('.rescue-'));
+  if (readFileSync(out, 'utf-8') !== 'previous contents' && leftovers.length === 0) pass('the rescue replaces the JD file atomically and leaves no temp file');
+  else fail(`atomic write wrong: leftovers=${JSON.stringify(leftovers)}`);
+  try { rmSync(dir, { recursive: true, force: true }); } catch {}
 }
