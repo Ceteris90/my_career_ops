@@ -121,6 +121,7 @@ DRY_RUN=false
 RETRY_FAILED=false
 RESUME_PAUSED=false
 START_FROM=0
+SCOPE_COMPANY=""
 MAX_RETRIES=2
 MIN_SCORE=0
 SKIP_PDF=false
@@ -163,6 +164,9 @@ Options:
   --retry-failed       Only retry offers marked as "failed" in state
   --resume-paused      Resume offers paused by a Claude session/rate limit
   --start-from N       Start from offer ID N (skip earlier IDs)
+  --company A,B        Only process offers whose company matches (case- and
+                       punctuation-insensitive substring of the notes' company
+                       half or of the URL; comma-separated). Applies before --limit
   --limit N            Max offers: positive integer; omit for no limit
   --max-retries N      Max retry attempts per offer (default: 2)
   --min-score N        Skip PDF/tracker for offers scoring below N (default: 0 = off)
@@ -217,6 +221,9 @@ while [[ $# -gt 0 ]]; do
     --retry-failed) RETRY_FAILED=true; shift ;;
     --resume-paused) RESUME_PAUSED=true; shift ;;
     --start-from) START_FROM="$2"; shift 2 ;;
+    --company)
+      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "ERROR: --company requires an argument"; exit 1; }
+      SCOPE_COMPANY="$2"; shift 2 ;;
     --limit)
       if [[ $# -lt 2 ]] || ! [[ "$2" =~ ^[0-9]+$ ]] || [[ "$2" =~ ^0+$ ]]; then
         echo "ERROR: --limit must be a positive integer; omit --limit for no limit."
@@ -1923,6 +1930,18 @@ main() {
   local -a pending_sources=()
   local -a pending_notes=()
 
+  # --company: resolve the matching ids ONCE (batch/company-scope.mjs), then skip
+  # every other row before --limit is counted.
+  local scope_ids=""
+  if [[ -n "$SCOPE_COMPANY" ]]; then
+    if ! scope_ids=$(node "$BATCH_DIR/company-scope.mjs" --input "$INPUT_FILE" --company "$SCOPE_COMPANY"); then
+      echo "ERROR: could not resolve --company scope (company-scope.mjs failed)." >&2
+      exit 1
+    fi
+    scope_ids=" $(echo "$scope_ids" | tr '\n' ' ') "
+    echo "Scope: company=$SCOPE_COMPANY ($(echo "$scope_ids" | wc -w | tr -d ' ') matching row(s))"
+  fi
+
   while IFS=$'\t' read -r id url source notes; do
     [[ "$id" == "id" ]] && continue  # skip header
     [[ -z "$id" || -z "$url" ]] && continue
@@ -1932,6 +1951,10 @@ main() {
 
     # Skip if before start-from
     if (( id < START_FROM )); then
+      continue
+    fi
+
+    if [[ -n "$SCOPE_COMPANY" && "$scope_ids" != *" $id "* ]]; then
       continue
     fi
 
