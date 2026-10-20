@@ -189,10 +189,10 @@ export const MANIFEST_USER_PATH_OVERLAPS = Object.freeze([
 // re-execing it, and a v1.14–v1.37 parent checks out only its import closure,
 // so on the first upgrade to this layout the child runs with no manifest file
 // on disk. That is the one case where the local list is empty, and apply()
-// does not need it then: it merges the target release's list, which it reads
-// from the pinned commit (manifestSystemPathsAt), so the update is complete.
-// What else reads the local list fails closed without it (see
-// requireLocalSystemPaths).
+// does not need the file then: it reads the target release's list from the
+// pinned commit (manifestSystemPathsAt) and adopts it as its own
+// (adoptTargetManifest), which is what the child's list always was. What else
+// reads the local list fails closed without it (see requireLocalSystemPaths).
 export const MANIFEST_MODULE = 'lib/update-manifest.mjs';
 const LOCAL_MANIFEST = readLocalManifest();
 const SYSTEM_PATHS = LOCAL_MANIFEST.paths;
@@ -225,6 +225,24 @@ function requireLocalSystemPaths(what) {
     );
   }
   return SYSTEM_PATHS;
+}
+
+/**
+ * Fill the local list from the target's when lib/update-manifest.mjs is not on
+ * disk. Only apply() calls it, with the list it read from the pinned commit.
+ *
+ * Before #5554 the child's local list was the target's by construction: the
+ * child IS the target updater, and the list was in its source. On the first
+ * upgrade to this layout an older parent does not check the module out, so
+ * the child starts with an empty list. This gives it back the list its own
+ * release ships, so the LOCAL_PATHS_FILE collision check in localUserPaths()
+ * and every merge below see what they saw before the split. It never replaces
+ * a list that was read from disk.
+ * @param {string[]} paths - The target's SYSTEM_PATHS, already validated.
+ */
+function adoptTargetManifest(paths) {
+  if (!LOCAL_MANIFEST.problem || SYSTEM_PATHS.length > 0) return;
+  SYSTEM_PATHS.push(...paths);
 }
 
 /**
@@ -4578,7 +4596,6 @@ async function apply() {
     // missing/corrupt. Whether an entry names the user layer is not decided
     // here: rejectUserLayerPaths refuses those entry by entry (3a), so one bad
     // entry cannot block every install.
-    const manifestUserPaths = effectiveUserPaths();
     try {
       git('show', `${targetCommit}:update-system.mjs`);
     } catch (err) {
@@ -4593,6 +4610,10 @@ async function apply() {
       throw new Error(`Target manifest is unreadable; refusing to update (${err.message})`);
     }
     remoteSystemPaths = assertCanonicalManifestPaths(remoteSystemPaths, `Target SYSTEM_PATHS (${remoteManifestFile})`);
+    // Before effectiveUserPaths(): its LOCAL_PATHS_FILE collision check reads
+    // the local list, which must not be empty on the first upgrade to this layout.
+    adoptTargetManifest(remoteSystemPaths);
+    const manifestUserPaths = effectiveUserPaths();
     const validatedManifestPaths = assertCanonicalManifestPaths(
       mergePathLists(SYSTEM_PATHS, remoteSystemPaths, BOOTSTRAP_PATHS),
       'Merged updater manifest',
