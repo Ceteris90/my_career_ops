@@ -8,7 +8,7 @@
 // original's permission bits.
 import {
   mkdtempSync, writeFileSync, readFileSync, symlinkSync, lstatSync, statSync, chmodSync, existsSync,
-  readdirSync, mkdirSync,
+  readdirSync, mkdirSync, chownSync,
 } from 'fs';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
@@ -42,6 +42,29 @@ try {
     const leftovers = readdirSync(tmp).filter((f) => f.endsWith('.tmp'));
     if (leftovers.length === 0) pass('replaceUserFile leaves no temp file behind');
     else fail(`replaceUserFile left temp files: ${leftovers.join(', ')}`);
+  }
+
+  // ── 1c. The file's group survives the replacement. The temp file is created
+  //    in this process's default group; a 0640 file shared through another
+  //    group would otherwise change hands.
+  {
+    const otherGid = IS_WINDOWS ? undefined
+      : (process.getgroups?.() || []).find((g) => g !== process.getgid());
+    if (otherGid === undefined) {
+      warn('skipping the group case (Windows, or this user is in only one group)');
+    } else {
+      const file = join(tmp, 'group-shared.yml');
+      writeFileSync(file, 'tracked_companies: []\n');
+      chownSync(file, process.getuid(), otherGid);
+      chmodSync(file, 0o640);
+      replaceUserFile(file, 'tracked_companies:\n  - name: Acme\n');
+      const after = statSync(file);
+      if (after.gid === otherGid && (after.mode & 0o777) === 0o640) {
+        pass('replaceUserFile keeps the original file\'s group and mode');
+      } else {
+        fail(`replaceUserFile group/mode = ${after.gid}/${(after.mode & 0o777).toString(8)}, expected ${otherGid}/640`);
+      }
+    }
   }
 
   // ── 1a. A read-only file is refused, as the in-place write refused it. A
