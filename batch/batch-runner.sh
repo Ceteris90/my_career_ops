@@ -337,11 +337,13 @@ check_prerequisites() {
   esac
 
   if ! command -v "$cli_cmd" &>/dev/null; then
-    echo "ERROR: '$cli_cmd' not found in PATH (required for --cli $CLI)."
+    local level="ERROR"
+    [[ "$DRY_RUN" == "true" ]] && level="WARN"
+    echo "$level: '$cli_cmd' not found in PATH (required for --cli $CLI)."
     if [[ "$CLI" == "opencode" ]]; then
       echo "       Install opencode (https://opencode.ai) or Ollama (https://ollama.ai) with an opencode model."
     fi
-    exit 1
+    [[ "$DRY_RUN" == "true" ]] || exit 1
   fi
 
   # Parallelism, the rate-limit retry loop, and --strict-mcp-config are
