@@ -90,6 +90,8 @@ START_FROM=0
 MAX_RETRIES=2
 MIN_SCORE=0
 SKIP_PDF=false
+MODE="full"
+SINGLE_PASS=false
 MODEL=""  # explicit override; otherwise resolved from config/profile.yml spend_tier
 RESOLVED_MODEL=""
 RESOLVED_SPEND_TIER=""
@@ -133,6 +135,8 @@ Options:
   --skip-pdf           Skip PDF generation entirely (write ❌ in tracker PDF column)
   --worker-timeout N   Stop a worker after N seconds and record it as failed
                        (default: 1800; 0 = no limit)
+  --mode MODE          Evaluation mode: full (default) or match (condensed single-pass CV match)
+  --single-pass        Alias for --mode match
   --rate-limit-sleep N Maximum adaptive retry delay in seconds; 0 pauses immediately
                        (default: 300; range: 0–2147483647; claude only)
   --status             Show batch progress and a per-job table, then exit
@@ -197,6 +201,20 @@ while [[ $# -gt 0 ]]; do
     --max-retries) MAX_RETRIES="$2"; shift 2 ;;
     --min-score) MIN_SCORE="$2"; shift 2 ;;
     --skip-pdf) SKIP_PDF=true; shift ;;
+    --mode)
+      [[ $# -ge 2 ]] || { echo "ERROR: --mode requires an argument (full or match)"; exit 1; }
+      MODE="$2"
+      if [[ "$MODE" == "match" || "$MODE" == "single-pass" ]]; then
+        MODE="match"
+        SINGLE_PASS=true
+      fi
+      shift 2
+      ;;
+    --single-pass)
+      MODE="match"
+      SINGLE_PASS=true
+      shift
+      ;;
     --rate-limit-sleep)
       [[ $# -ge 2 ]] || { echo "ERROR: --rate-limit-sleep requires an argument"; exit 1; }
       RATE_LIMIT_SLEEP="$2"
@@ -226,6 +244,16 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ "$MODE" != "full" && "$MODE" != "match" ]]; then
+  echo "ERROR: Unknown --mode '$MODE'. Supported: full, match."
+  exit 1
+fi
+
+if [[ "$MODE" == "match" ]]; then
+  PROMPT_FILE="$BATCH_DIR/batch-prompt-match.md"
+  SKIP_PDF=true
+fi
 
 if [[ -z "$PARALLEL" ]]; then
   if [[ "$CLI" == "claude" ]]; then PARALLEL=$DEFAULT_CLAUDE_PARALLEL; else PARALLEL=1; fi
@@ -587,6 +615,7 @@ resolve_worker_model() {
   RESOLVED_SPEND_TIER="$(read_spend_tier)"
   RESOLVED_MODEL="$(spend_tier_to_model "$RESOLVED_SPEND_TIER")"
 }
+
 
 # Append a one-line, auditable record of a pre-screen-gate discard to
 # batch/logs/discard.log (see modes/batch.md — Pre-screen gate). Format:
@@ -1168,7 +1197,9 @@ process_offer() {
 
   # Build the prompt with placeholders replaced
   local prompt
-  if [[ "$SKIP_PDF" == "true" ]]; then
+  if [[ "$MODE" == "match" ]]; then
+    prompt="Process this job offer in single-pass CV match mode. Extract CV facts, score the match against the JD requirements in a single pass, output the report and tracker addition, and output final JSON. Do not generate PDF; write ❌ in the tracker PDF column and set \"pdf\": null in the final JSON."
+  elif [[ "$SKIP_PDF" == "true" ]]; then
     prompt="Process this job offer. Run the pipeline: A-G evaluation + report .md + tracker line. Do not generate PDF; write ❌ in the tracker PDF column and set \"pdf\": null in the final JSON."
     echo "    ⏭️  --skip-pdf set — skipping PDF generation for #$id ($url)"
   else
@@ -1230,6 +1261,7 @@ process_offer() {
     fi
   done
 
+
   # Build the launch command for the configured CLI.
   # For claude the model is resolved once per run from spend_tier unless --model
   # was passed; other CLIs take --model verbatim. Building claude's command in an
@@ -1262,6 +1294,8 @@ process_offer() {
   local terminal_failure_recorded=false
   local shim_retries=0
   local max_shim_retries=4
+  local match_output_retries=0
+  local max_match_output_retries=1
   while true; do
     exit_code=0
     case "$CLI" in
@@ -1285,6 +1319,49 @@ process_offer() {
         run_worker grok --always-approve --output-format plain ${model_args[@]+"${model_args[@]}"} -p "$full_prompt" > "$log_file" 2>&1 || exit_code=$?
         ;;
     esac
+
+    # In match mode, check if worker result JSON is malformed or missing required
+    # fields (parsed_status or parsed_score). If so, retry once before finalizing
+    # so a transient formatting glitch does not permanently fail or bypass gates.
+    if [[ "$MODE" == "match" && $exit_code -eq 0 ]]; then
+      local worker_check_json
+      worker_check_json=$(awk '
+        /^```json[[:space:]]*$/ { in_block=1; block=""; next }
+        in_block && /^```[[:space:]]*$/ { in_block=0; last=block; next }
+        in_block { block = block $0 "\n" }
+        END { printf "%s", last }
+      ' "$log_file" 2>/dev/null || true)
+      local check_status="" check_score=""
+      if [[ -n "$worker_check_json" ]]; then
+        local check_parsed
+        check_parsed=$(printf '%s' "$worker_check_json" | node -e '
+          let data = "";
+          process.stdin.on("data", d => data += d);
+          process.stdin.on("end", () => {
+            try {
+              const obj = JSON.parse(data);
+              const status = typeof obj.status === "string" ? obj.status : "";
+              const score = typeof obj.score === "number" ? String(obj.score) : "";
+              process.stdout.write(status + "\x1f" + score);
+            } catch {
+              process.stdout.write("");
+            }
+          });
+        ' 2>/dev/null || true)
+        if [[ -n "$check_parsed" ]]; then
+          IFS=$'\x1f' read -r check_status check_score <<< "$check_parsed"
+        fi
+      fi
+      if [[ -z "$check_status" || ( "$check_status" != "needs_confirmation" && "$check_status" != "skipped" && "$check_status" != "failed" && -z "$check_score" ) ]]; then
+        if (( match_output_retries < max_match_output_retries && retries < MAX_RETRIES )); then
+          match_output_retries=$((match_output_retries + 1))
+          retries=$((retries + 1))
+          echo "    ⚠️  Malformed or missing match mode JSON summary (attempt $retries/$MAX_RETRIES); retrying once..."
+          sleep 2
+          continue
+        fi
+      fi
+    fi
 
     # Non-claude CLIs run a single attempt: the session-limit and rate-limit
     # detection below greps generic phrases (429, quota, session limit) that
@@ -1412,6 +1489,20 @@ process_offer() {
         elif [[ -n "$parsed_score" ]]; then
           score="$parsed_score"
         fi
+      fi
+    fi
+
+    # In match mode, enforce valid JSON output and required fields. If malformed
+    # or missing parsed_status or parsed_score (and not a human-confirmation hold
+    # or dealbreaker skip), treat as a failed worker attempt so it cannot be
+    # recorded as completed with score "-" or bypass --min-score.
+    if [[ "$MODE" == "match" && -z "$worker_failed_match" ]]; then
+      if [[ -z "$worker_result_json" || -z "$parsed" || -z "$parsed_status" ]]; then
+        worker_failed_match="failed"
+        worker_error_match="malformed or missing match mode JSON summary (parsed_status missing)"
+      elif [[ "$parsed_status" != "needs_confirmation" && "$parsed_status" != "skipped" ]] && { [[ -z "$parsed_score" ]] || ! is_decimal_number "$score"; }; then
+        worker_failed_match="failed"
+        worker_error_match="missing or invalid match mode score: $score"
       fi
     fi
 
@@ -1567,6 +1658,17 @@ process_offer() {
         echo "    ⏭️  Skipped (score: $score < min-score: $MIN_SCORE)"
         return 0
       fi
+    fi
+
+    # Defensive guard: in match mode, an offer must never complete without a valid numeric score.
+    if [[ "$MODE" == "match" ]] && ! is_decimal_number "$score"; then
+      if (( retries < MAX_RETRIES )); then
+        retries=$((retries + 1))
+      fi
+      update_state_retrying "$id" "$url" "failed" "$started_at" "$completed_at" "$report_num" "-" "missing or invalid numeric score in match mode: $score" "$retries" || true
+      release_report_num "$report_num"
+      echo "    ❌ Failed (invalid match mode score: $score, attempt $retries)"
+      return 0
     fi
 
     update_state_retrying "$id" "$url" "completed" "$started_at" "$completed_at" "$report_num" "$score" "-" "$retries" || true
@@ -1827,6 +1929,9 @@ main() {
   fi
 
   echo "=== career-ops batch runner ==="
+  if [[ "$MODE" == "match" ]]; then
+    echo "Mode: match (single-pass CV evaluation)"
+  fi
   if (( LIMIT > 0 )); then
     echo "Parallel: $PARALLEL | Max retries: $MAX_RETRIES | Limit: $LIMIT"
   else
