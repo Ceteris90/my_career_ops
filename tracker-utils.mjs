@@ -8,7 +8,7 @@
  * copies — and every writer excludes every other writer through the same lock.
  */
 
-import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -715,16 +715,36 @@ export function writeFileAtomic(path, content, { mode } = {}) {
  * full disk mid-write leaves the user's only copy empty or cut short. The
  * atomic replacement is a new file, which would otherwise turn a symlinked
  * cv.md into a regular file and drop the file's permissions; writing through
- * the real path and carrying the mode over keeps both.
+ * the real path and carrying the mode over keeps both. A symlink whose target
+ * does not exist yet (article-digest.md before its first entry) is followed by
+ * hand, since realpathSync cannot resolve it, so the target is created.
  *
  * @param {string} path - The file to replace (may be a symlink, or not exist yet).
  * @param {string} content - Complete file content to write.
  * @returns {void}
  */
 export function replaceUserFile(path, content) {
-  const target = canonicalizeTrackerPath(path);
+  const target = userFileWriteTarget(path);
   const mode = existsSync(target) ? statSync(target).mode & 0o777 : undefined;
   writeFileAtomic(target, content, { mode });
+}
+
+/**
+ * The file replaceUserFile() should write: the real path, or for a dangling
+ * symlink chain the path at its end, which an in-place write would have created.
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+function userFileWriteTarget(path) {
+  let current = canonicalizeTrackerPath(path);
+  for (let hops = 0; hops < 40; hops++) {
+    let stat;
+    try { stat = lstatSync(current); } catch { return current; }
+    if (!stat.isSymbolicLink()) return current;
+    current = resolve(dirname(current), readlinkSync(current));
+  }
+  throw new Error(`${path}: too many levels of symbolic links`);
 }
 
 /**

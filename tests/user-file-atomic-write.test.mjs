@@ -44,6 +44,25 @@ try {
     else fail(`replaceUserFile left temp files: ${leftovers.join(', ')}`);
   }
 
+  // ── 1b. A dangling symlink (article-digest.md before its first entry): the
+  //    link stays and its target is created, as an in-place write would do.
+  {
+    const dir = join(tmp, 'dangling');
+    mkdirSync(dir);
+    const link = join(dir, 'article-digest.md');
+    let linked = false;
+    try { symlinkSync(join('targets', 'digest.md'), link); linked = true; } catch (e) { warn(`skipping the dangling-symlink case: ${e.code || e.message}`); }
+    if (linked) {
+      mkdirSync(join(dir, 'targets'));
+      replaceUserFile(link, '# Article Digest\n');
+      if (lstatSync(link).isSymbolicLink() && readFileSync(join(dir, 'targets', 'digest.md'), 'utf8') === '# Article Digest\n') {
+        pass('replaceUserFile creates a dangling symlink\'s target and keeps the link');
+      } else {
+        fail(`replaceUserFile replaced the dangling symlink (isSymbolicLink=${lstatSync(link).isSymbolicLink()})`);
+      }
+    }
+  }
+
   // ── 2. add-entry.mjs end to end, with cv.md a symlink to the real file ──
   {
     const realDir = join(tmp, 'real');
