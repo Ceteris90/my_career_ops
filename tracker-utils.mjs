@@ -703,8 +703,10 @@ export function writeFileAtomic(path, content, { mode, owner } = {}) {
       if (owner) chownSync(tmpPath, owner.uid, owner.gid);
     } else {
       // Creation honours the umask, so it can only narrow `mode`; chmod then
-      // sets it exactly.
-      writeFileSync(tmpPath, content, { mode });
+      // sets it exactly. With `owner`, create it owner-only: until the chown
+      // it sits in this process's default group, which `mode`'s group bits
+      // must not open it to.
+      writeFileSync(tmpPath, content, { mode: owner ? 0o600 : mode });
       // Before chmod: a chown by a non-root owner may clear set-id bits.
       if (owner) chownSync(tmpPath, owner.uid, owner.gid);
       chmodSync(tmpPath, mode);
