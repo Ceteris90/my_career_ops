@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { compileKeyword, foldTitle } from './title-keywords.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { writeFileAtomic } from './tracker-utils.mjs';
@@ -234,7 +234,7 @@ function blockAfter(lines, header, nextHeader) {
 export function buildPortals(template, a) {
   const p = a.portals;
   const lines = template.split('\n');
-  const shippedNegatives = yaml.load(template).title_filter.negative.map((n) => foldTitle(String(n)));
+  const shippedNegatives = loadYaml(template).title_filter.negative.map((n) => foldTitle(String(n)));
 
   // Drop shipped negatives that would reject a user positive under the same
   // word:/stem:/substring rules the scanner uses.
@@ -247,7 +247,7 @@ export function buildPortals(template, a) {
     const match = lines[i].match(/^\s+-\s+(.+)$/);
     if (!match) continue;
     let value;
-    try { value = yaml.load(match[1]); } catch { continue; }
+    try { value = loadYaml(match[1]); } catch { continue; }
     if (typeof value === 'string' && conflicting.has(foldTitle(value))) lines.splice(i, 1);
   }
   const [, filteredNegEnd] = blockAfter(lines, '  negative:', '  seniority_boost:');
@@ -283,7 +283,7 @@ export function buildPortals(template, a) {
 }
 
 function checkProfile(text, a) {
-  const p = yaml.load(text);
+  const p = loadYaml(text);
   const ok = p.candidate.full_name === a.candidate.full_name
     && JSON.stringify(p.target_roles.primary) === JSON.stringify(a.target_roles)
     && p.location.country === a.location.country
@@ -292,8 +292,8 @@ function checkProfile(text, a) {
 }
 
 function checkPortals(text, templateText, a) {
-  const c = yaml.load(text);
-  const t = yaml.load(templateText);
+  const c = loadYaml(text);
+  const t = loadYaml(templateText);
   const ok = JSON.stringify(c.title_filter.positive) === JSON.stringify(a.portals.positive)
     && c.tracked_companies.length === t.tracked_companies.length
     && (a.portals.max_posting_age_days > 0 ? c.max_posting_age_days === a.portals.max_posting_age_days : c.max_posting_age_days === undefined);

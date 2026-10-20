@@ -1063,7 +1063,7 @@ export async function runUnmined(filePath, { fetchJson } = {}) {
     console.log(`verify-portals: no portals file at ${filePath} — nothing to check.`);
     return 0;
   }
-  const cfg = yaml.load(readFileSync(filePath, 'utf8')) || {};
+  const cfg = loadYaml(readFileSync(filePath, 'utf8')) || {};
   const hints = unminedHints(cfg);
   if (hints.length === 0) {
     console.log('No untracked companies named in search_queries. Nothing to mine.');

@@ -96,7 +96,7 @@ export function readStyleTokens(profilePath = getProfilePath()) {
  */
 export function readLockedSections(profilePath = getProfilePath(), foldKey = (s) => s.toLowerCase()) {
   if (!existsSync(profilePath)) return [];
-  const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+  const raw = loadYaml(readFileSync(profilePath, 'utf-8')) || {};
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
   const locked = raw?.cv?.locked_sections;
   if (locked === undefined || locked === null) return [];
