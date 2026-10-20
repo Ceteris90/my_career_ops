@@ -285,3 +285,50 @@ try {
 } finally {
   rmSync(hooksRoot, { recursive: true, force: true });
 }
+
+// The same signing config, against the suites whose fixtures run git through
+// something that inherits process.env (the updater's own gitIn, a bare
+// execFileSync, a spawned CLI) and so are sealed by sealProcessGitEnv() rather
+// than by a fixture runner. updater-branch-guard tags a fixture commit, which
+// is the "no tag message?" case on a machine that signs tags; the rest only
+// commit, which signs with the contributor's key or fails where none is
+// reachable. A suite that loses its seal cannot build a fixture under this.
+console.log('\nhermetic git env — process-sealed suites survive ambient signing config');
+
+const sealedRoot = mkdtempSync(join(tmpdir(), 'career-ops-hermetic-sealed-'));
+try {
+  const signingConfig = join(sealedRoot, 'gitconfig');
+  writeFileSync(signingConfig, [
+    '[tag]', '\tgpgSign = true', '\tforceSignAnnotated = true',
+    '[commit]', '\tgpgSign = true',
+    '[gpg]', `\tprogram = ${join(sealedRoot, 'no-such-signing-program')}`,
+    '',
+  ].join('\n'));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: signingConfig };
+  for (const name of ['GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG']) delete env[name];
+
+  for (const name of [
+    'doctor-code-root-checks',
+    'doctor-tracked-bak-files',
+    'update-system',
+    'updater-branch-guard',
+    'updater-commit-file-modes',
+    'updater-status-paths',
+    'updater-upgrade-safety',
+  ]) {
+    const suite = fileURLToPath(new URL(`./${name}.test.mjs`, import.meta.url));
+    const child = spawnSync(process.execPath, [suite], { encoding: 'utf-8', timeout: 120000, env });
+    const out = child.stdout || '';
+    const failures = out.split('\n').filter((line) => line.includes('❌'));
+    if (child.status === 0 && failures.length === 0) {
+      pass(`${name} builds its fixtures under ambient tag.gpgSign / commit.gpgSign`);
+    } else {
+      const why = failures[0]?.trim()
+        || (child.stderr || '').split('\n').find((line) => /fatal:|error:|Error: /.test(line))?.trim()
+        || 'no output';
+      fail(`${name} does not survive ambient signing config (exit ${child.status}): ${why}`);
+    }
+  }
+} finally {
+  rmSync(sealedRoot, { recursive: true, force: true });
+}

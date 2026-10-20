@@ -1489,6 +1489,40 @@ export function hermeticGitRunner(dir, { stdio } = {}) {
 }
 
 /**
+ * Seal THIS process's git environment, for a suite whose fixtures run git
+ * through something that inherits process.env rather than through
+ * `hermeticGitRunner`: the updater's own `gitIn` / `gitQuietIn` and the `*In`
+ * helpers built on them, a bare `execFileSync('git', ...)`, or a CLI spawned
+ * with the parent's environment. Those inherit the environment as a real
+ * install must, so a fixture built with them is only as isolated as the
+ * contributor's shell. With `tag.gpgSign = true` in ~/.gitconfig a lightweight
+ * `git tag` becomes a signed annotated tag with no message and git dies with
+ * "no tag message?"; with `commit.gpgSign = true` every fixture commit is
+ * signed with the contributor's own key, or fails where gpg cannot sign.
+ *
+ * Sealing the process rather than one runner is what reaches the git calls
+ * the code under test makes for itself. Every discovered test file runs in its
+ * own process, so nothing outside the calling suite is touched. Call it before
+ * the suite's first git command; a later `process.env` override (an identity
+ * negative control, say) still applies on top and restores back to the seal.
+ *
+ * The environment is `hermeticGitEnv`'s, so the runtime-layer pins come with
+ * it, and the variables that helper and `hermeticGitRunner` drop are deleted
+ * from process.env, not merely left uncopied. The config path names a file
+ * that is never created: a missing global file is simply an empty one.
+ */
+export function sealProcessGitEnv() {
+  const dir = mkdtempSync(join(tmpdir(), 'co-sealed-git-'));
+  process.on('exit', () => _rmSync(dir, { recursive: true, force: true }));
+  const sealed = hermeticGitEnv(join(dir, 'gitconfig'));
+  for (const name of REPO_LOCATION_ENV) delete sealed[name];
+  for (const name of Object.keys(process.env)) {
+    if (!Object.hasOwn(sealed, name)) delete process.env[name];
+  }
+  Object.assign(process.env, sealed);
+}
+
+/**
  * Can a directory write-deny actually stop THIS process from creating a file?
  *
  * Two suites arrange a write failure by making the tracker's directory
