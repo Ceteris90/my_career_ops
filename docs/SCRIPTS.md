@@ -1010,6 +1010,7 @@ node tracker.mjs sync                     # (re)build applications.db from appli
 node tracker.mjs sync --check             # diagnose corruption only, no write (exit 1 if issues found)
 node tracker.mjs query --status Applied --since 2026-05-01
 node tracker.mjs query --company acme --json
+node tracker.mjs query --status Evaluated --min-score 4  # scored 4.0/5 or higher, not yet applied to
 node tracker.mjs history --id 42          # status transitions observed across syncs (Applied → Interview → ...)
 node tracker.mjs export                   # inverse: index → markdown table on stdout
 node tracker.mjs export --out repaired.md # write to a file (existing file backed up to .bak first)
