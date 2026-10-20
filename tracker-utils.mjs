@@ -8,7 +8,7 @@
  * copies — and every writer excludes every other writer through the same lock.
  */
 
-import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, accessSync, constants as fsConstants, chmodSync, chownSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, accessSync, constants as fsConstants, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -684,31 +684,20 @@ export function renameSyncWithRetry(tmpPath, path, rename = renameSync) {
  * temporary file before the rename, so the destination is never observable with
  * wider permissions than it had.
  *
- * It also takes the process's uid and default group. Pass `owner` to carry the
- * original's over: it is applied before `mode`, and a failure (EPERM: another
- * user's file, or a group this process is not in) aborts before the rename,
- * leaving the original untouched.
- *
  * @param {string} path - Final file path to replace.
  * @param {string} content - Complete file content to write.
- * @param {{mode?: number, owner?: {uid: number, gid: number}}} [options] -
- *   `mode`: permission bits for the replacement; `owner`: its uid and gid.
+ * @param {{mode?: number}} [options] - `mode`: permission bits for the replacement.
  * @returns {void}
  */
-export function writeFileAtomic(path, content, { mode, owner } = {}) {
+export function writeFileAtomic(path, content, { mode } = {}) {
   const tmpPath = join(dirname(path), `.${basename(path)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`);
   try {
     if (mode === undefined) {
       writeFileSync(tmpPath, content);
-      if (owner) chownSync(tmpPath, owner.uid, owner.gid);
     } else {
       // Creation honours the umask, so it can only narrow `mode`; chmod then
-      // sets it exactly. With `owner`, create it owner-only: until the chown
-      // it sits in this process's default group, which `mode`'s group bits
-      // must not open it to.
-      writeFileSync(tmpPath, content, { mode: owner ? 0o600 : mode });
-      // Before chmod: a chown by a non-root owner may clear set-id bits.
-      if (owner) chownSync(tmpPath, owner.uid, owner.gid);
+      // sets it exactly.
+      writeFileSync(tmpPath, content, { mode });
       chmodSync(tmpPath, mode);
     }
     renameSyncWithRetry(tmpPath, path);
@@ -741,13 +730,8 @@ export function replaceUserFile(path, content) {
   // file the user made read-only. The in-place write refused; so does this
   // (throws EACCES/EPERM).
   if (exists) accessSync(target, fsConstants.W_OK);
-  const stat = exists ? statSync(target) : null;
-  const mode = stat ? stat.mode & 0o777 : undefined;
-  // The in-place write kept the file's owner and group; a 0640 file shared
-  // through its group must not move to this process's default group. POSIX
-  // only: Windows reports uid/gid 0 and has no chown semantics to keep.
-  const owner = stat && process.platform !== 'win32' ? { uid: stat.uid, gid: stat.gid } : undefined;
-  writeFileAtomic(target, content, { mode, owner });
+  const mode = exists ? statSync(target).mode & 0o777 : undefined;
+  writeFileAtomic(target, content, { mode });
 }
 
 /**
