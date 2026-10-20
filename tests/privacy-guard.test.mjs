@@ -268,6 +268,70 @@ test('7b. a profile URL derived handle is guarded however the URL was written', 
 });
 
 // ---------------------------------------------------------------------------
+// 9b. A body the guard cannot read as text is REFUSED, not cleared — the
+// fail-open shapes fetch accepts whose content JSON.stringify cannot see.
+// ---------------------------------------------------------------------------
+test('9b. uninspectable fetch bodies are refused, never assumed clean', () => {
+  const guard = fakeGuard();
+  const uninspectable = {
+    ReadableStream: new ReadableStream({ start(c) { c.close(); } }),
+    FormData: (() => { const f = new FormData(); f.append('q', FAKE.name); return f; })(),
+    URLSearchParams: new URLSearchParams({ q: FAKE.name }),
+    Blob: new Blob([FAKE.name]),
+    ArrayBuffer: new TextEncoder().encode(FAKE.name).buffer,
+  };
+
+  for (const [name, body] of Object.entries(uninspectable)) {
+    // At the boundary: a PrivacyGuardError with the "could not be inspected"
+    // category, so the caller gets a policy refusal rather than a raw TypeError.
+    assert.throws(
+      () => assertLlmRequestAllowed('https://openrouter.ai/api/v1/chat/completions', body, { guard }),
+      (err) => err instanceof PrivacyGuardError && err.category === 'request body that could not be inspected',
+      `${name} must be refused at the boundary`
+    );
+    // The non-throwing variant agrees — fail-closed is a property of the check.
+    const decision = checkLlmRequest('https://openrouter.ai/api/v1/chat/completions', body, { guard });
+    assert.equal(decision.allowed, false, `${name} must not be reported allowed`);
+  }
+
+  // A string body still inspects — the refusal is not a blanket rejection.
+  assert.doesNotThrow(() =>
+    assertLlmRequestAllowed('https://openrouter.ai/api/v1/chat/completions', JSON.stringify({ messages: [{ content: 'hello' }] }), { guard })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 9c. Binary views are DECODED, not stringified to a byte table — otherwise a
+// secret inside a Buffer is present but invisible to the substring match.
+// ---------------------------------------------------------------------------
+test('9c. a Buffer body is scanned as text, not as a byte array', () => {
+  const guard = fakeGuard();
+
+  // The default JSON view of a Buffer holds byte codes, not the text, so a
+  // guard that merely JSON.stringify'd it would report "clean" on a real secret.
+  assert.ok(
+    !JSON.stringify({ q: Buffer.from(FAKE.name) }).includes(FAKE.name),
+    'precondition: the raw JSON view of a Buffer hides the text'
+  );
+  assert.throws(() => guard.assertSafe(Buffer.from(FAKE.name)), PrivacyGuardError, 'Buffer body');
+
+  // Nested inside a request object, and as a typed array, too.
+  assert.throws(
+    () => guard.assertSafe({ model: 'm', messages: [{ content: Buffer.from(`hi ${FAKE.name}`) }] }),
+    PrivacyGuardError,
+    'nested Buffer'
+  );
+  assert.throws(
+    () => guard.assertSafe(new TextEncoder().encode(FAKE.email)),
+    PrivacyGuardError,
+    'Uint8Array'
+  );
+
+  // And a clean Buffer still passes, so this is not a false-positive machine.
+  assert.equal(guard.assertSafe(Buffer.from('an ordinary job posting')), true);
+});
+
+// ---------------------------------------------------------------------------
 // 8. Auto-detection: emails and phones, with per-kind switches.
 // ---------------------------------------------------------------------------
 test('8. auto-detection is pattern-based and each kind can be switched off', () => {
