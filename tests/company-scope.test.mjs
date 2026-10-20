@@ -1,7 +1,7 @@
 // tests/company-scope.test.mjs — batch/company-scope.mjs picks the rows of a
 // `--company` run, and batch-runner.sh --dry-run honours it before --limit.
-import { pass, fail, rmSync, getBash, ROOT, NODE } from './helpers.mjs';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync, symlinkSync } from 'node:fs';
+import { pass, fail, rmSync, getBash, linkNodeModules, ROOT, NODE } from './helpers.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -51,7 +51,8 @@ if (!bash) {
     for (const d of ['lib']) cpSync(join(ROOT, d), join(work, d), { recursive: true });
     // company-scope.mjs imports normalizeCompany from tracker-utils.mjs (and its siblings).
     for (const f of ['tracker-utils.mjs', 'tracker-parse.mjs', 'tracker-aliases.json', 'path-resolver.mjs', 'package.json']) cpSync(join(ROOT, f), join(work, f));
-    symlinkSync(join(ROOT, 'node_modules'), join(work, 'node_modules'));
+    const linkProblem = linkNodeModules(work);
+    if (linkProblem) throw new Error(linkProblem);
     writeFileSync(join(batch, 'batch-input.tsv'), TSV);
     // The runner checks that the worker CLI exists before it lists offers; a stub
     // keeps this test independent of a developer-installed claude binary.
