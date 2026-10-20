@@ -1221,3 +1221,32 @@ function readMaybe(path) {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+// ── 20b. Real CLI: on a HEAD from before #5554 the hint restores the updater ──
+//    A failed first upgrade can leave the new updater on disk over a HEAD that
+//    has no lib/update-manifest.mjs. Checking that file out of HEAD would fail,
+//    so the hint names update-system.mjs, whose HEAD copy holds the full list.
+{
+  const fixture = seedRollbackRepo('co-rollback-pre-split-head-', {
+    paired: true,
+    fetchTarget: false,
+  });
+  const { dir, g } = fixture;
+  try {
+    putManifest(dir, ['update-system.mjs', 'system/root.txt'], 'legacy');
+    g('add', '-A');
+    g('commit', '-qm', 'pre-split HEAD');
+    put(dir, 'update-system.mjs', updaterSource);
+    const result = runRollback(dir);
+    const output = outputOf(result);
+    check(
+      result.status !== 0
+        && output.includes('git checkout HEAD -- update-system.mjs')
+        && !output.includes(`git checkout HEAD -- ${MANIFEST_MODULE}`),
+      'on a pre-split HEAD, rollback names the updater to restore, not the missing module',
+      `pre-split HEAD rollback hint: status ${result.status}, output ${JSON.stringify(output)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}

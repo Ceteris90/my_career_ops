@@ -219,9 +219,18 @@ function readLocalManifest(root = ROOT) {
  */
 function requireLocalSystemPaths(what) {
   if (LOCAL_MANIFEST.problem) {
+    // A HEAD from before #5554 has no module to restore: that state is a
+    // failed first upgrade that left this updater on disk. Its own updater
+    // holds the whole list inline, so the fix is to put that file back.
+    let restore = `git checkout HEAD -- ${MANIFEST_MODULE}`;
+    try {
+      gitQuiet('cat-file', '-e', `HEAD:${MANIFEST_MODULE}`);
+    } catch {
+      restore = 'git checkout HEAD -- update-system.mjs';
+    }
     throw new Error(
       `${what} needs the local system manifest, but ${LOCAL_MANIFEST.problem}. `
-      + `Restore it with \`git checkout HEAD -- ${MANIFEST_MODULE}\`, then run this again.`,
+      + `Restore it with \`${restore}\`, then run this again.`,
     );
   }
   return SYSTEM_PATHS;
