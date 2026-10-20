@@ -3,7 +3,7 @@
 import { pass, fail, rmSync, getBash, ROOT, NODE } from './helpers.mjs';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { normalizeLabel, requestedLabels, companyOfNotes, matchesCompany, idsForCompanies } from '../batch/company-scope.mjs';
 
@@ -49,8 +49,14 @@ if (!bash) {
     chmodSync(join(batch, 'batch-runner.sh'), 0o755);
     for (const d of ['lib']) cpSync(join(ROOT, d), join(work, d), { recursive: true });
     writeFileSync(join(batch, 'batch-input.tsv'), TSV);
+    // The runner checks that the worker CLI exists before it lists offers; a stub
+    // keeps this test independent of a developer-installed claude binary.
+    const stubBin = join(work, 'stub-bin');
+    mkdirSync(stubBin, { recursive: true });
+    writeFileSync(join(stubBin, 'claude'), '#!/bin/sh\nexit 0\n');
+    chmodSync(join(stubBin, 'claude'), 0o755);
     const run = (...args) => {
-      const r = spawnSync(bash, [join(batch, 'batch-runner.sh'), '--dry-run', ...args], { cwd: work, encoding: 'utf-8', timeout: 60000, env: { ...process.env, CAREER_OPS_ROOT: work } });
+      const r = spawnSync(bash, [join(batch, 'batch-runner.sh'), '--dry-run', ...args], { cwd: work, encoding: 'utf-8', timeout: 60000, env: { ...process.env, CAREER_OPS_ROOT: work, PATH: `${stubBin}${delimiter}${process.env.PATH}` } });
       return { code: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
     };
     const all = run();
