@@ -236,11 +236,20 @@ test('the worker prompt carries the override profile, not the data root profile'
 // that spelling in DATA_ROOT while getProfilePath() returns the real path of
 // path-resolver.mjs's directory. Without an override both name the same file,
 // so the default layout must not be told about an override nobody set.
-test('a checkout reached through a link gets no Runtime profile block without an override', () => {
+// A junction needs no privilege on Windows, but it can still be refused, for
+// example when the temp directory sits on a volume that has no junctions; a
+// machine that cannot make the link cannot run this case, so it is skipped.
+test('a checkout reached through a link gets no Runtime profile block without an override', (t) => {
   const f = fixture();
   const link = `${f.dir}-link`;
   try {
-    symlinkSync(f.dir, link, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      symlinkSync(f.dir, link, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error;
+      t.skip(`cannot create a directory link here (${error.code})`);
+      return;
+    }
     run({ ...f, dir: link, runner: join(link, 'batch', 'batch-runner.sh') }, { dryRun: false });
     const captured = join(f.captureDir, 'resolved-prompt.md');
     assert.ok(existsSync(captured), 'the stub claude did not capture a resolved system prompt');
