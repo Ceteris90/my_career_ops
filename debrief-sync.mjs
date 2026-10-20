@@ -4,12 +4,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as yaml from 'js-yaml';
 import { appendContact, VALID_TYPES } from './contact-extract.mjs';
 import { replaceNextPin } from './followup-seed.mjs';
 import { isRealCalendarDate } from './followup-cadence.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { parseMarkdownLinks, parseTrackerRow, resolveColumns } from './tracker-parse.mjs';
 import { acquireTrackerLock, resolveWorkspaceRoot, trackerLockDirFor, writeFileAtomic } from './tracker-utils.mjs';
@@ -108,8 +108,8 @@ function normalizePlan(plan) {
   return { appNum: plan.appNum, dealbreaker, contacts, nextDate, nextWhy };
 }
 
-function replaceDecision(yamlBody) {
-  const decision = String(yaml.load(yamlBody)?.final_decision ?? '').trim();
+function replaceDecision(yamlBody, summary) {
+  const decision = String(summary.final_decision ?? '').trim();
   if (decision === 'Skip') return yamlBody;
   if (!/^final_decision:.*$/m.test(yamlBody)) {
     return `${yamlBody}${yamlBody.endsWith('\n') ? '' : '\n'}final_decision: "Skip"`;
@@ -117,8 +117,8 @@ function replaceDecision(yamlBody) {
   return yamlBody.replace(/^final_decision:.*$/m, 'final_decision: "Skip"');
 }
 
-function insertHardStop(yamlBody, sentence) {
-  const stops = yaml.load(yamlBody)?.hard_stops;
+function insertHardStop(yamlBody, summary, sentence) {
+  const stops = summary.hard_stops;
   const existing = Array.isArray(stops) ? stops.map((item) => String(item)) : [];
   if (existing.includes(sentence)) return yamlBody;
   const quoted = JSON.stringify(sentence);
@@ -141,12 +141,16 @@ function insertHardStop(yamlBody, sentence) {
 function applyReport(report, sentence) {
   const fence = report.match(FENCE);
   if (!fence) planError('BAD_PLAN', 'the report has no Machine Summary YAML');
+  let summary;
   try {
-    yaml.load(fence[2]);
+    summary = loadYaml(fence[2]);
   } catch (err) {
     planError('BAD_PLAN', `Machine Summary YAML did not parse: ${err.message}`);
   }
-  const nextYaml = insertHardStop(replaceDecision(fence[2]), sentence);
+  if (summary == null || typeof summary !== 'object' || Array.isArray(summary)) {
+    planError('BAD_PLAN', 'the Machine Summary YAML is not a mapping');
+  }
+  const nextYaml = insertHardStop(replaceDecision(fence[2], summary), summary, sentence);
   return report.replace(fence[0], () => `${fence[1]}${nextYaml}${fence[3]}`);
 }
 
