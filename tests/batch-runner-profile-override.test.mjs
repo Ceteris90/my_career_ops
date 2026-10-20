@@ -47,6 +47,10 @@ function tierModel(tier) {
 
 const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// batch-runner.sh prints the resolved path with forward slashes on Windows
+// (Git Bash), so the expected path has to be spelled the same way.
+const runnerPath = (value) => (process.platform === 'win32' ? value.replace(/\\/g, '/') : value);
+
 /**
  * A throwaway install: batch/ beside path-resolver.mjs, the data root's own
  * config/profile.yml, and a second profile elsewhere that only
@@ -219,7 +223,7 @@ test('the worker prompt carries the override profile, not the data root profile'
     const captured = join(f.captureDir, 'resolved-prompt.md');
     assert.ok(existsSync(captured), 'the stub claude did not capture a resolved system prompt');
     const prompt = readFileSync(captured, 'utf8');
-    assert.match(prompt, new RegExp(`The profile for this run is \`${escapeRe(join(f.altDir, 'me.yml'))}\`.`), prompt);
+    assert.match(prompt, new RegExp(`The profile for this run is \`${escapeRe(runnerPath(join(f.altDir, 'me.yml')))}\`.`), prompt);
     assert.match(prompt, /Where this prompt names `config\/profile\.yml`, read that file instead/, prompt);
     assert.match(prompt, /candidate_note: override-profile/, prompt);
     assert.doesNotMatch(prompt, /candidate_note: data-root-profile/, 'the prompt still carries the data root profile');
@@ -234,7 +238,8 @@ test('the runtime-path block names the profile the run actually reads', () => {
     run(f, { profile: join(f.altDir, 'me.yml'), dryRun: false });
     const prompt = readFileSync(join(f.captureDir, 'resolved-prompt.md'), 'utf8');
     assert.match(prompt, /## Runtime paths: data root outside the checkout/, prompt);
-    assert.match(prompt, new RegExp(`The profile for this run is \`${escapeRe(join(f.altDir, 'me.yml'))}\``), prompt);
+    assert.match(prompt, new RegExp(`The profile for this run is \`${escapeRe(runnerPath(join(f.altDir, 'me.yml')))}\``), prompt);
+    assert.match(prompt, /Where this prompt names `config\/profile\.yml`, read that file instead/, prompt);
     // The runtime block already names the profile; the default-layout block
     // must not repeat it here.
     assert.doesNotMatch(prompt, /## Runtime profile/, prompt);

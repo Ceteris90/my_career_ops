@@ -1247,7 +1247,7 @@ process_offer() {
     {
       printf '\n\n---\n\n'
       printf '## Runtime paths: data root outside the checkout\n\n'
-      printf 'This install keeps the user layer in a separate data root. The profile for this run is `%s`. Wherever this prompt names one of the paths below, resolve it under the data root, not the working directory:\n\n' "$PROFILE_FILE"
+      printf 'This install keeps the user layer in a separate data root. The profile for this run is `%s`. Where this prompt names `config/profile.yml`, read that file instead. Wherever this prompt names one of the paths below, resolve it under the data root, not the working directory:\n\n' "$PROFILE_FILE"
       printf 'Data root: %s\n\n' "$DATA_ROOT"
       printf '`cv.md`, `article-digest.md`, `modes/_profile.md`, `modes/_custom.md`, `reports/`, `output/`, `data/`, `interview-prep/`, `batch/tracker-additions/`\n\n'
       printf 'Write the report under `reports/` in the data root and the tracker TSV under `batch/tracker-additions/` in the data root, and give scripts absolute data-root paths for these files. Markdown links written inside the report and the tracker TSV keep the relative form this prompt shows (`reports/...`). Every other path (`templates/`, the `.mjs` scripts, the other `modes/` files) stays relative to the working directory.\n'
