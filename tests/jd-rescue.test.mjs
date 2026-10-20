@@ -5,8 +5,9 @@
  * words, which is precisely where a JS-rendered board keeps its job
  * description. In one observed batch run that cost 14 of 24 offers, each
  * failing as "JD file empty/boilerplate" after a worker had already been paid
- * for. Every case below is offline — the one network strategy (the Greenhouse
- * board API) is deliberately never reached, so this suite makes no HTTP calls.
+ * for. Every case below is offline — the one network strategy (the ATS API
+ * lookup) answers null for the example.com URLs used here without making a
+ * request, so this suite makes no HTTP calls.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
@@ -311,4 +312,31 @@ console.log('\njd-rescue.mjs — JD recovery from structured page data');
   if (readFileSync(out, 'utf-8') !== 'previous contents' && leftovers.length === 0) pass('the rescue replaces the JD file atomically and leaves no temp file');
   else fail(`atomic write wrong: leftovers=${JSON.stringify(leftovers)}`);
   try { rmSync(dir, { recursive: true, force: true }); } catch {}
+}
+
+// ── review round 2: chain continues past a candidate that cannot replace the page ──
+{
+  // A non-thin page whose first candidate is long enough to clear the floor but NOT longer than
+  // the page text must not end the search when a later source holds a fuller JD.
+  const mid = jobPosting({ description: longDesc('short').replace(/(<li>.*?<\/li>){0,10}/, '') });
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify(jobPosting({ description: `<p>${Array.from({ length: 90 }, (_, i) => `w${i}`).join(' ')}</p>` }))}</script></head>` +
+    `<body><script>window.__appData={"descriptionHtml":${JSON.stringify(`<p>${Array.from({ length: 400 }, (_, i) => `full${i}`).join(' ')}</p>`)}}</script></body></html>`;
+  const r = rescue(html, { strippedWords: 150 });
+  if (r.ok && r.method === 'embedded-description' && r.words >= 400) pass('on a non-thin page, a candidate not longer than the page does not stop the chain');
+  else fail(`chain stopped at a candidate that could not replace the page: ${JSON.stringify(r)}`);
+}
+
+{
+  // End tags may carry attributes or spaces: "</script foo>" closes a script block.
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify(jobPosting({ description: longDesc('attr') }))}</script data-x="1"></head><body>shell</body></html>`;
+  const r = rescue(html);
+  if (r.ok && r.method === 'ld+json') pass('a block closed with "</script data-x>" is still read');
+  else fail(`attribute end tag not handled: ${JSON.stringify(r)}`);
+}
+
+{
+  // The ATS lookup is reused from browser-extract.mjs; an unknown host must cost nothing.
+  const r = rescue('<html><body><div>Loading</div></body></html>', { url: 'https://jobs.example.com/co/abc123' });
+  if (!r.ok && r.method === 'none') pass('an unrecognised host falls through the ATS lookup without a rescue');
+  else fail(`unknown host not handled: ${JSON.stringify(r)}`);
 }

@@ -27,8 +27,8 @@
  * no browser needs to run — the data just has to be read out of the right place.
  *
  * Strategies run in order, cheapest first. 1 and 3 are pure offline parsing of
- * bytes already on disk; only 2 makes a network request, and it is a single
- * unauthenticated JSON GET. All three are zero-LLM-token.
+ * bytes already on disk; only 2 makes a network request, a single
+ * unauthenticated JSON GET to the ATS's public API. All three are zero-LLM-token.
  *
  * WHEN A RESCUE IS ACCEPTED
  *
@@ -38,7 +38,7 @@
  * handed 126 words of the company's own page chrome and correctly reported that
  * it had no job description. What actually distinguishes those pages is not how
  * much text they have but *where the JD lives*: the posting is served from
- * boards-api.greenhouse.io, a different origin than the document curl fetched,
+ * the ATS's own API, a different origin than the document curl fetched,
  * so no amount of parsing that document can produce it.
  *
  * Hence two accept conditions rather than one:
@@ -47,7 +47,7 @@
  *     text was demonstrably missing content the structured source has.
  * A structured JobPosting is high-precision, so "longer" here means "more JD",
  * not "more navigation". Where the stripped page already wins — a canonical
- * boards.greenhouse.io posting renders its own JD server-side — the rescue is
+ * Greenhouse board posting renders its own JD server-side — the rescue is
  * rejected and the existing text is kept untouched, so pages that work today
  * cannot regress.
  */
@@ -63,8 +63,8 @@ const HTML_ENTITIES = {
 /** Strip HTML to visible text, matching the runner's own normalization. */
 function htmlToText(html) {
   return String(html ?? '')
-    .replace(/<script[\s\S]*?<\/script\s*>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style\s*>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script[^>]*>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style[^>]*>/gi, ' ')
     // Keep block boundaries as line breaks so requirement lists do not run
     // together into one unreadable paragraph for the worker.
     .replace(/<\/(p|div|li|h[1-6]|tr|section|article)>/gi, '\n')
@@ -110,7 +110,7 @@ function composeJd({ title, company, location, description, employmentType }) {
  * and only JobPosting nodes are kept.
  */
 function fromLdJson(html) {
-  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi;
+  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script[^>]*>/gi;
   // Collect every distinct JobPosting on the page. A listing page can carry
   // several, and taking the first would hand the worker some other job's JD, so
   // a rescue is only offered when exactly one posting qualifies.
@@ -157,87 +157,26 @@ function fromLdJson(html) {
 }
 
 /* ---------------------------------------------------------------- strategy 2
- * Greenhouse board API.
+ * The ATS's own public API, through upstream's fetchJdViaKnownApi().
  *
  * A company that embeds Greenhouse on its own careers domain
- * (careers.example.com/job?gh_jid=1234567) serves an iframe host page with
- * no JD text in it, so curl legitimately sees nothing. The board itself is
- * public and unauthenticated:
- *   https://boards-api.greenhouse.io/v1/boards/{token}/jobs/{id}?content=true
- *
- * The board token does not have to be guessed. The embed host page names it in
- * the iframe/script URL it ships ("...job_board?for=acme"), so it is
- * read out of the HTML already on disk; a canonical boards.greenhouse.io URL
- * carries it in the path instead.
+ * (careers.example.com/job?gh_jid=1234567) serves a host page with no JD text
+ * in it, and the posting lives on another origin, so no amount of parsing the
+ * downloaded document can produce it. browser-extract.mjs already knows how to
+ * ask the right API for every ATS in JD_TEXT_API_ATS (the same dispatch
+ * fetch-jd.mjs and the `jd` mode use), so this strategy calls it rather than
+ * carrying a second copy of the per-ATS code. A URL it does not recognise
+ * answers null without any network request.
  */
-function greenhouseTarget(url, html) {
-  let jobId = null;
-  let token = null;
-
+async function fromKnownApi(url) {
   try {
-    const u = new URL(url);
-    jobId = u.searchParams.get('gh_jid');
-    const path = /(?:boards|job-boards)\.greenhouse\.io\/(?:embed\/)?([A-Za-z0-9_-]+)\/jobs\/(\d+)/.exec(url);
-    if (path) { token ??= path[1]; jobId ??= path[2]; }
-    if (!token && /greenhouse\.io$/.test(u.hostname)) {
-      const seg = u.pathname.split('/').filter(Boolean);
-      if (seg.length) token = seg[0];
-    }
-  } catch { return null; }
-
-  if (!jobId) return null;
-  if (!token) {
-    const forMatch = /(?:job_board\?|[?&])for=([A-Za-z0-9_-]+)/.exec(html);
-    if (forMatch) token = forMatch[1];
-  }
-  if (!token || token === 'embed') return null;
-
-  // True when the page we downloaded is the company's own careers page and the
-  // board lives elsewhere. This is the deterministic signal that the visible
-  // text cannot be the JD, however much of it there is: the posting is on
-  // another origin. A canonical boards.greenhouse.io page is same-origin with
-  // its board and renders the JD itself, so it is not cross-origin.
-  let crossOrigin = true;
-  try {
-    crossOrigin = !/(^|\.)greenhouse\.io$/.test(new URL(url).hostname.toLowerCase());
-  } catch { /* unparseable URL: treat as cross-origin and let the API decide */ }
-
-  return { token, jobId, crossOrigin };
-}
-
-async function fromGreenhouseApi(url, html, timeoutMs, thin) {
-  const target = greenhouseTarget(url, html);
-  if (!target) return null;
-  // The only strategy that costs a network round-trip, so it is not fired
-  // speculatively. Either the page is thin and we have nothing else, or the
-  // board is on another origin and the page therefore cannot hold the JD.
-  if (!thin && !target.crossOrigin) return null;
-
-  const api = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(target.token)}/jobs/${encodeURIComponent(target.jobId)}?content=true`;
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const res = await fetch(api, {
-      signal: ctl.signal,
-      headers: { 'User-Agent': 'career-ops/batch', Accept: 'application/json' },
-    });
-    if (!res.ok) return null;
-    const job = await res.json();
-    if (!job?.content) return null;
-    const text = composeJd({
-      title: job.title,
-      company: target.token,
-      location: job.location?.name,
-      // Greenhouse double-encodes content: the JSON string holds &lt;p&gt;...
-      // Decoding once turns it back into HTML, which htmlToText then strips.
-      description: htmlToText(job.content),
-    });
-    if (wordCount(text) === 0) return null;
-    return { text, method: `greenhouse-api:${target.token}` };
+    const { fetchJdViaKnownApi } = await import('../browser-extract.mjs');
+    const result = await fetchJdViaKnownApi(url, 20_000, 15_000);
+    if (!result?.text) return null;
+    const text = result.title ? `${result.title}\n\n${result.text}` : result.text;
+    return { text, method: `ats-api:${result.ats}` };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -282,39 +221,39 @@ async function main() {
     process.exit(1);
   }
 
-  // First strategy that clears the word floor wins. A strategy that finds only a
-  // thin candidate must not stop the chain: a later one may hold the real JD.
+  // First strategy whose text clears the word floor AND, when the page is not
+  // thin, is longer than the page's own text, wins. A candidate that fails
+  // either test must not stop the chain: a later source may hold the full JD.
   let found = null;
   let thinFound = null;
+  let notBetter = null;
   for (const run of [
     () => fromLdJson(html),
-    () => fromGreenhouseApi(url, html, timeoutMs, thin),
+    () => fromKnownApi(url),
     () => fromEmbeddedDescription(html),
   ]) {
     const candidate = await run();
     if (!candidate) continue;
-    if (wordCount(candidate.text) >= minWords) { found = candidate; break; }
-    thinFound ??= candidate;
+    const w = wordCount(candidate.text);
+    if (w < minWords) { thinFound ??= candidate; continue; }
+    // Never replace a page that already had more JD than the rescue found —
+    // see "WHEN A RESCUE IS ACCEPTED" above.
+    if (!thin && w <= strippedWords) { notBetter ??= candidate; continue; }
+    found = candidate;
+    break;
   }
 
   if (!found) {
     // A rescue that yields another thin page is not a rescue. Reporting it as
     // one would put the worker back in exactly the position this module exists
     // to avoid, so it is a failure and the caller routes the offer to Playwright.
-    if (thinFound) process.stdout.write(`${wordCount(thinFound.text)}\t${thinFound.method}:thin\n`);
+    if (notBetter) process.stdout.write(`${wordCount(notBetter.text)}\t${notBetter.method}:not-better\n`);
+    else if (thinFound) process.stdout.write(`${wordCount(thinFound.text)}\t${thinFound.method}:thin\n`);
     else process.stdout.write('0\tnone\n');
     process.exit(1);
   }
 
   const words = wordCount(found.text);
-
-  // Never overwrite a page that already had more JD than the rescue found —
-  // see "WHEN A RESCUE IS ACCEPTED" above.
-  if (!thin && words <= strippedWords) {
-    process.stdout.write(`${words}\t${found.method}:not-better\n`);
-    process.exit(1);
-  }
-
   // Write beside the target and rename, so a failed write leaves the existing
   // JD file intact for the fallbacks that follow.
   const tmp = `${outFile}.rescue-${process.pid}`;
