@@ -128,7 +128,7 @@ endpoints) are checked.
 
 | Situation | Result |
 |-----------|--------|
-| Protected value found in the request | **Blocked.** Error names the category and which `protected:` entry matched (`entry N`), never the value. |
+| Protected value found in the request | **Blocked.** Error names the category and the `protected:` key that matched (`protected.salary.current_base`), never the value. |
 | Request body cannot be serialized/read | **Blocked.** "I could not inspect this" is never reported as "clean". |
 | Body is a `ReadableStream` / `FormData` / `URLSearchParams` / `Blob` / `ArrayBuffer` | **Blocked.** Their content lives in internal slots JSON cannot see, so the guard refuses them rather than inspecting 2 bytes and clearing the request. Read it to text yourself and pass the string. |
 | Body is a `Buffer` / typed array | **Inspected as decoded text.** Not refused: its bytes are decodable, so the guard decodes them and scans that. |
@@ -136,12 +136,15 @@ endpoints) are checked.
 | Config file absent | **Allowed, by design.** Documented safe state: pattern detection still runs. Reported as `absent`, not as protection you configured. |
 | Config file present but empty | Same as absent, reported as `empty`. |
 
-The `entry N` label is a 1-based position in the flattened `protected:` values,
-so a block message like `Found: configured protected number (entry 2)` points at
-the second value under `protected:` in `config/privacy.yml` — the only way to
-locate the line, since the value itself is never echoed. Configured numbers
-match as a substring of any longer digit run, so a block can be triggered by a
-number you do not recognise; the entry label is what turns that into a fix.
+The label is the YAML **key path** of the value that matched, so a block message
+like `Found: configured protected number (protected.salary.current_base)` names
+the exact line in `config/privacy.yml` to look at — the only way to locate it,
+since the value itself is never echoed. Nested keys report their full dotted path
+and array items report `protected.custom[0]`. (An earlier version printed a
+flattened position, `entry 3`, which pointed at no visible line once a value was
+nested — the case the label exists for.) Configured numbers match as a substring
+of any longer digit run, so a block can be triggered by a number you do not
+recognise; the key path is what turns that into a fix.
 
 ---
 

@@ -163,22 +163,40 @@ test('4. the error message never contains the protected value', () => {
 // ---------------------------------------------------------------------------
 // 4b. The error points at WHICH configured entry matched, without naming it.
 // ---------------------------------------------------------------------------
-test('4b. a blocked request names the config entry, never the value', () => {
-  // Entry 2 is the phone; the request contains only a longer digit run that
-  // matches it as a substring, so the category alone would leave the user with
-  // no way to find the offending line in config/privacy.yml.
-  const guard = new PrivacyGuard({ values: [FAKE.name, FAKE.phone] });
-  let caught;
-  try {
-    guard.assertSafe('reference 9991555010019999 in the posting');
-  } catch (err) {
-    caught = err;
-  }
-  assert.ok(caught instanceof PrivacyGuardError);
-  assert.match(caught.message, /entry 2/, 'names the config entry that matched');
-  assert.ok(!caught.message.includes('555'), 'still no value, not even digits');
-  assert.ok(!caught.message.includes(FAKE.phone), 'and not the full configured value');
-  assert.ok(!caught.message.includes(FAKE.name));
+test('4b. a blocked request names the config key, never the value', () => {
+  // A config key path the user can find. The request contains only a longer
+  // digit run that matches the phone as a substring, so the category alone would
+  // leave them with no way to find the offending line in config/privacy.yml.
+  withConfigFile(
+    ['protected:', `  full_name: "${FAKE.name}"`, `  phone: "${FAKE.phone}"`, ''].join('\n'),
+    (path) => {
+      const guard = loadPrivacyGuard({ configPath: path });
+      let caught;
+      try {
+        guard.assertSafe('reference 9991555010019999 in the posting');
+      } catch (err) {
+        caught = err;
+      }
+      assert.ok(caught instanceof PrivacyGuardError);
+      assert.match(caught.message, /protected\.phone/, 'names the config key that matched');
+      assert.ok(!caught.message.includes('555'), 'still no value, not even digits');
+      assert.ok(!caught.message.includes(FAKE.phone), 'and not the full configured value');
+      assert.ok(!caught.message.includes(FAKE.name));
+    }
+  );
+
+  // A nested key reports its full path, not a flattened position: the earlier
+  // "entry 3" label pointed at nothing the user could count in the file.
+  withConfigFile(
+    ['protected:', `  full_name: "${FAKE.name}"`, '  salary:', '    current_base: 145000', ''].join('\n'),
+    (path) => {
+      const guard = loadPrivacyGuard({ configPath: path });
+      assert.throws(
+        () => guard.assertSafe('my base is 145000'),
+        (err) => /protected\.salary\.current_base/.test(err.message)
+      );
+    }
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -587,22 +605,23 @@ test('an explicitly disabled config makes the guard a documented no-op', () => {
 });
 
 // ---------------------------------------------------------------------------
-// A boolean under `protected:` must not consume an entry number, or the
-// `entry N` label in a block error points at the wrong line of the file.
+// A boolean under `protected:` must not become a protected value, or the key
+// labels in a block error drift off the lines of the file.
 // ---------------------------------------------------------------------------
-test('booleans under protected do not shift the entry N labels', () => {
+test('booleans under protected do not shift the config key labels', () => {
   withConfigFile(
     [
       'protected:',
-      '  active: true',                     // entry that must NOT count
-      `  full_name: "${FAKE.name}"`,        // entry 1
-      '  salary:',                          // entry 2 (nested)
+      '  active: true',                     // control flag, not a value
+      `  full_name: "${FAKE.name}"`,
+      '  salary:',
       '    target: 145000',
       '',
     ].join('\n'),
     (path) => {
       const config = readPrivacyConfig(path);
       assert.ok(!config.values.includes(true), 'the boolean is not a protected value');
+      assert.deepEqual(config.valueKeys, ['protected.full_name', 'protected.salary.target']);
 
       const guard = loadPrivacyGuard({ configPath: path });
       let caught;
@@ -611,9 +630,9 @@ test('booleans under protected do not shift the entry N labels', () => {
       } catch (err) {
         caught = err;
       }
-      // full_name is the FIRST guarded value, so it must read "entry 1" — not
-      // "entry 2", which is where it would land if the boolean had counted.
-      assert.match(caught.message, /entry 1/);
+      // The label names full_name's own line regardless of the boolean above it.
+      assert.match(caught.message, /protected\.full_name/);
+      assert.ok(!/entry \d/.test(caught.message), 'no positional entry label remains');
     }
   );
 });
