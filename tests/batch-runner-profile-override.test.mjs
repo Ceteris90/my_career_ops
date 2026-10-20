@@ -114,7 +114,7 @@ function fixture({ resolver = 'current', externalDataRoot = false } = {}) {
 }
 
 /** Run the fixture runner; `dryRun: false` goes through the worker path with the stub claude. */
-function run(f, { profile, dryRun = true, model } = {}) {
+function run(f, { profile, dryRun = true, model, careerOpsRoot = f.dataRoot } = {}) {
   const env = {
     ...process.env,
     PATH: `${f.binDir}${delimiter}${process.env.PATH}`,
@@ -122,7 +122,7 @@ function run(f, { profile, dryRun = true, model } = {}) {
     // tests/helpers.mjs pins CAREER_OPS_ROOT to the suite's sandbox; this
     // fixture's data root is its own directory, so pin it back and leave the
     // profile variable as the only thing that differs between the runs.
-    CAREER_OPS_ROOT: f.dataRoot,
+    CAREER_OPS_ROOT: careerOpsRoot,
   };
   delete env.CAREER_OPS_DATA_DIR;
   if (profile === undefined) delete env.CAREER_OPS_PROFILE;
@@ -242,23 +242,30 @@ test('the worker prompt carries the override profile, not the data root profile'
 test('a checkout reached through a link gets no Runtime profile block without an override', (t) => {
   const f = fixture();
   const link = `${f.dir}-link`;
+  // CAREER_OPS_ROOT names the same directory through a second link, so the
+  // profile path the resolver returns differs from DATA_ROOT whichever way the
+  // runner spells PROJECT_DIR: the case cannot pass vacuously on a platform
+  // where `pwd` happens to give the real path.
+  const rootLink = `${f.dir}-root-link`;
   try {
     try {
       symlinkSync(f.dir, link, process.platform === 'win32' ? 'junction' : 'dir');
+      symlinkSync(f.dir, rootLink, process.platform === 'win32' ? 'junction' : 'dir');
     } catch (error) {
       if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error;
       t.skip(`cannot create a directory link here (${error.code})`);
       return;
     }
-    run({ ...f, dir: link, runner: join(link, 'batch', 'batch-runner.sh') }, { dryRun: false });
+    run({ ...f, dir: link, runner: join(link, 'batch', 'batch-runner.sh') }, { dryRun: false, careerOpsRoot: rootLink });
     const captured = join(f.captureDir, 'resolved-prompt.md');
     assert.ok(existsSync(captured), 'the stub claude did not capture a resolved system prompt');
     const prompt = readFileSync(captured, 'utf8');
     assert.doesNotMatch(prompt, /## Runtime profile/, prompt);
     assert.match(prompt, /candidate_note: data-root-profile/, prompt);
   } finally {
-    // The link itself only: removing it recursively would follow it into f.dir.
+    // The links themselves only: removing one recursively would follow it into f.dir.
     rmSync(link, { force: true });
+    rmSync(rootLink, { force: true });
     rmSync(f.dir, { recursive: true, force: true });
   }
 });
