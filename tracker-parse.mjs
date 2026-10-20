@@ -14,6 +14,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { createHash } from 'node:crypto';
 
 /** The original fixed 9-column layout (num … notes at indices 1 … 9). */
 export const LEGACY_COLMAP = {
@@ -355,6 +356,23 @@ export function parseTrackerRow(line, colmap = LEGACY_COLMAP, { allowTabs = fals
   // re-assigning the raw cell hands it `[label](href)`, from which no
   // requisition id can be extracted, so two distinct openings read as one.
   return row;
+}
+
+/**
+ * Hash of every parsed cell of a tracker row except Status.
+ *
+ * A reviewer that shows a row, asks a human, and then hands the write to
+ * set-status.mjs (`--expect-row`) needs to know the row it writes is still the
+ * one that was shown. Status is left out because it has its own guard
+ * (`--expect-status`), and `raw` because it repeats the status cell.
+ *
+ * @param {object} row - parseTrackerRow output (extra keys such as lineIdx are ignored).
+ * @returns {string} Lowercase SHA-256 hex digest.
+ */
+export function trackerRowIdentity(row) {
+  const cells = ['num', 'date', 'company', 'role', 'score', 'pdf', 'report', 'notes', 'url', 'location', 'via']
+    .map(key => [key, row[key] ?? null]);
+  return createHash('sha256').update(JSON.stringify(cells), 'utf8').digest('hex');
 }
 
 // Matches the req/job-number labels actually seen in this tracker's free-text

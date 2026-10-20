@@ -326,6 +326,7 @@ const SYSTEM_PATHS = [
   'lib/walk-tree.mjs',
   'lib/dir-lock.mjs',
   'lib/run-bounded.mjs',
+  'lib/status-hooks.mjs',
   'lib/scratch-dirs.mjs',
   'lib/story-bank.mjs',
   'lib/outcome-dir.mjs',
