@@ -13,7 +13,7 @@ import { execFileSync } from 'child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { pass, fail, ROOT, NODE, rmSync } from './helpers.mjs';
+import { pass, fail, ROOT, NODE, rmSync, isolatedBatchStatePath } from './helpers.mjs';
 import { unwrapReportUrlToken } from '../tracker-parse.mjs';
 
 console.log('\nReport URL token unwrap (balanced parentheses)');
@@ -67,6 +67,8 @@ for (const [input, expected] of cases) {
       CAREER_OPS_ADDITIONS: join(work, 'adds'),
       CAREER_OPS_DATA_DIR: work,
       CAREER_OPS_ROOT: work,
+      CAREER_OPS_BATCH_STATE: isolatedBatchStatePath(join(work, 'adds')),
+      CAREER_OPS_PDF_INDEX: join(work, 'data/pdf-index.tsv'),
     };
     const merge = () => execFileSync(NODE, [join(ROOT, 'merge-tracker.mjs')], { cwd: ROOT, encoding: 'utf8', env, timeout: 30000 });
 
