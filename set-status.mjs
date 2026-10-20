@@ -108,7 +108,7 @@ import { join, dirname, resolve, sep, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync, spawn } from 'child_process';
 import { createHash } from 'node:crypto';
-import { extractTrackerReportNumbers, resolveColumns, parseTrackerRow, normalizeTextKey, splitTrackerCells, trackerRowSeparator } from './tracker-parse.mjs';
+import { extractTrackerReportNumbers, parseMarkdownLinks, firstLinkTarget, soleMarkdownLink, resolveColumns, parseTrackerRow, normalizeTextKey, splitTrackerCells, trackerRowSeparator } from './tracker-parse.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { localToday } from './lib/local-today.mjs';
 import {
@@ -431,9 +431,8 @@ function resolveRow(rows) {
   if (flags.reportLink !== null) {
     const matches = [];
     for (const row of rows) {
-      const links = [...String(row.report ?? '').matchAll(/\[(\d+)\]\(([^)]+)\)/g)];
-      if (!links.some(link => link[1] === flags.reportLink)) continue;
-      if (links.length !== 1 || links[0][0] !== String(row.report ?? '').trim()) {
+      if (!parseMarkdownLinks(String(row.report ?? '')).some(link => link.label === flags.reportLink)) continue;
+      if (!soleMarkdownLink(row.report)) {
         failWith(EXIT_AMBIGUOUS, 'malformed-report', `Malformed Report cell for report #${flags.reportLink}: expected exactly one report link`);
       }
       matches.push(row);
@@ -519,7 +518,7 @@ for (let i = 0; i < lines.length; i++) {
   if (row) rows.push({ ...row, lineIdx: i });
   else if (flags.reportLink !== null && colmap.report != null) {
     const report = splitTrackerCells(lines[i])[colmap.report] ?? '';
-    if ([...String(report).matchAll(/\[(\d+)\]\(([^)]+)\)/g)].some(link => link[1] === flags.reportLink)) {
+    if (parseMarkdownLinks(String(report)).some(link => link.label === flags.reportLink)) {
       failWith(EXIT_AMBIGUOUS, 'malformed-row', `Tracker row linking report #${flags.reportLink} has missing cells`);
     }
   }
@@ -981,8 +980,7 @@ if (statusChanged && newStatus === 'Interview' && !flags.dryRun) {
     // reportsDir itself — resolving "../reports/x.md" against reportsDir would
     // double the "reports" segment.
     const reportCell = String(target.report ?? '').trim();
-    const linkMatch = reportCell.match(/\]\(([^)]+)\)/);
-    const rawReportPath = (linkMatch?.[1] ?? reportCell).trim().replace(/^<|>$/g, '');
+    const rawReportPath = (firstLinkTarget(reportCell) ?? reportCell).trim().replace(/^<|>$/g, '');
     let reportPath = null;
     if (rawReportPath && rawReportPath !== '—' && rawReportPath !== '-') {
       const normalized = rawReportPath.replace(/\\/g, '/').replace(/^(\.\.\/)+/, '');

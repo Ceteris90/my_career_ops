@@ -64,6 +64,7 @@ function fakeArchiveCodeRoot() {
     'session-activity.mjs', 'lib/is-main-module.mjs', 'check-jd-archive.mjs',
     'jd-capture.mjs', 'lib/cli-flags.mjs', 'templates/states.yml',
     'tracker-aliases.json', 'lib/dir-lock.mjs', 'lib/run-bounded.mjs',
+    'lib/yaml-document.mjs',
   ]) copyFileSync(join(ROOT, file), join(codeRoot, file));
   writeFileSync(join(codeRoot, 'archive-posting.mjs'), [
     "import { writeFileSync } from 'node:fs';",

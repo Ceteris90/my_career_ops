@@ -44,7 +44,7 @@ import { existsSync, readFileSync } from 'fs';
 import { isIP } from 'net';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 
 import { fetchJson as defaultFetchJson, fetchTextHead as defaultFetchText, makeHttpCtx } from './providers/_http.mjs';
 import { isBlockedAddress } from './providers/_ip-guard.mjs';
@@ -911,7 +911,7 @@ export async function verifyPortalsFile(
   { fetchJson = probeFetchJson, providers = null, httpCtx = null } = {},
 ) {
   if (!existsSync(filePath)) return { found: false, results: [] };
-  const config = yaml.load(readFileSync(filePath, 'utf-8'));
+  const config = loadYaml(readFileSync(filePath, 'utf-8'));
   // tracked_companies and job_boards carry the same entry shape and both feed the
   // scanner, so sweep both — a job board going dark is exactly as worth surfacing
   // as a company board 404ing.
@@ -1063,7 +1063,7 @@ export async function runUnmined(filePath, { fetchJson } = {}) {
     console.log(`verify-portals: no portals file at ${filePath} — nothing to check.`);
     return 0;
   }
-  const cfg = yaml.load(readFileSync(filePath, 'utf8')) || {};
+  const cfg = loadYaml(readFileSync(filePath, 'utf8')) || {};
   const hints = unminedHints(cfg);
   if (hints.length === 0) {
     console.log('No untracked companies named in search_queries. Nothing to mine.');

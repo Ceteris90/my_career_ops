@@ -17,8 +17,8 @@ import { readFileSync, existsSync, realpathSync, writeFileSync, symlinkSync, rmS
 import { join, dirname, relative, isAbsolute, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
-import { load as yamlLoad } from 'js-yaml';
-import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
+import { loadYaml } from './lib/yaml-document.mjs';
+import { resolveColumns, parseTrackerRow, normalizeVia, firstLinkTarget } from './tracker-parse.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerLinkDirsFor, resolveWorkspaceRoot, resolveWorkspaceRootFor } from './tracker-utils.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
@@ -323,7 +323,7 @@ export function parseMachineSummary(content) {
   if (!raw) return null;
 
   try {
-    const parsed = yamlLoad(raw);
+    const parsed = loadYaml(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return Object.fromEntries(
       Object.entries(parsed).filter(([key]) => MACHINE_SUMMARY_FIELDS.has(key))
@@ -1183,7 +1183,7 @@ const DISCARD_REASONS_FILE = join(dirname(fileURLToPath(import.meta.url)), 'temp
  */
 export function loadDiscardReasonVocabulary(file = DISCARD_REASONS_FILE) {
   try {
-    const parsed = yamlLoad(readFileSync(file, 'utf8'));
+    const parsed = loadYaml(readFileSync(file, 'utf8'));
     const reasons = Array.isArray(parsed?.reasons) ? parsed.reasons : [];
     const ids = reasons.map(reason => reason?.id).filter(id => typeof id === 'string' && id);
     return ids.length > 0 ? new Set(ids) : null;
@@ -1358,17 +1358,17 @@ export function analyze(entries = parseTracker()) {
 
   // Enrich entries with report data and classification
   const enriched = entries.map(e => {
-    const reportMatch = e.report.match(/\]\(([^)]+)\)/);
+    const reportTarget = firstLinkTarget(e.report);
     // Tracker links are relative to the tracker file's own directory (see
     // merge-tracker.mjs link normalization, and TRACKER_DIRS); fall back to
     // repo root for legacy root-relative links. Each candidate is guarded to
     // a reports/ root before the read is attempted; parseReport returns null
     // for a missing file, so no pre-flight existsSync is needed (#2385).
     let reportData = null;
-    if (reportMatch) {
+    if (reportTarget != null) {
       const candidates = new Set([
-        ...TRACKER_DIRS.map((dir) => join(dir, reportMatch[1])),
-        join(CAREER_OPS, reportMatch[1]),
+        ...TRACKER_DIRS.map((dir) => join(dir, reportTarget)),
+        join(CAREER_OPS, reportTarget),
       ]);
       for (const candidate of candidates) {
         if (!REPORTS_ROOTS.some((root) => withinReports(candidate, root))) continue;
