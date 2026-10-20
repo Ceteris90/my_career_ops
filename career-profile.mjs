@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import { createInterface } from 'readline';
 import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 
@@ -182,7 +183,7 @@ function validateProfile(profile) {
 
 function readProfile(file) {
   if (!existsSync(file)) return { schema_version: 1, candidate: {}, summary: [], experiences: [], projects: [], education: [], certifications: [], skills: [] };
-  const parsed = yaml.load(readFileSync(file, 'utf8'));
+  const parsed = loadYaml(readFileSync(file, 'utf8'));
   const errors = validateProfile(parsed);
   if (errors.length) throw new Error(`Existing profile is invalid:\n- ${errors.join('\n- ')}`);
   return parsed;
@@ -335,7 +336,7 @@ function doValidate(args) {
   const pathArg = args.find((arg) => !arg.startsWith('--'));
   const file = pathArg ? resolve(root, pathArg) : profilePath;
   if (!existsSync(file)) throw new Error(`Profile not found: ${file}`);
-  const errors = validateProfile(yaml.load(readFileSync(file, 'utf8')));
+  const errors = validateProfile(loadYaml(readFileSync(file, 'utf8')));
   if (errors.length) { process.stderr.write(`Invalid profile:\n- ${errors.join('\n- ')}\n`); process.exitCode = 1; }
   else process.stdout.write(`Valid Master Career Profile: ${file}\n`);
 }

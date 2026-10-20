@@ -9765,6 +9765,7 @@ try {
       // ...and pipeline-lock.mjs runs the shared lock protocol from
       // lib/dir-lock.mjs (#5358), so the fixture carries that too.
       copyFileSync(join(ROOT, 'lib', 'dir-lock.mjs'), join(e2eTmp, 'lib', 'dir-lock.mjs'));
+      copyFileSync(join(ROOT, 'lib', 'yaml-document.mjs'), join(e2eTmp, 'lib', 'yaml-document.mjs'));
       // ...and followup-cadence now delegates flag validation to the shared
       // lib/cli-flags.mjs helper, so the fixture carries that too.
       copyFileSync(join(ROOT, 'lib', 'cli-flags.mjs'), join(e2eTmp, 'lib', 'cli-flags.mjs'));

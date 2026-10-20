@@ -57,7 +57,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 
 import { makeHttpCtx } from './providers/_http.mjs';
 import { loadProviders, resolveProvider } from './providers/_registry.mjs';
@@ -316,7 +316,7 @@ export function findUnclaimedEntries(entries, providers) {
 /** Read tracked_companies out of a portals file. Throws on a missing file. */
 export function loadCompanies(filePath = DEFAULT_PORTALS_PATH) {
   if (!existsSync(filePath)) throw new Error(`portals file not found: ${filePath}`);
-  const cfg = yaml.load(readFileSync(filePath, 'utf-8')) || {};
+  const cfg = loadYaml(readFileSync(filePath, 'utf-8')) || {};
   return Array.isArray(cfg.tracked_companies) ? cfg.tracked_companies : [];
 }
 
@@ -415,7 +415,7 @@ async function main() {
   }
 
   if (hasFlag(args, '--queries')) {
-    const cfg = yaml.load(readFileSync(filePath, 'utf-8')) || {};
+    const cfg = loadYaml(readFileSync(filePath, 'utf-8')) || {};
     const warnings = findStaleScanQueries(companies, cfg.title_filter?.positive);
     if (asJson) console.log(JSON.stringify({ warnings }, null, 2));
     else {
