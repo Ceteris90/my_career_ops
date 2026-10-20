@@ -708,6 +708,26 @@ export function writeFileAtomic(path, content, { mode } = {}) {
 }
 
 /**
+ * Replace a hand-edited user file (cv.md, article-digest.md, portals.yml)
+ * atomically, keeping what an in-place write kept.
+ *
+ * A bare writeFileSync truncates the file before writing it, so a crash or a
+ * full disk mid-write leaves the user's only copy empty or cut short. The
+ * atomic replacement is a new file, which would otherwise turn a symlinked
+ * cv.md into a regular file and drop the file's permissions; writing through
+ * the real path and carrying the mode over keeps both.
+ *
+ * @param {string} path - The file to replace (may be a symlink, or not exist yet).
+ * @param {string} content - Complete file content to write.
+ * @returns {void}
+ */
+export function replaceUserFile(path, content) {
+  const target = canonicalizeTrackerPath(path);
+  const mode = existsSync(target) ? statSync(target).mode & 0o777 : undefined;
+  writeFileAtomic(target, content, { mode });
+}
+
+/**
  * Append whole rows to a line-oriented user file (status-log.tsv, scan-history.tsv,
  * scan-runs.tsv, portal-health.tsv), first closing an unterminated last row.
  *
