@@ -19,7 +19,10 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
+import { loadYaml } from './lib/yaml-document.mjs';
+import { validateLockedSections, sectionKey } from './generate-pdf.mjs';
+import { readLockedSections } from './theme-style.mjs';
 
 try {
   const { config } = await import('dotenv');
@@ -27,6 +30,7 @@ try {
 } catch { /* dotenv optional */ }
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
+const DATA_ROOT = getCareerOpsRoot();
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -35,10 +39,10 @@ const PATHS = {
   shared:   join(ROOT, 'modes', '_shared.md'),
   writing:  join(ROOT, 'modes', '_writing.md'),
   pdfMode:  join(ROOT, 'modes', 'pdf.md'),
-  cv:       join(ROOT, 'cv.md'),
-  profile:  join(ROOT, 'config', 'profile.yml'),
+  cv:       join(DATA_ROOT, 'cv.md'),
+  profile:  getProfilePath(),
   template: join(ROOT, 'templates', 'cv-template.html'),
-  output:   join(ROOT, 'output'),
+  output:   join(DATA_ROOT, 'output'),
 };
 
 // ---------------------------------------------------------------------------
@@ -320,7 +324,7 @@ try {
 
   let candidateName = 'candidate';
   try {
-    const profile = yaml.load(profileContent);
+    const profile = loadYaml(profileContent);
     if (profile && profile.name) {
       candidateName = profile.name;
     }
@@ -332,6 +336,10 @@ try {
 
   const filename = `cv-${candidateName}-${companySlug}.html`;
   const htmlPath = join(PATHS.output, filename);
+
+  const lockedKeys = readLockedSections(PATHS.profile, sectionKey);
+  const cvMarkdown = readFileSync(PATHS.cv, 'utf-8');
+  validateLockedSections(tailoredHtml, cvMarkdown, lockedKeys);
 
   writeFileSync(htmlPath, tailoredHtml, 'utf-8');
   console.log(`\n✅  Tailored HTML saved: ${htmlPath}`);

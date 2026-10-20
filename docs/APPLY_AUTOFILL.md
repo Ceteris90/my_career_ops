@@ -1,6 +1,6 @@
 # ATS Auto-Fill Flow (Apply Mode)
 
-The `apply` mode interactive assistant helps you fill out applications for job postings. It reads the form questions in your browser and drafts personalized answers based on your profile and the evaluated report.
+The `apply` mode interactive assistant helps you fill out applications for job postings. It opens the form in a Playwright browser this project launches (`node apply-scope.mjs launch-options` → `chromium.launch`), reads the questions on that page, and drafts personalized answers based on your profile and the evaluated report. It does not attach to your ordinary system browser or a remote-debugging port.
 
 **CRITICAL RULE: Career-Ops never submits.**
 The agent prepares the responses, selects the options, and types out the text fields. **You always click Submit.** This ensures you have the final say and gives you a chance to review the application before it is sent.
@@ -17,7 +17,7 @@ We have field-tested the auto-fill flow across several major ATS platforms (Ashb
 
 ### Lever
 
-- **Captcha Avoidance:** Lever often pops an hCaptcha challenge if checkboxes or radio buttons are clicked programmatically. To avoid this, the agent only auto-fills text, textareas, and standard select dropdowns. It will list any skipped checkboxes or radio buttons with recommended values so you can tick them manually and solve the captcha before submitting.
+- **Checkboxes and the Captcha Stay Yours:** Lever often pops an hCaptcha challenge when checkboxes or radio buttons are clicked programmatically. The agent therefore auto-fills text, textareas, and standard select dropdowns only, and never touches the checkboxes, the radio buttons, or the captcha widget. It lists every field it skipped along with recommended values, and you tick them, solve the captcha, and submit.
 
 ### Workable
 

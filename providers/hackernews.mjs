@@ -43,18 +43,12 @@ function extractUrl(text) {
   return m ? m[0].replace(/[.,;!?)]+$/, '') : '';
 }
 
-// Named HTML entities we decode in comment bodies. Kept in single map
-/** @type {Record<string, string>} */
-const ENTITY_MAP = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#x27;': "'",
-  '&#39;': "'",
-  '&nbsp;': ' ',
-};
-const ENTITY_RE = /&amp;|&lt;|&gt;|&quot;|&#x27;|&#39;|&nbsp;/g;
+// Shared decoder instead of a local map (#2487, #2921). The local ENTITY_RE
+// was a literal alternation of seven forms, so it decoded &#39; but left every
+// OTHER numeric entity (&#8211;, &#232;, &#x2013;) and every other named one
+// (&uuml;, &eacute;) sitting in the title — where an undecoded entity does not
+// just look wrong, it fails the user's title_filter and the posting is dropped.
+import { decodeEntities } from './_html-entities.mjs';
 
 /**
  * Parse a single HN comment text into a normalized job object.
@@ -66,7 +60,7 @@ const ENTITY_RE = /&amp;|&lt;|&gt;|&quot;|&#x27;|&#39;|&nbsp;/g;
  * Exported for unit testing.
  *
  * @param {string} text  Raw comment text (may contain HTML; tags are stripped).
- * @param {string} threadUrl  Fallback url (the HN thread) if no URL in comment.
+ * @param {string} threadUrl  Fallback url if no URL in comment (fetch() passes the comment's own permalink).
  * @returns {{ title: string, url: string, company: string, location: string } | null}
  *   null when the comment is empty, deleted, or carries no usable title.
  */
@@ -76,11 +70,10 @@ export function parseHnComment(text, threadUrl = '') {
   // Strip HTML. Anchors: keep the href value in place so URL extraction works.
   // Block-level tags (<p>, <br>, <div>, <li>, headings) become newlines so that
   // body paragraphs never bleed into the first header line after the join.
-  const plain = text
+  const plain = decodeEntities(text
     .replace(/<a\s[^>]*href="([^"]+)"[^>]*>.*?<\/a>/gi, (_, href) => href)
     .replace(/<\/?(?:p|br|div|li|h[1-6])\b[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(ENTITY_RE, (m) => ENTITY_MAP[m])
+    .replace(/<[^>]+>/g, ' '))
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n');
 
@@ -172,7 +165,16 @@ export default {
       const text = typeof child.text === 'string' ? child.text : '';
       if (!text.trim()) continue;
 
-      const parsed = parseHnComment(text, threadHnUrl);
+      // A post with no link of its own falls back to its own permalink, not the
+      // thread's. With the thread URL every such post shared one dedup key, so
+      // only the first was ever considered, and its pipeline row opened the
+      // whole thread (#5478). The thread URL stays the last resort for a
+      // comment that carries no id.
+      const commentId = child.id ?? child.objectID;
+      const fallbackUrl = commentId != null && String(commentId) !== ''
+        ? `https://news.ycombinator.com/item?id=${encodeURIComponent(String(commentId))}`
+        : threadHnUrl;
+      const parsed = parseHnComment(text, fallbackUrl);
       if (!parsed) continue;
 
       jobs.push({
