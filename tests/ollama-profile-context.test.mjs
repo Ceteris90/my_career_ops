@@ -47,6 +47,13 @@ for (const relativePath of [
   // ollama-eval dates its report with localToday() rather than the UTC day,
   // so the fixture has to carry that helper for the module to load at all.
   'lib/local-today.mjs',
+  // ollama-eval gates every outbound LLM request through the shared privacy
+  // boundary and installs the ambient fetch guard, so a fixture that carries
+  // ollama-eval has to carry those two modules as well or the child throws
+  // ERR_MODULE_NOT_FOUND before it ever reaches the mock server.
+  'lib/llm-outbound.mjs',
+  'lib/privacy-guard.mjs',
+  'lib/pii-interceptor.mjs',
   'utils/token-tracker.mjs',
 ]) {
   copyIntoFixture(relativePath);
