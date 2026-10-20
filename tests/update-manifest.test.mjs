@@ -125,7 +125,8 @@ console.log('\n🧪 Testing lib/update-manifest.mjs (#5554)...');
 // ── 4. manifestSystemPathsAt picks the file by layout ──
 {
   const newLayout = {
-    'update-system.mjs': "const SYSTEM_PATHS = [\n  'update-system.mjs',\n];",
+    // Like legacyParentManifest(): the short list names the module.
+    'update-system.mjs': `const SYSTEM_PATHS = [\n  'update-system.mjs',\n  '${MANIFEST_MODULE}',\n];`,
     [MANIFEST_MODULE]: "export const SYSTEM_PATHS = [\n  'update-system.mjs',\n  'a.mjs',\n];\nObject.freeze(SYSTEM_PATHS);",
   };
   const oldLayout = { 'update-system.mjs': "const SYSTEM_PATHS = [\n  'update-system.mjs',\n  'b.mjs',\n];" };
@@ -149,6 +150,25 @@ console.log('\n🧪 Testing lib/update-manifest.mjs (#5554)...');
     pass('a ref from before the split is read from its update-system.mjs');
   } else {
     fail(`old layout read wrong: ${JSON.stringify(fromOld)}`);
+  }
+  // A failed probe on a commit that has the module must not yield the short
+  // list: `has` answers false on any git error, and that list is non-empty.
+  let probeFailure = null;
+  try {
+    manifestSystemPathsAt('ref', {
+      has: () => false,
+      show: (path) => {
+        if (!(path in newLayout)) throw new Error(`no ${path}`);
+        return newLayout[path];
+      },
+    });
+  } catch (err) {
+    probeFailure = err;
+  }
+  if (probeFailure && probeFailure.message.includes(MANIFEST_MODULE)) {
+    pass('a failed module probe on a new-layout ref throws rather than returning the short legacy list');
+  } else {
+    fail('a failed module probe fell back to the short list in update-system.mjs');
   }
   const fromEmpty = at(emptyModule);
   if (fromEmpty.file === MANIFEST_MODULE && fromEmpty.paths.length === 0) {

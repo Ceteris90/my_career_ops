@@ -1580,7 +1580,8 @@ export function extractArrayFromSource(source, name) {
  * carries legacyParentManifest()'s short list, which is not the manifest.
  * A commit without the file predates the split, and its update-system.mjs
  * holds the whole list. An empty result is returned as-is so the caller's
- * missing-or-empty check refuses it; it never falls back to the other file.
+ * missing-or-empty check refuses it; it never falls back to the other file,
+ * and it throws when update-system.mjs turns out to hold the short list.
  *
  * @param {string} ref - A commit, branch or ref whose tree to read.
  * @param {{has?: (path: string) => boolean, show?: (path: string) => string}} [ctx]
@@ -1599,7 +1600,15 @@ export function manifestSystemPathsAt(ref, ctx = {}) {
   });
   const show = ctx.show ?? ((path) => git('show', `${ref}:${path}`));
   const file = has(MANIFEST_MODULE) ? MANIFEST_MODULE : 'update-system.mjs';
-  return { file, paths: extractArrayFromSource(show(file), 'SYSTEM_PATHS') };
+  const paths = extractArrayFromSource(show(file), 'SYSTEM_PATHS');
+  // `has` answers false on any git error, not only on a missing file. A
+  // pre-split update-system.mjs never lists the module, so one that does is
+  // legacyParentManifest()'s short list on a commit whose module could not be
+  // read. Throw: apply() and rollback() turn that into their fail-closed path.
+  if (file !== MANIFEST_MODULE && paths.includes(MANIFEST_MODULE)) {
+    throw new Error(`${ref} ships ${MANIFEST_MODULE} but it could not be read; refusing the short list in update-system.mjs`);
+  }
+  return { file, paths };
 }
 
 function mergePathLists(...lists) {
