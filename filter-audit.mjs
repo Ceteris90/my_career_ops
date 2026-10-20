@@ -65,6 +65,11 @@ by definition they match no positive keyword.`;
  * meant to say the filter changed since a row was recorded. Every other status
  * was decided after the title cut. A posting can carry several rows (one per
  * status), so rows are deduped on the scanner's own URL key.
+ *
+ * Pre-v1.18 rows carry three cells, url / date / title, with no header, and an
+ * upgrade keeps them byte-identical. Read by the current column order their
+ * title lands in `portal`, so a three-cell row takes its title from there and
+ * has no company or status.
  */
 export function readHistory(tsv) {
   const lines = String(tsv ?? '').split('\n');
@@ -73,7 +78,12 @@ export function readHistory(tsv) {
   const rows = [];
   for (const line of lines) {
     if (!line.trim()) continue;
-    const { url, title, company, status } = parseScanHistoryLine(line);
+    const parsed = parseScanHistoryLine(line);
+    const legacy = line.split('\t').length === 3;
+    const { url } = parsed;
+    const title = legacy ? parsed.portal : parsed.title;
+    const company = legacy ? '' : parsed.company;
+    const status = legacy ? '' : parsed.status;
     if (!title || status === 'skipped_title') continue;
     const key = url ? normalizeUrlForDedup(url) : `title:${title}`;
     if (seen.has(key)) continue;

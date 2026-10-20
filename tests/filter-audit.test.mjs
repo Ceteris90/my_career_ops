@@ -113,3 +113,19 @@ test('the CLI reads the user layer under CAREER_OPS_ROOT', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('a pre-v1.18 three-column history still counts', () => {
+  // CodeRabbit on #2731: upgrades keep the legacy url / date / title rows
+  // byte-identical (test-fixtures/upgrade/state-v1.16), and read by the current
+  // column order their title was empty, so the audit saw zero offers.
+  const tsv = [
+    'https://boards.example.test/acme/jobs/12345\t2026-06-19\tSenior Platform Engineer',
+    'https://boards.example.test/globex/jobs/67890\t2026-06-24\tStaff DevOps Engineer',
+    'https://boards.example.test/acme/jobs/22222\t2026-10-01\tgh\tPlatform Lead\tAcme\tadded',
+    '',
+  ].join('\n');
+  const rows = readHistory(tsv);
+  assert.deepEqual(rows.map((r) => r.title), ['Senior Platform Engineer', 'Staff DevOps Engineer', 'Platform Lead']);
+  assert.deepEqual(rows.map((r) => r.company), ['', '', 'Acme']);
+  assert.equal(audit({ positive: ['Platform'] }, rows, new Map()).rows[0].hits, 2);
+});
