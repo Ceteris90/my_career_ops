@@ -375,7 +375,8 @@ export function matchedTitleKeywords(title, titleFilter) {
 //   - `block` matches → reject
 //   - `allow` empty → pass (already cleared block)
 //   - `allow` non-empty → must match at least one keyword, OR the TITLE carries
-//     an explicit remote marker (see titleSignalsRemote below)
+//     an explicit remote marker (see titleSignalsRemote below), unless
+//     `remote_title_fallback: false` disables that final rescue.
 
 // Normalize a keyword list from portals.yml: tolerates a bare string
 // (wrapped to a 1-item array), null/undefined (→ []), and non-string
@@ -649,7 +650,7 @@ export function buildLocationFilter(locationFilter) {
     // Last resort only. Deliberately placed AFTER `block` so a remote title can
     // never rescue a blocked location — "Program Manager - Remote" in Bengaluru
     // stays rejected. This widens `allow`, never `block`.
-    return titleSignalsRemote(title);
+    return locationFilter.remote_title_fallback !== false && titleSignalsRemote(title);
   };
 }
 
@@ -4380,6 +4381,11 @@ async function main() {
       // Present only when portals.yml sets preferred_languages: a provider that
       // returns language versions selectively also returns the preferred ones.
       ...(preferredLanguageRank ? { preferredLanguageRank } : {}),
+      // This scan's own title decision, for a provider that pays extra per
+      // posting (Workday's multi-location detail GETs) and can skip postings
+      // the title filter below will drop. Absent when this company's filter_on
+      // leaves the title out, since then no title is dropped.
+      ...(normalizeFilterOn(company.filter_on).includes('title') ? { titleWanted: (title) => titleFilter(title) } : {}),
     };
     let sourceName = provider.id === 'local-parser' ? 'local-parser' : `${provider.id}-api`;
     try {

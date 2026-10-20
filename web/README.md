@@ -16,11 +16,18 @@ Requires Node 22.6+ (see [Tests](#tests) — `npm test` needs glob discovery, an
 ```bash
 cd web
 npm ci
-npm run dev
+npm run build
+npm start
 ```
 
 Open http://localhost:3000. The app reads the career-ops checkout it lives in
 (the parent directory) — your existing CV, pipeline and reports appear as-is.
+
+`npm start` serves the production build, which is the one to use day to day.
+Run `npm run build` again after updating career-ops so the app picks up the new
+code. `npm run dev` is for working on the web UI itself (see
+[Development](#development)): it compiles each page on first visit and checks
+for changes as you go, so it is noticeably slower to use.
 
 The server binds IPv4 loopback, so reach it as `localhost` or `127.0.0.1`;
 `http://[::1]:3000` has nothing listening on it.

@@ -1301,6 +1301,7 @@ These have no `npm run` binding — modes and agents call them with
 
 | Invocation | Purpose |
 |------------|---------|
+| `node onboard-write.mjs --answers <file.json\|-> [--target <dir>] [--force] [--only profile\|portals]` | Onboarding writer: copies `config/profile.example.yml` and `templates/portals.example.yml` line for line and changes only the answered fields (contact, targets, archetypes, narrative, title keywords, extra negatives, location allow-list, 45-day posting age). Keeps existing files unless `--force`, and `--only` limits a run to one file; prints `{"written":[],"kept":[]}` |
 | `node set-status.mjs <report#\|company> <State> [--note]` | Canonical tracker write path: strict states.yml validation, shared lock, atomic write. Modes call this instead of hand-editing `applications.md` |
 | `node mark-pdf-ready.mjs <report#> [--dry-run] [--json]` | Mark the matched tracker's PDF cell ready after the web PDF render path finishes; resolves the report number, uses the shared tracker lock, and writes atomically |
 | `node sync-pdf-flags.mjs [--dry-run] [--prune [--write]] [--json]` | Reconcile tracker PDF column against data/pdf-index.tsv; `--prune` drops manifest rows whose PDF is gone from disk (dry run by default, `--write` to commit) |

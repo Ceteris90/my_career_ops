@@ -27,6 +27,11 @@
  *                                     # …track main instead: every merge,
  *                                     # including whatever's mid-flight
  *                                     # between a bad one and its fix.
+ *   node update-system.mjs apply --commit-on-branch --confirm
+ *                                     # …and commit even when HEAD is not on
+ *                                     # the default branch (#3846). Without it
+ *                                     # the update is applied and staged there,
+ *                                     # and the commit is left to you.
  *   node update-system.mjs rollback   # Rollback last update
  *   node update-system.mjs dismiss [--version X.Y.Z]
  *                                     # Don't ask again about this release;
@@ -124,6 +129,10 @@ function isLegacyReexec() {
 }
 
 const CANONICAL_REPO = 'https://github.com/career-ops-hq/career-ops.git';
+// Local snapshot of a withheld update's index, including preserved files.
+// A ref stays out of git status and contributor branches; trust it only while
+// its content matches the queried paths (see stagedUpdateBaseline).
+export const STAGED_UPDATE_REF = 'refs/career-ops/staged-update';
 const RAW_VERSION_URL = 'https://raw.githubusercontent.com/career-ops-hq/career-ops/main/VERSION';
 const RELEASES_API = 'https://api.github.com/repos/career-ops-hq/career-ops/releases/latest';
 // The authoritative answer to "what commit does this upstream ref name?".
@@ -226,6 +235,7 @@ const SYSTEM_PATHS = [
   'modes/titles.md',
   'modes/upskill.md',
   'modes/intake.md',
+  'modes/retro.md',
   'documents/.gitkeep',
   // Empty scaffolds are system-owned exceptions inside otherwise user-owned
   // directories. Ship only these exact files; the data they sit beside stays
@@ -347,6 +357,7 @@ const SYSTEM_PATHS = [
   'lib/context-budget.test.mjs',
   'lib/golden-budget-analysis.mjs',
   'img-to-pdf.mjs',
+  'apply-scope.mjs',
   'archive-posting.mjs',
   'jd-capture.mjs',
   'application-answers.mjs',
@@ -371,6 +382,7 @@ const SYSTEM_PATHS = [
   'tracker-aliases.json',
   'session-activity.mjs',
   'set-status.mjs',
+  'onboard-write.mjs',
   'mark-pdf-ready.mjs',
   'normalize-statuses.mjs',
   'fix-report-links.mjs',
@@ -2587,6 +2599,42 @@ export function driftPathspecExcludingSkillEntrypoints(systemPaths, skillEntrypo
 }
 
 /**
+ * Use the pending snapshot only while it matches the queried index or worktree
+ * paths. Manual discard must fall back to normal local-edit attribution.
+ * Keep a mismatched ref: a stash/pop round trip can restore the snapshot after
+ * an intervening updater run. Commit and rollback clear it instead.
+ *
+ * @param {Function} runGit - Git runner (injectable for tests).
+ * @param {string[]} paths - Pathspecs the caller is asking about.
+ * @returns {string|null} Commit to use as the baseline, or null.
+ */
+export function stagedUpdateBaseline(runGit, paths) {
+  let ref;
+  try {
+    ref = runGit('rev-parse', '--verify', '--quiet', `${STAGED_UPDATE_REF}^{commit}`).trim();
+  } catch {
+    return null; // No withheld update recorded — the normal case.
+  }
+  if (!ref) return null;
+  // Scope checks to the queried paths so unrelated staged work is ignored.
+  // Index match permits later worktree edits; worktree match permits stash pop
+  // to restore the snapshot unstaged. Either suffices for attribution below.
+  for (const check of [
+    () => runGit('diff-index', '--cached', '--quiet', ref, '--', ...paths),
+    () => runGit('diff', '--quiet', ref, '--', ...paths),
+  ]) {
+    try {
+      check();
+      return ref;
+    } catch {
+      // Try the next one.
+    }
+  }
+  // Neither matches; retain the ref for a possible stash pop.
+  return null;
+}
+
+/**
  * System-layer files this install changed locally that the update is about to
  * overwrite (#2337).
  *
@@ -2670,6 +2718,10 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
   } catch {
     mergeBase = null;
   }
+  // A pending snapshot identifies files delivered by the withheld update,
+  // not a replacement for the install's history baseline. Preserved local
+  // customizations must remain candidates even when the snapshot carries them.
+  const stagedBaseline = stagedUpdateBaseline(runGit, paths);
   let baseline = mergeBase;
   if (!baseline) {
     try {
@@ -2715,6 +2767,22 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
     } catch {
       // Unreadable history (shallow clone): report the candidates rather than
       // guess, same degradation contract as diffNames.
+    }
+
+    if (stagedBaseline) {
+      try {
+        const message = runGit('log', '-1', '--format=%B', stagedBaseline);
+        const marker = message.split('\n').find(line => line.startsWith('Career-Ops-Preserved: '));
+        const preserved = new Set(marker ? JSON.parse(marker.slice('Career-Ops-Preserved: '.length)) : []);
+        const delivered = runGit(
+          'diff-tree', '--no-commit-id', '--name-only', '-r', stagedBaseline, '--', ...paths,
+        ).split('\n').map(line => line.trim()).filter(Boolean);
+        for (const file of delivered) {
+          if (changedLocally.has(file) && !preserved.has(file)) deliveredBy.set(file, stagedBaseline);
+        }
+      } catch {
+        // Unreadable snapshot metadata keeps the ordinary attribution.
+      }
     }
 
     // Compare each candidate against the update commit that installed it,
@@ -3590,7 +3658,16 @@ export function stagedPathsOutside(owned, preserved = [], run = (...args) => git
   // work into the commit, which is the exact #915 bug 2 regression this guard
   // exists to prevent. NUL-delimited output is unambiguous and unquoted.
   const staged = run('diff', '--cached', '--name-only', '-z');
-  if (!staged) return [];
+  return pathsOutsideUpdate(staged, owned, preserved);
+}
+
+/** Unstaged tracked paths that must be isolated before switching branches. */
+export function unstagedPathsOutside(owned, preserved = [], run = (...args) => gitRawIn(ROOT, ...args)) {
+  return pathsOutsideUpdate(run('diff', '--name-only', '-z'), owned, preserved);
+}
+
+function pathsOutsideUpdate(listed, owned, preserved) {
+  if (!listed) return [];
 
   const files = new Set();
   const dirs = [];
@@ -3604,7 +3681,7 @@ export function stagedPathsOutside(owned, preserved = [], run = (...args) => git
   // `git diff --name-only` / `git ls-files`, which never emit directories.
   const preservedFiles = new Set(preserved);
 
-  return staged.split('\0')
+  return listed.split('\0')
     .filter(path => path !== '')
     .filter(path => preservedFiles.has(path)
       || (!files.has(path) && !dirs.some(dir => path.startsWith(dir))));
@@ -4320,6 +4397,226 @@ export function reconcileGitignore(localText, upstreamText) {
   return { text: `${localText}${separator}${body}${eol}`, added };
 }
 
+// ── BRANCH SAFETY (#3846) ───────────────────────────────────────
+
+// Separate from --force, which permits overwriting locally edited system files.
+export const COMMIT_ON_BRANCH_FLAG = '--commit-on-branch';
+
+export function commitOnBranchOptIn(argv = process.argv, env = process.env) {
+  return argv.includes(COMMIT_ON_BRANCH_FLAG) ||
+    env.CAREER_OPS_UPDATE_COMMIT_ON_BRANCH === '1';
+}
+
+/** Checked-out branch, or null for detached HEAD / unavailable git. */
+export function currentBranchIn(root = ROOT) {
+  try {
+    return gitQuietIn(root, 'symbolic-ref', '--quiet', '--short', 'HEAD') || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve origin/HEAD, falling back to a local main/master. Return null when
+ * unknown so the caller retains the existing commit behavior.
+ */
+export function defaultBranchIn(root = ROOT) {
+  try {
+    const ref = gitQuietIn(root, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD');
+    if (ref.startsWith('origin/') && ref.length > 'origin/'.length) {
+      return ref.slice('origin/'.length);
+    }
+  } catch {
+    // No origin/HEAD (never set, pruned, or no remote). Fall through.
+  }
+  for (const name of ['main', 'master']) {
+    try {
+      gitQuietIn(root, 'show-ref', '--verify', '--quiet', `refs/heads/${name}`);
+      return name;
+    } catch {
+      // Not this one.
+    }
+  }
+  return null;
+}
+
+/**
+ * Withhold only on a known non-default branch without opt-in (#3846).
+ * Default-branch and uncertain cases retain the existing commit behavior.
+ *
+ * @param {{currentBranch: string|null, defaultBranch: string|null, optIn?: boolean}} params
+ * @returns {{commit: boolean, reason: string}} Decision and why.
+ */
+export function updateCommitBranchDecision({ currentBranch, defaultBranch, optIn = false }) {
+  if (optIn) return { commit: true, reason: 'opt-in' };
+  if (!currentBranch) return { commit: true, reason: 'detached-head' };
+  if (!defaultBranch) return { commit: true, reason: 'unknown-default-branch' };
+  if (currentBranch === defaultBranch) return { commit: true, reason: 'on-default-branch' };
+  return { commit: false, reason: 'non-default-branch' };
+}
+
+/**
+ * Shared entry point for apply() and tests using real repositories.
+ *
+ * @param {string} [root=ROOT] - Repository to read.
+ * @param {{optIn?: boolean, updatePaths?: string[]}} [options] - Optional concrete update paths restrict withholding to pending changes.
+ * @returns {{commit: boolean, reason: string, currentBranch: string|null, defaultBranch: string|null}}
+ */
+export function resolveUpdateCommitBranch(root = ROOT, options = {}) {
+  const optIn = options.optIn ?? commitOnBranchOptIn();
+  const currentBranch = currentBranchIn(root);
+  const defaultBranch = defaultBranchIn(root);
+  const decision = {
+    ...updateCommitBranchDecision({ currentBranch, defaultBranch, optIn }),
+    currentBranch,
+    defaultBranch,
+  };
+  if (!decision.commit && options.updatePaths) {
+    const staged = new Set(gitRawIn(root, 'diff', '--cached', '--name-only', '-z').split('\0'));
+    if (!options.updatePaths.some(path => staged.has(path))) {
+      // Nothing to commit for this update; leave unrelated staged work alone.
+      return { ...decision, commit: false, reason: 'no-staged-update' };
+    }
+  }
+  return decision;
+}
+
+/**
+ * Quote POSIX shell arguments: valid Git branch names can contain shell syntax.
+ * Leave plain tokens bare for readability.
+ */
+export function shellQuoteArg(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9._@+/-]+$/.test(text)) return text;
+  return `'${text.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Format recovery using the selected commit form. Pathspec commits can lose
+ * staged mode bits with core.fileMode=false, so do not substitute for index form.
+ *
+ * @param {string} version - Target version for the commit message.
+ * @param {boolean} usedIndexCommit - Whether the index form is safe here.
+ * @param {string[]} expandedPathsToStage - Concrete staged file list.
+ * @param {{git?: Function, root?: string, pathspecFile?: string}} [ctx] - Reuse a failed commit's file, or configure the shared writer.
+ * @returns {string} A runnable git command.
+ */
+export function updateCommitCommand(version, usedIndexCommit, expandedPathsToStage, ctx = {}) {
+  const message = `chore: auto-update system files to v${version}`;
+  if (usedIndexCommit) return `git commit -m "${message}"`;
+  // Reuse the scoped commit's file on failure. Withheld commits need their own
+  // file, written by the same helper: large updates exceed Windows argv limits.
+  let pathspecArgs;
+  try {
+    const file = ctx.pathspecFile ?? writePathspecFile(expandedPathsToStage, ctx);
+    pathspecArgs = `"--pathspec-from-file=${file}" --pathspec-file-nul`;
+  } catch {
+    // Match main's recovery fallback if the git directory is not writable.
+    pathspecArgs = `-- ${expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ')}`;
+  }
+  return `git commit -m "${message}" ${pathspecArgs}`;
+}
+
+/**
+ * Best-effort snapshot of the index, parented to HEAD, for next-run attribution.
+ * Ref-write failure must not turn an applied update into a reported failure.
+ *
+ * @param {string} version - Target version, for the recorded commit's message.
+ * @param {object} [ctx] - Git runner override and preservedPaths excluded from update attribution.
+ */
+export function recordStagedUpdate(version, ctx = {}) {
+  // Suppress stderr from non-fatal bookkeeping failures.
+  const runGit = ctx.git || gitQuiet;
+  try {
+    const tree = runGit('write-tree');
+    const commit = runGit(
+      // commit-tree needs an identity even on fresh installs; this is a
+      // synthetic snapshot, not a user-authored commit.
+      '-c', 'user.name=career-ops updater',
+      '-c', 'user.email=updater@career-ops.invalid',
+      'commit-tree', tree, '-p', runGit('rev-parse', 'HEAD'),
+      '-m', `career-ops staged update to v${version} (uncommitted)`,
+      // The snapshot includes the whole index, including preserved user work.
+      // Record its exclusions so it cannot claim those paths as delivered.
+      '-m', `Career-Ops-Preserved: ${JSON.stringify(ctx.preservedPaths || [])}`,
+    );
+    runGit('update-ref', STAGED_UPDATE_REF, commit);
+  } catch {
+    // Non-fatal, see above.
+  }
+}
+
+/** Clear the pending snapshot after commit or rollback; best-effort. */
+export function clearStagedUpdate(ctx = {}) {
+  const runGit = ctx.git || git;
+  try {
+    (ctx.git || gitQuiet)('rev-parse', '--verify', '--quiet', `${STAGED_UPDATE_REF}^{commit}`);
+  } catch {
+    return; // Nothing recorded.
+  }
+  try {
+    runGit('update-ref', '-d', STAGED_UPDATE_REF);
+  } catch {
+    // Non-fatal, see above.
+  }
+}
+
+/**
+ * Explain the staged state and offer keep / move / rollback commands (#3846).
+ * apply() has already created the backup used by rollback.
+ *
+ * @param {object} params
+ * @param {string} params.currentBranch
+ * @param {string} params.defaultBranch
+ * @param {string} params.version
+ * @param {string} params.commitCommand - From updateCommitCommand().
+ * @param {string[]} [params.unrelatedStaged] - Paths from stagedPathsOutside().
+ * @param {string[]} [params.unrelatedUnstaged] - Unstaged tracked paths outside the update.
+ * @returns {string} Multi-line notice.
+ */
+export function skippedBranchCommitNotice({
+  currentBranch, defaultBranch, version, commitCommand, unrelatedStaged = [], unrelatedUnstaged = [],
+}) {
+  const branch = shellQuoteArg(defaultBranch);
+  const stashMessage = shellQuoteArg(`career-ops v${version}`);
+  const ownWorkMessage = shellQuoteArg('my work');
+  const ownWorkPaths = [...new Set([...unrelatedStaged, ...unrelatedUnstaged])];
+  return [
+    '',
+    `Update applied but NOT committed: you are on '${currentBranch}', not '${defaultBranch}'.`,
+    'The refreshed system files are staged in your working tree. Committing them here',
+    'would put a full system snapshot on your branch, which is how a small pull request',
+    'turns into an unreviewable one (#3846).',
+    '',
+    'Pick one:',
+    '  1. Keep the update on this branch:',
+    `       ${commitCommand}`,
+    `  2. Move it to '${defaultBranch}' (git 2.35+ for --staged):`,
+    `       git stash push --staged -m ${stashMessage}`,
+    `       git switch ${branch} && git stash pop --index && ${commitCommand}`,
+    // --staged takes the whole index and leaves unstaged work behind. Isolate
+    // unrelated work by path before switching; unstaging alone is insufficient.
+    // Quote every path and keep the full list so the printed command is runnable.
+    ...(unrelatedStaged.length > 0 ? [
+      `       NOTE: ${unrelatedStaged.length === 1 ? 'one other path is' : `${unrelatedStaged.length} other paths are`} staged besides this update. \`stash push --staged\``,
+      '       takes the whole index, so option 2 would move them too. Take them out of',
+      '       the index first, scoped to their own paths — unstaging is not enough:',
+    ] : []),
+    ...(unrelatedUnstaged.length > 0 ? [
+      '       NOTE: unrelated unstaged changes remain in the working tree after',
+      '       `stash push --staged`. Stash or commit them before switching branches.',
+    ] : []),
+    ...(ownWorkPaths.length > 0 ? [
+      `         git stash push -m ${ownWorkMessage} -- ${ownWorkPaths.map(shellQuoteArg).join(' ')}`,
+    ] : []),
+    '  3. Undo the update entirely:',
+    '       node update-system.mjs rollback',
+    '',
+    `Always want it committed here? Re-run with ${COMMIT_ON_BRANCH_FLAG}, or set`,
+    'CAREER_OPS_UPDATE_COMMIT_ON_BRANCH=1.',
+  ].join('\n');
+}
+
 // ── APPLY ───────────────────────────────────────────────────────
 
 /**
@@ -4363,6 +4660,7 @@ async function apply() {
   const isReexec = authenticatedReexec || legacyReexec;
   const updateForce = process.argv.includes('--force') ||
     (isReexec && process.env.CAREER_OPS_UPDATE_FORCE === '1');
+  const commitOnBranch = commitOnBranchOptIn();
   const updateConfirmed = process.argv.includes('--confirm') ||
     (isReexec && (process.env.CAREER_OPS_UPDATE_CONFIRM === '1' || legacyReexec));
   const initialStatusPaths = new Set(gitStatusEntries().map(entry => entry.path));
@@ -4624,6 +4922,8 @@ async function apply() {
           'apply',
           '--confirm',
           ...(updateForce ? ['--force'] : []),
+          // Forward opt-in to the committing child; the env twin covers older targets.
+          ...(commitOnBranch ? [COMMIT_ON_BRANCH_FLAG] : []),
         ], {
           cwd: ROOT,
           stdio: 'inherit',
@@ -4642,6 +4942,7 @@ async function apply() {
             // not whatever its own fetch of targetRef happens to resolve.
             CAREER_OPS_UPDATE_TARGET_SHA: targetCommit,
             ...(updateForce ? { CAREER_OPS_UPDATE_FORCE: '1' } : {}),
+            ...(commitOnBranch ? { CAREER_OPS_UPDATE_COMMIT_ON_BRANCH: '1' } : {}),
             // Keep the legacy confirmation channel for older target updaters;
             // this process still requires the authenticated marker above.
             CAREER_OPS_UPDATE_CONFIRM: '1',
@@ -5073,6 +5374,8 @@ async function apply() {
     // Which commit form was used, so the failure path can suggest the matching
     // recovery command. Declared outside the try because the catch reads it.
     let usedIndexCommit = false;
+    // Keep the closing summary consistent with a withheld commit.
+    let skippedBranchCommit = false;
 
     // The staging and scoped-commit paths must use the same concrete file list.
     // Passing a manifest directory to `git commit -- <dir>` reads matching
@@ -5124,10 +5427,31 @@ async function apply() {
         preservedPaths,
       );
       usedIndexCommit = unrelated.length === 0;
-      if (usedIndexCommit) {
+      // Decide after staging so withholding a commit does not withhold the update.
+      const branchDecision = resolveUpdateCommitBranch(ROOT, {
+        optIn: commitOnBranch,
+        updatePaths: [...expandedPathsToStage, ...materializedSkillEntrypoints],
+      });
+      if (!branchDecision.commit && branchDecision.reason !== 'no-staged-update') {
+        skippedBranchCommit = true;
+        // Distinguish this update from user edits on the next run.
+        recordStagedUpdate(remote, { preservedPaths });
+        console.log(skippedBranchCommitNotice({
+          currentBranch: branchDecision.currentBranch,
+          defaultBranch: branchDecision.defaultBranch,
+          version: remote,
+          commitCommand: updateCommitCommand(remote, usedIndexCommit, expandedPathsToStage),
+          unrelatedStaged: unrelated,
+          unrelatedUnstaged: unstagedPathsOutside(
+            [...ownedPaths, ...materializedSkillEntrypoints], preservedPaths,
+          ),
+        }));
+      } else if (branchDecision.commit && usedIndexCommit) {
         git('commit', '-m', `chore: auto-update system files to v${remote}`);
-      } else {
+        clearStagedUpdate();
+      } else if (branchDecision.commit) {
         commitPathspecs(`chore: auto-update system files to v${remote}`, expandedPathsToStage);
+        clearStagedUpdate();
       }
     } catch (e) {
       let commitFailed = false;
@@ -5148,19 +5472,7 @@ async function apply() {
         // pathspec form after the index form was selected would tell the user to
         // run the very thing that drops the staged mode bits — a recovery step
         // that quietly reintroduces the bug it is recovering from.
-        // The pathspec form reads its list from a file: printed inline, 1,593
-        // paths ran to 55,564 characters, a command no Windows shell can run
-        // (#5103). Should even that file be unwritable, the inline list is
-        // still the right command on a platform without the ceiling.
-        let pathspecArgs;
-        try {
-          pathspecArgs = `"--pathspec-from-file=${e.pathspecFile ?? writePathspecFile(expandedPathsToStage)}" --pathspec-file-nul`;
-        } catch {
-          pathspecArgs = `-- ${expandedPathsToStage.map(p => `'${p.replace(/'/g, "'\\''")}'`).join(' ')}`;
-        }
-        const recovery = usedIndexCommit
-          ? `git commit -m "chore: auto-update system files to v${remote}"`
-          : `git commit -m "chore: auto-update system files to v${remote}" ${pathspecArgs}`;
+        const recovery = updateCommitCommand(remote, usedIndexCommit, expandedPathsToStage, { pathspecFile: e.pathspecFile });
         throw new Error(
           `Update commit failed (files may be staged but not committed).\n` +
           `    Error: ${e.message.split('\n')[0]}\n` +
@@ -5202,7 +5514,7 @@ async function apply() {
     } else {
       console.log(`\nUpdate complete: v${local} → v${remote}`);
     }
-    console.log(`Updated ${updated.length} system paths.`);
+    console.log(`Updated ${updated.length} system paths.${skippedBranchCommit ? ' Staged, not committed (see above).' : ''}`);
     console.log(`Rollback available: node update-system.mjs rollback`);
 
     console.log('\n-- The CareerOps Manifesto ------------------------------');
@@ -5500,6 +5812,9 @@ function rollback() {
       }
     }
 
+    // The restored tree no longer contains the withheld update snapshot.
+    clearStagedUpdate();
+
     console.log(`Rollback complete. Restored ${restored.length} file(s) from ${latest}, removed ${removed.length} target-only file(s).`);
     console.log('Your data (CV, profile, tracker, reports) was not affected.');
   } catch (err) {
@@ -5584,7 +5899,7 @@ if (isCli) {
       case 'rollback': rollback(); break;
       case 'dismiss': await dismiss(); break;
       default:
-        console.log('Usage: node update-system.mjs [check [--force] [--channel main]|status|apply --confirm [--force] [--channel main]|rollback|dismiss [--version X.Y.Z]]');
+        console.log('Usage: node update-system.mjs [check [--force] [--channel main]|status|apply --confirm [--force] [--channel main] [--commit-on-branch]|rollback|dismiss [--version X.Y.Z]]');
         process.exit(1);
     }
   } catch (err) {

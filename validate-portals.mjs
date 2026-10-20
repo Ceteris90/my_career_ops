@@ -338,6 +338,9 @@ export async function validatePortalsConfig(config, { providerIds = new Set() } 
       if (config.location_filter.strict !== undefined && typeof config.location_filter.strict !== 'boolean') {
         add(errors, 'location_filter.strict', 'must be a boolean when set');
       }
+      if (config.location_filter.remote_title_fallback !== undefined && typeof config.location_filter.remote_title_fallback !== 'boolean') {
+        add(errors, 'location_filter.remote_title_fallback', 'must be a boolean when set');
+      }
     }
   }
 

@@ -98,6 +98,7 @@ RATE_LIMIT_SLEEP=300
 WORKER_TIMEOUT=1800
 BATCH_PAUSED=false
 STATUS_ONLY=false
+STATUS_FULL=true
 WATCH_MODE=false
 LIMIT=0  # internal sentinel only; explicit --limit must be positive
 
@@ -135,7 +136,9 @@ Options:
   --rate-limit-sleep N Maximum adaptive retry delay in seconds; 0 pauses immediately
                        (default: 300; range: 0–2147483647; claude only)
   --status             Show batch progress and a per-job table, then exit
-  --watch              Live-refresh progress until the run completes
+  --summary            With --status, print the totals only (the table is one row per offer)
+  --full               With --status, print the per-job table (the default)
+  --watch              Live-refresh progress (always with the per-job table) until the run completes
   -h, --help           Show this help
 
 Files:
@@ -216,6 +219,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --status) STATUS_ONLY=true; shift ;;
+    --summary) STATUS_FULL=false; shift ;;
+    --full) STATUS_FULL=true; shift ;;
     --watch) WATCH_MODE=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -1461,6 +1466,65 @@ process_offer() {
       return 0
     fi
 
+    # A dealbreaker hit is a finished skip, not a hold (batch-prompt.md Step
+    # 1.6). The worker writes one SKIP row quoting the rule and the JD line and
+    # no report. Accept it only when the handoff names this posting and the row
+    # proves it; anything else is quarantined and retried like a failure.
+    if [[ "$parsed_status" == "skipped" ]]; then
+      local skip_tracker="$TRACKER_DIR/$id.tsv" skip_rule=""
+      local -a skip_reports=()
+      if [[ -n "$report_num" && "$report_num" != "-" ]]; then
+        shopt -s nullglob
+        local skip_candidate
+        for skip_candidate in "$REPORTS_DIR/$report_num-"*.md; do
+          [[ "$skip_candidate" == *-RESERVED.md ]] || skip_reports+=("$skip_candidate")
+        done
+        shopt -u nullglob
+      fi
+      if (( ${#skip_reports[@]} == 0 )); then
+        skip_rule=$(node -e '
+          const fs = require("fs");
+          const [json, url, id, tsv, reserved] = process.argv.slice(1);
+          const flat = (s) => String(s).replace(/[\x00-\x1f\x7f]+/g, " ").replace(/ +/g, " ").trim();
+          const result = JSON.parse(json);
+          if (result.reason !== "dealbreaker" || result.url !== url || String(result.id) !== id) process.exit(1);
+          if (typeof result.rule !== "string" || !flat(result.rule)) process.exit(1);
+          const lines = fs.readFileSync(tsv, "utf8").replace(/\r\n/g, "\n").split("\n").filter(Boolean);
+          if (lines.length !== 2) process.exit(1);
+          const head = lines[0].split("\t");
+          const row = lines[1].split("\t");
+          const field = (name) => row[head.indexOf(name)] ?? "";
+          if (field("status") !== "SKIP" || field("url") !== url || !field("notes").startsWith("Dealbreaker: \"")) process.exit(1);
+          // merge-tracker keeps the TSV num as the row id, so it must be the
+          // number this runner reserved (zero padding aside).
+          if (!/^\d+$/.test(field("num")) || Number(field("num")) !== Number(reserved)) process.exit(1);
+          process.stdout.write(flat(result.rule));
+        ' "$worker_result_json" "$url" "$id" "$skip_tracker" "$report_num" 2>/dev/null) || skip_rule=""
+      fi
+      if [[ -n "$skip_rule" ]]; then
+        # Keep the reservation. The SKIP row uses this number and no report
+        # file holds it, so releasing now would hand it to the next job before
+        # the merge. merge_tracker releases it once the row is in the tracker.
+        update_state_retrying "$id" "$url" "skipped" "$started_at" "$completed_at" "$report_num" "-" "dealbreaker: \"$skip_rule\"" "$retries" || true
+        echo "    ⏭️  Skipped (dealbreaker): $url — \"$skip_rule\""
+        return 0
+      fi
+      local skip_quarantine="$LOGS_DIR/quarantine"
+      mkdir -p "$skip_quarantine"
+      [[ -f "$skip_tracker" ]] && mv "$skip_tracker" "$skip_quarantine/$id-tracker.tsv"
+      local skip_report
+      for skip_report in ${skip_reports[@]+"${skip_reports[@]}"}; do
+        mv "$skip_report" "$skip_quarantine/$id-${skip_report##*/}"
+      done
+      if (( retries < MAX_RETRIES )); then
+        retries=$((retries + 1))
+      fi
+      update_state_retrying "$id" "$url" "failed" "$started_at" "$completed_at" "$report_num" "-" "dealbreaker skip without a valid SKIP tracker row for this posting, or with a report; artifacts quarantined" "$retries" || true
+      release_report_num "$report_num"
+      echo "    ❌ Failed (invalid dealbreaker skip, attempt $retries): artifacts moved to $skip_quarantine"
+      return 0
+    fi
+
     if [[ -n "$worker_failed_match" ]]; then
       [[ -z "$worker_error_match" ]] && worker_error_match="worker reported status:failed (exit code 0)"
       if (( retries < MAX_RETRIES )); then
@@ -1525,6 +1589,16 @@ merge_tracker() {
   echo ""
   echo "=== Merging tracker additions ==="
   node "$PROJECT_DIR/merge-tracker.mjs"
+  # A dealbreaker SKIP row holds its report number until it is merged. The
+  # tracker row now holds it for reserve-report-num.mjs, so drop the sentinel.
+  if [[ -f "$STATE_FILE" ]]; then
+    local mid mstatus mnum merror
+    while IFS=$'\t' read -r mid _ mstatus _ _ mnum _ merror _; do
+      if [[ "$mid" != "id" && "$mstatus" == "skipped" && "$merror" == dealbreaker:* ]]; then
+        release_report_num "$mnum"
+      fi
+    done < "$STATE_FILE"
+  fi
   echo ""
   echo "=== Reconciling pipeline.md ==="
   node "$PROJECT_DIR/reconcile-pipeline.mjs" || echo "⚠️  Pipeline reconcile had issues (see above)"
@@ -1549,8 +1623,9 @@ print_summary() {
 
   local total=0 completed=0 skipped=0 failed=0 pending=0 needs_confirmation=0
   local score_sum=0 score_count=0
+  local -a dealbreaker_lines=()
 
-  while IFS=$'\t' read -r sid _ sstatus _ _ _ sscore _ _; do
+  while IFS=$'\t' read -r sid surl sstatus _ _ _ sscore serror _; do
     [[ "$sid" == "id" ]] && continue
     total=$((total + 1))
     case "$sstatus" in
@@ -1560,7 +1635,9 @@ print_summary() {
           score_count=$((score_count + 1))
         fi
         ;;
-      skipped) skipped=$((skipped + 1)) ;;
+      skipped) skipped=$((skipped + 1))
+        [[ "$serror" == dealbreaker:* ]] && dealbreaker_lines+=("#$sid $surl — $serror")
+        ;;
       failed) failed=$((failed + 1)) ;;
       needs_confirmation) needs_confirmation=$((needs_confirmation + 1)) ;;
       *) pending=$((pending + 1)) ;;
@@ -1568,6 +1645,14 @@ print_summary() {
   done < "$STATE_FILE"
 
   echo "Total: $total | Completed: $completed | Skipped: $skipped | Failed: $failed | Pending: $pending | Needs confirmation: $needs_confirmation"
+
+  if (( ${#dealbreaker_lines[@]} > 0 )); then
+    echo "Dealbreaker skips: ${#dealbreaker_lines[@]} (SKIP rows merged; to evaluate one anyway, rerun it in a session and say \"evaluate anyway\")"
+    local dealbreaker_line
+    for dealbreaker_line in "${dealbreaker_lines[@]}"; do
+      echo "  $dealbreaker_line"
+    done
+  fi
 
   if (( score_count > 0 )); then
     local avg
@@ -1585,6 +1670,8 @@ print_summary() {
 }
 
 print_status_table() {
+  # $1 = "full" forces the per-job table whatever STATUS_FULL says (--watch).
+  local force_full="${1:-}"
   if [[ ! -f "$STATE_FILE" ]]; then
     echo "No state file found at $STATE_FILE"
     return
@@ -1633,6 +1720,10 @@ print_status_table() {
     avg=$(LC_ALL=C awk -v sum="$score_sum" -v count="$score_count" 'BEGIN{printf "%.1f", sum / count}' 2>/dev/null || echo "N/A")
     echo "Average score: $avg/5 ($score_count scored)"
   fi
+
+  if [[ "$force_full" != "full" && "$STATUS_FULL" != "true" ]]; then
+    return
+  fi
   echo ""
 
   # Format the per-job table:
@@ -1676,7 +1767,7 @@ watch_status() {
     while kill -0 "$active_pid" 2>/dev/null; do
       clear || printf "\033[c"
       echo "=== Watching Batch Progress (PID $active_pid) ==="
-      print_status_table
+      print_status_table full
       sleep 2
     done
     echo ""
@@ -1686,7 +1777,7 @@ watch_status() {
   fi
 
   echo "Showing final status:"
-  print_status_table
+  print_status_table full
 
   # Chain verify-pipeline.mjs
   if [[ -f "$PROJECT_DIR/verify-pipeline.mjs" ]]; then

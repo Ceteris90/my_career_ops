@@ -87,6 +87,38 @@ export function readStyleTokens(profilePath = getProfilePath()) {
 }
 
 /**
+ * Read the `cv.locked_sections` array from a profile file, folding them into
+ * canonical section keys. Missing file or absent/null section → []. File-read,
+ * YAML-parse, and type errors propagate so invalid configurations fail loudly.
+ * @param {string} [profilePath]
+ * @param {Function} [foldKey] - Optional function to fold keys, defaults to lowercase
+ * @returns {string[]}
+ */
+export function readLockedSections(profilePath = getProfilePath(), foldKey = (s) => s.toLowerCase()) {
+  if (!existsSync(profilePath)) return [];
+  const raw = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const locked = raw?.cv?.locked_sections;
+  if (locked === undefined || locked === null) return [];
+  if (typeof locked === 'string') {
+    const trimmed = locked.trim();
+    if (!trimmed) {
+      throw new TypeError(`Invalid cv.locked_sections in ${profilePath}: string cannot be empty`);
+    }
+    return [foldKey(trimmed)];
+  }
+  if (Array.isArray(locked)) {
+    return locked.map((item, idx) => {
+      if (typeof item !== 'string' || !item.trim()) {
+        throw new TypeError(`Invalid cv.locked_sections[${idx}] in ${profilePath}: expected a non-empty string, got ${typeof item === 'string' ? 'empty string' : typeof item}`);
+      }
+      return foldKey(item.trim());
+    });
+  }
+  throw new TypeError(`Invalid cv.locked_sections in ${profilePath}: expected a string or array of strings, got ${typeof locked}`);
+}
+
+/**
  * Map a parsed `style:` object to { '--css-var': value }, keeping only the
  * recognized string tokens. Exported for tests.
  * @param {unknown} style

@@ -239,12 +239,12 @@ Create `cv.md` from whatever they provide — clean markdown with standard secti
 #### Step 2: Profile (required)
 If `node doctor.mjs --json` `warnings` says the data-root `.env` sets `CAREER_OPS_PROFILE`, do not copy the example profile. Ask the user to export that variable in the shell (or shell profile) that starts the agent, then restart the session from it, or to remove the line from `.env`. A shell export does not reach an agent session that is already running, so run doctor again only after that.
 
-If `config/profile.yml` is missing, copy from `config/profile.example.yml` and ask:
+If `config/profile.yml` is missing, ask:
 > "I need a few details to personalize the system:
 > - Your full name and email
 > - Your location and timezone
 > - What roles are you targeting? (e.g., 'Senior Backend Engineer', 'AI Product Manager')
-> - Your salary target range
+> - Your salary target range and its currency
 > - How much do you want to spend on model usage per evaluation? Three options:
 >   - **economy** — cheapest and fastest, good for scanning lots of offers quickly
 >   - **standard** — balanced cost and quality (default if you're not sure)
@@ -252,21 +252,43 @@ If `config/profile.yml` is missing, copy from `config/profile.example.yml` and a
 >
 > I'll set everything up for you."
 
-Fill in `config/profile.yml` (including `spend_tier`, default `standard`). Archetypes and targeting narrative go to `modes/_profile.md` or `config/profile.yml` — never `modes/_shared.md`.
+Keep the answers for the writer in Step 3. Archetypes and targeting narrative go to `modes/_profile.md` or `config/profile.yml` — never `modes/_shared.md`.
 
 #### Step 3: Portals (recommended)
 If `portals.yml` is missing:
 > "I'll set up the job scanner with 45+ pre-configured companies. Want me to customize the search keywords for your target roles?"
 
-Copy `templates/portals.example.yml` → `portals.yml`; if they gave target roles in Step 2, update `title_filter.positive`.
+Then write both files in one run. Do not copy or hand-edit the templates. `templates/portals.example.yml` is about 160 KB, and the writer changes only the answered fields:
 
-Then tighten the filters to what they said, so the first scan does not fill the pipeline with roles they ruled out:
+```bash
+node onboard-write.mjs --answers - <<'JSON'
+{
+  "candidate": { "full_name": "...", "email": "...", "location": "City, Region" },
+  "target_roles": ["..."],
+  "compensation": { "target_range": "...", "currency": "USD", "minimum": "..." },
+  "location": { "country": "...", "city": "...", "timezone": "..." },
+  "spend_tier": "standard",
+  "archetypes": [{ "name": "...", "level": "...", "fit": "primary" }],
+  "narrative": { "headline": "...", "superpowers": ["..."], "proof_points": [{ "name": "...", "hero_metric": "..." }] },
+  "portals": { "positive": ["..."], "negative": [], "countries": ["..."], "cities": [] }
+}
+JSON
+```
 
-- **Location.** When they name only countries ("remote in the US", "anywhere in Canada"), list those countries under both `always_allow` and `allow`. `allow` turns the filter into an allow-list, so a city you did not think to block (Paris, Manila) is dropped. A `block` list alone drops only the places it names. For the United States, `always_allow` also admits "City, ST" locations. For other countries, add the main cities too, since a posting may name only the city. When they name cities, list the cities under `allow` and leave country names out of `always_allow`, since a country there admits every city in it. Leave "Remote" out of `allow`, since it would admit remote roles in any country.
-- **Posting age.** Set `max_posting_age_days: 45` unless they ask for older postings. Tell them it also hides long-open roles on a company's own board.
-- **Excluded titles.** Add their exclusions to `title_filter.negative`. Never replace the list. Replacing it drops the template's junior, intern and German student entries (Werkstudent, Praktikant).
+- `portals.positive` is the title keywords. Default to the target roles and their common variants.
+- `portals.negative` is the titles they ruled out. The writer adds them to `title_filter.negative` and never replaces the list, so the template's junior, intern and German student entries (Werkstudent, Praktikant) stay.
+- `countries` and `cities` become a `location_filter` allow-list, so the first scan does not fill the pipeline with roles in places they ruled out. Countries go under both `always_allow` and `allow`, and cities under `allow` only. Leave both empty when they want anywhere.
+  - When they name only countries ("remote in the US", "anywhere in Canada"), pass those countries. For the United States, `always_allow` also admits "City, ST" locations. For other countries, add the main cities to `cities` too, since a posting may name only the city.
+  - When they name cities, pass the cities and leave `countries` empty, since a country in `always_allow` admits every city in it.
+  - "Remote" and "Hybrid" are not places, and the writer refuses them, because an allow-list entry like that admits every country.
+  - A posting labeled only "Remote" (no country) will not match a US `always_allow` / `allow` list. Tell the candidate that limitation during onboarding; do not add "Remote" as an unconditional country match. Titles that themselves signal remote work can still match on the title filter.
+- `max_posting_age_days` defaults to 45. Tell them it also hides long-open roles on a company's own board. Set 0 only when they ask for older postings.
+- Contact fields they did not give are blanked, so the example person never reaches a CV.
+- Existing files are kept. Pass `--force` only when the user asks to redo setup. `node onboard-write.mjs --help` shows every field.
 
-For "remote or hybrid in the US", the result looks like this:
+The writer prints `{"written": [...], "kept": [...]}`. Do not read the templates first, and do not edit `portals.yml` or the answered profile fields afterward. To change an answer, rerun with `--force --only profile` or `--force --only portals` for the file that answer lives in. Leave `minimum` out when they gave none.
+
+For "remote or hybrid in the US", pass `"countries": ["United States", "USA"]`, and the writer adds this to `portals.yml`:
 
 ```yaml
 location_filter:
@@ -302,7 +324,7 @@ After the basics, proactively ask for more context:
 
 Store insights in `config/profile.yml` (narrative), `modes/_profile.md`, or `article-digest.md` (proof points) — never in `modes/_shared.md`.
 
-**After every evaluation, learn.** "This score is too high" or "you missed my experience in X" → update `modes/_profile.md`, `config/profile.yml`, or `article-digest.md`. The system gets smarter with every interaction without putting personalization into system-layer files.
+**Learn through `retro`.** When the user corrects you ("this score is too high", "stop writing my summary in third person"), propose the rule through the `retro` mode, which writes only what the user accepts. A missed fact ("you missed my experience in X") goes through `add` or `expand`, which confirm before writing `cv.md` or `article-digest.md`. Personalization stays out of system-layer files.
 
 #### Step 6: Ready
 Once all files exist, record the agent CLI you are running in, so `doctor.mjs`, `rank-pipeline.mjs` and the web UI use it instead of guessing:
@@ -311,7 +333,11 @@ Once all files exist, record the agent CLI you are running in, so `doctor.mjs`, 
 node remember-cli.mjs <cli>   # claude, codex, opencode, gemini, grok, ...
 ```
 
-It writes `CAREER_OPS_CLI=<cli>` to the data root's `.env` and keeps every other line. Skip it if the user already set `CAREER_OPS_CLI`. Then confirm:
+It writes `CAREER_OPS_CLI=<cli>` to the data root's `.env` and keeps every other line. Skip it if the user already set `CAREER_OPS_CLI`.
+
+Then run `node doctor.mjs` once before you confirm. Mention a setup command only for a check that fails. For example, say `npx playwright install chromium` only when the "Playwright chromium" check fails, and never just because the README lists it.
+
+Then confirm:
 > "You're all set! You can now:
 > - Paste a job URL to evaluate it
 > - Run the scan entrypoint for your CLI to search portals: `/career-ops scan`, `/career-ops-scan`, or ask Codex to run `scan`
@@ -448,6 +474,7 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 | Wants to broaden the search with adjacent job titles suggested from the CV | `titles` |
 | Asks what skills to learn, wants a skill-gap analysis of their pipeline | `upskill` |
 | Wants to build or enrich the profile from documents they already have (master CV, LinkedIn export, diplomas, references) | `intake` — scans `documents/`, extracts text locally (`intake.mjs`), proposes source-annotated additions to `config/profile.yml`/`cv.md`/`modes/_profile.md`; writes nothing without explicit confirm |
+| Wants to end the session with a review, or asks you to remember a correction next time | `retro`, which proposes up to five rules from the user's own words, checks them with `learn.mjs`, and writes only the ids the user accepts to `modes/_custom.md` or `modes/_profile.md` |
 | Asks about follow-ups or application cadence | `followup` |
 | Wants to classify application replies and review updates | `reply-watch` — classifies replies, matches to applications, suggests tracker updates |
 | Wants to record application outcome & archive artifacts | `outcome` |
@@ -474,6 +501,17 @@ A single-string `modes_dir` (today's default, ~90% of users) behaves exactly as 
 
 ---
 
+## Apply scope
+
+Apply reads and searches only this checkout, plus the data root when `CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR` is set. Run `node apply-scope.mjs root` and use only the directories it prints.
+
+- Do not search `$HOME`. Do not grep or open another career-ops install.
+- Open forms in a Playwright browser this project launches. Run `node apply-scope.mjs launch-options` and pass that object to `chromium.launch`. Do not call `chromium.connect` or `connectOverCDP`. Do not read `DevToolsActivePort`. Do not pass a remote-debugging port or a Chrome user-data directory.
+- If Playwright is unavailable, ask the candidate to paste the questions or share a screenshot.
+- Do not submit the form. Ethical Use still holds. Stop before Submit, Send, or Apply until the candidate confirms they submitted it.
+
+---
+
 ## Offer Verification -- MANDATORY
 
 **NEVER decide whether an offer is active from a bare WebSearch/WebFetch snippet.** Start with `node check-liveness.mjs <url>`: it checks free public ATS APIs first, then falls back to Playwright only when the API returns `null`. A non-null `uncertain` result does not trigger Playwright; it remains unconfirmed.
@@ -482,6 +520,8 @@ When checking the browser fallback manually:
 1. `browser_navigate` to the URL
 2. `browser_snapshot` to read content
 3. Explicit expired/closed evidence or 404/410 = closed. An unreadable JD, loading placeholder, or login/error page is **unconfirmed**, not closed. Check embedded iframes before judging a footer/navbar-only page. Title + description + Apply = active; an Apply button alone is not a JD.
+
+**Known WebFetch failure mode — "Related jobs" sidebars:** a career page that lists sibling postings in a "Related jobs"/"Similar openings" sidebar can carry a per-item status badge (e.g. "Job removed") next to one of those *other* listings. WebFetch's HTML-to-markdown pass flattens the page into one text stream, and its summarization step has been observed misattributing that sidebar badge to the **primary** posting, reporting a live job as closed. Confirmed on `jobs.uber.com` (2026-10-17): two independent WebFetch calls on the same URL, a day apart, both claimed "Job removed" while a Playwright render showed a complete, live JD with no removal notice on the primary job. This is exactly why rule 1 above says never trust WebFetch for this: when it disagrees with a Playwright read, or the page carries any kind of sibling-postings list, trust Playwright.
 
 **Exception for batch workers (headless mode):** use public API verification where available. If the API cannot confirm the posting and browser verification is unavailable, WebFetch may supply JD text, but mark the report header `**Verification:** unconfirmed (batch mode)`; the user can verify manually later.
 

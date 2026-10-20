@@ -196,6 +196,7 @@ async function runWhileLocked({
 
   const evidence = {
     probe: null, reachedPrompt: null, watched: false, marker: null, markerNotAwaited: null, lockDir, run: null,
+    cleanupError: null,
   };
   try {
     const lock = await acquireTrackerLock(lockDir, {
@@ -284,7 +285,18 @@ async function runWhileLocked({
     };
     return evidence;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    // On windows-latest this removal sometimes fails with EPERM (#5514). Thrown
+    // from here, it replaced the evidence above, so every subtest of the case
+    // reported the EPERM and none of them what the writer did. It is recorded
+    // instead, and the case's own cleanup subtest reports it. No maxRetries:
+    // rmSync retries only a directory that is not yet empty. EPERM on the
+    // directory itself is what Node 25 reports while another process has it as
+    // its working directory (Node 22 says EBUSY), and neither is retried.
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+      evidence.cleanupError = err;
+    }
   }
 }
 
@@ -301,6 +313,11 @@ function writerCase({
   ...options
 }) {
   const { name, content } = options;
+  // Every message starts with the case's name. test-all.mjs prints the first
+  // line of a failure without the parent test, and nine cases run nine
+  // different scripts, so a message that does not say which one leaves the
+  // reader guessing (#5514).
+  const say = (message) => `${name}: ${message}`;
   test(name, async (t) => {
     const outcome = runWhileLocked({ ...options, verifyConcurrent, verifyOutput });
     // Every subtest reads the one run; an error in it fails each, by name.
@@ -309,11 +326,11 @@ function writerCase({
     await t.test('contends on the shared lock before reading or writing', async () => {
       const { probe } = await outcome;
       const detail = `exit=${probe.code}, timedOut=${probe.timedOut}\n${probe.output}`;
-      assert.equal(probe.timedOut, false, `lock contention probe hung (${detail})`);
-      assert.notEqual(probe.code, 0, `lock contention probe exited 0 while the lock was held (${detail})`);
+      assert.equal(probe.timedOut, false, say(`lock contention probe hung (${detail})`));
+      assert.notEqual(probe.code, 0, say(`lock contention probe exited 0 while the lock was held (${detail})`));
       assert.ok(probe.output.includes('Timed out waiting for tracker lock'),
-        `lock contention probe did not time out on the lock (${detail})`);
-      assert.equal(probe.trackerAfter, content, 'lock contention probe changed the tracker without the lock');
+        say(`lock contention probe did not time out on the lock (${detail})`));
+      assert.equal(probe.trackerAfter, content, say('lock contention probe changed the tracker without the lock'));
     });
 
     // Only the cases that order their mutation on the marker make this claim;
@@ -322,27 +339,35 @@ function writerCase({
       await t.test('signals contention durably after creating the recover guard', async () => {
         const { marker, markerNotAwaited, lockDir, runPid } = await outcome;
         assert.equal(markerNotAwaited, null,
-          `not waited for: the writer in ${markerNotAwaited} never left its contention marker, `
-          + 'so this case did not spend 3s learning the same thing (see that case for the cause)');
+          say(`not waited for: the writer in ${markerNotAwaited} never left its contention marker, `
+          + 'so this case did not spend 3s learning the same thing (see that case for the cause)'));
         assert.ok(marker,
-          'the writer left no contention marker, so the fixture mutation was not ordered after its read — '
+          say('the writer left no contention marker, so the fixture mutation was not ordered after its read — '
           + 'the CAREER_OPS_TRACKER_TEST_LOCK_WAIT_MARKER hook in tracker-utils.mjs is gone, renamed, or no '
-          + 'longer reached on contention');
-        assert.equal(marker.lockDir, lockDir, 'the marker names a different lock');
-        assert.equal(marker.guardCreated, true, 'the marker does not record the recover guard being created');
-        assert.equal(marker.pid, runPid, 'the marker came from a different process');
+          + 'longer reached on contention'));
+        assert.equal(marker.lockDir, lockDir, say('the marker names a different lock'));
+        assert.equal(marker.guardCreated, true, say('the marker does not record the recover guard being created'));
+        assert.equal(marker.pid, runPid, say('the marker came from a different process'));
       });
     }
 
     await t.test(completion, async () => {
       const { run, reachedPrompt } = await outcome;
-      assert.notEqual(reachedPrompt, false, 'did not reach the pre-lock review prompt before the fixture mutation');
+      assert.notEqual(reachedPrompt, false, say('did not reach the pre-lock review prompt before the fixture mutation'));
       const detail = `exit=${run.code}, timedOut=${run.timedOut}\n${run.stdout}${run.stderr}\n${run.after}`;
-      assert.equal(run.timedOut, false, `writer hung after lock release (${detail})`);
-      assert.equal(run.code, 0, `writer failed after lock release (${detail})`);
-      assert.ok(run.updated, `writer did not make its update (${detail})`);
-      assert.ok(run.concurrentKept, `writer lost the row committed while it waited (${detail})`);
-      assert.ok(run.outputMatches, `writer output is not what was expected (${detail})`);
+      assert.equal(run.timedOut, false, say(`writer hung after lock release (${detail})`));
+      assert.equal(run.code, 0, say(`writer failed after lock release (${detail})`));
+      assert.ok(run.updated, say(`writer did not make its update (${detail})`));
+      assert.ok(run.concurrentKept, say(`writer lost the row committed while it waited (${detail})`));
+      assert.ok(run.outputMatches, say(`writer output is not what was expected (${detail})`));
+    });
+
+    // Separate from the claims above, so a directory that cannot be removed is
+    // reported next to what the writer did rather than instead of it.
+    await t.test('removes its fixture directory', async () => {
+      const { cleanupError } = await outcome;
+      assert.equal(cleanupError, null,
+        say(`could not remove the fixture directory (${cleanupError?.code}: ${cleanupError?.message})`));
     });
   });
 }
