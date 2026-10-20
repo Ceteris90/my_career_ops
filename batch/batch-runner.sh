@@ -1076,6 +1076,7 @@ process_offer() {
   # requirements, which together exceed 80 stripped words.
   local prefetch_min_words=80
   local jd_prefetch_words=0
+  local jd_raw_file=""
   if command -v curl >/dev/null 2>&1; then
     # Reject loopback, link-local, and private-network destinations before curl
     # connects. --proto/--proto-redir restrict schemes but not destination IPs,
@@ -1150,6 +1151,11 @@ process_offer() {
         break
       fi
     done
+      # Keep the bytes curl downloaded: the strip below discards <script> blocks,
+      # which is where a JS-rendered board keeps its JD (schema.org JobPosting,
+      # hydration payload), so jd-rescue.mjs reads this copy, not the stripped text.
+      jd_raw_file="${jd_file}.raw"
+      cp "$jd_file" "$jd_raw_file" 2>/dev/null || true
       # Strip HTML tags and count visible words to distinguish a real JD (hundreds
       # of words) from a JS shell (near zero visible text).
       jd_prefetch_words=$(node -e "
@@ -1171,6 +1177,22 @@ process_offer() {
       # miscompare. Strip everything that is not a digit and default to 0.
       jd_prefetch_words="${jd_prefetch_words//[^0-9]/}"
       jd_prefetch_words="${jd_prefetch_words:-0}"
+      # Zero-token JD rescue: read the JD out of the structured data the board
+      # already shipped in the bytes above. It only replaces the text when the page
+      # is thin or the rescued JD is longer, and it fails open (any failure leaves
+      # the stripped text as is, and the checks below decide as before).
+      if [[ -f "$BATCH_DIR/jd-rescue.mjs" && -s "$jd_raw_file" ]]; then
+        if _rs_line=$(node "$BATCH_DIR/jd-rescue.mjs" "$url" "$jd_raw_file" "$jd_file" "$jd_prefetch_words" 2>/dev/null); then
+          IFS=$'\t' read -r _rs_words _rs_method <<< "$_rs_line"
+          _rs_words="${_rs_words//[^0-9]/}"
+          _rs_words="${_rs_words:-0}"
+          if [[ "$_rs_words" -ge "$prefetch_min_words" ]]; then
+            echo "    ℹ️  JD rescue: recovered ${_rs_words} words via ${_rs_method} (visible text had ${jd_prefetch_words})"
+            jd_prefetch_words="$_rs_words"
+          fi
+        fi
+      fi
+      rm -f "$jd_raw_file"
       if [[ "$jd_prefetch_words" -lt "$prefetch_min_words" ]]; then
         : > "$jd_file"
         echo "    ℹ️  JD prefetch: thin content (${jd_prefetch_words} words) — worker will WebFetch"
