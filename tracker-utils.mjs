@@ -8,7 +8,7 @@
  * copies — and every writer excludes every other writer through the same lock.
  */
 
-import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, statSync, lstatSync, existsSync, realpathSync, readlinkSync, accessSync, constants as fsConstants, chmodSync, appendFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
@@ -725,7 +725,12 @@ export function writeFileAtomic(path, content, { mode } = {}) {
  */
 export function replaceUserFile(path, content) {
   const target = userFileWriteTarget(path);
-  const mode = existsSync(target) ? statSync(target).mode & 0o777 : undefined;
+  const exists = existsSync(target);
+  // A rename only needs the directory to be writable, so it would replace a
+  // file the user made read-only. The in-place write refused; so does this
+  // (throws EACCES/EPERM).
+  if (exists) accessSync(target, fsConstants.W_OK);
+  const mode = exists ? statSync(target).mode & 0o777 : undefined;
   writeFileAtomic(target, content, { mode });
 }
 

@@ -44,6 +44,28 @@ try {
     else fail(`replaceUserFile left temp files: ${leftovers.join(', ')}`);
   }
 
+  // ── 1a. A read-only file is refused, as the in-place write refused it. A
+  //    rename needs only the directory to be writable, so without the check
+  //    the file would be replaced.
+  {
+    const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+    if (IS_WINDOWS || isRoot) {
+      warn('skipping the read-only case (Windows or root: mode bits do not deny the write)');
+    } else {
+      const file = join(tmp, 'read-only-cv.md');
+      writeFileSync(file, '# Locked\n');
+      chmodSync(file, 0o444);
+      let threw = null;
+      try { replaceUserFile(file, '# Changed\n'); } catch (e) { threw = e; }
+      if (threw && ['EACCES', 'EPERM'].includes(threw.code) && readFileSync(file, 'utf8') === '# Locked\n') {
+        pass('replaceUserFile refuses a read-only file and leaves it unchanged');
+      } else {
+        fail(`replaceUserFile on a read-only file: threw=${threw?.code}, content=${JSON.stringify(readFileSync(file, 'utf8'))}`);
+      }
+      chmodSync(file, 0o644);
+    }
+  }
+
   // ── 1b. A dangling symlink (article-digest.md before its first entry): the
   //    link stays and its target is created, as an in-place write would do.
   {
