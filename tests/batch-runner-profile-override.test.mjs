@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { getBash, rmSync } from './helpers.mjs';
@@ -228,6 +228,28 @@ test('the worker prompt carries the override profile, not the data root profile'
     assert.match(prompt, /candidate_note: override-profile/, prompt);
     assert.doesNotMatch(prompt, /candidate_note: data-root-profile/, 'the prompt still carries the data root profile');
   } finally {
+    rmSync(f.dir, { recursive: true, force: true });
+  }
+});
+
+// Run through a junction (Windows) or a directory symlink, the runner keeps
+// that spelling in DATA_ROOT while getProfilePath() returns the real path of
+// path-resolver.mjs's directory. Without an override both name the same file,
+// so the default layout must not be told about an override nobody set.
+test('a checkout reached through a link gets no Runtime profile block without an override', () => {
+  const f = fixture();
+  const link = `${f.dir}-link`;
+  try {
+    symlinkSync(f.dir, link, process.platform === 'win32' ? 'junction' : 'dir');
+    run({ ...f, dir: link, runner: join(link, 'batch', 'batch-runner.sh') }, { dryRun: false });
+    const captured = join(f.captureDir, 'resolved-prompt.md');
+    assert.ok(existsSync(captured), 'the stub claude did not capture a resolved system prompt');
+    const prompt = readFileSync(captured, 'utf8');
+    assert.doesNotMatch(prompt, /## Runtime profile/, prompt);
+    assert.match(prompt, /candidate_note: data-root-profile/, prompt);
+  } finally {
+    // The link itself only: removing it recursively would follow it into f.dir.
+    rmSync(link, { force: true });
     rmSync(f.dir, { recursive: true, force: true });
   }
 });

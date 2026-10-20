@@ -1261,7 +1261,13 @@ process_offer() {
   # except the personalization injected below, so name the file this run uses.
   # With the data root outside the checkout the runtime block above already
   # does that, so this only fills the default layout.
-  if [[ "$PROFILE_RESOLVED" == "true" && "$PROFILE_FILE" != "$DATA_ROOT/config/profile.yml" && "$DATA_ROOT" == "$PROJECT_DIR" ]]; then
+  # The override is checked first, the way hasProfileOverride() does it, and
+  # the path comparison only after it. With no override the two paths are the
+  # same file, but not always the same string: through a junction or symlink
+  # getProfilePath() returns the real path while DATA_ROOT keeps the one pwd
+  # gave, and that alone used to add this block.
+  local profile_override="${CAREER_OPS_PROFILE:-}"
+  if [[ -n "${profile_override//[[:space:]]/}" && "$PROFILE_RESOLVED" == "true" && "$PROFILE_FILE" != "$DATA_ROOT/config/profile.yml" && "$DATA_ROOT" == "$PROJECT_DIR" ]]; then
     {
       printf '\n\n---\n\n'
       printf '## Runtime profile\n\n'
