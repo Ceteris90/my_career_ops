@@ -55,7 +55,13 @@ test('each CLI is asked for one answer with no tools or extra turns', () => {
   }
   assert.deepEqual(args('codex'), ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', 'PROMPT']);
   assert.deepEqual(args('pi'), ['--no-tools', '-p', 'PROMPT']);
-  assert.deepEqual(args('copilot'), ['-p', 'PROMPT', '--deny-tool=read,write,shell,url,memory']);
+  const copilot = args('copilot');
+  assert.deepEqual(copilot.slice(0, 3), ['-p', 'PROMPT', '-s']);
+  const only = copilot.filter(a => a.startsWith('--available-tools=')).map(a => a.split('=')[1]);
+  assert.equal(only.length, 1, 'copilot gets one tool allowlist');
+  assert.ok(only[0], 'an empty --available-tools= leaves every tool on');
+  assert.ok(copilot.includes(`--disable-mcp-server=${only[0]}`), 'an MCP server named like the allowlist entry is turned off');
+  assert.ok(copilot.includes('--deny-tool=read,write,shell,url,memory'));
 });
 
 test('opencode runs with every permission denied', POSIX, (t) => {
