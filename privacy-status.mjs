@@ -70,7 +70,7 @@ function collect() {
     report.configSource = config.source;
     report.autoDetect = { ...AUTO_DETECT_DEFAULTS, ...config.autoDetect };
 
-    const guard = loadPrivacyGuard();
+    const guard = loadPrivacyGuard({ config });
     if (!guard.enabled) {
       report.state = 'bypassed';
       return report;

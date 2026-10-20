@@ -546,6 +546,65 @@ test('12b. redact mode tokenizes instead of blocking, and only when opted in', a
 });
 
 // ---------------------------------------------------------------------------
+// 12c. Redaction is scoped to the request that produced the tokens.
+//
+// The redactor used to be process-global, so its token map (and its
+// `tokens.size > 0` rehydration gate) survived into every later request. A token
+// string echoed back by the provider in an UNRELATED response was then swapped
+// for the real value from an earlier one.
+// ---------------------------------------------------------------------------
+test('12c. redaction tokens do not leak across requests', async () => {
+  const guard = new PrivacyGuard({ values: [FAKE.name] });
+  // The provider echoes the token in its reply for whatever reason of its own.
+  const mockFetch = async () => ({
+    ok: true,
+    text: async () => 'the template literal {{PRIVACY_REDACTED_1}} appeared',
+    json: async () => ({}),
+  });
+  const redacting = wrapFetch(mockFetch, { guard, redact: true });
+  const call = () =>
+    redacting('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ q: 'hello' }),
+    });
+
+  // Request A redacts the name, so it has a token to put back.
+  const first = await call().then((r) => r.text());
+  assert.ok(!first.includes(FAKE.name), 'no real value in the first reply');
+
+  // Request B carries no value at all, so its response must be left alone —
+  // neither patched nor rehydrated against A's tokens.
+  const second = await call();
+  assert.ok(!second.text.toString().includes('rehydrate'), 'an unrelated response is not patched');
+  assert.equal(await second.text(), 'the template literal {{PRIVACY_REDACTED_1}} appeared');
+});
+
+// ---------------------------------------------------------------------------
+// 12d. Rehydration restores the spelling the user configured, not the
+// lowercased match key.
+// ---------------------------------------------------------------------------
+test('12d. rehydration restores the configured spelling', async () => {
+  const guard = new PrivacyGuard({ values: [FAKE.name] });
+  let sentBody = null;
+  const mockFetch = async (input, init) => {
+    sentBody = init?.body;
+    return { ok: true, text: async () => sentBody, json: async () => ({}) };
+  };
+  const redacting = wrapFetch(mockFetch, { guard, redact: true });
+  const response = await redacting('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    // Lowercased in the request, title-case as configured.
+    body: JSON.stringify({ q: FAKE.name.toLowerCase() }),
+  });
+
+  // Scrubbing matched case-insensitively...
+  assert.match(sentBody, /PRIVACY_REDACTED_/);
+  assert.ok(!sentBody.toLowerCase().includes(FAKE.name.toLowerCase()));
+  // ...but the restored value is the configured spelling, not the match key.
+  assert.ok((await response.text()).includes(FAKE.name), 'restores "Jordan A. Placeholder"');
+});
+
+// ---------------------------------------------------------------------------
 // Config loading: the shape the user actually writes.
 // ---------------------------------------------------------------------------
 test('a real config file loads its values and switches, nested keys included', () => {

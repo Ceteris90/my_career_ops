@@ -105,7 +105,7 @@ function main() {
     if (mode !== 'status') process.exit(1);
   }
 
-  const guard = loadPrivacyGuard();
+  const guard = loadPrivacyGuard({ config });
   const map = loadTokenMap();
 
   for (const file of USER_FILES) {
