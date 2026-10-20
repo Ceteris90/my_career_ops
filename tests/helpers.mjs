@@ -514,8 +514,10 @@ const STACK_FRAME_RE = /^ {4}at \S.*:\d+:\d+\)?$/m;
  *
  * @param {string} cmd - Executable, resolved through the run() allowlist.
  * @param {string[]} args - Argument vector.
- * @param {{stderr: string|RegExp, status?: number}} expected - The rejection:
+ * @param {{stderr: string|RegExp, status?: number|null}} expected - The rejection:
  *   a substring (or pattern) stderr must contain, and the exit status (default 1).
+ *   A signal-killed child has status null; it still never passes, since any
+ *   signal is refused.
  * @param {object} [opts={}] - Passed through to run().
  * @returns {boolean} True only for the intended rejection. On false,
  *   formatRunFailure() describes what the child actually did.

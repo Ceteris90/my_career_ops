@@ -49,9 +49,14 @@ const MSG = 'No URL provided.';
   const ok = runRejects(
     NODE,
     ['-e', `console.error(${JSON.stringify(MSG)}); setTimeout(() => {}, 10000);`],
-    { stderr: MSG },
+    // status: null matches the killed child's status, so only the signal guard
+    // can reject it.
+    { stderr: MSG, status: null },
     { ...QUIET, timeout: 500 },
   );
+  const f = lastRunFailure();
+  if (f?.signal && f.status === null && f.stderr.includes(MSG)) pass('the timeout child is killed by a signal with the message on stderr (premise)');
+  else fail(`timeout child premise broken: ${JSON.stringify(f)}`);
   if (!ok) pass('runRejects() rejects a child killed by the timeout');
   else fail('runRejects() counted a timed-out child as the intended rejection');
 }
