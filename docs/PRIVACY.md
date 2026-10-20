@@ -212,6 +212,11 @@ Read these. The guard is useful precisely because its edges are stated.
    unless you use `pii-workspace.mjs`.
 6. **Your provider still sees your prompt.** Anything not caught by the guard —
    and everything you deliberately allow — reaches the provider as usual.
+7. **Redact mode rehydrates only `text()` and `json()`.** In opt-in redact mode
+   (`PRIVACY_REDACT=1`) the wrapper un-tokens the response by patching those two
+   methods on the live response object. A caller that reads `response.body` as a
+   stream receives the placeholder tokens, not your real values. Blocking mode —
+   the default — has no equivalent gap.
 
 ---
 
