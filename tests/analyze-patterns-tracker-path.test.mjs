@@ -86,6 +86,27 @@ try {
     fail(`analyze-patterns.mjs failed with CAREER_OPS_TRACKER set: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
   }
 
+  // A tracker in another workspace (its own data/ and reports/): the reports
+  // move with the tracker, the way resolveWorkspaceRoot() lays them out.
+  const workspace = join(work, 'workspace');
+  mkdirSync(join(workspace, 'data'), { recursive: true });
+  mkdirSync(join(workspace, 'reports'), { recursive: true });
+  const w = writeReport(workspace, 5, 'Workspace Archetype');
+  const workspaceTracker = join(workspace, 'data', 'applications.md');
+  writeFileSync(workspaceTracker, [...HEADER, trackerRow(5, `../reports/${w}`)].join('\n') + '\n');
+
+  try {
+    const result = analyze({ CAREER_OPS_ROOT: root, CAREER_OPS_TRACKER: workspaceTracker });
+    const got = archetypesOf(result);
+    if (result.metadata?.total === 1 && got.join('|') === 'Workspace Archetype') {
+      pass("CAREER_OPS_TRACKER in another workspace: that workspace's reports are read");
+    } else {
+      fail(`workspace tracker: total=${result.metadata?.total}, archetypes=${JSON.stringify(got)}`);
+    }
+  } catch (e) {
+    fail(`analyze-patterns.mjs failed on a workspace tracker: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
+  }
+
   try {
     const result = analyze({ CAREER_OPS_ROOT: root });
     const got = archetypesOf(result);

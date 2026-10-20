@@ -14,26 +14,32 @@
  */
 
 import { readFileSync, existsSync, realpathSync, writeFileSync, symlinkSync, rmSync } from 'fs';
-import { join, dirname, relative, resolve, sep } from 'path';
+import { join, dirname, relative, isAbsolute, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { load as yamlLoad } from 'js-yaml';
 import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
-import { getCareerOpsRoot, rawTrackerPath, resolveTrackerPath } from './path-resolver.mjs';
-import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput } from './tracker-utils.mjs';
+import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
+import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerLinkDirsFor, resolveWorkspaceRootFor } from './tracker-utils.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
-// Report links resolve against the tracker's directory as spelled first:
-// withinReports() compares candidates lexically against CAREER_OPS, so the
-// realpath above alone (macOS /var -> /private/var, or any symlinked data
-// root) would push every valid link outside reports/. The realpath's own
-// directory stays a candidate for a tracker file that is itself a symlink,
-// whose links are written relative to its target.
-const TRACKER_DIR = dirname(resolve(rawTrackerPath(CAREER_OPS)));
+// Report links resolve from the same directories verify-pipeline.mjs checks:
+// the tracker's folder as realpathed and as spelled (a symlinked tracker FILE
+// writes links relative to its target; a symlinked data root, or macOS's
+// /var -> /private/var tmpdir, needs the spelled form, since withinReports()
+// compares lexically), then the data root.
+const TRACKER_DIRS = trackerLinkDirsFor(CAREER_OPS);
+// A CAREER_OPS_TRACKER that points at another workspace brings that
+// workspace's reports/ with it (see resolveWorkspaceRoot); the data root's own
+// reports/ stays allowed for a tracker kept apart from its reports.
+const REPORTS_ROOTS = [...new Set([
+  join(CAREER_OPS, 'reports'),
+  join(resolveWorkspaceRootFor(CAREER_OPS), 'reports'),
+])];
 const REPORTS_DIR = join(CAREER_OPS, 'reports');
 
 const MACHINE_SUMMARY_FIELDS = new Set([
@@ -791,6 +797,11 @@ requirement_importance:
     if (withinReports(escape)) failures.push('containment: traversal path escaped reports/ (path-traversal guard broken)');
     const sibling = join(CAREER_OPS, 'reports-evil', 'x.md');
     if (withinReports(sibling)) failures.push('containment: reports-prefixed sibling dir wrongly accepted');
+    // The same lexical guard against a workspace's reports root (REPORTS_ROOTS).
+    const otherRoot = join(CAREER_OPS, 'workspace', 'reports');
+    if (withinReports(join(otherRoot, '..', '..', 'reports', 'x.md'), otherRoot)) failures.push('containment: traversal escaped a workspace reports root');
+    if (withinReports(join(otherRoot, '..', 'reports-evil', 'x.md'), otherRoot)) failures.push('containment: sibling of a workspace reports root wrongly accepted');
+    if (withinReports(otherRoot, otherRoot)) failures.push('containment: a reports root itself wrongly accepted as a report');
   }
 
   // Symlink-escape + missing-file graceful degradation (#2655). realpath
@@ -864,23 +875,24 @@ function parseTracker() {
 }
 
 // Canonical reports-root containment. A tracker link resolves to a candidate
-// path; accept it only if it stays inside the repo's reports/ directory. Two
+// path; accept it only if it stays inside a reports/ directory (the data
+// root's by default; see REPORTS_ROOTS for the others). Two
 // layers: a cheap lexical traversal guard (no stat) rejects a crafted link like
-// reports/../../etc/passwd, which join() collapses to a repo-relative path that
-// no longer starts with reports/; then realpath canonicalization rejects a
+// reports/../../etc/passwd, which join() collapses to a path that is no longer
+// under reports/; then realpath canonicalization rejects a
 // symlink whose target escapes reports/ (a lexical-only check would follow it).
 // realpathSync throws ENOENT/ENOTDIR for a not-yet-created candidate or a
 // missing reports root — both are non-fatal: a missing candidate falls through
 // to the downstream read (which returns null, preserving prior semantics), a
 // missing root means there are simply no reports. Only genuinely unexpected
-// errors rethrow, matching readTextIfExists. Identical to the guard in
-// upskill.mjs so both sites behave the same.
-function withinReports(candidate) {
-  const repoRelative = relative(CAREER_OPS, candidate).split(sep).join('/');
-  if (!repoRelative.startsWith('reports/') || repoRelative.includes('..')) return false;
+// errors rethrow, matching readTextIfExists. The same guard as upskill.mjs's,
+// with the reports root as a parameter.
+function withinReports(candidate, reportsRoot = join(CAREER_OPS, 'reports')) {
+  const rootRelative = relative(reportsRoot, candidate);
+  if (!rootRelative || isAbsolute(rootRelative) || rootRelative.includes('..')) return false;
   let realRoot;
   try {
-    realRoot = realpathSync(join(CAREER_OPS, 'reports'));
+    realRoot = realpathSync(reportsRoot);
   } catch (err) {
     if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return false;
     throw err;
@@ -1345,20 +1357,18 @@ export function analyze(entries = parseTracker()) {
   const enriched = entries.map(e => {
     const reportMatch = e.report.match(/\]\(([^)]+)\)/);
     // Tracker links are relative to the tracker file's own directory (see
-    // merge-tracker.mjs link normalization), as spelled and as realpathed (see
-    // TRACKER_DIR); fall back to repo root for
-    // legacy root-relative links. Each candidate is guarded to reports/
-    // before the read is attempted; parseReport returns null for a missing
-    // file, so no pre-flight existsSync is needed (#2385).
+    // merge-tracker.mjs link normalization, and TRACKER_DIRS); fall back to
+    // repo root for legacy root-relative links. Each candidate is guarded to
+    // a reports/ root before the read is attempted; parseReport returns null
+    // for a missing file, so no pre-flight existsSync is needed (#2385).
     let reportData = null;
     if (reportMatch) {
       const candidates = new Set([
-        join(TRACKER_DIR, reportMatch[1]),
-        join(dirname(APPS_FILE), reportMatch[1]),
+        ...TRACKER_DIRS.map((dir) => join(dir, reportMatch[1])),
         join(CAREER_OPS, reportMatch[1]),
       ]);
       for (const candidate of candidates) {
-        if (!withinReports(candidate)) continue;
+        if (!REPORTS_ROOTS.some((root) => withinReports(candidate, root))) continue;
         reportData = parseReport(candidate);
         if (reportData) break;
       }
