@@ -14,21 +14,24 @@
  */
 
 import { readFileSync, existsSync, realpathSync, writeFileSync, symlinkSync, rmSync } from 'fs';
-import { join, dirname, relative, sep } from 'path';
+import { join, dirname, relative, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { load as yamlLoad } from 'js-yaml';
 import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
-import { getCareerOpsRoot } from './path-resolver.mjs';
+import { getCareerOpsRoot, rawTrackerPath, resolveTrackerPath } from './path-resolver.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput } from './tracker-utils.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
-const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
-  ? join(CAREER_OPS, 'data/applications.md')
-  : join(CAREER_OPS, 'applications.md');
+const APPS_FILE = resolveTrackerPath(CAREER_OPS);
+// Report links resolve against the tracker's directory as spelled, not the
+// realpath above: withinReports() compares candidates lexically against
+// CAREER_OPS, so a canonicalized base (macOS /var -> /private/var, or any
+// symlinked data root) would push every valid link outside reports/.
+const TRACKER_DIR = dirname(resolve(rawTrackerPath(CAREER_OPS)));
 const REPORTS_DIR = join(CAREER_OPS, 'reports');
 
 const MACHINE_SUMMARY_FIELDS = new Set([
@@ -1347,7 +1350,7 @@ export function analyze(entries = parseTracker()) {
     let reportData = null;
     if (reportMatch) {
       const candidates = new Set([
-        join(dirname(APPS_FILE), reportMatch[1]),
+        join(TRACKER_DIR, reportMatch[1]),
         join(CAREER_OPS, reportMatch[1]),
       ]);
       for (const candidate of candidates) {
