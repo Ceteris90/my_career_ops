@@ -95,27 +95,21 @@ soft_gaps: []
 }
 
 function writeFixture(root, {
-  headerScore = '4.2',
-  yamlScore = '4.2',
-  trackerScore = '4.2',
   status = 'Interview',
   decision = 'Apply',
   hardStops = '[]',
   notes = 'screen done',
   followups = '# Follow-ups\n\n- next #7 2026-02-01 (set 2026-01-06)\n',
+  report = reportText('4.2', decision, hardStops),
 } = {}) {
   mkdirSync(join(root, 'data'), { recursive: true });
   mkdirSync(join(root, 'reports'), { recursive: true });
   writeFileSync(join(root, 'data', 'applications.md'), [
     '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
     '|---|---|---|---|---|---|---|---|---|',
-    `| 7 | 2026-01-05 | Northwind | Platform Engineer | ${trackerScore}/5 | ${status} | — | [7](${REPORT_REL}) | ${notes} |`,
+    `| 7 | 2026-01-05 | Northwind | Platform Engineer | 4.2/5 | ${status} | — | [7](${REPORT_REL}) | ${notes} |`,
     '',
   ].join('\n'));
-  const report = reportText(headerScore, decision, hardStops).replace(
-    `score: ${headerScore}`,
-    `score: ${yamlScore}`,
-  );
   writeFileSync(join(root, REPORT_REL), report);
   if (followups != null) writeFileSync(join(root, 'data', 'follow-ups.md'), followups);
 }
@@ -229,6 +223,9 @@ refuses('a weekday --next writes nothing', ['--app', '7', '--dealbreaker', SENTE
 refuses('an impossible --next writes nothing', ['--app', '7', '--dealbreaker', SENTENCE, '--next', '2026-02-31']);
 refuses('an unknown flag writes nothing', ['--app', '7', '--dealbreaker', SENTENCE, '--bogus']);
 refuses('a dealbreaker with a semicolon writes nothing', ['--app', '7', '--dealbreaker', 'No on-site; relocation']);
+refuses('a Machine Summary holding only comments writes nothing', ['--app', '7', '--dealbreaker', SENTENCE], {
+  report: reportText('4.2', 'Apply', '[]').replace(/```yaml\n[\s\S]*?```/, '```yaml\n# summary pending\n```'),
+});
 
 {
   const root = freshRoot();
