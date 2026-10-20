@@ -229,6 +229,24 @@ test('7. normalization matches spelling variants but drops unguardable values', 
 });
 
 // ---------------------------------------------------------------------------
+// 7b. A profile URL guards its bare handle in BOTH the scheme'd and bare forms.
+// ---------------------------------------------------------------------------
+test('7b. a profile URL derived handle is guarded however the URL was written', () => {
+  // With the scheme.
+  const withScheme = new PrivacyGuard({ values: ['https://linkedin.com/in/jordan-placeholder'] });
+  assert.throws(() => withScheme.assertSafe('see jordan-placeholder on the site'), PrivacyGuardError);
+
+  // WITHOUT the scheme — this is the case the old URL-shaped gate skipped, so
+  // the handle went unguarded even though the docs promised otherwise.
+  const bare = new PrivacyGuard({ values: ['linkedin.com/in/jordan-placeholder'] });
+  assert.throws(() => bare.assertSafe('see jordan-placeholder on the site'), PrivacyGuardError);
+
+  // A non-URL value derives nothing extra and does not throw.
+  const plain = new PrivacyGuard({ values: [FAKE.name] });
+  assert.equal(plain.assertSafe('ordinary professional text'), true);
+});
+
+// ---------------------------------------------------------------------------
 // 8. Auto-detection: emails and phones, with per-kind switches.
 // ---------------------------------------------------------------------------
 test('8. auto-detection is pattern-based and each kind can be switched off', () => {
