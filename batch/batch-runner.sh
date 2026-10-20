@@ -58,7 +58,41 @@ BATCH_DIR="$SCRIPT_DIR"
 INPUT_FILE="$BATCH_DIR/batch-input.tsv"
 STATE_FILE="$BATCH_DIR/batch-state.tsv"
 PROMPT_FILE="$BATCH_DIR/batch-prompt.md"
+# The profile follows CAREER_OPS_PROFILE as well as the data root, like every
+# other reader does through path-resolver.mjs (#5144). Building it from the
+# data root here left a run reading the data root's profile for spend_tier and
+# for the prompt's personalization while the .mjs readers used the override.
+# The .md prompt files still name config/profile.yml; the script-generated
+# runtime block and the injected personalization use $PROFILE_FILE.
 PROFILE_FILE="$DATA_ROOT/config/profile.yml"
+PROFILE_RESOLVED=false
+if [[ -f "$PROJECT_DIR/path-resolver.mjs" ]]; then
+  if ! resolved_profile_file="$(node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    const resolver = process.argv[1];
+    const { getProfilePath } = await import(pathToFileURL(resolver).href);
+    if (typeof getProfilePath !== "function") {
+      process.stderr.write("WARN: path-resolver.mjs has no getProfilePath(), so CAREER_OPS_PROFILE is ignored in this run. Update the install to use the override.\n");
+    } else {
+      const profile = getProfilePath();
+      process.stdout.write(process.platform === "win32" ? profile.replace(/\\/g, "/") : profile);
+    }
+  ' "$PROJECT_DIR/path-resolver.mjs")"; then
+    echo "ERROR: could not resolve the career-ops profile path through path-resolver.mjs" >&2
+    exit 1
+  fi
+  if [[ -n "$resolved_profile_file" ]]; then
+    PROFILE_FILE="$resolved_profile_file"
+    PROFILE_RESOLVED=true
+  fi
+elif [[ -n "${CAREER_OPS_PROFILE:-}" ]]; then
+  echo "WARN: no path-resolver.mjs next to this script, so CAREER_OPS_PROFILE is ignored in this run." >&2
+fi
+if [[ -n "${CAREER_OPS_PROFILE:-}" && "$PROFILE_RESOLVED" == "true" && ! -f "$PROFILE_FILE" ]]; then
+  # Before the override was honored this read the data root's profile anyway.
+  # Say it, instead of silently running with no profile at all.
+  echo "WARN: no profile at $PROFILE_FILE (CAREER_OPS_PROFILE); the prompt gets no profile and spend_tier is not taken from it." >&2
+fi
 LOGS_DIR="$BATCH_DIR/logs"
 DISCARD_LOG="$LOGS_DIR/discard.log"
 TRACKER_DIR="$DATA_ROOT/batch/tracker-additions"
@@ -91,7 +125,7 @@ SCOPE_COMPANY=""
 MAX_RETRIES=2
 MIN_SCORE=0
 SKIP_PDF=false
-MODEL=""  # explicit override; otherwise resolved from config/profile.yml spend_tier
+MODEL=""  # explicit override; otherwise resolved from the profile's spend_tier
 RESOLVED_MODEL=""
 RESOLVED_SPEND_TIER=""
 CLI=claude
@@ -112,7 +146,8 @@ usage() {
   cat <<'USAGE'
 career-ops batch runner — process job offers in batch via headless agent workers
 Defaults to claude; other CLIs via --cli. For claude the model is resolved from
-spend_tier in config/profile.yml unless --model overrides it.
+spend_tier in config/profile.yml (or in the file CAREER_OPS_PROFILE names)
+unless --model overrides it.
 
 Usage: batch-runner.sh [OPTIONS]
 
@@ -120,7 +155,8 @@ Options:
   --cli NAME           Agent CLI to use: claude (default), opencode, gemini, qwen, grok
   --model NAME         Model for the CLI (e.g. qwen2.5:32b for opencode/ollama).
                        For claude, overrides the tier-resolved model (otherwise
-                       config/profile.yml spend_tier: economy/standard/premium;
+                       the spend_tier in config/profile.yml, or in the file
+                       CAREER_OPS_PROFILE names: economy/standard/premium;
                        default standard).
   --parallel N         Number of parallel workers (default: 3 for claude, 1 otherwise).
                        On a rate limit, the rest of the batch runs on 1 worker.
@@ -155,7 +191,8 @@ Files:
 With a data root outside the checkout (CAREER_OPS_ROOT, CAREER_OPS_DATA_DIR
 or a .career-ops-data marker), config/profile.yml, reports/ and
 batch/tracker-additions/ are read and written there. The other files stay
-beside this script.
+beside this script. CAREER_OPS_PROFILE, when set, names the profile read for
+spend_tier and injected into the prompt, as it does for the other scripts.
 
 Examples:
   # Dry run to see pending offers
@@ -307,11 +344,13 @@ check_prerequisites() {
   esac
 
   if ! command -v "$cli_cmd" &>/dev/null; then
-    echo "ERROR: '$cli_cmd' not found in PATH (required for --cli $CLI)."
+    local level="ERROR"
+    [[ "$DRY_RUN" == "true" ]] && level="WARN"
+    echo "$level: '$cli_cmd' not found in PATH (required for --cli $CLI)."
     if [[ "$CLI" == "opencode" ]]; then
       echo "       Install opencode (https://opencode.ai) or Ollama (https://ollama.ai) with an opencode model."
     fi
-    exit 1
+    [[ "$DRY_RUN" == "true" ]] || exit 1
   fi
 
   # Parallelism, the rate-limit retry loop, and --strict-mcp-config are
@@ -486,8 +525,9 @@ get_retries() {
   echo "${retries:-0}"
 }
 
-# Read spend_tier from config/profile.yml. Defaults to "standard" if the key
-# is absent or invalid.
+# Read spend_tier from $PROFILE_FILE (config/profile.yml, or the file
+# CAREER_OPS_PROFILE names). Defaults to "standard" if the key is absent or
+# invalid.
 read_spend_tier() {
   local raw=""
 
@@ -1043,6 +1083,7 @@ process_offer() {
   # requirements, which together exceed 80 stripped words.
   local prefetch_min_words=80
   local jd_prefetch_words=0
+  local jd_raw_file=""
   if command -v curl >/dev/null 2>&1; then
     # Reject loopback, link-local, and private-network destinations before curl
     # connects. --proto/--proto-redir restrict schemes but not destination IPs,
@@ -1117,6 +1158,11 @@ process_offer() {
         break
       fi
     done
+      # Keep the bytes curl downloaded: the strip below discards <script> blocks,
+      # which is where a JS-rendered board keeps its JD (schema.org JobPosting,
+      # hydration payload), so jd-rescue.mjs reads this copy, not the stripped text.
+      jd_raw_file="${jd_file}.raw"
+      cp "$jd_file" "$jd_raw_file" 2>/dev/null || true
       # Strip HTML tags and count visible words to distinguish a real JD (hundreds
       # of words) from a JS shell (near zero visible text).
       jd_prefetch_words=$(node -e "
@@ -1138,6 +1184,22 @@ process_offer() {
       # miscompare. Strip everything that is not a digit and default to 0.
       jd_prefetch_words="${jd_prefetch_words//[^0-9]/}"
       jd_prefetch_words="${jd_prefetch_words:-0}"
+      # Zero-token JD rescue: read the JD out of the structured data the board
+      # already shipped in the bytes above. It only replaces the text when the page
+      # is thin or the rescued JD is longer, and it fails open (any failure leaves
+      # the stripped text as is, and the checks below decide as before).
+      if [[ -f "$BATCH_DIR/jd-rescue.mjs" && -s "$jd_raw_file" ]]; then
+        if _rs_line=$(node "$BATCH_DIR/jd-rescue.mjs" "$url" "$jd_raw_file" "$jd_file" "$jd_prefetch_words" 2>/dev/null); then
+          IFS=$'\t' read -r _rs_words _rs_method <<< "$_rs_line"
+          _rs_words="${_rs_words//[^0-9]/}"
+          _rs_words="${_rs_words:-0}"
+          if [[ "$_rs_words" -ge "$prefetch_min_words" ]]; then
+            echo "    ℹ️  JD rescue: recovered ${_rs_words} words via ${_rs_method} (visible text had ${jd_prefetch_words})"
+            jd_prefetch_words="$_rs_words"
+          fi
+        fi
+      fi
+      rm -f "$jd_raw_file"
       if [[ "$jd_prefetch_words" -lt "$prefetch_min_words" ]]; then
         : > "$jd_file"
         echo "    ℹ️  JD prefetch: thin content (${jd_prefetch_words} words) — worker will WebFetch"
@@ -1216,17 +1278,30 @@ process_offer() {
     {
       printf '\n\n---\n\n'
       printf '## Runtime paths: data root outside the checkout\n\n'
-      printf 'This install keeps the user layer in a separate data root. Wherever this prompt names one of the paths below, resolve it under the data root, not the working directory:\n\n'
+      printf 'This install keeps the user layer in a separate data root. The profile for this run is `%s`. Where this prompt names `config/profile.yml`, read that file instead. Wherever this prompt names one of the paths below, resolve it under the data root, not the working directory:\n\n' "$PROFILE_FILE"
       printf 'Data root: %s\n\n' "$DATA_ROOT"
-      printf '`cv.md`, `article-digest.md`, `config/profile.yml`, `modes/_profile.md`, `modes/_custom.md`, `reports/`, `output/`, `data/`, `interview-prep/`, `batch/tracker-additions/`\n\n'
+      printf '`cv.md`, `article-digest.md`, `modes/_profile.md`, `modes/_custom.md`, `reports/`, `output/`, `data/`, `interview-prep/`, `batch/tracker-additions/`\n\n'
       printf 'Write the report under `reports/` in the data root and the tracker TSV under `batch/tracker-additions/` in the data root, and give scripts absolute data-root paths for these files. Markdown links written inside the report and the tracker TSV keep the relative form this prompt shows (`reports/...`). Every other path (`templates/`, the `.mjs` scripts, the other `modes/` files) stays relative to the working directory.\n'
+    } >> "$resolved_prompt"
+  fi
+
+  # The .md prompts name config/profile.yml. When CAREER_OPS_PROFILE names a
+  # different file, the worker would read the wrong profile for everything
+  # except the personalization injected below, so name the file this run uses.
+  # With the data root outside the checkout the runtime block above already
+  # does that, so this only fills the default layout.
+  if [[ "$PROFILE_RESOLVED" == "true" && "$PROFILE_FILE" != "$DATA_ROOT/config/profile.yml" && "$DATA_ROOT" == "$PROJECT_DIR" ]]; then
+    {
+      printf '\n\n---\n\n'
+      printf '## Runtime profile\n\n'
+      printf 'The profile for this run is `%s`. Where this prompt names `config/profile.yml`, read that file instead.\n' "$PROFILE_FILE"
     } >> "$resolved_prompt"
   fi
 
   # Inject user-layer personalization into the temporary worker prompt.
   # The resolved prompt is gitignored runtime state, so user profile data stays
   # out of the system layer while batch scoring matches interactive scoring.
-  for context_file in "$DATA_ROOT/modes/_profile.md" "$DATA_ROOT/config/profile.yml" "$DATA_ROOT/modes/_custom.md"; do
+  for context_file in "$DATA_ROOT/modes/_profile.md" "$PROFILE_FILE" "$DATA_ROOT/modes/_custom.md"; do
     if [[ -f "$context_file" ]]; then
       {
         printf '\n\n---\n\n'

@@ -154,9 +154,10 @@ const CLOSURE = {
   'set-status.mjs': [
     'set-status.mjs', 'path-resolver.mjs', 'tracker-utils.mjs', 'pipeline-lock.mjs', 'lib/dir-lock.mjs',
     'lib/yaml-document.mjs', 'tracker-parse.mjs', 'lib/local-today.mjs', 'role-matcher.mjs', 'templates/states.yml',
-    // session-activity.mjs (#4532): advisory in-progress claim taken before
-    // the write below.
-    'session-activity.mjs',
+    // lib/status-hooks.mjs (#5536): the hooks around a status change, and
+    // session-activity.mjs (#4532), the advisory in-progress claim it takes
+    // before the write.
+    'lib/status-hooks.mjs', 'session-activity.mjs',
     // check-jd-archive.mjs / jd-capture.mjs: the transition into Interview
     // triggers a JD-archive check via these two (#4523), which in turn need
     // their own two lib/ helpers.
