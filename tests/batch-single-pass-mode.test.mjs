@@ -227,12 +227,6 @@ try {
     fail('batch-runner.sh does not reference batch-prompt-match.md');
   }
 
-  if (runnerSrc.includes('read_years_cap')) {
-    pass('batch-runner.sh contains read_years_cap function for #5297');
-  } else {
-    fail('batch-runner.sh missing read_years_cap function');
-  }
-
   // Verify batch/batch-prompt-match.md exists on disk and is well-formed
   const matchPromptFile = join(ROOT, 'batch', 'batch-prompt-match.md');
   if (existsSync(matchPromptFile)) {

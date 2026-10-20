@@ -92,7 +92,6 @@ MIN_SCORE=0
 SKIP_PDF=false
 MODE="full"
 SINGLE_PASS=false
-RESOLVED_YEARS_CAP=""
 MODEL=""  # explicit override; otherwise resolved from config/profile.yml spend_tier
 RESOLVED_MODEL=""
 RESOLVED_SPEND_TIER=""
@@ -601,8 +600,6 @@ run_worker() {
 # spend_tier maps to Claude model names, so it only applies to --cli claude;
 # other CLIs use --model verbatim, or their own default when it is unset.
 resolve_worker_model() {
-  RESOLVED_YEARS_CAP="$(read_years_cap)"
-
   if [[ -n "$MODEL" ]]; then
     RESOLVED_MODEL="$MODEL"
     RESOLVED_SPEND_TIER="override"
@@ -619,32 +616,6 @@ resolve_worker_model() {
   RESOLVED_MODEL="$(spend_tier_to_model "$RESOLVED_SPEND_TIER")"
 }
 
-# Read 'years-cap' from config/profile.yml (#5297).
-read_years_cap() {
-  local raw=""
-
-  if [[ -f "$PROFILE_FILE" ]]; then
-    raw=$(
-      awk -F: '
-        /^[[:space:]]*(years-cap|years_cap)[[:space:]]*:/ {
-          value = substr($0, index($0, ":") + 1)
-          print value
-          exit
-        }
-      ' "$PROFILE_FILE"
-    )
-    raw="${raw%%#*}"
-    raw="${raw//$'\r'/}"
-    raw="${raw#"${raw%%[![:space:]]*}"}"
-    raw="${raw%"${raw##*[![:space:]]}"}"
-    case "$raw" in
-      \"*\") raw="${raw#\"}"; raw="${raw%\"}" ;;
-      \'*\') raw="${raw#\'}"; raw="${raw%\'}" ;;
-    esac
-  fi
-
-  printf '%s\n' "$raw"
-}
 
 # Append a one-line, auditable record of a pre-screen-gate discard to
 # batch/logs/discard.log (see modes/batch.md — Pre-screen gate). Format:
@@ -1227,11 +1198,7 @@ process_offer() {
   # Build the prompt with placeholders replaced
   local prompt
   if [[ "$MODE" == "match" ]]; then
-    local years_cap_note=""
-    if [[ -n "$RESOLVED_YEARS_CAP" ]]; then
-      years_cap_note=" (years-cap: $RESOLVED_YEARS_CAP)"
-    fi
-    prompt="Process this job offer in single-pass CV match mode${years_cap_note}. Extract CV facts, score the match against the JD requirements in a single pass, output the report and tracker addition, and output final JSON. Do not generate PDF; write ❌ in the tracker PDF column and set \"pdf\": null in the final JSON."
+    prompt="Process this job offer in single-pass CV match mode. Extract CV facts, score the match against the JD requirements in a single pass, output the report and tracker addition, and output final JSON. Do not generate PDF; write ❌ in the tracker PDF column and set \"pdf\": null in the final JSON."
   elif [[ "$SKIP_PDF" == "true" ]]; then
     prompt="Process this job offer. Run the pipeline: A-G evaluation + report .md + tracker line. Do not generate PDF; write ❌ in the tracker PDF column and set \"pdf\": null in the final JSON."
     echo "    ⏭️  --skip-pdf set — skipping PDF generation for #$id ($url)"
@@ -1294,14 +1261,6 @@ process_offer() {
     fi
   done
 
-  if [[ "$MODE" == "match" && -n "$RESOLVED_YEARS_CAP" ]]; then
-    {
-      printf '\n\n---\n\n'
-      printf '## Candidate Years-of-Experience Cap (#5297)\n\n'
-      printf 'config/profile.yml specifies years-cap: %s.\n' "$RESOLVED_YEARS_CAP"
-      printf 'When extracting and evaluating candidate experience against the job description requirements, apply a strict cap of %s years. Only consider the candidate'\''s most recent %s years of experience; do not penalize for older unlisted experience or require experience beyond this cap.\n' "$RESOLVED_YEARS_CAP" "$RESOLVED_YEARS_CAP"
-    } >> "$resolved_prompt"
-  fi
 
   # Build the launch command for the configured CLI.
   # For claude the model is resolved once per run from spend_tier unless --model
@@ -1901,9 +1860,7 @@ main() {
 
   echo "=== career-ops batch runner ==="
   if [[ "$MODE" == "match" ]]; then
-    local yc_info="none"
-    [[ -n "$RESOLVED_YEARS_CAP" ]] && yc_info="$RESOLVED_YEARS_CAP"
-    echo "Mode: match (single-pass CV evaluation; years-cap: $yc_info)"
+    echo "Mode: match (single-pass CV evaluation)"
   fi
   if (( LIMIT > 0 )); then
     echo "Parallel: $PARALLEL | Max retries: $MAX_RETRIES | Limit: $LIMIT"
