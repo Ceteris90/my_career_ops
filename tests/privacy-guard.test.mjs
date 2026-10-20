@@ -161,6 +161,27 @@ test('4. the error message never contains the protected value', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. The error points at WHICH configured entry matched, without naming it.
+// ---------------------------------------------------------------------------
+test('4b. a blocked request names the config entry, never the value', () => {
+  // Entry 2 is the phone; the request contains only a longer digit run that
+  // matches it as a substring, so the category alone would leave the user with
+  // no way to find the offending line in config/privacy.yml.
+  const guard = new PrivacyGuard({ values: [FAKE.name, FAKE.phone] });
+  let caught;
+  try {
+    guard.assertSafe('reference 9991555010019999 in the posting');
+  } catch (err) {
+    caught = err;
+  }
+  assert.ok(caught instanceof PrivacyGuardError);
+  assert.match(caught.message, /entry 2/, 'names the config entry that matched');
+  assert.ok(!caught.message.includes('555'), 'still no value, not even digits');
+  assert.ok(!caught.message.includes(FAKE.phone), 'and not the full configured value');
+  assert.ok(!caught.message.includes(FAKE.name));
+});
+
+// ---------------------------------------------------------------------------
 // 5. A missing config file is a documented SAFE state, not a failure.
 // ---------------------------------------------------------------------------
 test('5. an absent config is not an error — the guard keeps pattern detection', () => {

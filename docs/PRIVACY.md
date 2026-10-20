@@ -128,11 +128,18 @@ endpoints) are checked.
 
 | Situation | Result |
 |-----------|--------|
-| Protected value found in the request | **Blocked.** Error names the category, never the value. |
+| Protected value found in the request | **Blocked.** Error names the category and which `protected:` entry matched (`entry N`), never the value. |
 | Request body cannot be serialized/read | **Blocked.** "I could not inspect this" is never reported as "clean". |
 | Config file present but unparseable | **Error.** The guard refuses to run on a config it cannot read. |
 | Config file absent | **Allowed, by design.** Documented safe state: pattern detection still runs. Reported as `absent`, not as protection you configured. |
 | Config file present but empty | Same as absent, reported as `empty`. |
+
+The `entry N` label is a 1-based position in the flattened `protected:` values,
+so a block message like `Found: configured protected number (entry 2)` points at
+the second value under `protected:` in `config/privacy.yml` — the only way to
+locate the line, since the value itself is never echoed. Configured numbers
+match as a substring of any longer digit run, so a block can be triggered by a
+number you do not recognise; the entry label is what turns that into a fix.
 
 ---
 
