@@ -545,7 +545,7 @@ export async function acquireTrackerLock(lockDir, options = {}) {
     removeLock: typeof options.removeLock === 'function' ? options.removeLock : undefined,
     onRecoverGuard: testWaitingMarker
       ? () => writeFileSync(testWaitingMarker, JSON.stringify({
-        pid: process.pid, lockDir, guardCreated: true,
+        pid: process.pid, ppid: process.ppid, lockDir, guardCreated: true,
       }), { flag: 'wx' })
       : undefined,
     // Tagged so callers can tell "lock is busy, retry later" apart from

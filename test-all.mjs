@@ -5994,7 +5994,6 @@ try {
   const nodeTrackerWriters = [
     ['dedup-tracker.mjs', 1],
     ['normalize-statuses.mjs', 1],
-    ['reply-watch.mjs', 1],
     ['tracker.mjs', 2],
   ];
   const unsafeWriters = nodeTrackerWriters.filter(([name, minTransactions]) => {
@@ -6012,6 +6011,20 @@ try {
     pass('all root tracker writers keep read and atomic replacement in shared transactions');
   } else {
     fail(`tracker writers bypass shared transaction scope: ${unsafeWriters.join(', ')}`);
+  }
+
+  // reply-watch writes no status of its own: every accepted update goes through
+  // set-status.mjs, so the status hooks run for it too (#5536). A cell edit or
+  // a tracker transaction reappearing here would be a second status writer.
+  const replyWatch = readFile('reply-watch.mjs');
+  const replyWatchDelegates = replyWatch.includes("'set-status.mjs'")
+    && replyWatch.includes("'--expect-row'")
+    && !/openTrackerTransaction|acquireTrackerLock|writeFileAtomic|rebuildRow|appendLedgerRows/.test(replyWatch)
+    && !/\[\s*(?:colmap|COLMAP|COLS)\.status\s*\]\s*=/.test(replyWatch);
+  if (replyWatchDelegates) {
+    pass('reply-watch delegates every tracker status change to set-status.mjs');
+  } else {
+    fail('reply-watch writes tracker status itself instead of delegating to set-status.mjs');
   }
 
   // The dashboard must use the same canonical writer as the CLI. Keep this

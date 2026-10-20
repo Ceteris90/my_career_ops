@@ -79,9 +79,13 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // reconstructed afterwards. Only the door differs.
 // `reply-watch` is the same class: the user confirms the update interactively;
 // the transition is observed at that moment, not reconstructed later.
-const VALID_SOURCES = new Set(['set-status', 'web', 'correction', 'backfill', 'manual', 'reply-watch']);
-// Sources whose dates are trusted for day-math. backfill/manual are parsed and
-// counted but excluded: they are reconstructed after the fact, not observed.
+// `dedup-tracker` is the opposite class: the kept row of a duplicate pair takes
+// over the removed row's more advanced status, and that transition was found
+// at dedup time, not observed then (#5536).
+const VALID_SOURCES = new Set(['set-status', 'web', 'correction', 'backfill', 'manual', 'reply-watch', 'dedup-tracker']);
+// Sources whose dates are trusted for day-math. backfill/manual/dedup-tracker
+// are parsed and counted but excluded: they are reconstructed after the fact,
+// not observed.
 const DAY_MATH_SOURCES = new Set(['set-status', 'web', 'correction', 'reply-watch']);
 
 // The hops a candidate can measure from their own tracker. Applied→Rejected is

@@ -420,13 +420,13 @@ node funnel-velocity.mjs --self-test
 node funnel-velocity.mjs --benchmarks path/to/benchmarks.yml
 ```
 
-Ledger line format (TSV, appended by `set-status.mjs`, `#`-prefixed lines are comments):
+Ledger line format (TSV, appended by `set-status.mjs` and, for a status a kept duplicate takes over, `dedup-tracker.mjs`; `#`-prefixed lines are comments):
 
 ```text
 {tracker#}\t{YYYY-MM-DD}\t{from}\t{to}\t{source}\t{note}
 ```
 
-`from` may be `-` (unknown prior state); `to` = `-` retracts the row's latest observation; a later `correction`-source line with the same (tracker#, to) replaces the earlier observation's date. Sources: set-status | correction | backfill | manual (only set-status/correction feed day-math).
+`from` may be `-` (unknown prior state); `to` = `-` retracts the row's latest observation; a later `correction`-source line with the same (tracker#, to) replaces the earlier observation's date. Sources are the closed set `VALID_SOURCES` in `funnel-velocity.mjs`. `backfill`, `manual` and `dedup-tracker` are counted but kept out of day-math, because they record a transition found after the fact rather than observed when it happened.
 
 **Exit codes:** `0` always (missing tracker/ledger produce an explanatory empty result), `1` self-test or benchmarks-load failure.
 
@@ -1459,6 +1459,7 @@ A bare number or company name is convenient, but becomes ambiguous when multiple
 - `--role <role>`: Narrowing selector that refines a company, report, row, or bare-number match when multiple tracker rows exist for a single target.
 - `--on <date>`: Specifies an explicit transition date (YYYY-MM-DD) for status logs and notes.
 - `--json`: Formats command output as structured JSON.
+- `--expect-row <hash>` / `--expect-status <state>`: For a caller that showed the row to a person before writing (`reply-watch.mjs`). Under the lock, refuse the write if any cell but Status differs from the reviewed row (`trackerRowIdentity` in `tracker-parse.mjs`), or if the status is no longer the reviewed one and not already `<state>`. Unlike `--expect-tracker`, a write to another row does not trip them.
 
 `--row` and `--report` are mutually exclusive. Because an explicit selector answers the report-mismatch guard rather than overriding it, `--row` bypasses that guard without needing `--force` (which silences the check while the ambiguity is still real).
 
@@ -1474,7 +1475,7 @@ Exit codes (the shared `CLI_EXIT` contract in `tracker-utils.mjs`, so these valu
 - `0` success, including an idempotent no-op re-run that changed nothing.
 - `1` for an invalid or conflicting selector, or a non-canonical state.
 - `2` when the selector matches no tracker row.
-- `3` when a bare numeric selector triggers the report-number mismatch guard (`report-number-mismatch`), or a company matches several rows.
+- `3` when a bare numeric selector triggers the report-number mismatch guard (`report-number-mismatch`), a company matches several rows, or a review guard refuses (`tracker-changed`, `row-changed`, `status-changed`).
 - `4` when the shared tracker lock is busy — retryable, unlike the others.
 
 Nothing is written on any non-zero exit.
