@@ -153,7 +153,7 @@ test('generate-pdf does not treat the data root as outside its workspace', () =>
 const CLOSURE = {
   'set-status.mjs': [
     'set-status.mjs', 'path-resolver.mjs', 'tracker-utils.mjs', 'pipeline-lock.mjs', 'lib/dir-lock.mjs',
-    'tracker-parse.mjs', 'lib/local-today.mjs', 'role-matcher.mjs', 'templates/states.yml',
+    'lib/yaml-document.mjs', 'tracker-parse.mjs', 'lib/local-today.mjs', 'role-matcher.mjs', 'templates/states.yml',
     // session-activity.mjs (#4532): advisory in-progress claim taken before
     // the write below.
     'session-activity.mjs',
@@ -167,7 +167,7 @@ const CLOSURE = {
   ],
   'generate-pdf.mjs': [
     'generate-pdf.mjs', 'path-resolver.mjs', 'tracker-utils.mjs', 'pipeline-lock.mjs', 'lib/dir-lock.mjs',
-    'tracker-parse.mjs', 'theme-style.mjs', 'lib/page-format.mjs', 'lib/is-main-module.mjs',
+    'tracker-parse.mjs', 'theme-style.mjs', 'lib/page-format.mjs', 'lib/is-main-module.mjs', 'lib/yaml-document.mjs',
     'cv-sections-core.mjs', 'cv-experience-order.mjs',
     'tracker-aliases.json',
   ],

@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { outputLanguageInstruction, parseOutputLanguage } from './profile-language.mjs';
 import { TSV_ADDITION_HEADER } from './tracker-parse.mjs';
 import { normalizedTrackerScore } from './lib/tracker-addition.mjs';
@@ -38,6 +38,7 @@ import { createAdmissionGate, formatSkipCounts } from './lib/admission-gate.mjs'
 import { localToday } from './lib/local-today.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { locateApplyReport } from './apply-scope.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const tracker = new TokenAccumulator();
@@ -500,7 +501,7 @@ async function fetchJobPage(url) {
 export function parsePortals(rawOverride) {
   const raw = rawOverride ?? readFile('portals.yml');
   if (!raw) throw new Error('portals.yml not found');
-  const config = yaml.load(raw) || {};
+  const config = loadYaml(raw) || {};
 
   // The shared predicate rather than a second copy of the matching rules. This
   // path kept its own `includes` loop, and the two had drifted three ways: an
@@ -823,18 +824,25 @@ async function cmdApply(ref, ctx) {
   const modeContent = readSystemFile('modes/apply.md') ?? '';
 
   let reportContent;
-  if (fileExists(ref)) {
-    reportContent = readFile(ref);
-  } else {
-    const numStr = String(ref).padStart(3, '0');
-    const reportsDir = path.join(DATA_ROOT, 'reports');
-    const dirEntries = fs.existsSync(reportsDir) ? fs.readdirSync(reportsDir) : [];
-    const matches = dirEntries.filter(f => f.startsWith(numStr));
-    if (matches.length === 0) {
+  let reportPath;
+  try {
+    const located = locateApplyReport(DATA_ROOT, ref, {
+      exists: (p) => fs.existsSync(p),
+      list: (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []),
+    });
+    if (!located.ok) {
       console.error(`Report not found: ${ref}`);
       return;
     }
-    reportContent = readFile(`reports/${matches[0]}`);
+    reportPath = located.path;
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    return;
+  }
+  try {
+    reportContent = fs.readFileSync(reportPath, 'utf8');
+  } catch {
+    reportContent = null;
   }
 
   if (!reportContent) { console.error('Could not read report content.'); return; }

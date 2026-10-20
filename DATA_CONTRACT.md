@@ -48,6 +48,7 @@ These files contain your personal data, customizations, and work product. Update
 | `data/agent-inbox.md` | Your append-only request queue drained at session start (written by `agent-inbox.mjs`) |
 | `data/reply-candidates.json` | Your normalized employer-reply candidates (subject, body, sender, signal, plus optional `received_at`/`date` — read by `reply-watch.mjs`; a reliable received date is required for date-guarded company-wide rejection suggestions) |
 | `data/reply-proposals/*.json` | Local integration status proposals with quoted evidence; read-only until explicit review in `reply-watch.mjs`. Acceptance writes status plus a `[reply-proposal:<digest>]` Notes receipt atomically through `set-status.mjs`; keep receipts to prevent replay. See `docs/REPLY_PROPOSALS.md` for the v1 draft contract; the format may change until a real producer writes to the directory. |
+| `data/learning/*` | Your retro state: the candidates and reply files, pending checks, and the ledger of accepted and rejected rules (written by `learn.mjs`, never loaded into a prompt) |
 | `data/pdf-index.tsv` | PDF↔report linkage manifest (written by `generate-pdf.mjs`, read by `find.mjs`, the dashboard, and the `email` mode) |
 | `data/offers/*` | Your received offers/contracts, promise notes, prep reports, and reply drafts (PII — gitignored, written by the `offer-prep` mode) |
 | `data/outcomes/*` | Your application outcome logs and archived application artifacts (written by the `outcome` mode) |
@@ -131,6 +132,7 @@ These files contain system logic, scripts, templates, and instructions that impr
 | `modes/interview/*` | Interview prep planning, practice, and debrief skills |
 | `modes/agent-inbox.md` | Agent inbox (queued requests) instructions |
 | `modes/reply-watch.md` | Employer reply classification instructions |
+| `modes/retro.md` | Session review instructions: propose rules for `learn.mjs` to check |
 | `modes/update.md` | System update instructions |
 | `modes/ar/*` | Arabic language modes |
 | `modes/da/*` | Danish language modes |
