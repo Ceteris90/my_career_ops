@@ -692,12 +692,15 @@ export function renameSyncWithRetry(tmpPath, path, rename = renameSync) {
 export function writeFileAtomic(path, content, { mode } = {}) {
   const tmpPath = join(dirname(path), `.${basename(path)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`);
   try {
+    // flush: fsync before the rename, so a write error that surfaces only at
+    // sync time (ENOSPC on some filesystems), or a crash, cannot leave the
+    // rename durable and the data not.
     if (mode === undefined) {
-      writeFileSync(tmpPath, content);
+      writeFileSync(tmpPath, content, { flush: true });
     } else {
       // Creation honours the umask, so it can only narrow `mode`; chmod then
       // sets it exactly.
-      writeFileSync(tmpPath, content, { mode });
+      writeFileSync(tmpPath, content, { mode, flush: true });
       chmodSync(tmpPath, mode);
     }
     renameSyncWithRetry(tmpPath, path);
