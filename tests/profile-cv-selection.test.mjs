@@ -191,7 +191,8 @@ try {
       process.env.CAREER_OPS_ROOT = root;
       assert.deepEqual(loadValidatedProfile(), original.profile);
     } finally {
-      process.env.CAREER_OPS_ROOT = previous;
+      if (previous === undefined) delete process.env.CAREER_OPS_ROOT;
+      else process.env.CAREER_OPS_ROOT = previous;
     }
     assert.throws(() => loadValidatedProfile({ file: join(root, 'missing.yml') }), { code: 'ENOENT' });
     save('invalid-reader.yml', { schema_version: 2 });
@@ -207,6 +208,20 @@ try {
     cli('career-profile.mjs', ['prepare-cv', ...args, '--profile', 'alternate-profile.yml']);
     cli('career-profile.mjs', ['prepare-cv', ...args], 0, { CAREER_OPS_ROOT: '', CAREER_OPS_DATA_DIR: root });
     assert.equal(cli('career-profile.mjs', ['validate']).status, 0);
+  });
+
+  check('CLI errors include fact/entry context and slot zero, omitting unavailable fields', () => {
+    const selection = structuredClone(original.selection);
+    selection.bindings[0].fact_ids = ['fact-unreviewed'];
+    save('invalid-selection.json', selection);
+    const factError = cli('career-profile.mjs', ['prepare-cv', '--payload', 'base.json', '--selection', 'invalid-selection.json'], 1);
+    assert.equal(factError.stdout, '');
+    assert.equal(factError.stderr, '[fact-not-verified] Selected fact needs review. (profile_entry_id="exp-acme-recent", fact_id="fact-unreviewed", experience_index=0)\n');
+
+    delete selection.bindings[0].target;
+    save('invalid-selection.json', selection);
+    const targetError = cli('career-profile.mjs', ['prepare-cv', '--payload', 'base.json', '--selection', 'invalid-selection.json'], 1);
+    assert.equal(targetError.stderr, '[invalid-target] Experience index is outside the base payload. (profile_entry_id="exp-acme-recent")\n');
   });
 
   check('CLI rejects stale preparation, missing/invalid profiles and malformed arguments', () => {

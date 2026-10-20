@@ -346,6 +346,9 @@ try {
   else if (command === 'prepare-cv' || command === 'verify-cv') doCvSelection(command, args);
   else throw new Error(`Unknown command: ${command}\n\n${HELP}`);
 } catch (error) {
-  process.stderr.write(`${error.code ? `[${error.code}] ` : ''}${error.message}\n`);
+  const context = ['profile_entry_id', 'fact_id', 'experience_index']
+    .filter(key => error[key] !== undefined)
+    .map(key => `${key}=${JSON.stringify(error[key])}`);
+  process.stderr.write(`${error.code ? `[${error.code}] ` : ''}${error.message}${context.length ? ` (${context.join(', ')})` : ''}\n`);
   process.exitCode = 1;
 }
