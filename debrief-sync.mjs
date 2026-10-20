@@ -11,11 +11,10 @@ import { isRealCalendarDate } from './followup-cadence.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
-import { parseMarkdownLinks, parseTrackerRow, resolveColumns, splitTrackerCells, trackerRowSeparator } from './tracker-parse.mjs';
+import { parseMarkdownLinks, parseTrackerRow, resolveColumns } from './tracker-parse.mjs';
 import { acquireTrackerLock, resolveWorkspaceRoot, trackerLockDirFor, writeFileAtomic } from './tracker-utils.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
-const SCORE_CAP = 3.4;
 const FENCE = /(##[ \t]*Machine Summary[ \t]*\n+```(?:yaml|yml)?[ \t]*\n)([\s\S]*?)(\n```)/i;
 
 const KNOWN_FLAGS = ['--app', '--dealbreaker', '--contact-name', '--contact-email', '--contact-type', '--next', '--why', '--help', '-h'];
@@ -37,13 +36,6 @@ export class DebriefSyncError extends Error {
 
 function planError(code, message) {
   throw new DebriefSyncError(code, `${code}: ${message}`);
-}
-
-function scoreNumber(value) {
-  const match = String(value ?? '').match(/(\d+(?:\.\d+)?)/);
-  if (!match) return null;
-  const number = Number(match[1]);
-  return Number.isFinite(number) ? number : null;
 }
 
 function insideWorkspace(root, candidate) {
@@ -116,30 +108,6 @@ function normalizePlan(plan) {
   return { appNum: plan.appNum, dealbreaker, contacts, nextDate, nextWhy };
 }
 
-function headerScore(report) {
-  const match = String(report).match(/\*\*Score:\*\*\s*(\d+(?:\.\d+)?)\s*\/\s*5\b/);
-  return match ? Number(match[1]) : null;
-}
-
-function replaceHeader(report, desired) {
-  return report.replace(/\*\*Score:\*\*(\s*)(\d+(?:\.\d+)?)(\s*\/\s*5\b)/, (full, space, num, rest) => {
-    if (Number(num) === desired) return full;
-    return `**Score:**${space}${desired.toFixed(1)}${rest}`;
-  });
-}
-
-function replaceYamlScore(yamlBody, desired) {
-  if (scoreNumber(yaml.load(yamlBody)?.score) === desired) return yamlBody;
-  let seen = false;
-  const lines = yamlBody.split('\n').map((line) => {
-    if (seen || !/^score:/.test(line)) return line;
-    seen = true;
-    return `score: ${desired.toFixed(1)}`;
-  });
-  if (!seen) planError('SCORE_MISMATCH', 'YAML score is missing');
-  return lines.join('\n');
-}
-
 function replaceDecision(yamlBody) {
   const decision = String(yaml.load(yamlBody)?.final_decision ?? '').trim();
   if (decision === 'Skip') return yamlBody;
@@ -170,49 +138,16 @@ function insertHardStop(yamlBody, sentence) {
   return lines.join('\n');
 }
 
-function applyReport(report, sentence, desired) {
+function applyReport(report, sentence) {
   const fence = report.match(FENCE);
-  if (!fence || headerScore(report) == null) {
-    planError('SCORE_MISMATCH', 'header score and YAML score must both be present and equal');
+  if (!fence) planError('BAD_PLAN', 'the report has no Machine Summary YAML');
+  try {
+    yaml.load(fence[2]);
+  } catch (err) {
+    planError('BAD_PLAN', `Machine Summary YAML did not parse: ${err.message}`);
   }
-  const yamlNum = scoreNumber(yaml.load(fence[2])?.score);
-  if (yamlNum == null || yamlNum !== headerScore(report)) {
-    planError('SCORE_MISMATCH', 'header score and YAML score differ');
-  }
-  const nextYaml = insertHardStop(replaceDecision(replaceYamlScore(fence[2], desired)), sentence);
-  const next = replaceHeader(report, desired);
-  return next.replace(fence[0], () => `${fence[1]}${nextYaml}${fence[3]}`);
-}
-
-function readTracker(text) {
-  const lines = text.split('\n');
-  const colmap = resolveColumns(lines);
-  const rows = [];
-  lines.forEach((line, lineIdx) => {
-    const row = parseTrackerRow(line, colmap);
-    if (row) rows.push({ ...row, lineIdx });
-  });
-  return { lines, colmap, rows };
-}
-
-function withScore(line, colIndex, desired) {
-  const parts = splitTrackerCells(line);
-  const original = parts[colIndex] ?? '';
-  const trimmed = original.trim();
-  if (scoreNumber(trimmed) === desired) return line;
-  const formatted = desired.toFixed(1);
-  const nextTrimmed = /\/\s*5/.test(trimmed)
-    ? trimmed.replace(/\d+(?:\.\d+)?/, formatted)
-    : formatted;
-  const start = original.indexOf(trimmed);
-  parts[colIndex] = trimmed && start >= 0
-    ? original.slice(0, start) + nextTrimmed + original.slice(start + trimmed.length)
-    : ` ${nextTrimmed} `;
-  if (trackerRowSeparator(line) === '\t') {
-    const closing = line.trimEnd().endsWith('|');
-    return `${parts[0]}|${parts.slice(1, closing ? -1 : undefined).join('\t')}${closing ? `|${parts.at(-1)}` : ''}`;
-  }
-  return parts.join('|');
+  const nextYaml = insertHardStop(replaceDecision(fence[2]), sentence);
+  return report.replace(fence[0], () => `${fence[1]}${nextYaml}${fence[3]}`);
 }
 
 function reportPathFor(row, workspaceRoot) {
@@ -230,27 +165,11 @@ function reportPathFor(row, workspaceRoot) {
 
 function loadRow(appsFile, appNum) {
   if (!existsSync(appsFile)) planError('BAD_PLAN', `tracker not found at ${appsFile}`);
-  const text = readFileSync(appsFile, 'utf8');
-  const tracker = readTracker(text);
-  const row = tracker.rows.find((item) => item.num === appNum);
+  const lines = readFileSync(appsFile, 'utf8').split('\n');
+  const colmap = resolveColumns(lines);
+  const row = lines.map((line) => parseTrackerRow(line, colmap)).find((item) => item?.num === appNum);
   if (!row) planError('BAD_PLAN', `application #${appNum} is not in the tracker`);
-  return { text, tracker, row };
-}
-
-function scoresFor(report) {
-  let doc;
-  const fence = report.match(FENCE);
-  try {
-    doc = fence ? yaml.load(fence[2]) : null;
-  } catch (err) {
-    planError('BAD_PLAN', `Machine Summary YAML did not parse: ${err.message}`);
-  }
-  const header = headerScore(report);
-  const yamlScore = scoreNumber(doc?.score);
-  if (header == null || yamlScore == null || header !== yamlScore) {
-    planError('SCORE_MISMATCH', 'header score and YAML score differ');
-  }
-  return { header, desired: Math.min(header, SCORE_CAP) };
+  return row;
 }
 
 function appendDealbreakerNote(appNum, status, sentence, root) {
@@ -275,42 +194,23 @@ export async function applyDebriefSync(plan) {
   let prepared;
   let wrote = false;
   try {
-    const loaded = loadRow(appsFile, normalized.appNum);
-    const status = loaded.row.status.trim();
-    const company = loaded.row.company.trim();
+    const row = loadRow(appsFile, normalized.appNum);
+    const status = row.status.trim();
+    const company = row.company.trim();
     if (normalized.contacts.length > 0 && !company) {
       planError('BAD_PLAN', 'the tracker row has no company to store with the contact');
     }
     if (normalized.dealbreaker && !status) {
       planError('BAD_PLAN', 'the tracker row has no status to keep while recording the dealbreaker');
     }
-    let lines = loaded.tracker.lines;
-    let reportPath = null;
-    let reportText = null;
-    let originalReport = null;
     if (normalized.dealbreaker) {
-      reportPath = reportPathFor(loaded.row, resolveWorkspaceRoot(appsFile));
-      originalReport = readFileSync(reportPath, 'utf8');
-      const checked = scoresFor(originalReport);
-      const currentTracker = scoreNumber(loaded.row.score);
-      if (currentTracker == null || (currentTracker !== checked.header && currentTracker !== checked.desired)) {
-        planError('SCORE_MISMATCH', 'tracker score must already be the report score or the capped score');
+      const reportPath = reportPathFor(row, resolveWorkspaceRoot(appsFile));
+      const original = readFileSync(reportPath, 'utf8');
+      const next = applyReport(original, normalized.dealbreaker);
+      if (next !== original) {
+        writeFileAtomic(reportPath, next);
+        wrote = true;
       }
-      reportText = applyReport(originalReport, normalized.dealbreaker, checked.desired);
-      const updated = withScore(lines[loaded.row.lineIdx], loaded.tracker.colmap.score, checked.desired);
-      if (updated !== lines[loaded.row.lineIdx]) {
-        lines = lines.slice();
-        lines[loaded.row.lineIdx] = updated;
-      }
-    }
-    const trackerText = lines.join('\n');
-    if (trackerText !== loaded.text) {
-      writeFileAtomic(appsFile, trackerText);
-      wrote = true;
-    }
-    if (reportText != null && reportText !== originalReport) {
-      writeFileAtomic(reportPath, reportText);
-      wrote = true;
     }
     prepared = { status, company };
   } finally {
