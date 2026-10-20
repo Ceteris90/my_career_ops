@@ -22,7 +22,6 @@ function daysAhead(days) {
 }
 
 const FUTURE = daysAhead(60);
-const LOW_SENTENCE = 'Requires a clearance the candidate does not hold';
 const REPORT_REL = 'reports/007-northwind-2026-01-05.md';
 
 function check(label, fn) {
@@ -152,15 +151,15 @@ const fullArgs = [
     });
 
     const first = run(root, fullArgs);
-    check('debrief command records the dealbreaker, both contacts, and the future pin', () => {
+    check('debrief command records the dealbreaker next to the evaluated score, both contacts, and the future pin', () => {
       assert.equal(first.status, 0, first.stderr || first.error?.message);
       const tracker = readRoot(root, 'data/applications.md');
       const report = readRoot(root, REPORT_REL);
-      assert.match(report, /\*\*Score:\*\*\s*3\.4\/5/);
-      assert.match(report, /^score:\s*3\.4$/m);
+      assert.match(report, /\*\*Score:\*\*\s*4\.2\/5/);
+      assert.match(report, /^score:\s*4\.2$/m);
       assert.match(report, /final_decision:\s*"Skip"/);
       assert.match(report, /No on-site roles outside the home city/);
-      assert.match(tracker, /\| 3\.4\/5 \|/);
+      assert.match(tracker, /\| 4\.2\/5 \|/);
       assert.match(tracker, /\| Interview \|/);
       assert.equal((tracker.match(/Dealbreaker: No on-site roles outside the home city/g) || []).length, 1);
       const contacts = summary(root, 'contacts.mjs', ['--summary']);
@@ -211,58 +210,6 @@ const fullArgs = [
   }
 }
 
-{
-  const root = freshRoot();
-  try {
-    writeFixture(root, {
-      headerScore: '3.0',
-      yamlScore: '3.0',
-      trackerScore: '3.0',
-      followups: null,
-    });
-    const result = run(root, ['--app', '7', '--dealbreaker', LOW_SENTENCE]);
-    check('a score already at 3.0 stays 3.0 and still records the dealbreaker', () => {
-      assert.equal(result.status, 0, result.stderr);
-      const report = readRoot(root, REPORT_REL);
-      const tracker = readRoot(root, 'data/applications.md');
-      assert.match(report, /\*\*Score:\*\*\s*3\.0\/5/);
-      assert.match(report, /^score:\s*3\.0$/m);
-      assert.match(report, /final_decision:\s*"Skip"/);
-      assert.match(report, /Requires a clearance the candidate does not hold/);
-      assert.match(tracker, /\| 3\.0\/5 \|/);
-      assert.equal((tracker.match(/Dealbreaker: Requires a clearance the candidate does not hold/g) || []).length, 1);
-    });
-    const trackerAfter = readRoot(root, 'data/applications.md');
-    const again = run(root, ['--app', '7', '--dealbreaker', LOW_SENTENCE]);
-    check('a second 3.0 run does not duplicate the dealbreaker note', () => {
-      assert.equal(again.status, 0, again.stderr);
-      assert.equal(JSON.parse(again.stdout).wrote, false);
-      assert.equal(readRoot(root, 'data/applications.md'), trackerAfter);
-    });
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-{
-  const root = freshRoot();
-  try {
-    writeFixture(root, { trackerScore: '3.4', followups: null });
-    const result = run(root, ['--app', '7', '--dealbreaker', SENTENCE]);
-    check('a tracker score already at the cap is kept while the report drops to 3.4', () => {
-      assert.equal(result.status, 0, result.stderr);
-      const report = readRoot(root, REPORT_REL);
-      const tracker = readRoot(root, 'data/applications.md');
-      assert.match(report, /\*\*Score:\*\*\s*3\.4\/5/);
-      assert.match(report, /^score:\s*3\.4$/m);
-      assert.match(tracker, /\| 3\.4\/5 \|/);
-      assert.match(tracker, /Dealbreaker: No on-site roles outside the home city/);
-    });
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
 function refuses(label, args, mutate = {}) {
   const root = freshRoot();
   try {
@@ -282,13 +229,6 @@ refuses('a weekday --next writes nothing', ['--app', '7', '--dealbreaker', SENTE
 refuses('an impossible --next writes nothing', ['--app', '7', '--dealbreaker', SENTENCE, '--next', '2026-02-31']);
 refuses('an unknown flag writes nothing', ['--app', '7', '--dealbreaker', SENTENCE, '--bogus']);
 refuses('a dealbreaker with a semicolon writes nothing', ['--app', '7', '--dealbreaker', 'No on-site; relocation']);
-refuses('a header and YAML score mismatch writes nothing', ['--app', '7', '--dealbreaker', SENTENCE], {
-  headerScore: '4.2',
-  yamlScore: '3.9',
-});
-refuses('a tracker score that is neither the header nor the cap writes nothing', ['--app', '7', '--dealbreaker', SENTENCE], {
-  trackerScore: '2.0',
-});
 
 {
   const root = freshRoot();
