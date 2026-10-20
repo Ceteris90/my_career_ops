@@ -107,7 +107,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'node:crypto';
-import { extractTrackerReportNumbers, resolveColumns, parseTrackerRow, normalizeTextKey, splitTrackerCells, trackerRowSeparator, trackerRowIdentity } from './tracker-parse.mjs';
+import { extractTrackerReportNumbers, parseMarkdownLinks, soleMarkdownLink, resolveColumns, parseTrackerRow, normalizeTextKey, splitTrackerCells, trackerRowSeparator, trackerRowIdentity } from './tracker-parse.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { localToday } from './lib/local-today.mjs';
 import {
@@ -431,9 +431,8 @@ function resolveRow(rows) {
   if (flags.reportLink !== null) {
     const matches = [];
     for (const row of rows) {
-      const links = [...String(row.report ?? '').matchAll(/\[(\d+)\]\(([^)]+)\)/g)];
-      if (!links.some(link => link[1] === flags.reportLink)) continue;
-      if (links.length !== 1 || links[0][0] !== String(row.report ?? '').trim()) {
+      if (!parseMarkdownLinks(String(row.report ?? '')).some(link => link.label === flags.reportLink)) continue;
+      if (!soleMarkdownLink(row.report)) {
         failWith(EXIT_AMBIGUOUS, 'malformed-report', `Malformed Report cell for report #${flags.reportLink}: expected exactly one report link`);
       }
       matches.push(row);
@@ -519,7 +518,7 @@ for (let i = 0; i < lines.length; i++) {
   if (row) rows.push({ ...row, lineIdx: i });
   else if (flags.reportLink !== null && colmap.report != null) {
     const report = splitTrackerCells(lines[i])[colmap.report] ?? '';
-    if ([...String(report).matchAll(/\[(\d+)\]\(([^)]+)\)/g)].some(link => link[1] === flags.reportLink)) {
+    if (parseMarkdownLinks(String(report)).some(link => link.label === flags.reportLink)) {
       failWith(EXIT_AMBIGUOUS, 'malformed-row', `Tracker row linking report #${flags.reportLink} has missing cells`);
     }
   }
