@@ -28,6 +28,7 @@ import {
   bypassRequested,
 } from '../lib/privacy-guard.mjs';
 import {
+  assertGoogleRequestAllowed,
   assertLlmRequestAllowed,
   checkLlmRequest,
   isLlmRequestUrl,
@@ -336,6 +337,37 @@ test('11b. host matching recognises LLM providers and not lookalikes', () => {
   assert.equal(isLlmRequestUrl('https://boards-api.greenhouse.io/v1/boards/acme/jobs'), false);
   assert.equal(isLlmRequestUrl('https://evil-openrouter.ai.example.com/x'), false, 'suffix match is on label boundaries');
   assert.equal(isLlmRequestUrl('not a url'), false);
+});
+
+// ---------------------------------------------------------------------------
+// 11c. The Google helper inspects the same parts the SDK receives, in both the
+// systemInstruction and each turn — so gate and call cannot drift apart.
+// ---------------------------------------------------------------------------
+test('11c. assertGoogleRequestAllowed inspects systemInstruction and every turn', () => {
+  const guard = fakeGuard();
+
+  // Clean request passes.
+  assert.doesNotThrow(() =>
+    assertGoogleRequestAllowed({ systemInstruction: 'You are a helpful evaluator.', turns: ['A job posting.'] }, { guard })
+  );
+
+  // A value in the user turn is blocked.
+  assert.throws(
+    () => assertGoogleRequestAllowed({ turns: [`Contact me at ${FAKE.email}`] }, { guard }),
+    PrivacyGuardError
+  );
+
+  // A value in the systemInstruction is blocked too, not just the turns.
+  assert.throws(
+    () => assertGoogleRequestAllowed({ systemInstruction: `Candidate: ${FAKE.name}`, turns: ['ok'] }, { guard }),
+    PrivacyGuardError
+  );
+
+  // A value in the SECOND turn of a multi-turn request is found as well.
+  assert.throws(
+    () => assertGoogleRequestAllowed({ turns: ['first', `call ${FAKE.phone}`] }, { guard }),
+    PrivacyGuardError
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -79,7 +79,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { TSV_ADDITION_HEADER } from './tracker-parse.mjs';
-import { assertLlmRequestAllowed } from './lib/llm-outbound.mjs';
+import { assertGoogleRequestAllowed } from './lib/llm-outbound.mjs';
 import { installPiiInterceptor } from './lib/pii-interceptor.mjs';
 
 // The Google Generative AI SDK calls global fetch directly, so this ambient
@@ -467,14 +467,17 @@ const model = genAI.getGenerativeModel({
 
 let evaluationText;
 try {
-  // Privacy gate. The SDK builds its own HTTP request, so the explicit layer
-  // reconstructs exactly what it will send — the same systemInstruction and the
-  // same user turn — and inspects that before the SDK is allowed to call out.
-  assertLlmRequestAllowed(
-    'https://generativelanguage.googleapis.com/v1/models:generateContent',
-    JSON.stringify({ systemInstruction: systemPrompt, contents: `JOB DESCRIPTION TO EVALUATE:\n\n${jdText}` })
-  );
-  const result = await model.generateContent(`JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`);
+  // Privacy gate. `assertGoogleRequestAllowed` builds the request body from the
+  // same systemInstruction and user turn the SDK receives, so the inspected
+  // payload and the transmitted one are the same request. The SDK issues its own
+  // global fetch, so the ambient interceptor is the backstop for anything this
+  // reconstruction misses.
+  const userTurn = `JOB DESCRIPTION TO EVALUATE:\n\n${jdText}`;
+  assertGoogleRequestAllowed({
+    systemInstruction: systemPrompt,
+    turns: [userTurn],
+  });
+  const result = await model.generateContent(userTurn);
   evaluationText = result.response.text();
   const usage = {
     prompt_tokens: result.response.usageMetadata?.promptTokenCount ?? 0,
