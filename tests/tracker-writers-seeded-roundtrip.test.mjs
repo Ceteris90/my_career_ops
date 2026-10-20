@@ -267,7 +267,15 @@ function runSetStatus(sandbox, args) {
   try {
     const stdout = execFileSync(NODE, [join(ROOT, 'set-status.mjs'), ...args], {
       cwd: ROOT, encoding: 'utf-8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, CAREER_OPS_TRACKER: sandbox.appsFile, CAREER_OPS_TRACKER_LOCK: sandbox.lockDir },
+      // set-status also resolves its data root and claims a session-activity
+      // sentinel; point both into the sandbox so the real checkout is untouched.
+      env: {
+        ...process.env,
+        CAREER_OPS_ROOT: sandbox.root,
+        CAREER_OPS_ACTIVITY_DIR: join(sandbox.root, '.career-ops-locks', 'active'),
+        CAREER_OPS_TRACKER: sandbox.appsFile,
+        CAREER_OPS_TRACKER_LOCK: sandbox.lockDir,
+      },
     });
     return { code: 0, out: stdout };
   } catch (e) {
@@ -287,6 +295,7 @@ for (const seed of SEEDS) {
     for (const d of [dataDir, reportsDir, additionsDir]) mkdirSync(d, { recursive: true });
     const appsFile = join(dataDir, 'applications.md');
     const sandbox = {
+      root: dir,
       appsFile,
       lockDir: join(dir, 'career-ops-merge-tracker-seeded.lock'),
     };
