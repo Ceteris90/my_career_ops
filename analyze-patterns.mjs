@@ -27,10 +27,12 @@ import { localToday } from './lib/local-today.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
-// Report links resolve against the tracker's directory as spelled, not the
-// realpath above: withinReports() compares candidates lexically against
-// CAREER_OPS, so a canonicalized base (macOS /var -> /private/var, or any
-// symlinked data root) would push every valid link outside reports/.
+// Report links resolve against the tracker's directory as spelled first:
+// withinReports() compares candidates lexically against CAREER_OPS, so the
+// realpath above alone (macOS /var -> /private/var, or any symlinked data
+// root) would push every valid link outside reports/. The realpath's own
+// directory stays a candidate for a tracker file that is itself a symlink,
+// whose links are written relative to its target.
 const TRACKER_DIR = dirname(resolve(rawTrackerPath(CAREER_OPS)));
 const REPORTS_DIR = join(CAREER_OPS, 'reports');
 
@@ -1343,7 +1345,8 @@ export function analyze(entries = parseTracker()) {
   const enriched = entries.map(e => {
     const reportMatch = e.report.match(/\]\(([^)]+)\)/);
     // Tracker links are relative to the tracker file's own directory (see
-    // merge-tracker.mjs link normalization); fall back to repo root for
+    // merge-tracker.mjs link normalization), as spelled and as realpathed (see
+    // TRACKER_DIR); fall back to repo root for
     // legacy root-relative links. Each candidate is guarded to reports/
     // before the read is attempted; parseReport returns null for a missing
     // file, so no pre-flight existsSync is needed (#2385).
@@ -1351,6 +1354,7 @@ export function analyze(entries = parseTracker()) {
     if (reportMatch) {
       const candidates = new Set([
         join(TRACKER_DIR, reportMatch[1]),
+        join(dirname(APPS_FILE), reportMatch[1]),
         join(CAREER_OPS, reportMatch[1]),
       ]);
       for (const candidate of candidates) {

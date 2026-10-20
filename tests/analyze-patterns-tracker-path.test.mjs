@@ -7,12 +7,14 @@
 // `calibrate` analysed a different file than set-status.mjs writes whenever
 // that override was set. It now goes through resolveTrackerPath(), which
 // realpaths the result; report links must still resolve when the data root is
-// reached through a symlink (macOS's /var -> /private/var tmpdir is one).
+// reached through a symlink (macOS's /var -> /private/var tmpdir is one), and
+// when the tracker file is itself a symlink, whose links are relative to its
+// target.
 import { pass, fail, ROOT, NODE, rmSync } from './helpers.mjs';
 import { execFileSync } from 'child_process';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 
 console.log('\nanalyze-patterns — tracker path resolution');
 
@@ -118,6 +120,38 @@ try {
       }
     } catch (e) {
       fail(`analyze-patterns.mjs failed through a symlinked data root: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
+    }
+  }
+
+  // A tracker file that is itself a symlink: its links are written relative
+  // to the target's directory, which only the realpathed tracker path names.
+  // The root is canonical so this is not also a symlinked-root case on macOS.
+  const canonical = join(realpathSync(work), 'canonical-root');
+  mkdirSync(join(canonical, 'data'), { recursive: true });
+  mkdirSync(join(canonical, 'reports'), { recursive: true });
+  const target = writeReport(canonical, 4, 'Linked Tracker Archetype');
+  writeFileSync(join(canonical, 'data', 'applications.md'),
+    [...HEADER, trackerRow(4, `../reports/${target}`)].join('\n') + '\n');
+  const deepTracker = join(canonical, 'data', 'deep', 'applications.md');
+  let trackerLinked = false;
+  try {
+    mkdirSync(dirname(deepTracker));
+    symlinkSync(join('..', 'applications.md'), deepTracker, 'file');
+    trackerLinked = true;
+  } catch {
+    pass('symlinked tracker file: skipped (symlinks unavailable on this filesystem)');
+  }
+  if (trackerLinked) {
+    try {
+      const result = analyze({ CAREER_OPS_ROOT: canonical, CAREER_OPS_TRACKER: deepTracker });
+      const got = archetypesOf(result);
+      if (got.join('|') === 'Linked Tracker Archetype') {
+        pass('symlinked tracker file: links relative to its target still resolve');
+      } else {
+        fail(`symlinked tracker file lost its report data: archetypes=${JSON.stringify(got)}`);
+      }
+    } catch (e) {
+      fail(`analyze-patterns.mjs failed through a symlinked tracker file: ${(e.stderr || e.message || '').toString().slice(0, 300)}`);
     }
   }
 } finally {
