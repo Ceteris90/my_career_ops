@@ -331,6 +331,8 @@ const SYSTEM_PATHS = [
   'lib/outcome-types.mjs',
   'lib/latex-escape.mjs',
   'lib/cv-payload-schema.mjs',
+  'lib/career-profile.mjs',
+  'lib/profile-cv-selection.mjs',
   'lib/cv-markdown.mjs',
   'lib/page-format.mjs',
   'lib/template-manifest.mjs',
