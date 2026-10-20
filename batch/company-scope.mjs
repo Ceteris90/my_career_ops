@@ -10,20 +10,17 @@
  *   - the company half of the notes column ("Company - Role" when the notes use
  *     that shape, otherwise the whole notes text), or
  *   - the posting URL (so `--company acme` finds boards.greenhouse.io/acme/...).
- * Comparison folds case and punctuation (letters and digits of any script
- * only), so "Acme Corp." matches "acme corp" and "AcmeCorp".
+ * Comparison uses tracker-utils.mjs normalizeCompany (case and punctuation
+ * folded, any script kept), so "Acme Corp." matches "acme corp" and "AcmeCorp".
  */
 import { readFileSync } from 'node:fs';
 import { isMainModule } from '../lib/is-main-module.mjs';
 import { flagValue, validateFlags } from '../lib/cli-flags.mjs';
-
-export function normalizeLabel(value) {
-  return String(value || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
-}
+import { normalizeCompany } from '../tracker-utils.mjs';
 
 /** Split a comma-separated CLI value into normalised keys, dropping blanks. */
 export function requestedLabels(value) {
-  return String(value || '').split(',').map(normalizeLabel).filter(Boolean);
+  return String(value || '').split(',').map(normalizeCompany).filter(Boolean);
 }
 
 /** Company half of a "Company - Role" notes value; the whole text otherwise. */
@@ -35,7 +32,7 @@ export function companyOfNotes(notes) {
 
 export function matchesCompany({ url = '', notes = '' }, wanted) {
   if (wanted.length === 0) return true;
-  const hay = [normalizeLabel(companyOfNotes(notes)), normalizeLabel(url)];
+  const hay = [normalizeCompany(companyOfNotes(notes)), normalizeCompany(url)];
   return wanted.some((w) => hay.some((h) => h.includes(w)));
 }
 

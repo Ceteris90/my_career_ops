@@ -1,16 +1,17 @@
 // tests/company-scope.test.mjs — batch/company-scope.mjs picks the rows of a
 // `--company` run, and batch-runner.sh --dry-run honours it before --limit.
 import { pass, fail, rmSync, getBash, ROOT, NODE } from './helpers.mjs';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, cpSync, symlinkSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
-import { normalizeLabel, requestedLabels, companyOfNotes, matchesCompany, idsForCompanies } from '../batch/company-scope.mjs';
+import { requestedLabels, companyOfNotes, matchesCompany, idsForCompanies } from '../batch/company-scope.mjs';
+import { normalizeCompany } from '../tracker-utils.mjs';
 
 console.log('\nbatch/company-scope.mjs — --company scope');
 const eq = (label, got, want) => (JSON.stringify(got) === JSON.stringify(want) ? pass(label) : fail(`${label}: expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`));
 
-eq('labels fold case and punctuation', normalizeLabel('Acme Corp.'), 'acmecorp');
+eq('names fold case and punctuation (shared normalizeCompany)', normalizeCompany('Acme Corp.'), 'acmecorp');
 eq('a comma list becomes keys, blanks dropped', requestedLabels('Acme, ,Globex Inc'), ['acme', 'globexinc']);
 eq('company half of "Company - Role"', companyOfNotes('Acme - Data Scientist'), 'Acme');
 eq('notes without the separator are used whole', companyOfNotes('priority'), 'priority');
@@ -48,6 +49,9 @@ if (!bash) {
     for (const f of ['batch-runner.sh', 'company-scope.mjs', 'batch-prompt.md']) cpSync(join(ROOT, 'batch', f), join(batch, f));
     chmodSync(join(batch, 'batch-runner.sh'), 0o755);
     for (const d of ['lib']) cpSync(join(ROOT, d), join(work, d), { recursive: true });
+    // company-scope.mjs imports normalizeCompany from tracker-utils.mjs (and its siblings).
+    for (const f of ['tracker-utils.mjs', 'tracker-parse.mjs', 'tracker-aliases.json', 'path-resolver.mjs', 'package.json']) cpSync(join(ROOT, f), join(work, f));
+    symlinkSync(join(ROOT, 'node_modules'), join(work, 'node_modules'));
     writeFileSync(join(batch, 'batch-input.tsv'), TSV);
     // The runner checks that the worker CLI exists before it lists offers; a stub
     // keeps this test independent of a developer-installed claude binary.
@@ -75,6 +79,9 @@ if (!bash) {
     const missing = spawnSync(bash, [join(batch, 'batch-runner.sh'), '--company'], { cwd: work, encoding: 'utf-8', timeout: 60000 });
     if (missing.status !== 0 && /--company requires an argument/.test(`${missing.stdout}${missing.stderr}`)) pass('--company without a value is a usage error');
     else fail('--company without a value was accepted');
+    const swallowed = run('--company', '--limit', '5');
+    if (swallowed.code !== 0 && /--company requires an argument/.test(swallowed.out)) pass('--company followed by another flag is rejected, not read as a company name');
+    else fail('"--company --limit 5" took --limit as the company: ' + swallowed.out.slice(0, 200));
   } finally {
     try { rmSync(work, { recursive: true, force: true }); } catch { /* best effort */ }
   }

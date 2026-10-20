@@ -185,7 +185,7 @@ while [[ $# -gt 0 ]]; do
     --resume-paused) RESUME_PAUSED=true; shift ;;
     --start-from) START_FROM="$2"; shift 2 ;;
     --company)
-      [[ $# -ge 2 && -n "$2" ]] || { echo "ERROR: --company requires an argument"; exit 1; }
+      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "ERROR: --company requires an argument"; exit 1; }
       SCOPE_COMPANY="$2"; shift 2 ;;
     --limit)
       if [[ $# -lt 2 ]] || ! [[ "$2" =~ ^[0-9]+$ ]] || [[ "$2" =~ ^0+$ ]]; then
