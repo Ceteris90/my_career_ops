@@ -17,6 +17,7 @@ import * as yaml from 'js-yaml';
 import { buildLocationFilter, normalizeUrlForDedup, PORTALS_PATH, SCAN_HISTORY_PATH, PIPELINE_PATH } from './scan.mjs';
 import { buildTitleFilter } from './title-keywords.mjs';
 import { loadProviders, resolveProvider } from './providers/_registry.mjs';
+import { mergeProviderPlugins } from './plugins/_engine.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { localToday } from './lib/local-today.mjs';
@@ -279,7 +280,12 @@ async function main() {
     console.error(`Error: portals.yml not found at ${PORTALS_PATH}. Run onboarding first - the check reads its title_filter and tracked_companies.`);
     process.exit(1);
   }
-  const ctx = { ...loadContext(), providers: await loadProviders(path.join(CODE_ROOT, 'providers')) };
+  const providers = await loadProviders(path.join(CODE_ROOT, 'providers'));
+  // Same provider map scan.mjs builds (#4026): without the enabled provider
+  // plugins, an entry the scanner reads through one is diagnosed as
+  // tracked-no-provider. No-op when config/plugins.yml is absent.
+  await mergeProviderPlugins(providers, { root: CODE_ROOT, dataRoot: DATA_ROOT });
+  const ctx = { ...loadContext(), providers };
   const result = diagnose(posting, ctx);
   const log = args.includes('--log');
   const logged = log && result.gap !== 'surfaced'
