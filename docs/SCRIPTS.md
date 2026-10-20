@@ -1198,7 +1198,8 @@ Each call asks for one answer, not an agent session. It runs in an empty temp
 directory, and where the CLI has a switch for it, with tools off
 (`claude --tools "" --disallowedTools "*"`, `grok --disallowed-tools` for its shell, fetch, write and
 MCP tools, `codex exec --sandbox read-only`, `pi --no-tools`,
-`copilot --deny-tool=read,write,shell,url,memory`, and opencode with
+`copilot --available-tools` with one name that matches no tool, so neither
+built-in nor MCP tools are offered, and opencode with
 `OPENCODE_CONFIG_CONTENT` denying every permission). The prompt asks for scores from
 the listed company, title and URL text, without opening the postings.
 A call times out after 180 s; set `CAREER_OPS_RANK_TIMEOUT_MS` to change that.

@@ -67,10 +67,12 @@ const REASON_MAX = 140;
 // has no switch that removes every tool, and --max-turns stops it before it
 // answers, so it denies the tools that run commands, fetch, write, or reach
 // MCP servers. opencode has no flag, so its inline config denies every
-// permission, and pi takes --no-tools. copilot -p still honors saved tool
-// approvals, so the call denies read, write, shell, url, and memory with
-// --deny-tool after -p. The = form keeps that variadic option from swallowing
-// the prompt. codex refuses to start outside a git
+// permission, and pi takes --no-tools. copilot drops an empty
+// --available-tools, so the call lists one name that matches no tool. A
+// configured MCP server with that name would match it, so --disable-mcp-server
+// turns that server off. --deny-tool still blocks read, write, shell, url, and
+// memory if a later copilot ignores the unknown name. The = form keeps these
+// variadic options from swallowing the prompt. codex refuses to start outside a git
 // repository without --skip-git-repo-check, and every call runs in an empty
 // temp dir.
 const GROK_DENIED_TOOLS = [
@@ -78,11 +80,21 @@ const GROK_DENIED_TOOLS = [
   'monitor', 'scheduler_create', 'write', 'search_replace', 'read_file', 'list_dir', 'grep',
 ].join(',');
 
+const COPILOT_NO_TOOLS = 'career-ops-no-tools';
+
 export const CLI_CANDIDATES = [
   { bin: 'claude', args: p => ['-p', p, '--tools', '', '--disallowedTools', '*'] },
   { bin: 'opencode', args: p => ['run', p], env: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'deny' }) } },
   { bin: 'codex', args: p => ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', p] },
-  { bin: 'copilot', args: p => ['-p', p, '--deny-tool=read,write,shell,url,memory'] },
+  {
+    bin: 'copilot',
+    args: p => [
+      '-p', p, '-s',
+      `--available-tools=${COPILOT_NO_TOOLS}`,
+      `--disable-mcp-server=${COPILOT_NO_TOOLS}`,
+      '--deny-tool=read,write,shell,url,memory',
+    ],
+  },
   { bin: 'qwen', args: p => ['-p', p] },
   { bin: 'agy', id: 'antigravity', args: p => ['-p', p] },
   { bin: 'grok', args: p => ['-p', p, '--disable-web-search', '--disallowed-tools', GROK_DENIED_TOOLS] },
