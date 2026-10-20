@@ -155,8 +155,9 @@ export function diagnose(posting, ctx) {
     }
     if (entry.enabled === false) return { gap: 'tracked-disabled', evidence, fix: `re-enable "${entry.name}" if its board is live` };
     const resolved = resolveProvider(entry, ctx.providers);
+    const inactiveReason = resolved && !resolved.error ? resolved.provider.inactiveReason : undefined;
     if (resolved && !resolved.error) {
-      evidence.push(`provider: ${resolved.provider.id}`);
+      evidence.push(`provider: ${resolved.provider.id}${inactiveReason ? ` (plugin inactive: ${inactiveReason})` : ''}`);
     } else {
       // Scanners with their own company lists (scan-hn.mjs, scan-interamt.mjs, ...)
       // show up only in scan-history, under their own portal names.
@@ -175,6 +176,11 @@ export function diagnose(posting, ctx) {
     }
     if (!titleOk(title)) return { gap: 'tracked-title-filter', evidence, fix: `title keyword: no title_filter keyword matches "${title}"` };
     if (locationOk === false) return { gap: 'tracked-location-filter', evidence, fix: `location: location_filter drops "${location}"` };
+    // An enabled provider plugin that cannot run (missing key, failed
+    // integrity check) resolves to a stub: the scanner never reads this board.
+    if (inactiveReason) {
+      return { gap: 'tracked-not-seen', evidence, fix: `activate the "${resolved.provider.id}" plugin: ${inactiveReason} (node doctor.mjs shows its setup)` };
+    }
     if (otherBoard) {
       return { gap: 'tracked-not-seen', evidence, fix: `the entry reads another board: point "${entry.name}".careers_url at ${careersUrlFor(target)}, or add that board as a second entry` };
     }

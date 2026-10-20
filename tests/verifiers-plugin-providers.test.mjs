@@ -29,7 +29,8 @@ console.log('\nverifiers resolve provider plugins like the scanner (#4026)');
 // test never reads, writes, or deletes the developer's real files. Plugin code
 // resolves from this CODE_ROOT while config/plugins.yml resolves from the
 // separate Data Root, matching a split checkout. Copies the flat scripts plus
-// the four dirs the verifiers reach into; node_modules is symlinked.
+// the dirs the verifiers reach into (scaffolder/ for doctor.mjs); node_modules
+// is symlinked.
 function prepareFixtureCodeRoot(tmp) {
   const codeRoot = join(tmp, 'code-root');
   mkdirSync(codeRoot, { recursive: true });
@@ -38,7 +39,7 @@ function prepareFixtureCodeRoot(tmp) {
       cpSync(join(ROOT, entry.name), join(codeRoot, entry.name));
     }
   }
-  for (const dir of ['providers', 'plugins', 'templates', 'lib', 'batch']) {
+  for (const dir of ['providers', 'plugins', 'templates', 'lib', 'batch', 'scaffolder']) {
     if (existsSync(join(ROOT, dir))) cpSync(join(ROOT, dir), join(codeRoot, dir), { recursive: true });
   }
   // Through the shared helper, so this site and the one in test-all.mjs cannot
@@ -189,10 +190,30 @@ providerFixture: {
     const coverageRun = runVerifier('coverage-check.mjs', [
       'https://example.com/jobs/1', '--company', 'apify entry', '--title', 'Backend Engineer', '--json',
     ]);
-    if (/"provider: apify"/.test(coverageRun.out) && !/unknown provider:\s*apify/i.test(coverageRun.out)) {
+    let coverage = null;
+    try { coverage = JSON.parse(coverageRun.out); } catch { /* reported below */ }
+    const coverageEvidence = (coverage?.evidence || []).join(' | ');
+    if (/provider: apify/.test(coverageEvidence) && !/unknown provider:\s*apify/i.test(coverageEvidence)) {
       pass('coverage-check.mjs resolves an enabled `apify` plugin provider instead of "unknown provider"');
     } else {
       fail(`coverage-check.mjs did not resolve the apify plugin (exit ${coverageRun.code}): ${coverageRun.out.slice(0, 300)}`);
+    }
+    // The plugin is enabled but has no token, so the scanner never reads the
+    // board: the fix must say so rather than "newer than the last scan".
+    if (/APIFY_TOKEN/.test(coverage?.fix || '')) {
+      pass('coverage-check.mjs names the missing APIFY_TOKEN in its fix for an inactive plugin provider');
+    } else {
+      fail(`coverage-check.mjs fix does not name the inactive plugin's reason: ${JSON.stringify(coverage?.fix)}`);
+    }
+
+    // doctor.mjs --strict probes portals.yml through its own provider map.
+    // Before the fix the apify entry was skipped as unclaimed and doctor said
+    // every entry resolves; now it reaches the stub, whose probe fails.
+    const doctorRun = runVerifier('doctor.mjs', ['--strict']);
+    if (/1 portals\.yml entry do not resolve/i.test(doctorRun.out)) {
+      pass('doctor.mjs --strict reports the apify portal entry as unresolved instead of skipping it');
+    } else {
+      fail(`doctor.mjs --strict did not report the apify portal entry (exit ${doctorRun.code}): ${doctorRun.out.slice(0, 600)}`);
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
