@@ -98,11 +98,15 @@ test('the shared HTTP layer folds the board signal into the request it sends', a
 });
 
 test('abortableSleep resolves on abort and propagates a rejecting clock', async () => {
-  // Resolves early when the signal aborts mid-sleep.
+  // Resolves early when the signal aborts mid-sleep — under a deadline, so a
+  // regression that waited out the 10s timer fails here instead of passing slow.
   const c1 = new AbortController();
   const p1 = abortableSleep(10_000, undefined, c1.signal);
   c1.abort();
-  await p1; // must not hang on the 10s timer
+  const deadline = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('abortableSleep did not resolve on abort')), 500),
+  );
+  await Promise.race([p1, deadline]);
 
   // A rejecting clock propagates (not an unhandled rejection, not a hang).
   const c2 = new AbortController();
