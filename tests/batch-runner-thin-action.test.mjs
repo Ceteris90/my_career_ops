@@ -57,6 +57,8 @@ if (!bash || !detect || !act) {
       `if (m === 'ok') process.stdout.write(JSON.stringify({ url: 'u', title: 't', text: ${JSON.stringify(words(250))} }));`,
       `else if (m === 'short') process.stdout.write(JSON.stringify({ url: 'u', title: 't', text: ${JSON.stringify(words(20))} }));`,
       "else if (m === 'noplaywright') { console.error(JSON.stringify({ error: 'playwright not installed', code: 'no_playwright' })); process.exitCode = 1; }",
+      "else if (m === 'unavailable') { console.error(JSON.stringify({ error: 'gone', code: 'unavailable' })); process.exitCode = 1; }",
+      "else if (m === 'empty') { console.error(JSON.stringify({ error: 'empty', code: 'empty_text' })); process.exitCode = 1; }",
       "else { console.error(JSON.stringify({ error: 'navigation error', code: 'navigation_error' })); process.exitCode = 1; }",
       '',
     ].join('\n'));
@@ -115,8 +117,14 @@ if (!bash || !detect || !act) {
     if (/^skip=1 retryable=0/.test(thin.out) && thin.jd === '') pass('browser-extract: a near-empty page is not used and the offer is skipped');
     else fail(`browser-extract short: ${thin.out}`);
     const failed = run({ action: 'browser-extract', mode: 'fail' });
-    if (/^skip=1 retryable=0 .*needs-playwright/.test(failed.out) && failed.jd === '') pass('browser-extract: an extraction failure falls back to the skip rules');
-    else fail(`browser-extract failure: ${failed.out}`);
+    if (/^skip=1 retryable=1 .*navigation_error/.test(failed.out) && failed.jd === '') pass('browser-extract: navigation_error is on the retry allowlist');
+    else fail(`browser-extract navigation_error: ${failed.out}`);
+    const emptyText = run({ action: 'browser-extract', mode: 'empty' });
+    if (/^skip=1 retryable=1 .*empty_text/.test(emptyText.out)) pass('browser-extract: empty_text is on the retry allowlist');
+    else fail(`browser-extract empty_text: ${emptyText.out}`);
+    const gone = run({ action: 'browser-extract', mode: 'unavailable' });
+    if (/^skip=1 retryable=0 .*needs-playwright/.test(gone.out) && gone.jd === '') pass('browser-extract: any code off the allowlist (unavailable) stays terminal');
+    else fail(`browser-extract unavailable: ${gone.out}`);
     const nopw = run({ action: 'browser-extract', mode: 'noplaywright' });
     if (/^skip=1 retryable=1 .*Playwright is not installed/.test(nopw.out)) pass('browser-extract: Playwright missing keeps the offer retryable');
     else fail(`browser-extract no playwright: ${nopw.out}`);
@@ -129,7 +137,7 @@ if (!bash || !detect || !act) {
     else fail(`stub absent: ${missing.out}`);
 
     // ── skip handler, with the state helpers stubbed ───────────────────────
-    const handler = (extra) => {
+    const handler = (extra, retries = 0) => {
       n += 1;
       const calls = join(work, `calls-${n}.txt`);
       const jd = join(work, `jdh-${n}.txt`);
@@ -139,9 +147,9 @@ if (!bash || !detect || !act) {
       writeFileSync(script, [
         '#!/usr/bin/env bash',
         `calls=${JSON.stringify(calls)}`,
-        'update_state_retrying() { echo "state $3 | $8" >> "$calls"; }',
+        'update_state_retrying() { echo "state $3 | $8 | retries=$9" >> "$calls"; }',
         'release_report_num() { echo "release $1" >> "$calls"; }',
-        'id=7; url=u; started_at=s; retries=0; report_num=042',
+        `id=7; url=u; started_at=s; retries=${retries}; MAX_RETRIES=2; report_num=042`,
         `jd_file=${JSON.stringify(jd)}`,
         extra,
         'run() {',
@@ -159,6 +167,14 @@ if (!bash || !detect || !act) {
     const retr = handler('jd_thin_skip=1; jd_thin_retryable=1; jd_thin_note="connect failed"');
     if (/state failed \| connect failed/.test(retr) && /release 042/.test(retr)) pass('handler: a retryable skip records "failed" so --retry-failed picks it up');
     else fail(`handler retryable: ${retr}`);
+    if (/retries=1/.test(retr)) pass('handler: a retryable skip spends one retry');
+    else fail(`handler retry count: ${retr}`);
+    const spent = handler('jd_thin_skip=1; jd_thin_retryable=1; jd_thin_note="connect failed"', 2);
+    if (/state failed .*retries=2/.test(spent)) pass('handler: the retry count never exceeds --max-retries');
+    else fail(`handler retry cap: ${spent}`);
+    const termRetries = handler('jd_thin_skip=1; jd_thin_retryable=0; jd_thin_note="x"');
+    if (/state skipped .*retries=0/.test(termRetries)) pass('handler: a terminal skip leaves the retry count alone');
+    else fail(`handler terminal retries: ${termRetries}`);
     const none = handler('jd_thin_skip=0');
     if (none.trim() === 'NOT RETURNED') pass('handler: without a flagged skip it does nothing');
     else fail(`handler idle: ${none}`);

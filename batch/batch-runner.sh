@@ -1293,12 +1293,19 @@ process_offer() {
           process.stdin.on("end", () => { try { process.stdout.write(String(JSON.parse(d).code || "")); } catch { /* none */ } });
         ' < "$be_err" 2>/dev/null) || be_code=""
         echo "    🎭 Browser extract failed${be_code:+ ($be_code)}"
-        # Chromium/Playwright missing is the machine's problem, not the page's:
-        # keep every offer retryable instead of skipping the whole run for good.
-        if [[ "$be_code" == "no_playwright" ]]; then
-          jd_thin_retryable=1
-          jd_thin_note="browser-extract: Playwright is not installed — run 'npx playwright install chromium' and retry"
-        fi
+        # Allowlist of transient failures worth another try. Everything else
+        # (unavailable, URL or validation errors, an unknown code) is a verdict
+        # about the page or the call and stays terminal.
+        case "$be_code" in
+          no_playwright)
+            jd_thin_retryable=1
+            jd_thin_note="browser-extract: Playwright is not installed — run 'npx playwright install chromium' and retry"
+            ;;
+          empty_text|navigation_error)
+            jd_thin_retryable=1
+            jd_thin_note="browser-extract failed ($be_code) — retryable"
+            ;;
+        esac
       fi
       rm -f "$be_out" "$be_err"
     fi
@@ -1321,9 +1328,14 @@ process_offer() {
 
   if [[ "$jd_thin_skip" == "1" ]]; then
     local thin_state="skipped" thin_now
-    [[ "$jd_thin_retryable" == "1" ]] && thin_state="failed"
+    local thin_retries="$retries"
+    if [[ "$jd_thin_retryable" == "1" ]]; then
+      thin_state="failed"
+      # Spend one retry so --retry-failed stops at MAX_RETRIES instead of looping.
+      (( thin_retries < MAX_RETRIES )) && thin_retries=$((retries + 1))
+    fi
     thin_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    update_state_retrying "$id" "$url" "$thin_state" "$started_at" "$thin_now" "-" "-" "$jd_thin_note" "$retries" || true
+    update_state_retrying "$id" "$url" "$thin_state" "$started_at" "$thin_now" "-" "-" "$jd_thin_note" "$thin_retries" || true
     release_report_num "$report_num"
     rm -f "$jd_file"
     echo "    🚫 $jd_thin_note — no worker spawned"
