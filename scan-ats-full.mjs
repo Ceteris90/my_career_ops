@@ -932,7 +932,12 @@ export async function runHistorySeedScan(seeds, providers, opts, ctx, processJob
     const hostKey = (() => {
       try { return new URL(entry.careers_url).hostname.toLowerCase(); } catch { return seed.vendor; }
     })();
-    await withHostSlot(hostKey, () => withConnectionScope(async () => {
+    await withHostSlot(hostKey, () => {
+      // Give the history board its own abort signal so a timed-out board's
+      // in-flight requests stop (#5570). The operation.active flag below only
+      // gates work BETWEEN fetches; it can't stop the fetch already in flight.
+      const controller = new AbortController();
+      return withConnectionScope(async () => {
       if (quarantinedHosts.has(hostKey)) {
         errors++;
         if (opts.verbose) console.error(`  ✗ ${seed.vendor}-history/${entry.name}: host skipped after an earlier timeout`);
@@ -949,6 +954,7 @@ export async function runHistorySeedScan(seeds, providers, opts, ctx, processJob
         await withTimeout(operationPromise, timeoutMs, `${seed.vendor}-history/${entry.name}`, () => {
           timedOut = true;
           operation.active = false;
+          controller.abort();
         });
       } catch (err) {
         operation.active = false;
@@ -961,7 +967,8 @@ export async function runHistorySeedScan(seeds, providers, opts, ctx, processJob
         // quarantining prevents queued work from replacing it.
         operationPromise.catch(() => {});
       }
-    }));
+      }, { signal: controller.signal });
+    });
   });
 
   return {
