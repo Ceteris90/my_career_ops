@@ -753,6 +753,41 @@ function displayTitle(raw) {
   return `${kept.join('')}…`;
 }
 
+// Application portals reported to reject longer values (#5629). Advisory only.
+const PORTAL_LENGTH_LIMIT = 64;
+const HEADER_TITLE_RE = /<div\s+class=["'][^"']*\bheader-title\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
+
+/**
+ * Warn, never fail, when the CV headline or the output PDF filename is longer
+ * than some application portals accept (#5629). Reads the headline from the
+ * rendered header-title element, so it judges what actually prints.
+ *
+ * @param {string} html - The CV HTML about to be rendered.
+ * @param {string} outputPath - Destination PDF path (only the basename counts).
+ * @param {number} [limit] - Length above which a warning is printed.
+ * @returns {string[]} The warning messages printed (empty when none).
+ */
+export function warnLongPortalFields(html, outputPath, limit = PORTAL_LENGTH_LIMIT) {
+  const warnings = [];
+  const raw = HEADER_TITLE_RE.exec(html)?.[1];
+  if (raw) {
+    const plain = raw.replace(/<[^>]+>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#0?39;/g, "'").replace(/&amp;/g, '&').trim();
+    const len = [...plain].length;
+    if (len > limit) {
+      warnings.push(`CV headline is ${len} characters (limit ${limit}): "${displayTitle(raw)}". Some application portals reject longer values; aim for a job title plus two or three keywords.`);
+    }
+  }
+  const name = basename(outputPath || '');
+  const nameLen = [...name].length;
+  if (nameLen > limit) {
+    warnings.push(`Output filename is ${nameLen} characters (limit ${limit}): "${displayTitle(name)}". Some application portals reject longer file names; use a shorter name.`);
+  }
+  for (const w of warnings) console.warn(`⚠️  ${w}`);
+  return warnings;
+}
+
 /**
  * The text of the first real section title in html[start, end), skipping any
  * that sits in raw text (a heading quoted inside a script names nothing).
@@ -1778,6 +1813,7 @@ async function generatePDF() {
   validateCvSectionOrder(html, cvMarkdown, { allowReorder });
   validateCvExperienceOrder(html, { allowNonChronological });
   validateLockedSections(html, cvMarkdown, readLockedSections(workspaceProfilePath(), sectionKey));
+  warnLongPortalFields(html, outputPath);
 
   // Normalize text for ATS compatibility (issue #1)
   const normalized = normalizeTextForATS(html);
@@ -1940,6 +1976,7 @@ async function runBatchFromManifest(manifestPath, globals) {
       validateCvSectionOrder(html, cvMarkdown, { allowReorder: globals.allowReorder });
       validateCvExperienceOrder(html, { allowNonChronological: globals.allowNonChronological });
       validateLockedSections(html, cvMarkdown, lockedKeys);
+      warnLongPortalFields(html, entryOutput);
       html = normalizeTextForATS(html).html;
       // Same gate, same guard and same place as the single render. A blocked
       // entry throws into the catch below: it is recorded as failed and never

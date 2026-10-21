@@ -2956,6 +2956,37 @@ try {
   fail(`PDF renderer post-launch cleanup test crashed: ${error.message}`);
 }
 
+// Advisory length check for the CV headline and output filename (#5629).
+try {
+  const { warnLongPortalFields } = await import(pathToFileURL(join(ROOT, 'generate-pdf.mjs')).href);
+  const page = (t) => `<html><body><div class="header-title">${t}</div></body></html>`;
+  const origWarn = console.warn;
+  const logged = [];
+  console.warn = (m) => { logged.push(String(m)); };
+  let at, over, longName, none, escaped, threw = false;
+  try {
+    at = warnLongPortalFields(page('a'.repeat(64)), '/tmp/cv.pdf');
+    over = warnLongPortalFields(page('b'.repeat(65)), '/tmp/cv.pdf');
+    longName = warnLongPortalFields(page('Short Title'), `/tmp/${'c'.repeat(70)}.pdf`);
+    none = warnLongPortalFields('<html><body><p>no headline</p></body></html>', '/tmp/cv.pdf');
+    escaped = warnLongPortalFields(page('&amp;'.repeat(64)), '/tmp/cv.pdf');
+  } catch { threw = true; } finally { console.warn = origWarn; }
+  if (!threw && at.length === 0) pass('headline of exactly 64 characters does not warn');
+  else fail('headline of exactly 64 characters should not warn');
+  if (!threw && over.length === 1 && /65 characters/.test(over[0]) && logged.some((m) => /65 characters/.test(m))) pass('headline over 64 characters warns with its length');
+  else fail('headline over 64 characters should warn once, naming its length');
+  if (!threw && longName.length === 1 && /filename is \d+ characters/.test(longName[0])) pass('output filename over 64 characters warns');
+  else fail('output filename over 64 characters should warn');
+  if (!threw && none.length === 0) pass('absent headline does not warn');
+  else fail('absent headline should not warn');
+  if (!threw && escaped.length === 0) pass('HTML entities count as one character in the headline length');
+  else fail('HTML entities should be decoded before measuring the headline');
+  if (!threw) pass('warnLongPortalFields never throws (build keeps going)');
+  else fail('warnLongPortalFields must never throw');
+} catch (error) {
+  fail(`portal length warning tests crashed: ${error.message}`);
+}
+
 // ── 7c. UPDATER DASHBOARD REBUILD ─────────────────────────────────
 
 console.log('\n7c. Updater dashboard rebuild');
