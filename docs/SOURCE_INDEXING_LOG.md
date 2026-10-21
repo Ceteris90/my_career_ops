@@ -114,7 +114,7 @@ The pass rate is each channel's editorial shape, not noise: @data_science_job 77
 |---|---|
 | **Proposed by** | @kosinal (not the operator) |
 | **Provider** | `providers/jobscz.mjs`, `providers/pracecz.mjs` |
-| **PR** | [#5628](https://github.com/career-ops-hq/career-ops/pull/5628) · issue [#5627](https://github.com/career-ops-hq/career-ops/issues/5627) |
+| **PR** | [#5631](https://github.com/career-ops-hq/career-ops/pull/5631) · issue [#5627](https://github.com/career-ops-hq/career-ops/issues/5627) |
 | **Merged** | — |
 | **Status** | Proposed |
 
