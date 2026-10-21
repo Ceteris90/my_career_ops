@@ -38,6 +38,11 @@ const attr = normalizeTextForATS('<a href="https://example.com/_x_/">link</a>').
 if (attr.includes('href="https://example.com/_x_/"')) pass('leaves underscores in tag attributes untouched');
 else fail(`attribute changed: ${attr}`);
 
+const plain = normalizeTextForATS('<title>CV - _Orbit_</title><textarea>_x_</textarea><p>_Orbit_</p>');
+if (plain.html === '<title>CV - _Orbit_</title><textarea>_x_</textarea><p><em>Orbit</em></p>' && plain.replacements['markdown-italic'] === 1) {
+  pass('leaves underscores in text-only elements (title, textarea) as written');
+} else fail(`text-only element changed: ${JSON.stringify(plain)}`);
+
 const { replacements } = normalizeTextForATS('<p>_One_ and _Two_ but snake_case</p>');
 if (replacements['markdown-italic'] === 2) pass('counts each italic run once');
 else fail(`markdown-italic count wrong: ${JSON.stringify(replacements)}`);
