@@ -14,6 +14,9 @@ import { fencingReport } from "@/lib/cli-fencing.mjs";
 const ADVISOR_SCOPE = scopeFrom("Read,WebFetch,Glob,Grep");
 import { readPersonalizationState } from "@/lib/personalization-file.mjs";
 import { readJsonObject } from "@/lib/json-body";
+import { assistantFailureMessage, createAssistantStream } from "@/lib/assistant-stream.mjs";
+import { createAssistantDeadline } from "@/lib/assistant-deadline.mjs";
+import { parseClaudeEvent } from "@/lib/run-cli-support.mjs";
 
 /**
  * Human labels of the modes/_profile.md sections still identical to the template.
@@ -33,7 +36,7 @@ async function personalizationGeneric(): Promise<string[] | null> {
 
 export const runtime = "nodejs"; // child_process (spawn) requires the Node runtime
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 330; // five-minute CLI budget + response cleanup
 
 const SYSTEM_PREAMBLE = `You are the career-ops assistant — a proactive, friendly career co-pilot for a person who is actively job-hunting. You live inside their LOCAL career-ops web dashboard (a pipeline of evaluated jobs, A–F reports, their CV, analytics) and run on their own AI CLI.
 
@@ -91,6 +94,7 @@ export async function POST(req: Request) {
     });
   }
   const { spec, binPath } = resolved;
+  const workspaceRoot = careerOpsRoot();
   // The CLI actually running: fencing and argv below are keyed on it.
   const cliId = spec.id;
   const substitution = cliSubstitutionNotice(resolved);
@@ -123,10 +127,16 @@ export async function POST(req: Request) {
   const setupLine = onboardingNeeded || generic === null || generic.length
     ? `\n\nSETUP STATE (authoritative — the SAME signal the home screen uses; trust it over guessing, and do NOT re-ask for anything already on file):\n- CV on file (cv.md): ${hasCv ? "YES — do NOT ask for it again; read it to be concrete" : "NO — this is the first thing to collect"}\n- Still missing: ${missing.length ? missing.join(", ") : "nothing"}${personalizationLine}\nWhen onboarding, START at the first item actually missing. If the CV is already on file, SKIP step 1 entirely and go straight to the next missing prerequisite (usually the profile — target roles, comp, location), then the personalization sections still on the template.`
     : `\n\nSETUP STATE: this user is fully set up (CV + profile + scanner + personalization all on file). Do NOT run onboarding or ask for a CV — just help them with what they actually asked.`;
-  const prompt = `${SYSTEM_PREAMBLE}${setupLine}${memoryLine}${pageLine}\n\n--- Conversation ---\n${convo}\nUser: ${message}\nAssistant:`;
+  // A split data root is the CLI's workspace. Reading a shipped template in its
+  // parent checkout can require a permission confirmation that print mode cannot
+  // answer (observed: AGY silently stopped on ViewFile of _profile.template.md).
+  // The action schema above already supplies the format; keep candidate reads
+  // inside the data workspace rather than bypassing the tool's approval policy.
+  const workspaceLine = `\n\nWORKSPACE AND SOURCE BOUNDARY:\nYour working directory is ${workspaceRoot}. Candidate files are relative to this directory: cv.md, config/profile.yml, modes/_profile.md (if present). Read modes/_custom.md if present for the user's procedural preferences. Treat missing files as missing, not an invitation to search elsewhere.\nFor onboarding and personalization, the action definitions above are the complete format specification. Do NOT read shipped templates, engine code, or parent/sibling directories: they are unnecessary and may require a file permission approval that this background chat cannot provide. Use the saved candidate files and this conversation to propose the supported actions; never edit files or execute scripts yourself. If a required read is denied, explain the missing access in your reply instead of stopping silently or claiming completion.`;
+  const prompt = `${SYSTEM_PREAMBLE}${setupLine}${workspaceLine}${memoryLine}${pageLine}\n\n--- Conversation ---\n${convo}\nUser: ${message}\nAssistant:`;
 
   // Claude Code streams token-level deltas via stream-json + partial messages.
-  // Other CLIs: pass their stdout through raw.
+  // Other structured CLIs use their own parser; plain-output tools stay raw.
   // The chat CLI is READ-ONLY: all writes go through gated registry actions
   // (remember → /api/memory, setStatus → /api/status), never the CLI editing
   // files directly. Scope its tools so it can advise (read) but not blind-write.
@@ -153,7 +163,7 @@ export async function POST(req: Request) {
         "--disallowedTools",
         ADVISOR_SCOPE.disallowed,
       ]
-    : spec.args(prompt);
+    : (spec.streamArgs ?? spec.args)(prompt);
 
   // The advisor reads and fetches but must never write — the same intent the
   // Claude branch spells as Read,WebFetch,Glob,Grep with Bash/Write/Edit denied.
@@ -163,7 +173,7 @@ export async function POST(req: Request) {
     child = spawnHeadlessCli(
       binPath,
       args,
-      { cwd: careerOpsRoot(), env: process.env },
+      { cwd: workspaceRoot, env: process.env },
       { cliId, capabilities: CAPS.networkReadOnly },
     );
   } catch (e) {
@@ -174,26 +184,23 @@ export async function POST(req: Request) {
   }
 
   const encoder = new TextEncoder();
-  // `closed` + kill timer in the OUTER scope so cancel() can flip `closed` before
+  // `closed` + deadline in the OUTER scope so cancel() can flip `closed` before
   // the child's late handlers run — otherwise they enqueue onto an already-closed
   // controller and throw an uncaught "Controller is already closed" (see #1155).
   let closed = false;
-  let killer: ReturnType<typeof setTimeout> | undefined;
+  let deadline: ReturnType<typeof createAssistantDeadline> | undefined;
+  // Keep plain-text compatibility for existing consumers/older open tabs.
+  const structured = req.headers.get("accept")?.includes("application/x-ndjson") ?? false;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      let buf = "";
       let emitted = false;
-      killer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
-      }, 90_000);
+      let stderr = "";
+      let streamError = "";
+      let lastProgressAt = 0;
       const safeClose = () => {
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
+          deadline?.stop();
           try {
             controller.close();
           } catch {
@@ -201,23 +208,51 @@ export async function POST(req: Request) {
           }
         }
       };
-      const safeEnqueue = (s: string): boolean => {
-        if (closed || !s) return false;
+      const safeFrame = (event: { type: string; text?: string; ok?: boolean }): boolean => {
+        if (closed) return false;
+        const s = structured ? JSON.stringify(event) + "\n" : event.type === "text" ? event.text : "";
+        if (!s) return false;
         try {
           controller.enqueue(encoder.encode(s));
           return true;
         } catch {
           closed = true; // controller already closed underneath us — stop, never crash
+          deadline?.stop();
+          try { child.kill("SIGTERM"); } catch { /* already exited */ }
           return false;
         }
       };
+      const safeEnqueue = (text: string) => safeFrame({ type: "text", text });
+      const finish = (ok: boolean, message?: string) => {
+        if (message) safeEnqueue(`\n\n${message}`);
+        safeFrame({ type: "done", ok });
+        safeClose();
+      };
+      deadline = createAssistantDeadline({ onTimeout: (reason: string, ms: number) => {
+        console.error(`[career-ops assistant: ${cliId}] ${reason} time limit (${ms}ms)`);
+        finish(false, assistantFailureMessage({ cliName: spec.name, timedOut: true, timeoutReason: reason, timeoutMs: ms }) ?? undefined);
+        try { child.kill("SIGTERM"); } catch { /* already exited */ }
+      } });
       const emit = (s: string) => {
         if (safeEnqueue(s)) emitted = true;
       };
+      const replies = createAssistantStream({
+        parseLine: isClaude ? parseClaudeEvent : spec.streamArgs ? spec.parseEvent : null,
+        emit,
+        completeMessages: cliId === "codex" || cliId === "antigravity",
+        onError: (message: string) => { streamError = message; },
+        onActivity: () => {
+          deadline?.activity();
+          if (Date.now() - lastProgressAt >= 5_000) {
+            lastProgressAt = Date.now();
+            safeFrame({ type: "progress" });
+          }
+        },
+      });
       // Same honesty as /api/run: a runtime with no verified fencing mechanism
       // runs with its default access, and that must be visible rather than
       // inferred from which CLI happens to be selected (#2507). This stream is
-      // plain text, so the notice is a leading line rather than an event.
+      // assistant text, so the notice remains a leading line in the reply.
       const fencing = fencingReport({ cliId, cliName: spec.name, capabilities: CAPS.networkReadOnly });
       if (fencing.notice) safeEnqueue(`⚠️ ${fencing.notice}
 
@@ -226,48 +261,30 @@ export async function POST(req: Request) {
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
-        if (!isClaude) {
-          emit(d.toString());
-          return;
-        }
-        // line-buffered NDJSON → emit only assistant text deltas
-        buf += d.toString();
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const obj = JSON.parse(line);
-            if (obj.type === "stream_event" && obj.event?.type === "content_block_delta") {
-              const text = obj.event.delta?.text;
-              if (typeof text === "string") emit(text);
-            }
-          } catch {
-            /* partial / non-json line — skip */
-          }
-        }
+        replies.push(d);
       });
       child.stderr.on("data", (d: Buffer) => {
-        const s = d.toString();
-        if (/error|not found|denied|fatal/i.test(s)) {
-          safeEnqueue(`\n[${spec.name}] ${s.trim()}\n`);
-        }
+        // CLI diagnostics can include entire file/tool outputs. Keep them out
+        // of the conversation and action-envelope parser.
+        stderr = (stderr + d.toString()).slice(-16_000);
       });
       child.on("error", (e) => {
-        safeEnqueue(`\n[error launching ${spec.name}: ${e.message}]`);
-        safeClose();
+        console.error(`[career-ops assistant: ${cliId}] launch error: ${e.message}`);
+        finish(false, `${spec.name} could not be started. Check the selected AI tool in Config.`);
       });
-      child.on("close", () => {
-        if (!emitted) {
-          safeEnqueue("_(no output — is the CLI authenticated?)_");
+      child.on("close", (code) => {
+        if (closed) return;
+        replies.flush();
+        const failure = assistantFailureMessage({ cliName: spec.name, code, diagnostic: streamError, emitted });
+        if (failure && !closed) {
+          console.error(`[career-ops assistant: ${cliId}] exited ${code}: ${streamError}\n${stderr}`);
         }
-        safeClose();
+        finish(!failure, failure ?? undefined);
       });
     },
     cancel() {
       closed = true;
-      if (killer) clearTimeout(killer);
+      deadline?.stop();
       try {
         child.kill("SIGTERM");
       } catch {
@@ -278,7 +295,7 @@ export async function POST(req: Request) {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": structured ? "application/x-ndjson; charset=utf-8" : "text/plain; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
     },

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { fenceArgs } from "./cli-fencing.mjs";
 import { prepareCliLaunch } from "./cli-launch.mjs";
+import { prepareCliInput } from "./cli-input.mjs";
 
 // Plain .mjs (same pattern as tracker-table.mjs/clean-chips.mjs) so
 // tests/lib/spawn-cli.test.mjs can import it directly under Node. Import it with the
@@ -9,7 +10,9 @@ import { prepareCliLaunch } from "./cli-launch.mjs";
 // JS modules must be fully specified.
 
 /**
- * Spawn a headless agent CLI with stdin closed, under the worker's permissions.
+ * Spawn a headless agent CLI under the worker's permissions, then close stdin.
+ * Structured AGY runs receive their one prompt on stdin before EOF so long
+ * conversations do not exceed Windows' command-line limit.
  *
  * CLIs such as `codex exec` read additional prompt text from stdin when a pipe
  * is left open. A web request never supplies that extra input, so leaving the
@@ -58,17 +61,27 @@ export function spawnHeadlessCli(binPath, args, options, fencing) {
     );
   }
   const { args: fencedArgs } = fenceArgs({ ...fencing, args });
+  const input = prepareCliInput(fencing.cliId, fencedArgs);
   // On Windows an npm-installed CLI is a script shim spawn() cannot run without a
   // shell, so launch the .js/.exe it wraps (a no-op elsewhere; cli-launch.mjs).
   // After fencing, so the fencers see the CLI's own argv rather than node's.
-  const launch = prepareCliLaunch(binPath, fencedArgs);
+  const launch = prepareCliLaunch(binPath, input.args);
   // windowsHide: on Windows a child attaches to the parent's console. A
   // long-lived dev server whose console has gone stale then kills EVERY child
   // at DLL init with 0xC0000142 (STATUS_DLL_INIT_FAILED), in ~20 ms and with no
   // output at all; the same spawn with windowsHide (CREATE_NO_WINDOW) succeeds.
   // Nothing spawned here needs a console, so never inherit one. Set after the
   // caller's options so no caller can opt back in. No-op on POSIX (#3809).
-  const child = spawn(launch.command, launch.args, { ...options, windowsHide: true });
-  child.stdin?.end();
+  const child = spawn(launch.command, launch.args, {
+    ...options,
+    ...(input.stdin !== null ? { stdio: ["pipe", "pipe", "pipe"] } : {}),
+    windowsHide: true,
+  });
+  if (input.stdin !== null) {
+    // A failed/early-exiting CLI can close its pipe before consuming the prompt.
+    // Report that through the same error channel as a failed process launch.
+    child.stdin?.on?.("error", error => child.emit("error", error));
+    child.stdin?.end(input.stdin, "utf8");
+  } else child.stdin?.end();
   return child;
 }

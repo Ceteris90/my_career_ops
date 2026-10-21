@@ -22,6 +22,9 @@ import { cleanMessages } from "@/lib/assistant-history.mjs";
 import { StatusConfirmationCard, type StatusConfirmationPart } from "@/components/assistant-status-confirmation";
 import { StatusWriteError, writeAssistantStatus } from "@/lib/assistant-status-write.mjs";
 import { cn } from "@/lib/cn";
+import { CLI_CONFIG_CHANGED } from "@/lib/saved-cli";
+import { assistantActionKey, displayAssistantReply } from "@/lib/assistant-reply.mjs";
+import { createAssistantResponseDecoder } from "@/lib/assistant-protocol.mjs";
 
 // ── message model: messages are PART arrays so a live worker card can render
 // inline next to text, both fed by the single JobsProvider store ──────────────
@@ -135,7 +138,8 @@ function describePage(p: string): string {
 
 // ── persistence migration: old {role,content:string} → parts[] ────────────────
 function msgText(m: Msg): string {
-  return m.parts.filter((p): p is Extract<Part, { type: "text" }> => p.type === "text").map((p) => p.text).join(" ").trim();
+  const text = m.parts.filter((p): p is Extract<Part, { type: "text" }> => p.type === "text").map((p) => p.text).join(" ").trim();
+  return m.role === "assistant" ? displayAssistantReply(text) : text;
 }
 
 export function AssistantConsole() {
@@ -289,7 +293,11 @@ export function AssistantConsole() {
     }
     read();
     window.addEventListener("storage", read);
-    return () => window.removeEventListener("storage", read);
+    window.addEventListener(CLI_CONFIG_CHANGED, read);
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener(CLI_CONFIG_CHANGED, read);
+    };
   }, []);
 
   async function chatRequest(url: string, init?: RequestInit) {
@@ -674,7 +682,7 @@ export function AssistantConsole() {
       reachedAssistant = true;
       const res = await fetch("/api/assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({ message: text, cliId, history, pageContext: describePage(pathname) + pipelineContext() + applyContext() }),
       });
       if (!res.ok || !res.body) {
@@ -684,14 +692,18 @@ export function AssistantConsole() {
         return;
       }
       const reader = res.body.getReader();
-      const dec = new TextDecoder();
       let acc = "";
       let display = "";
       let hasActionOutput = false;
+      const wire = createAssistantResponseDecoder({
+        structured: res.headers.get("content-type")?.includes("application/x-ndjson") ?? false,
+        onText: (text: string) => { acc += text; },
+        onDone: (ok: boolean) => { if (!ok) failed = true; },
+      });
       for (;;) {
         const { done, value } = await reader.read();
-        if (done) break;
-        acc += dec.decode(value, { stream: true });
+        if (done) wire.finish();
+        else wire.push(value);
 
         const { complete, hidePartialFrom } = parseEnvelopes(acc);
         const cuts: [number, number][] = complete.map((e) => [e.start, e.end]);
@@ -712,15 +724,15 @@ export function AssistantConsole() {
         setStreamText(display.trimStart());
 
         for (const e of complete) {
-          const key = `${e.start}|${e.id}|${e.argsJson}`;
-          if (handledRef.current.has(key)) continue;
-          handledRef.current.add(key);
           let args: Record<string, unknown>;
           try {
             args = JSON.parse(normalizeJson(e.argsJson));
           } catch {
             continue;
           }
+          const key = assistantActionKey(e.id, args);
+          if (handledRef.current.has(key)) continue;
+          handledRef.current.add(key);
           hasActionOutput = runDispatch(e.id, args) || hasActionOutput;
         }
         for (const p of shimNavs) {
@@ -737,12 +749,13 @@ export function AssistantConsole() {
             hasActionOutput = runDispatch("remember", { fact: f }) || hasActionOutput;
           }
         }
+        if (done) break;
       }
       // Hidden/truncated envelopes are wire data, not a usable reply. A valid
       // action-only response still counts, without approving its confirmation.
       if (!display.trim() && !hasActionOutput) {
         failed = true;
-        setStreamText("_(no output — is the CLI authenticated?)_");
+        setStreamText("The AI tool returned no output. Try again, or check the selected AI tool in Config.");
       }
     } catch (error) {
       failed = true;
@@ -999,7 +1012,7 @@ function PartView({
     if (!part.text.trim()) return null;
     return (
       <div className="report-prose text-sm [&_*]:my-1 [&>:first-child]:mt-0 [&>:last-child]:mb-0">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayAssistantReply(part.text)}</ReactMarkdown>
       </div>
     );
   }

@@ -355,6 +355,15 @@ test("a CLI with no verified mechanism is passed through and reported honestly",
   }
 });
 
+test("unverified means the Career Ops adapter is missing, not that a CLI cannot restrict permissions", () => {
+  const {level,notice}=fencingReport({cliId:'antigravity',cliName:'Antigravity CLI',capabilities:CAPS.networkReadOnly});
+  assert.equal(level,'none');
+  assert.match(notice,/has no verified permission restrictions in Career Ops/);
+  assert.match(notice,/default access/);
+  assert.doesNotMatch(notice,/cannot be permission-restricted/);
+  assert.equal(isFencingNotice('Antigravity CLI cannot be permission-restricted — this agent runs with its default access'),true,'historical warnings remain recognizable');
+});
+
 test("every runtime and capability pair grades to a defined level", () => {
   // Given fencingReport replaced a boolean that nothing read. A boolean could not
   // describe the middle case at all: Codex has no read-only-plus-network policy,

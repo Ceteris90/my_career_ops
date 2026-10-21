@@ -1,6 +1,7 @@
 import { keepIfInstalled, pickSoleInstalled } from "./cli-pick.mjs";
 
 export const CONFIG_KEY = "career-ops:config";
+export const CLI_CONFIG_CHANGED = "career-ops:cli-config-changed";
 
 export function readSavedCliId(): string | null {
   try {
@@ -20,6 +21,8 @@ export function persistCliId(cliId: string) {
       CONFIG_KEY,
       JSON.stringify({ ...prev, mode: prev.mode || "cli", cliId }),
     );
+    // The browser's storage event only reaches OTHER tabs.
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(CLI_CONFIG_CHANGED));
   } catch {
     /* quota / private mode */
   }

@@ -94,6 +94,7 @@ export function ConfigForm() {
     // key/manual panel is unwired) and a secret must never sit in clear-text
     // localStorage. Keys belong in the user's own CLI/provider config.
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, cliId, provider, logos }));
+    persistCliId(cliId);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -173,7 +174,7 @@ export function ConfigForm() {
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => setCliId(c.id)}
+                        onClick={() => { setCliId(c.id); persistCliId(c.id); }}
                         aria-pressed={selected}
                         className={cn(rowClassName, "w-full cursor-pointer text-left")}
                       >
