@@ -42,9 +42,11 @@ test('the board abort signal rides in the scope; none leaks outside it', async (
 test('boardScope aborts the board signal when the watchdog fires', async () => {
   let aborted = false;
   const started = Date.now();
-  await boardScope({ singleHost: true }, 'fake/board', 40, async () => {
-    const signal = currentAbortSignal();
-    assert.ok(signal, 'the board work can see its abort signal');
+  await boardScope({ singleHost: true }, 'fake/board', 40, async (signal) => {
+    // The signal is handed to the callback AND readable from the scope, so the
+    // retry loop can tell a timed-out board from a failed one.
+    assert.ok(signal, 'the callback receives the board signal');
+    assert.equal(signal, currentAbortSignal(), 'and it matches the scope signal');
     await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
     aborted = signal.aborted;
   }).catch(() => {}); // withTimeout rejects with the timeout error

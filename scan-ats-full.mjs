@@ -994,7 +994,11 @@ const COMPANY_TIMEOUT_MS = 5 * 60_000;
 // on every abandoned request.
 export function boardScope(source, label, timeoutMs, fn) {
   const controller = new AbortController();
-  const run = () => withTimeout(fn(), timeoutMs, label, () => controller.abort());
+  // The signal is handed to `fn` as well as carried in the scope, so a caller
+  // can tell a timed-out board from a failed one and skip any post-timeout
+  // fallback work (e.g. processing a deferred board's partial page outside the
+  // scope, where it would run uncancelled, #5570).
+  const run = () => withTimeout(fn(controller.signal), timeoutMs, label, () => controller.abort());
   return source.singleHost
     ? withAbortScope(controller.signal, run)
     : withConnectionScope(run, { signal: controller.signal });
@@ -1592,8 +1596,10 @@ async function main() {
     if (truncated.length && !resolverOutage) {
       log(`\n  ↻ retrying ${truncated.length} truncated board(s) sequentially...`);
       for (const entry of truncated) {
+        let retrySignal;
         try {
-          await boardScope(source, `${name}/${entry.name} (retry)`, COMPANY_TIMEOUT_MS, async () => {
+          await boardScope(source, `${name}/${entry.name} (retry)`, COMPANY_TIMEOUT_MS, async (signal) => {
+            retrySignal = signal;
             const jobs = await source.provider.fetch(entry, ctx);
             recordBoardResult(deadBoards, name, boardKey(entry), 200);
             // Where a board deferred by the parallel sweep is actually decided.
@@ -1627,8 +1633,11 @@ async function main() {
           // admitted ungated, the fallback the retry takes for a board that
           // comes back truncated again. Without it, a title match already in
           // hand would be lost to the retry's failure.
+          // Skip the fallback when the retry timed out: processJobs() can issue
+          // enrichDate detail fetches, and here it would run outside boardScope,
+          // uncancelled — the post-timeout work this fix exists to stop (#5570).
           const partial = deferred.get(entry)?.jobs;
-          if (partial) await processJobs(partial, name, source.provider, entry.name);
+          if (partial && !retrySignal?.aborted) await processJobs(partial, name, source.provider, entry.name);
         }
       }
     }
