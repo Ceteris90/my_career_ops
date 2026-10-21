@@ -21,7 +21,19 @@ import { safeEncodeURIComponent } from './_safe-url.mjs';
 // So this provider fetches the ordinary search URL over plain HTTP and reads that blob.
 // Zero tokens, no browser required.
 //
-// Two complementary discovery modes (both optional, both deduped by URL):
+// Two complementary discovery modes, both deduped by URL. Neither has a default:
+// a built-in list would be one user's search profile applied to everyone's scan
+// (the occ.mjs precedent), so an entry needs at least one non-empty `queries` or
+// `teams` value and throws without one. Example portals.yml entry:
+//
+//   - name: Apple
+//     careers_url: https://jobs.apple.com/en-us/search
+//     apple:
+//       location: united-states-USA            # optional, this is the default
+//       queries: ["business operations"]
+//       teams: ["business-process-management-OPMFG-BPM"]
+//     max_pages: 2
+//
 //   queries: text search with `sort=relevance`. Apple's text match is loose (it hits
 //            job descriptions too, so "business operations" reports 2000+ records), but
 //            relevance ranking puts the real title matches on page 1-2 — hence max_pages.
@@ -45,18 +57,6 @@ const PAGE_SIZE = 20;
 // should be able to name (RFC 9110 §10.1.5, RFC 9309 §2.2.1).
 
 const DEFAULT_LOCATION = 'united-states-USA';
-const DEFAULT_QUERIES = [
-  'corporate strategy',
-  'business operations',
-  'strategic finance',
-  'corporate development',
-  'chief of staff',
-  'financial planning',
-];
-// Apple's in-house strategy/ops-consulting org. Mixed content (much of it is
-// supply-chain / NPI / data-eng program management), but it is the only home of
-// titles like "Manager, Business Operations Strategy & Support - WW Ops BPR".
-const DEFAULT_TEAMS = ['business-process-management-OPMFG-BPM'];
 // `max_pages` on the ENTRY (not inside the `apple:` block), with a hard ceiling
 // so one portals.yml line cannot turn into an unbounded walk, and a warning when
 // the ceiling actually truncated a board — the convention in
@@ -91,7 +91,7 @@ function assertAppleUrl(url) {
 /**
  * Pull loaderData.search out of the SSR hydration blob.
  * @param {string} html
- * @returns {{ searchResults?: any[], totalRecords?: number } | null}
+ * @returns {{ searchResults?: unknown, totalRecords?: number } | null}
  */
 export function parseHydration(html) {
   const m = HYDRATION_RE.exec(html || '');
@@ -151,6 +151,37 @@ function toJob(r, company) {
   };
 }
 
+/**
+ * One search page, empty-vs-broken split per providers/ADDING_A_PROVIDER.md §2:
+ * a present-and-empty `searchResults` array is a real "no matches" and yields
+ * no jobs; a missing blob, or a `searchResults` that is absent or not an array,
+ * is a changed page shape and throws. Read as zero, it would hide a dead
+ * provider forever.
+ *
+ * @param {string} html
+ * @param {string} url  the page fetched, named in the error
+ * @param {string} company
+ * @returns {{ jobs: Job[], rowCount: number, total: number }}
+ */
+export function parseSearchPage(html, url, company) {
+  const search = parseHydration(html);
+  if (!search) {
+    throw new Error(`apple: no hydration blob in ${url} — Apple's SSR markup changed, or the page was not the search route`);
+  }
+  const rows = search.searchResults;
+  if (!Array.isArray(rows)) {
+    throw new Error(`apple: loaderData.search.searchResults in ${url} is ${rows === undefined ? 'missing' : `a ${rows === null ? 'null' : typeof rows}`}, not an array — Apple's search payload changed`);
+  }
+  /** @type {Job[]} */
+  const jobs = [];
+  for (const r of rows) {
+    if (!r?.postingTitle || !r?.id) continue;
+    const job = toJob(r, company);
+    if (job) jobs.push(job);
+  }
+  return { jobs, rowCount: rows.length, total: Number(search.totalRecords) || 0 };
+}
+
 /** @param {Record<string, string>} params */
 function searchUrl(params) {
   const qs = new URLSearchParams(params).toString();
@@ -174,7 +205,13 @@ export default {
   async fetch(entry, ctx) {
     const cfg = /** @type {any} */ (entry).apple || {};
     const location = cfg.location || DEFAULT_LOCATION;
-    const teams = Array.isArray(cfg.teams) ? cfg.teams : DEFAULT_TEAMS;
+    const list = (/** @type {unknown} */ v) => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []);
+    const queries = list(cfg.queries);
+    const teams = list(cfg.teams);
+    if (!queries.length && !teams.length) {
+      throw new Error(`apple: entry "${entry.name || 'Apple'}" needs a non-empty apple.queries or apple.teams list `
+        + '(e.g. apple: { queries: ["business operations"] }) — there is no default search');
+    }
     const entryMaxPages = resolveMaxPages(entry);
     // `ctx.maxPages` means verify-portals is probing, not scanning: walk one page
     // and one axis, so a liveness check costs one request instead of
@@ -182,13 +219,12 @@ export default {
     const ctxMaxPages = Number(/** @type {any} */ (ctx)?.maxPages);
     const probing = ctxMaxPages > 0;
     const maxPages = probing ? Math.min(entryMaxPages, ctxMaxPages) : entryMaxPages;
-    const queries = Array.isArray(cfg.queries) ? cfg.queries : DEFAULT_QUERIES;
-    const axes = probing
-      ? [{ search: String(queries[0] ?? ''), location, sort: 'relevance' }]
-      : [
-        ...queries.map((/** @type {any} */ q) => ({ search: String(q), location, sort: 'relevance' })),
-        ...teams.map((/** @type {any} */ t) => ({ location, team: String(t) })),
-      ];
+    /** @type {Record<string,string>[]} */
+    const axes = [
+      ...queries.map((q) => ({ search: q, location, sort: 'relevance' })),
+      ...teams.map((t) => ({ location, team: t })),
+    ];
+    if (probing) axes.length = 1;
 
     /** @type {Map<string, Job>} */
     const byUrl = new Map();
@@ -211,22 +247,13 @@ export default {
           if (probing) throw err;
           return;
         }
-        const search = parseHydration(html);
-        // No blob means Apple changed its SSR shape. Throwing beats returning
-        // what we have: a silent 0 reads as "no matching roles" forever, where a
-        // descriptive error names the page that stopped parsing (the
-        // parseIbmResponse precedent in providers/ibm.mjs).
-        if (!search) {
-          throw new Error(`apple: no hydration blob in ${url} — Apple's SSR markup changed, or the page was not the search route`);
-        }
-        const rows = Array.isArray(search.searchResults) ? search.searchResults : [];
-        for (const r of rows) {
-          if (!r?.postingTitle || !r?.id) continue;
-          const job = toJob(r, entry.name);
-          if (job && !byUrl.has(job.url)) byUrl.set(job.url, job);
-        }
-        const total = Number(search.totalRecords) || 0;
-        if (rows.length < PAGE_SIZE || page * PAGE_SIZE >= total) return;
+        // Throws on a changed page shape rather than returning what we have: a
+        // silent 0 reads as "no matching roles" forever, where a descriptive
+        // error names the page that stopped parsing (parseIbmResponse in
+        // providers/ibm.mjs is the precedent).
+        const { jobs, rowCount, total } = parseSearchPage(html, url, entry.name);
+        for (const job of jobs) if (!byUrl.has(job.url)) byUrl.set(job.url, job);
+        if (rowCount < PAGE_SIZE || page * PAGE_SIZE >= total) return;
         if (page === maxPages && !probing) truncated = true;
       }
     };

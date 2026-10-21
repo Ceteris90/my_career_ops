@@ -184,6 +184,53 @@ try {
       : fail(`apple paced ${slept} times across 3 pages`);
   }
 
+  // Empty vs broken (providers/ADDING_A_PROVIDER.md §2): a present-and-empty
+  // searchResults is a real "no matches"; an absent or wrong-typed one is a
+  // changed payload and must throw, or the provider reads as 0 roles forever.
+  {
+    const page = (search) => `<script>window.__staticRouterHydrationData = JSON.parse(${JSON.stringify(JSON.stringify({ loaderData: { search } }))});</script>`;
+    const U = 'https://jobs.apple.com/en-us/search?page=1';
+    const empty = mod.parseSearchPage(page({ searchResults: [], totalRecords: 0 }), U, 'Apple');
+    empty.jobs.length === 0 && empty.rowCount === 0
+      ? pass('apple.parseSearchPage() returns no jobs for a present-and-empty searchResults')
+      : fail(`apple empty page: ${JSON.stringify(empty)}`);
+    const { ctx } = recordingCtx(() => page({ searchResults: [], totalRecords: 0 }));
+    const viaFetch = await provider.fetch(ENTRY, ctx);
+    Array.isArray(viaFetch) && viaFetch.length === 0
+      ? pass('apple.fetch() returns [] for a well-formed page with no matches')
+      : fail(`apple.fetch() empty page: ${JSON.stringify(viaFetch)}`);
+    for (const [label, search] of [
+      ['missing', { totalRecords: 0 }],
+      ['null', { searchResults: null, totalRecords: 0 }],
+      ['an object', { searchResults: {}, totalRecords: 0 }],
+      ['a string', { searchResults: 'x', totalRecords: 0 }],
+    ]) {
+      let msg = '';
+      try { mod.parseSearchPage(page(search), U, 'Apple'); } catch (e) { msg = e.message; }
+      /searchResults .* not an array/.test(msg) && msg.includes(U)
+        ? pass(`apple.parseSearchPage() throws, naming the page, when searchResults is ${label}`)
+        : fail(`apple searchResults ${label}: ${JSON.stringify(msg)}`);
+    }
+  }
+
+  // No default search: with no queries and no teams the entry throws a clear
+  // configuration error instead of searching one user's built-in keywords.
+  for (const apple of [undefined, {}, { queries: [], teams: [] }, { queries: ['  '] }]) {
+    const { ctx, calls } = recordingCtx(() => hydration([], 0));
+    let msg = '';
+    await provider.fetch({ name: 'Apple', careers_url: 'https://jobs.apple.com/en-us/search', ...(apple ? { apple } : {}) }, ctx).catch((e) => { msg = e.message; });
+    /needs a non-empty apple\.queries or apple\.teams/.test(msg) && calls.length === 0
+      ? pass(`apple.fetch() rejects ${JSON.stringify(apple ?? null)} with a clear message and no request`)
+      : fail(`apple no-config ${JSON.stringify(apple ?? null)}: msg=${JSON.stringify(msg)} requests=${calls.length}`);
+  }
+  {
+    const { ctx, calls } = recordingCtx(() => hydration([row('7', 'Team Role')], 1));
+    const jobs = await provider.fetch({ ...ENTRY, apple: { teams: ['business-process-management-OPMFG-BPM'] } }, ctx);
+    jobs.length === 1 && calls.length === 1 && calls[0].url.includes('team=business-process-management-OPMFG-BPM') && !calls[0].url.includes('search=')
+      ? pass('apple.fetch() runs a teams-only entry with no text search')
+      : fail(`apple teams-only: ${JSON.stringify(calls.map((c) => c.url))}`);
+  }
+
 } catch (e) {
   fail(`apple provider tests crashed: ${e.message}`);
 }
