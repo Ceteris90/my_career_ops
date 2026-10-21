@@ -16,6 +16,7 @@ function trackerRoot(t) {
     '| 1 | 2026-09-01 | Acme, Inc. | Analytics Engineer | 4.6/5 | Applied | ✅ | [1](reports/001-acme-2026-09-01.md) | Remote; recruiter said "soon" |',
     '| 2 | 2026-09-02 | Globex | Data Analyst | 4,5/5 | Evaluated | ❌ | — | =HYPERLINK("https://jobs.example/2") |',
     '| 3 | 2026-09-03 | Initech | BI Engineer | N/A | SKIP | ❌ | — | |',
+    '| 4 | 2026-09-04 | Hooli | Data Analyst | N/A (2026-09-01) | Discarded | ❌ | — | |',
   ].join('\n') + '\n');
   return root;
 }
@@ -33,6 +34,7 @@ test('--csv prints spreadsheet-ready rows: numeric score, yes/no PDF, report pat
   assert.equal(result.status, 0, describeSpawn(result));
   assert.equal(result.stdout, [
     'id,date,company,role,score,status,pdf,report,notes',
+    '4,2026-09-04,Hooli,Data Analyst,,Discarded,no,,',
     '3,2026-09-03,Initech,BI Engineer,,SKIP,no,,',
     `2,2026-09-02,Globex,Data Analyst,4.5,Evaluated,no,,"'=HYPERLINK(""https://jobs.example/2"")"`,
     '1,2026-09-01,"Acme, Inc.",Analytics Engineer,4.6,Applied,yes,reports/001-acme-2026-09-01.md,"Remote; recruiter said ""soon"""',
@@ -47,7 +49,7 @@ test('--csv keeps the query filters', (t) => {
 });
 
 test('--csv with no matching rows prints only the header', (t) => {
-  const result = query(trackerRoot(t), ['--company', 'Hooli', '--csv']);
+  const result = query(trackerRoot(t), ['--company', 'Vandelay', '--csv']);
   assert.equal(result.status, 0, describeSpawn(result));
   assert.equal(result.stdout, 'id,date,company,role,score,status,pdf,report,notes\n');
 });

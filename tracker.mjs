@@ -44,7 +44,7 @@ import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { loadYaml } from './lib/yaml-document.mjs';
 import {
-  resolveColumns, detectColumns, isHeaderRow, isSeparatorRow, LEGACY_COLMAP, parseScore, firstLinkTarget,
+  resolveColumns, detectColumns, isHeaderRow, isSeparatorRow, LEGACY_COLMAP, firstLinkTarget,
 } from './tracker-parse.mjs';
 import {
   canonicalizeTrackerPath, openTrackerTransaction, writeFileAtomic,
@@ -670,12 +670,17 @@ const CSV_COLUMNS = [
   ['date', (r) => r.date],
   ['company', (r) => r.company],
   ['role', (r) => r.role],
-  ['score', (r) => (/\d/.test(r.score) ? parseScore(r.score) : '')],
+  ['score', (r) => csvScore(r.score)],
   ['status', (r) => r.status],
   ['pdf', (r) => (String(r.pdf ?? '').includes('✅') ? 'yes' : 'no')],
   ['report', (r) => firstLinkTarget(r.report) ?? ''],
   ['notes', (r) => r.notes],
 ];
+
+function csvScore(cell) {
+  const m = String(cell ?? '').replace(/\*\*/g, '').trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?$/);
+  return m ? Number(m[1].replace(',', '.')) : '';
+}
 
 function csvField(value) {
   const cell = escapeFormulaCell(value);
