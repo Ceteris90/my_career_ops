@@ -88,7 +88,7 @@ Health check for pipeline data integrity. Runs 17 checks over `data/applications
 1. Statuses are canonical (a `templates/states.yml` id or alias), with no markdown bold and no date in the cell.
 2. No two rows share a company+role pair (*warning*).
 3. Every report link points to an existing file. A report that cannot be inspected (a permission or I/O error) is a *warning*, since it may exist.
-4. Scores read as `X.X/5`, or one of the no-score values `N/A`, `DUP`, `—`, `-`.
+4. Scores read as a number followed by `/5` (e.g. `4/5`, `4.25/5`), or one of the no-score values `N/A`, `DUP`, `—`, `-`.
 5. Every row has a cell for each of the tracker's columns.
 6. No pending TSVs in `batch/tracker-additions/` (*warning*).
 7. No markdown bold in scores (*warning*).
@@ -99,7 +99,7 @@ Health check for pipeline data integrity. Runs 17 checks over `data/applications
 12. No `#` value is used by more than one row.
 13. Statuses in `applications.md` and `data/active-interviews.md` agree, via `tracker-sync-check.mjs` (drift is a *warning*; a sync check that cannot run is an error).
 14. `data/follow-ups.md`, when present, has a table `stats.mjs` and `followup-cadence.mjs` can parse (an error when no row parses, a *warning* when only some rows would be skipped).
-15. Every enabled `portals.yml` entry is claimed by a provider, checked offline (an unclaimed or unnamed entry is a *warning*, an unknown `provider` is an error).
+15. Every enabled `portals.yml` entry is claimed by a provider, checked offline. An entry that sets `scan_method` is handed off to the agent instead and is not flagged; an unclaimed or unnamed entry without one is a *warning*, an unknown `provider` is an error.
 16. No invisible control characters in tracker cells.
 17. Every report has an archived JD, via `check-jd-archive.mjs` (a missing archive is an error, review-due findings are *warnings*).
 
@@ -113,7 +113,7 @@ npm run verify
 
 ## normalize
 
-Maps non-canonical statuses to the canonical states in `templates/states.yml` (`Evaluated`, `Applied`, `Responded`, `Assessment`, `Interview`, `Offer`, `Hired`, `Rejected`, `Discarded`, `SKIP`) and strips markdown bold from the status and score columns. Aliases are read from `states.yml`, so `Enviada` becomes `Applied`, `CERRADA` becomes `Discarded`, `Mülakat` becomes `Interview`, etc. A few legacy forms are handled in the script itself: `Aplicado 2026-03-02` / `Rechazado 2026-03-02` lose the date, and `DUPLICADO`, `Repost #NNN` and an empty or `—` status become `Discarded`, with the DUPLICADO / Repost text moved to the notes column. Anything else it cannot map is listed as unknown and left as it is.
+Maps non-canonical statuses to the canonical states in `templates/states.yml` (`Evaluated`, `Applied`, `Responded`, `Assessment`, `Interview`, `Offer`, `Hired`, `Rejected`, `Discarded`, `SKIP`) and strips markdown bold from the status column (and from the score on any row whose status it changes). Aliases are read from `states.yml`, so `Enviada` becomes `Applied`, `CERRADA` becomes `Discarded`, `Mülakat` becomes `Interview`, etc. A few legacy forms are handled in the script itself: `Aplicado 2026-03-02` / `Rechazado 2026-03-02` lose the date, and `DUPLICADO`, `Repost #NNN` and an empty or `—` status become `Discarded`, with the DUPLICADO / Repost text moved to the notes column. Anything else it cannot map is listed as unknown and left as it is.
 
 ```bash
 npm run normalize             # apply changes
