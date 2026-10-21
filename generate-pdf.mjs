@@ -755,7 +755,37 @@ function displayTitle(raw) {
 
 // Application portals reported to reject longer values (#5629). Advisory only.
 const PORTAL_LENGTH_LIMIT = 64;
-const HEADER_TITLE_RE = /<div\s+class=["'][^"']*\bheader-title\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', hellip: '…', ndash: '–', mdash: '—' };
+
+// Plain text of the first <div> whose class list holds the whole token
+// `header-title`, in any attribute order. Tags inside it are skipped by a
+// character scan and entities are decoded in one pass, so no text is rebuilt
+// by repeated pattern replacement.
+function headlineText(html) {
+  for (const m of html.matchAll(/<div\b([^>]*)>/gi)) {
+    const cls = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(m[1]);
+    const tokens = (cls?.[1] ?? cls?.[2] ?? '').split(/\s+/);
+    if (!tokens.includes('header-title')) continue;
+    const start = m.index + m[0].length;
+    const end = html.toLowerCase().indexOf('</div', start);
+    const inner = html.slice(start, end === -1 ? html.length : end);
+    let text = '';
+    let inTag = false;
+    for (const ch of inner) {
+      if (ch === '<') inTag = true;
+      else if (ch === '>' && inTag) inTag = false;
+      else if (!inTag) text += ch;
+    }
+    return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, ref) => {
+      if (ref[0] === '#') {
+        const code = ref[1].toLowerCase() === 'x' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
+        return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+      }
+      return NAMED_ENTITIES[ref.toLowerCase()] ?? whole;
+    }).trim();
+  }
+  return '';
+}
 
 /**
  * Warn, never fail, when the CV headline or the output PDF filename is longer
@@ -769,14 +799,11 @@ const HEADER_TITLE_RE = /<div\s+class=["'][^"']*\bheader-title\b[^"']*["'][^>]*>
  */
 export function warnLongPortalFields(html, outputPath, limit = PORTAL_LENGTH_LIMIT) {
   const warnings = [];
-  const raw = HEADER_TITLE_RE.exec(html)?.[1];
-  if (raw) {
-    const plain = raw.replace(/<[^>]+>/g, '')
-      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-      .replace(/&#0?39;/g, "'").replace(/&amp;/g, '&').trim();
+  const plain = headlineText(html);
+  if (plain) {
     const len = [...plain].length;
     if (len > limit) {
-      warnings.push(`CV headline is ${len} characters (limit ${limit}): "${displayTitle(raw)}". Some application portals reject longer values; aim for a job title plus two or three keywords.`);
+      warnings.push(`CV headline is ${len} characters (limit ${limit}): "${displayTitle(plain)}". Some application portals reject longer values; aim for a job title plus two or three keywords.`);
     }
   }
   const name = basename(outputPath || '');
@@ -1813,11 +1840,12 @@ async function generatePDF() {
   validateCvSectionOrder(html, cvMarkdown, { allowReorder });
   validateCvExperienceOrder(html, { allowNonChronological });
   validateLockedSections(html, cvMarkdown, readLockedSections(workspaceProfilePath(), sectionKey));
-  warnLongPortalFields(html, outputPath);
 
   // Normalize text for ATS compatibility (issue #1)
   const normalized = normalizeTextForATS(html);
   html = normalized.html;
+  // After normalization, so the length is that of the text that prints.
+  warnLongPortalFields(html, outputPath);
   const totalReplacements = Object.values(normalized.replacements).reduce((a, b) => a + b, 0);
   if (totalReplacements > 0) {
     const breakdown = Object.entries(normalized.replacements).map(([k, v]) => `${k}=${v}`).join(', ');
@@ -1976,8 +2004,8 @@ async function runBatchFromManifest(manifestPath, globals) {
       validateCvSectionOrder(html, cvMarkdown, { allowReorder: globals.allowReorder });
       validateCvExperienceOrder(html, { allowNonChronological: globals.allowNonChronological });
       validateLockedSections(html, cvMarkdown, lockedKeys);
-      warnLongPortalFields(html, entryOutput);
       html = normalizeTextForATS(html).html;
+      warnLongPortalFields(html, entryOutput);
       // Same gate, same guard and same place as the single render. A blocked
       // entry throws into the catch below: it is recorded as failed and never
       // reaches Chromium, and the rest of the batch still renders.
