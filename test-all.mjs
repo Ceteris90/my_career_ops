@@ -100,6 +100,11 @@ function readFile(path) {
   return content;
 }
 
+function readOfertaMode() {
+  return readFile('modes/oferta.md')
+    .replace(/^\*\*\d+\. .+?\*\*\. Read `(modes\/oferta-signals\/[^`]+)` when .*$/gm, (_, file) => readFile(file));
+}
+
 /**
  * Normalize CRLF line endings to LF (#1771).
  *
@@ -2584,6 +2589,8 @@ const allowedFiles = [
 // the ones this PR actually intends to allow, so they get the tighter
 // check instead of loosening the shared one.
 const exactAllowedFiles = new Set([
+  // Exempt only the root Indonesian README, not similarly named files.
+  'README.id.md',
   // GitHub Sponsors funding target + Codex plugin manifest (#4131) — same
   // maintainer-credit shape as the .claude-plugin/.github/plugin ones above.
   'funding.json', '.codex-plugin/plugin.json',
@@ -2858,7 +2865,7 @@ try {
   if (
     generatePdfScript.includes('preferCSSPageSize: true') &&
     generatePdfScript.includes("right: '0'") &&
-    generatePdfScript.includes('injectPrintPageCss(html, format)') &&
+    generatePdfScript.includes('injectPrintPageCss(html, format, opts.country)') &&
     !/page\.pdf\(\{\s*format:/s.test(generatePdfScript)
   ) {
     pass('PDF renderer uses CSS @page margins instead of Playwright margins');
@@ -3787,7 +3794,7 @@ if (
   fail('application-answers CLI accepted a missing option value');
 }
 
-const ofertaMode = readFile('modes/oferta.md');
+const ofertaMode = readOfertaMode();
 const autoPipelineMode = readFile('modes/auto-pipeline.md');
 if (
   ofertaMode.includes('## Liveness gate (URL inputs)') &&
@@ -5987,7 +5994,6 @@ try {
   const nodeTrackerWriters = [
     ['dedup-tracker.mjs', 1],
     ['normalize-statuses.mjs', 1],
-    ['reply-watch.mjs', 1],
     ['tracker.mjs', 2],
   ];
   const unsafeWriters = nodeTrackerWriters.filter(([name, minTransactions]) => {
@@ -9755,6 +9761,10 @@ try {
       // via lib/local-today.mjs (#3070), so the fixture carries that too.
       mkdirSync(join(e2eTmp, 'lib'), { recursive: true });
       copyFileSync(join(ROOT, 'lib', 'local-today.mjs'), join(e2eTmp, 'lib', 'local-today.mjs'));
+      // ...and pipeline-lock.mjs runs the shared lock protocol from
+      // lib/dir-lock.mjs (#5358), so the fixture carries that too.
+      copyFileSync(join(ROOT, 'lib', 'dir-lock.mjs'), join(e2eTmp, 'lib', 'dir-lock.mjs'));
+      copyFileSync(join(ROOT, 'lib', 'yaml-document.mjs'), join(e2eTmp, 'lib', 'yaml-document.mjs'));
       // ...and followup-cadence now delegates flag validation to the shared
       // lib/cli-flags.mjs helper, so the fixture carries that too.
       copyFileSync(join(ROOT, 'lib', 'cli-flags.mjs'), join(e2eTmp, 'lib', 'cli-flags.mjs'));
@@ -9762,6 +9772,11 @@ try {
       // which is what lets the copy answer "am I main?" correctly from a
       // symlinked tmpdir in the first place.
       copyFileSync(join(ROOT, 'lib', 'is-main-module.mjs'), join(e2eTmp, 'lib', 'is-main-module.mjs'));
+      // ...and it reads the apply date from status-log.tsv with funnel-velocity.mjs's
+      // ledger parser, so the fixture carries that module and its imports too.
+      for (const rel of ['funnel-velocity.mjs', 'stats.mjs', 'funnel-stages.mjs', 'lib/scan-history-columns.mjs', 'lib/tsv-formula-escape.mjs']) {
+        copyFileSync(join(ROOT, rel), join(e2eTmp, rel));
+      }
       mkdirSync(join(e2eTmp, 'templates'), { recursive: true });
       copyFileSync(join(ROOT, 'templates', 'states.yml'), join(e2eTmp, 'templates', 'states.yml'));
       // The sandbox resolves js-yaml (and the rest of followup-cadence's
@@ -14423,8 +14438,8 @@ try {
   const env = { ...process.env, PATH: `${fakeBin}${delimiter}${process.env.PATH}`, BATCH_ARG_FILE: argFile };
   const out = run(getBash(), [toBashPath(join(batchDir, 'batch-runner.sh')), '--parallel', '1'], { cwd: tmp, env, stdio: ['pipe', 'pipe', 'pipe'] }) || '';
   const argv = existsSync(argFile) ? readFileSync(argFile, 'utf-8') : '';
-  if (argv.includes('--model') && argv.includes('claude-haiku-4-5') && out.includes('spend_tier=economy')) {
-    pass('economy spend_tier resolves to claude-haiku-4-5');
+  if (argv.includes('--model') && argv.includes('claude-haiku-5-5') && out.includes('spend_tier=economy')) {
+    pass('economy spend_tier resolves to claude-haiku-5-5');
   } else {
     fail(`economy spend_tier did not route to haiku: argv=${JSON.stringify(argv)}, out=${JSON.stringify(out.slice(-240))}`);
   }
@@ -16866,7 +16881,7 @@ try {
     { file: 'web/src/lib/format.ts', re: /CANONICAL_STATES\s*=\s*\[([\s\S]*?)\]/, upper: false, exclude: [] },
     { file: 'web/src/app/actions/registry.ts', re: /CANON_STATUS\s*=\s*\[([\s\S]*?)\]/, upper: false, exclude: [] },
     { file: 'web/src/app/actions/registry.ts', re: /TAB_VALUES\s*=\s*\[([\s\S]*?)\]/, upper: true, exclude: [] },
-    { file: 'web/src/components/pipeline-view.tsx', re: /TABS\s*=\s*\[([\s\S]*?)\]/, upper: true, exclude: [] },
+    { file: 'web/src/lib/pipeline-navigation.mjs', re: /PIPELINE_TABS\s*=[^[]*\[([\s\S]*?)\]/, upper: true, exclude: [] },
     // Analytics now derives its funnel from canonStatus in analytics-metrics;
     // it no longer owns a hardcoded status-list copy to keep in sync.
     // The states ACL used to be checked here too. It moved to its own block
@@ -17222,6 +17237,8 @@ try {
       'claude-invocation.mjs': join(webLib, 'claude-invocation.mjs'),
       'worker-capabilities.mjs': join(webLib, 'worker-capabilities.mjs'),
       'cv-envelope.mjs': join(webLib, 'cv-envelope.mjs'),
+      'report-envelope.mjs': join(webLib, 'report-envelope.mjs'),
+      'report-persist.mjs': join(webLib, 'report-persist.mjs'),
       'run-prompts.mjs': join(webLib, 'run-prompts.mjs'),
       'api/run/route.ts': runRoutePath,
     };
@@ -17239,10 +17256,12 @@ try {
         // about Claude (#2507).
         capabilities = await import(pathToFileURL(required['worker-capabilities.mjs']).href);
         prompts = await import(pathToFileURL(required['run-prompts.mjs']).href);
-        // Imported for its side effect of resolving: run-prompts pulls cv-envelope
-        // for CV_ENVELOPE_INSTRUCTION, so a break there would surface here anyway,
-        // but naming it keeps the failure message specific.
+        // Imported for their side effect of resolving: run-prompts pulls
+        // cv-envelope and report-envelope; report-persist is the evaluate
+        // backend writer. Naming them keeps the failure message specific.
         await import(pathToFileURL(required['cv-envelope.mjs']).href);
+        await import(pathToFileURL(required['report-envelope.mjs']).href);
+        await import(pathToFileURL(required['report-persist.mjs']).href);
       } catch (err) {
         fail(`web pdf write-scope modules could not be imported (${err.message}) — the #2185 freeze cannot verify`);
       }
@@ -17335,6 +17354,28 @@ try {
         } else {
           const granted = WRITE_CAPABLE_TOOLS.filter((t) => toolNames(allowed).includes(t));
           fail(`web pdf command line grants write access via ${granted.join(', ')} — an unscoped write grant is the #2185 hole`);
+        }
+
+        // evaluate (and CLI mode names oferta / auto-pipeline) ingest a posting.
+        // Job postings are data, never instructions — Write/Bash on that kind is
+        // the same unscoped grant #2185 closed for pdf.
+        const jdKinds = invocation.UNTRUSTED_JD_KINDS ?? ['evaluate', 'oferta', 'auto-pipeline'];
+        const jdWrite = [];
+        for (const kind of jdKinds) {
+          const jdArgs = claudeCliArgs({ kind, prompt: 'freeze-probe' });
+          const jdAllowed = argValue(jdArgs, '--allowedTools');
+          const jdDenied = argValue(jdArgs, '--disallowedTools');
+          if (grantsWriteCapability({ allowed: jdAllowed, disallowed: jdDenied })) {
+            const granted = WRITE_CAPABLE_TOOLS.filter((t) => toolNames(jdAllowed).includes(t));
+            jdWrite.push(`${kind}:${granted.join(',')}`);
+          }
+          const undeniedJd = WRITE_CAPABLE_TOOLS.filter((t) => !toolNames(jdDenied).includes(t));
+          if (undeniedJd.length) jdWrite.push(`${kind}:undenied:${undeniedJd.join(',')}`);
+        }
+        if (jdWrite.length === 0) {
+          pass('web evaluate/oferta/auto-pipeline command lines grant no write-capable tool');
+        } else {
+          fail(`web untrusted-JD kinds still grant write access (${jdWrite.join('; ')}) — a posting can aim Write/Bash`);
         }
 
         // Denied by name, not merely omitted: --permission-mode acceptEdits exists
@@ -19057,7 +19098,7 @@ console.log('\n68. Immigration-status requirement overreach (#2033)');
   // 2. Mode section structure: oferta signal (jurisdiction derivation,
   //    exceptions honesty, ITAR note) + apply step (status-vs-authorization
   //    rule, never-auto-answer guarantees).
-  const ofertaNow = readFile('modes/oferta.md');
+  const ofertaNow = readOfertaMode();
   const applyNow = readFile('modes/apply.md');
   const sigStart = ofertaNow.indexOf('**11. Immigration-Status Requirement Overreach**');
   const sigEnd = ofertaNow.indexOf('### Output format:', Math.max(sigStart, 0));

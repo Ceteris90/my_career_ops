@@ -20,7 +20,8 @@
   <a href="README.ar.md">العربية</a> |
   <a href="README.hi.md">हिन्दी</a> |
   <a href="README.tr.md">Türkçe</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
@@ -121,7 +122,11 @@ The silence after you hit send is not about you. Enough people saw the same thin
 
 <br>
 
-Hiring will not fix itself. The people going through it can, and they are already in the room, comparing notes and fixing each other's setups. [This is where the fix gets written](CONTRIBUTING.md). A room, not a club. **Let's build together.**
+Hiring will not fix itself. The people going through it can, and they are already in the room, comparing notes and fixing each other's setups.
+
+<p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=en" alt="Animated wall of contributors' GitHub avatars, filling in order of arrival since April 2026, with the next square left open." width="100%"></a></p>
+
+[This is where the fix gets written](CONTRIBUTING.md). A room, not a club. **Let's build together.**
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2F8pRpHETxa4%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&color=5865F2&style=for-the-badge&labelColor=2b3137&logo=discord&logoColor=white" alt="Discord: live member count of the career-ops server"></a></p>
 
@@ -203,7 +208,7 @@ npx @santifer/career-ops init
 
 > 💡 `npx` ships with [Node.js](https://nodejs.org): it runs the installer once,
 > without installing anything globally. No Node yet? Install it first.
-> (Already using a Claude Code / Gemini / Codex CLI? Then you already have it.)
+> (Already using a Claude Code / Codex CLI? Then you already have it.)
 
 This clones the latest release into `./career-ops` and installs dependencies. Then:
 
@@ -293,7 +298,7 @@ career-ops uses a shared command router. In CLIs that register slash commands, i
 /career-ops deep      → Deep research prompt about company
 /career-ops interview-prep → Generate company-specific interview prep doc
 /career-ops interview    → Interactive profile/CV onboarding interview
-/career-ops master-profile → Import, review, and validate your Master Career Profile
+/career-ops master-profile → Import, review, validate, and prepare selected Profile facts as CV bullets
 /career-ops eu-swe    → Calibrate a European SWE application before CV/apply/interview
 /career-ops interview/plan → Time-blocked prep plan for an upcoming interview
 /career-ops interview/practice → Practice interview, one question at a time with feedback
@@ -311,7 +316,7 @@ career-ops uses a shared command router. In CLIs that register slash commands, i
 /career-ops project   → Evaluate portfolio project idea
 /career-ops tracker   → Application status overview
 /career-ops agent-inbox → Queue/drain requests for the next session (data/agent-inbox.md)
-/career-ops apply     → Live application assistant (reads form + generates answers)
+/career-ops apply     → Live application assistant (Playwright from this checkout, does not submit)
 /career-ops scan      → Scan portals and discover new offers
 /career-ops discover  → Resolve a company list to scannable ATS boards + append to portals.yml (zero-token)
 /career-ops batch     → Batch processing with parallel workers
