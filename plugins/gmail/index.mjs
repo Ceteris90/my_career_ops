@@ -22,7 +22,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import {
   extractUrls, isCleanUrl, isAuthenticEmail, parseRoleAtCompany,
-  getMessageBody, companyFromUrl,
+  getMessageBody, companyFromUrl, parseJobCards,
 } from './_helpers.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -147,15 +147,23 @@ export default {
       }
 
       const seed = parseRoleAtCompany(subject);
-      const cleanUrls = extractUrls(getMessageBody(msg.payload)).filter(isCleanUrl);
-      for (const url of cleanUrls) {
+      const body = getMessageBody(msg.payload);
+      // Read the alert's job cards first so each row carries the employer and role
+      // even when the link is an opaque tracker (Indeed rc/clk/dl, Glassdoor
+      // jobListing) that automation can never unwrap. URLs the card parse did not
+      // cover still go through the plain sweep, so real ATS links are never lost.
+      const cards = parseJobCards(body);
+      const cardsByUrl = new Map(cards.map(c => [c.url, c]));
+      const cleanUrls = extractUrls(body).filter(isCleanUrl);
+      for (const url of new Set([...cleanUrls, ...cards.map(c => c.url)])) {
         if (seenUrls.has(url)) continue;
         seenUrls.add(url);
+        const card = cardsByUrl.get(url);
         jobs.push({
-          title: seed?.role || 'Job lead (email)',
+          title: card?.title || seed?.role || 'Job lead (email)',
           url,
-          company: companyFromUrl(url) || seed?.company || '',
-          location: '',
+          company: card?.company || companyFromUrl(url) || seed?.company || '',
+          location: card?.location || '',
         });
       }
       processedIds.add(m.id);

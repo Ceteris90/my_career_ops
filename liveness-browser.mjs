@@ -730,7 +730,13 @@ export function createHeadedPageProvider(chromium) {
 // blocked by an anti-bot wall. The headed result wins when it actually sees the
 // page; if the retry is still blocked (or no headed page is available) the
 // original uncertain result is kept — we never upgrade a block to expired.
-export async function checkUrlLivenessWithFallback(page, url, { getHeadedPage } = {}) {
+//
+// `headedWaitMs` > 0 turns the headed retry into a patient one: interactive
+// Cloudflare/hCaptcha checkboxes need a human click, and a fixed 3 s settle can
+// never wait for that, so the window used to close before the user could act.
+// With headedWaitMs the headed page is kept open and re-checked every 2 s until
+// the wall clears or the deadline passes, giving the user time to solve it.
+export async function checkUrlLivenessWithFallback(page, url, { getHeadedPage, headedWaitMs = 0 } = {}) {
   const first = await checkUrlLiveness(page, url);
   if (!getHeadedPage || !isChallengeResult(first)) {
     return first;
@@ -739,9 +745,19 @@ export async function checkUrlLivenessWithFallback(page, url, { getHeadedPage } 
   if (!headedPage) {
     return first;
   }
-  const second = await checkUrlLiveness(headedPage, url, { extraSettleMs: 3_000 });
-  if (isChallengeResult(second)) {
-    return { ...second, reason: `${second.reason} (headed retry also blocked)` };
+  let last = await checkUrlLiveness(headedPage, url, { extraSettleMs: 3_000 });
+  if (!isChallengeResult(last)) {
+    return last;
   }
-  return second;
+  if (headedWaitMs > 0) {
+    const deadline = Date.now() + headedWaitMs;
+    while (Date.now() < deadline) {
+      await sleep(2_000);
+      last = await checkUrlLiveness(headedPage, url, { extraSettleMs: 500 });
+      if (!isChallengeResult(last)) {
+        return last;
+      }
+    }
+  }
+  return { ...last, reason: `${last.reason} (headed retry also blocked)` };
 }

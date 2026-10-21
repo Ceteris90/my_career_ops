@@ -126,6 +126,14 @@ export const BOT_CHALLENGE_PATTERNS = [
   /\bray id\b/i,
   /\bcf-ray\b/i,
   /please complete the security check/i,
+  // Cloudflare renders the wall in the browser's locale. Without the localized
+  // phrases an English-only list misses it (e.g. a Russian-locale Chrome showed
+  // "Требуется дополнительная верификация" / "Идет проверка..." and the wall was
+  // not recognised at all).
+  /требуется дополнительная верификация/i,
+  /ид[её]т проверка/i,
+  /подтвердите, что вы/i,
+  /выполняется проверка/i,
 ];
 
 const EXPIRED_URL_PATTERNS = [

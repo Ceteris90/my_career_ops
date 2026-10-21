@@ -15,10 +15,91 @@ export function extractUrls(body) {
   const regex = /https?:\/\/[^\s"'<>\(\)]+/gi;
   let match;
   while ((match = regex.exec(body)) !== null) {
-    const url = match[0].replace(/[.,;:!?]+$/, '').replace(/&amp;/g, '&');
+    const url = match[0]
+      .replace(/[.,;:!?]+$/, '')
+      .replace(/&amp;/g, '&')
+      // Strip C0/C1 control bytes (NUL, SOH, …). Quoted-printable escapes such as
+      // `=00`/`=01` decode to raw control bytes, and a NUL anywhere in pipeline.md
+      // later makes execFileSync throw on every rank-pipeline batch (argv cannot
+      // carry NUL). They are never part of a real URL — drop them, don't emit them.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
     urls.push(url);
   }
   return [...new Set(urls)];
+}
+
+// A relative publish date line, used as the anchor that a job card precedes a URL.
+// Indeed/Glassdoor alert mails render, in order: Title / "Company - Location" /
+// snippet / "N днів тому" / URL. The date line sits directly above the URL, so it
+// is a reliable anchor — unlike scanning for " - " alone, which the snippet or the
+// title can also contain.
+const REL_DATE_RE = /(тому|назад|days? ago|hours? ago|weeks? ago|minutes? ago|just posted|щойно|сьогодні|today|yesterday|вчора)/i;
+const isRelativeDate = (line) => !!line && line.length < 40 && REL_DATE_RE.test(line);
+
+/** "Company - Location" → {company, location}, or null when the line is not one. */
+function parseCompanyLocation(line) {
+  if (!line || /^https?:\/\//i.test(line)) return null;
+  const m = line.match(/^(.{2,80}?)\s+[-–—]\s+(.{2,80})$/);
+  if (!m) return null;
+  const company = m[1].trim();
+  const location = m[2].trim();
+  if (!company || !location) return null;
+  if (/[.!?]$/.test(location)) return null; // sentence, not a location
+  return { company, location };
+}
+
+/**
+ * Parse job cards out of an alert email body (plain text or HTML-as-text).
+ *
+ * Alert emails list each opening as Title / "Company - Location" / snippet /
+ * relative-date / tracker-URL. The URL is a content-less click tracker
+ * (`pl.indeed.com/rc/clk/dl?jk=…`, Glassdoor `jobListing`), so the old URL-only
+ * sweep produced rows like `|  | Job lead (email)` — no employer, no role,
+ * unrankable, and unopenable by automation. Reading the card gives the title,
+ * company and location even when the tracker itself can never be unwrapped.
+ *
+ * Conservative: a URL is only taken as a card when a relative-date line sits
+ * directly above it AND a "Company - Location" line (with a title above that)
+ * precedes the date. Anything else is left to the plain URL sweep.
+ *
+ * @param {string} body
+ * @returns {{url: string, title: string, company: string, location: string}[]}
+ */
+export function parseJobCards(body) {
+  if (!body) return [];
+  const lines = String(body).split(/\r?\n/).map((s) => s.trim());
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const um = lines[i].match(/https?:\/\/[^\s"'<>()]+/);
+    if (!um) continue;
+    const url = um[0]
+      .replace(/[.,;:!?]+$/, '')
+      .replace(/&amp;/g, '&')
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+    if (seen.has(url)) continue;
+    if (!isRelativeDate(lines[i - 1])) continue;
+    let company = '';
+    let location = '';
+    let title = '';
+    for (let k = i - 2; k >= 0 && k >= i - 8; k--) {
+      if (!lines[k]) continue;
+      const cl = parseCompanyLocation(lines[k]);
+      if (!cl) continue;
+      company = cl.company;
+      location = cl.location;
+      for (let t = k - 1; t >= 0 && t >= k - 3; t--) {
+        if (lines[t] && !/^https?:\/\//i.test(lines[t]) && !isRelativeDate(lines[t])) { title = lines[t]; break; }
+      }
+      break;
+    }
+    if (!title && !company) continue; // not a card — leave it to the URL sweep
+    seen.add(url);
+    out.push({ url, title: title || 'Job lead (email)', company, location });
+  }
+  return out;
 }
 
 /** File types that are page furniture (logos, webfonts, media), never a posting. */

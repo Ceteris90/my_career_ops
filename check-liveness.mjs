@@ -33,6 +33,7 @@ import { planExpiredHistoryRows, trackerLivenessTargets, DEFAULT_TRACKER_STATUSE
 import { appendToScanHistory, normalizeUrlForDedup, SCAN_HISTORY_PATH } from './scan.mjs';
 import { withPipelineLock } from './pipeline-lock.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { captureUrl } from './lib/page-capture.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -42,11 +43,15 @@ import { createHash } from 'crypto';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
 
 const USAGE = `Usage:
-  node check-liveness.mjs [--no-fallback] [--throttle[=ms]] [--no-record] <url1> [url2] ...
-  node check-liveness.mjs [--no-fallback] [--throttle[=ms]] [--no-record] --file urls.txt
+  node check-liveness.mjs [--no-fallback] [--headed-wait[=ms]] [--throttle[=ms]] [--no-record] <url1> [url2] ...
+  node check-liveness.mjs [--no-fallback] [--headed-wait[=ms]] [--throttle[=ms]] [--no-record] --file urls.txt
   node check-liveness.mjs --tracker [--status=Evaluated,Applied]   # postings of tracker rows in these statuses
   node check-liveness.mjs --tracker --discard-expired [--apply]    # dry-run move expired Evaluated rows to Discarded; --apply writes
   node check-liveness.mjs --no-record             # check only; write nothing to scan-history
+  node check-liveness.mjs --headed-wait=180000    # on an anti-bot wall, keep the headed window open up to
+                                                  # ms (default 120000) so you can solve the Cloudflare checkbox
+  node check-liveness.mjs --capture ...           # archive every non-active verdict (screenshot+HTML+HAR+trace)
+                                                  # under data/captures/ for later investigation
   node check-liveness.mjs --help                  # print this usage block and exit
   node check-liveness.mjs -h                      # alias for --help`;
 
@@ -172,13 +177,24 @@ async function main() {
   // after ~2 rapid hits, so a bulk run needs spacing. Default base 5000ms.
   const throttleArg = args.find((a) => a === '--throttle' || a.startsWith('--throttle='));
   const throttleBaseMs = throttleArg ? (Number(throttleArg.split('=')[1]) || 5000) : 0;
+  // --headed-wait or --headed-wait=<ms>: on an anti-bot wall, keep the headed
+  // browser open and re-check until the user clears the challenge (interactive
+  // Cloudflare/hCaptcha checkbox) or the deadline passes. Default 120s. Without
+  // it the headed retry settles only 3s and the window closes before a human can
+  // click. Ignored when --no-fallback is set.
+  const headedWaitArg = args.find((a) => a === '--headed-wait' || a.startsWith('--headed-wait='));
+  const headedWaitMs = headedWaitArg ? (Number(headedWaitArg.split('=')[1]) || 120_000) : 0;
+  // --capture: archive any non-active verdict (uncertain/expired) as a bundle
+  // under data/captures/ for later investigation. Off by default.
+  const capture = args.includes('--capture');
   const record = recordingEnabled(args);
   const statusArg = args.find((a) => a.startsWith('--status='));
   const fromTracker = args.includes('--tracker');
   const discardExpired = args.includes('--discard-expired');
   const applyDiscards = args.includes('--apply');
   const positional = args.filter((a) => a !== '--no-fallback' && a !== '--no-record' && a !== throttleArg
-    && a !== '--tracker' && a !== '--discard-expired' && a !== '--apply' && a !== statusArg);
+    && a !== '--tracker' && a !== '--discard-expired' && a !== '--apply' && a !== statusArg
+    && a !== headedWaitArg && a !== '--capture');
 
   if (discardExpired && !fromTracker) {
     console.error('--discard-expired requires --tracker.');
@@ -221,10 +237,16 @@ async function main() {
 
   const notes = [
     noFallback ? null : 'headed fallback on challenge',
+    !noFallback && headedWaitMs > 0 ? `headed wait ~${headedWaitMs / 1000}s on challenge` : null,
     throttleBaseMs ? `throttle ~${throttleBaseMs / 1000}-${(throttleBaseMs * 2) / 1000}s` : null,
     record ? null : 'no-record',
+    capture ? 'capture non-active pages' : null,
   ].filter(Boolean);
   console.log(`Checking ${urls.length} URL(s)...${notes.length ? ` (${notes.join(', ')})` : ''}\n`);
+  if (!noFallback && headedWaitMs > 0) {
+    console.log(`If a Cloudflare/anti-bot wall appears, a headed window opens — solve the checkbox there;`);
+    console.log(`this tool re-checks every 2s and waits up to ~${Math.round(headedWaitMs / 1000)}s per wall.\n`);
+  }
 
   // Lazy browser: the API rung resolves ATS postings with no browser at all, so we
   // only launch Playwright if a URL actually needs the fallback.
@@ -267,7 +289,7 @@ async function main() {
       try {
         await ensureBrowser();
         const getHeadedPage = headed ? () => headed.get() : undefined;
-        ({ result, reason, code } = await checkUrlLivenessWithFallback(page, url, { getHeadedPage }));
+        ({ result, reason, code } = await checkUrlLivenessWithFallback(page, url, { getHeadedPage, headedWaitMs }));
         usedBrowser = true;
       } catch (err) {
         result = 'uncertain';
@@ -283,6 +305,19 @@ async function main() {
     else if (result === 'expired') expired++;
     else uncertain++;
     verdicts.push({ url, result, code });
+
+    // Archive anything we could not confirm (bot wall / unrecognised page) — or a
+    // dead posting — so it can be investigated from disk later. Opt-in.
+    if (capture && result !== 'active') {
+      try {
+        await captureUrl(url, {
+          reason: reason || result, status: result, headedWaitMs,
+          company: labels.has(url) ? labels.get(url) : '', log: (m) => console.log(m),
+        });
+      } catch (err) {
+        console.error(`           capture failed: ${err?.message || err}`);
+      }
+    }
 
     // Throttle only matters between browser checks (the API is cheap, not WAF-rate-limited).
     const wait = usedBrowser && i < urls.length - 1 ? jitteredDelayMs(throttleBaseMs) : 0;

@@ -50,6 +50,8 @@ import {
   applyRowRewrites,
 } from './lib/tracking-resolver.mjs';
 import { PROFILE_DIR, launchProfileContext } from './site-login.mjs';
+import { BOT_CHALLENGE_PATTERNS } from './liveness-core.mjs';
+import { captureUrl } from './lib/page-capture.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -81,26 +83,34 @@ export const CLI_CANDIDATES = [
 const USAGE = `
   rank-pipeline.mjs — opt-in LLM relevance re-ranker (annotates, never filters)
 
-  node rank-pipeline.mjs [--limit N] [--cli <name>] [--model <name>] [--dry-run] [--no-resolve]
+  node rank-pipeline.mjs [--limit N] [--cli <name>] [--model <name>] [--headed-wait[=ms]] [--dry-run] [--no-resolve]
 
     --limit N     max entries to rank this run (default ${DEFAULT_LIMIT}, ceiling ${LIMIT_CEILING})
     --cli <name>  force a CLI instead of $CAREER_OPS_CLI or auto-detection
     --model <n>   passed through to the CLI when it accepts one
+    --headed-wait <ms>  on an anti-bot wall while resolving tracking links, keep the
+                  headed window open so you can solve the Cloudflare/hCaptcha checkbox;
+                  re-reads until it clears (default 120000ms when a value is given).
+                  Off by default so unattended runs never hang.
     --dry-run     print the annotations, write nothing
     --no-resolve  skip browser resolution of email tracking links (default: resolve)
+    --capture     archive every unresolved page (screenshot+HTML+HAR+trace) under
+                  data/captures/ for later investigation (default: off)
     --self-test   run the in-memory suite (no subprocess, no network)
 `;
 const KNOWN_FLAGS = [
   '--limit',
   '--cli',
   '--model',
+  '--headed-wait',
+  '--capture',
   '--dry-run',
   '--no-resolve',
   '--self-test',
   '--help',
   '-h',
 ];
-const VALUE_FLAGS = ['--limit', '--cli', '--model'];
+const VALUE_FLAGS = ['--limit', '--cli', '--model', '--headed-wait'];
 /**
  * Clamp to [0,5] at one decimal, and sanitize the reason so a model-generated
  * string can never break the row's pipe-delimited grammar or forge a new row.
@@ -278,8 +288,18 @@ export function buildPrompt(entries, cvExcerpt) {
     .join('\n');
 }
 
+// A NUL byte anywhere in the prompt makes execFileSync throw synchronously
+// (invalid argv) with no status and empty stderr, so one corrupt row — e.g. the
+// mojibake the Gmail ingest can write into pipeline.md — silently fails an
+// entire batch of 10 with "CLI call failed" at 0.0s, indistinguishable from a
+// broken CLI. Strip NUL and all C0 controls except tab/newline before spawning.
+export function sanitizePromptArg(prompt = '') {
+  // eslint-disable-next-line no-control-regex
+  return String(prompt ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+}
+
 function callCli(cli, prompt, model) {
-  const args = cli.args(prompt);
+  const args = cli.args(sanitizePromptArg(prompt));
   if (model) args.push('--model', model);
   // Explicit maxBuffer: a verbose response otherwise throws
   // ERR_CHILD_PROCESS_STDIO_MAXBUFFER and fails the batch for no good reason.
@@ -303,7 +323,7 @@ function callCli(cli, prompt, model) {
  * @param {string} text - current pipeline.md contents.
  * @param {{persist: boolean}} opts
  */
-async function resolveTrackingLeadsInText(text, { persist }) {
+async function resolveTrackingLeadsInText(text, { persist, headedWaitMs = 0, capture = false } = {}) {
   const lines = String(text).split('\n');
   const targets = lines
     .map((raw, index) => ({ raw, index, ...rowCells(raw) }))
@@ -339,6 +359,7 @@ async function resolveTrackingLeadsInText(text, { persist }) {
   let calls = 0;
   let authNeeded = 0;
   const authHosts = new Set();
+  const failures = []; // {url, company, title, reason} — archived when capture is on
   try {
     for (const [i, t] of targets.entries()) {
       calls += 1;
@@ -347,13 +368,14 @@ async function resolveTrackingLeadsInText(text, { persist }) {
       // destination URL resolvable. Skipped before the first open.
       if (i > 0) await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 1800)));
       try {
-        const r = await resolveInBrowser(t.url, context);
+        const r = await resolveInBrowser(t.url, context, { headedWaitMs, log: (m) => console.log(m) });
         // Login wall = the link needs a session we do not have. Count it so the
         // caller can nudge the user to run `site-login.mjs`, rather than silently
         // dropping the lead.
         if (isLoginWall({ url: r.finalUrl }) || (r.finalUrl === t.url && isLoginWall({ url: t.url }))) {
           authNeeded += 1;
           try { authHosts.add(new URL(r.finalUrl || t.url).hostname.replace(/^www\./, '')); } catch { /* ignore */ }
+          failures.push({ url: t.url, company: t.company, title: t.title, reason: 'login wall — no session for this board' });
           continue;
         }
         // Prefer the cleaned page title; fall back to a title derived from the real
@@ -367,11 +389,35 @@ async function resolveTrackingLeadsInText(text, { persist }) {
         // Still a redirect-style tracker after the pass, or the pass landed on a
         // login/chrome page (LinkedIn /comm wrapper, Indeed account page) = no real
         // destination reached. Reject rather than rewrite a row into a junk title.
-        if ((!gained && !moved) || !r.finalUrl || isTrackingLead({ url: r.finalUrl }) || isEmailChrome({ url: r.finalUrl })) continue;
+        if ((!gained && !moved) || !r.finalUrl || isTrackingLead({ url: r.finalUrl }) || isEmailChrome({ url: r.finalUrl })) {
+          failures.push({ url: t.url, company: t.company, title: t.title, reason: 'tracker not resolved to a destination' });
+          continue;
+        }
         resolved.set(t.index, { url: r.finalUrl, title, company, desc: r.jdText });
         console.log(`  resolved: ${truncate(t.raw, 56)}… → ${[company, title].filter(Boolean).join(' — ')}`);
       } catch (err) {
         console.error(`  resolution failed for ${t.url}: ${err.message}`);
+        failures.push({ url: t.url, company: t.company, title: t.title, reason: `navigation error: ${String(err?.message || err).split('\n')[0]}` });
+      }
+    }
+
+    // Archive unresolved pages so a failed/discovered-dead lead can be
+    // investigated later from disk (screenshot + HTML + HAR + trace). Opt-in:
+    // off by default so a normal run never opens an extra browser per failure.
+    if (capture && failures.length) {
+      const seenF = new Set();
+      console.log(`  🗄️  capturing ${failures.length} unresolved page(s) for investigation…`);
+      for (const f of failures) {
+        if (seenF.has(f.url)) continue;
+        seenF.add(f.url);
+        try {
+          await captureUrl(f.url, {
+            reason: f.reason, company: f.company, title: f.title,
+            status: 'unresolved', headedWaitMs, log: (m) => console.log(m),
+          });
+        } catch (err) {
+          console.error(`  capture failed for ${f.url}: ${err?.message || err}`);
+        }
       }
     }
     let newText = text;
@@ -431,12 +477,52 @@ export function dropEmailChromeInText(text) {
   return { text: out, dropped };
 }
 
-async function resolveInBrowser(url, context) {
+async function resolveInBrowser(url, context, { headedWaitMs = 0, log = () => {} } = {}) {
   const page = await context.newPage();
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     // Let client-side redirects / tracking JS settle before reading the URL.
     await page.waitForTimeout(2500);
+
+    // Anti-bot wall (Cloudflare "just a moment" / hCaptcha) renders a challenge
+    // instead of the posting and has no destination to read. Detection must not
+    // rely on English text alone — Cloudflare renders the wall in the browser's
+    // locale (e.g. Russian "Требуется дополнительная верификация"), and a purely
+    // English pattern list then misses it entirely. So also test locale-independent
+    // Cloudflare DOM markers and a few localized phrases.
+    const isChallenge = async () => {
+      try {
+        const { body, title, dom } = await page.evaluate(() => ({
+          body: document.body?.innerText || '',
+          title: document.title || '',
+          dom: !!document.querySelector(
+            '#challenge-form, .cf-turnstile, [data-translate], #cf-chl-widget, '
+            + '.challenge-platform, script[src*="challenges.cloudflare.com"], iframe[src*="challenges.cloudflare.com"]'),
+        }));
+        if (dom) return true;
+        if (BOT_CHALLENGE_PATTERNS.some((re) => re.test(title) || re.test(body))) return true;
+        const text = `${title}\n${body}`.toLowerCase();
+        return /требуется дополнительная верификация|ид[её]т проверка|подтвердите, что вы|выполняется проверка|just a moment|verify you are human|attention required/.test(text);
+      } catch {
+        return false;
+      }
+    };
+    if (headedWaitMs > 0 && await isChallenge()) {
+      log('  ⚠️  anti-bot wall — solve the checkbox in the opened window; waiting up to '
+        + `${Math.round(headedWaitMs / 1000)}s (${truncate(url, 48)})`);
+      const deadline = Date.now() + headedWaitMs;
+      while (Date.now() < deadline) {
+        await page.waitForTimeout(2000);
+        if (!(await isChallenge())) { log('  ✅ wall cleared, continuing'); break; }
+      }
+      // Cloudflare clears by reloading to the real destination; give the redirect
+      // and its tracking JS a beat to land before reading the URL, otherwise
+      // page.url() is still the challenge/tracker URL and the link resolves to
+      // nothing even though the wall is gone.
+      await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => {});
+      await page.waitForTimeout(3000);
+    }
+
     const finalUrl = page.url();
     const pageTitle = await page.title();
     const { jdText, company } = await page.evaluate(() => {
@@ -504,6 +590,15 @@ async function main(args) {
   const limit = flagValue(args, '--limit') ?? DEFAULT_LIMIT;
   const model = flagValue(args, '--model');
   const forced = flagValue(args, '--cli') ?? process.env.CAREER_OPS_RANK_CLI;
+  // --headed-wait <ms> (or --headed-wait=<ms>): on an anti-bot wall during
+  // tracking-link resolution keep the headed window open and re-read until the
+  // user clears the challenge. Off (0) by default so unattended runs never hang.
+  const headedWaitMs = hasFlag(args, '--headed-wait')
+    ? (Number(flagValue(args, '--headed-wait')) || 120_000)
+    : 0;
+  // --capture: archive every unresolved page (screenshot + HTML + HAR + trace) so
+  // a failed/discarded lead can be investigated later. Off by default.
+  const capture = hasFlag(args, '--capture');
 
   if (forced === 'hermes') {
     console.error('Hermes is not supported for batch ranking.');
@@ -554,7 +649,7 @@ async function main(args) {
   let authNeeded = 0;
   let authHosts = [];
   if (!noResolve && hasTrackingLeads(text)) {
-    const summary = await resolveTrackingLeadsInText(text, { persist: !dryRun });
+    const summary = await resolveTrackingLeadsInText(text, { persist: !dryRun, headedWaitMs, capture: capture && !dryRun });
     text = summary.text;
     trackingResolved = summary.resolved;
     authNeeded = summary.authNeeded || 0;
@@ -794,7 +889,11 @@ function selfTest() {
   check('a bare real-URL row needs resolution', needsResolution({ url: 'https://justjoin.it/job-offer/acme-senior-dev', company: '', title: '' }));
   check('the Job lead (email) placeholder still needs resolution', needsResolution({ url: 'https://justjoin.it/job-offer/acme-senior-dev', company: '', title: 'Job lead (email)' }));
   check('a filled row does not need resolution', !needsResolution({ url: 'https://x.test/1', company: 'Acme', title: 'RN Dev' }));
-  check('a tracker always needs resolution', needsResolution({ url: 'https://pl.indeed.com/rc/clk/dl?jk=abc', company: 'Acme', title: 'RN Dev' }));
+  check('a content-less tracker needs resolution', needsResolution({ url: 'https://pl.indeed.com/rc/clk/dl?jk=abc', company: '', title: 'Job lead (email)' }));
+  // Once the alert card parse fills company+title, the tracker row is rankable and
+  // must NOT trigger a browser pass — Indeed rc/clk/dl can never be unwrapped by
+  // automation, so resolving it only opened a window per row and stayed unresolved.
+  check('a tracker with company+title does not need resolution', !needsResolution({ url: 'https://pl.indeed.com/rc/clk/dl?jk=abc', company: 'Acme', title: 'RN Dev' }));
 
   const chromeText = [
     '## Pending',
