@@ -11,10 +11,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveCodeRoot } from "../../src/lib/core/code-root.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MIRROR = path.join(HERE, "..", "..", "src", "lib", "core", "pipeline-sections.mjs");
-const CORE_ROOT = process.env.CAREER_OPS_ROOT || path.join(HERE, "..", "..", "..");
+// The core table lives in the engine checkout, never the data root, so resolve
+// the code root (CAREER_OPS_CODE_ROOT, else the checkout) rather than
+// CAREER_OPS_ROOT — a data-only override must not quietly disable the parity
+// comparison. Derive the web dir from this file so the result is cwd-independent.
+const CORE_ROOT = resolveCodeRoot(path.join(HERE, "..", ".."));
 const CORE = path.join(CORE_ROOT, "lib", "pipeline-sections.mjs");
 
 const mirror = await import(pathToFileURL(MIRROR).href);
