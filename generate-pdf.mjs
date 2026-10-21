@@ -763,12 +763,18 @@ const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp:
 // by repeated pattern replacement.
 function headlineText(html) {
   for (const m of html.matchAll(/<div\b([^>]*)>/gi)) {
-    const cls = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(m[1]);
+    const cls = /(?:^|\s)class\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(m[1]);
     const tokens = (cls?.[1] ?? cls?.[2] ?? '').split(/\s+/);
     if (!tokens.includes('header-title')) continue;
     const start = m.index + m[0].length;
-    const end = html.toLowerCase().indexOf('</div', start);
-    const inner = html.slice(start, end === -1 ? html.length : end);
+    // The matching </div>: count nested <div> opens and closes from here.
+    let depth = 1;
+    let end = html.length;
+    for (const t of html.slice(start).matchAll(/<(\/?)div\b[^>]*>/gi)) {
+      depth += t[1] ? -1 : 1;
+      if (depth === 0) { end = start + t.index; break; }
+    }
+    const inner = html.slice(start, end);
     let text = '';
     let inTag = false;
     for (const ch of inner) {
