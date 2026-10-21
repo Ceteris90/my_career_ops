@@ -1860,8 +1860,13 @@ if (isMainModule(import.meta.url)) {
   // loop open for minutes past the summary (#5570). Flush stdout first so a
   // piped summary is never truncated.
   const flushAndExit = (code) => {
-    if (process.stdout.writableLength > 0) process.stdout.once('drain', () => process.exit(code));
-    else process.exit(code);
+    // Exit from a write-completion callback, queued after whatever is already
+    // buffered, so a piped summary flushes first. `writableLength > 0` is not a
+    // reliable "wait for drain" signal — `drain` only fires for a write that
+    // returned false (past the high-water mark), so bytes queued below it would
+    // never drain and the process would hang (the opposite of the intent).
+    process.exitCode = code;
+    process.stdout.write('', () => process.exit(code));
   };
   main()
     .then(() => flushAndExit(0))

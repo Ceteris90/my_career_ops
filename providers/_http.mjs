@@ -369,6 +369,26 @@ export function sleep(ms, ctx) {
 }
 
 /**
+ * sleep(), but resolves at once if `signal` aborts partway — a retry backoff
+ * must not keep a board the watchdog has already given up on pending for its
+ * full delay (#5570).
+ *
+ * @param {number} ms
+ * @param {{ sleep?: (ms: number) => Promise<void> }} [ctx]
+ * @param {AbortSignal | null} [signal]
+ * @returns {Promise<void>}
+ */
+export function abortableSleep(ms, ctx, signal) {
+  if (!signal) return sleep(ms, ctx);
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { signal.removeEventListener('abort', done); resolve(); };
+    signal.addEventListener('abort', done, { once: true });
+    Promise.resolve(sleep(ms, ctx)).then(done);
+  });
+}
+
+/**
  * Milliseconds from a Retry-After header, in either permitted form (delta
  * seconds or an HTTP-date). Null when absent or unparseable.
  *
@@ -487,7 +507,11 @@ async function withRetry(request, ctx, policy = {}) {
       const delayMs = retryAfterMs !== null
         ? Math.min(retryAfterMs, maxDelayMs * 4)
         : backoff + Math.random() * jitterMs;
-      await sleep(delayMs, ctx);
+      // Interruptible: if the board's watchdog fires during the backoff, stop
+      // waiting and give up rather than sleeping out the delay and then issuing
+      // a doomed attempt (#5570).
+      await abortableSleep(delayMs, ctx, currentAbortSignal());
+      if (currentAbortSignal()?.aborted) throw lastErr;
     }
   }
   throw lastErr;

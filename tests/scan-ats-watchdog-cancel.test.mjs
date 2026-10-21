@@ -19,7 +19,7 @@ import {
   withConnectionScope,
   currentAbortSignal,
 } from '../providers/_connection-scope.mjs';
-import { fetchJsonWithRetry } from '../providers/_http.mjs';
+import { fetchJsonWithRetry, fetchJson } from '../providers/_http.mjs';
 
 test('the board abort signal rides in the scope; none leaks outside it', async () => {
   assert.equal(currentAbortSignal(), null, 'no signal outside a board');
@@ -72,6 +72,29 @@ test('a retry storm stops the moment the board is aborted', async () => {
     ),
   );
   assert.equal(calls, 1, 'no retries once the board is aborted (would be 5 before #5570)');
+});
+
+test('the shared HTTP layer folds the board signal into the request it sends', async () => {
+  // Guards the combine in fetchInContext itself: the request fetch() receives
+  // must carry the board's abort, not only this request's own timeout. Stub the
+  // transport so no network is touched and capture the signal it is handed.
+  const realFetch = globalThis.fetch;
+  let seenSignal = null;
+  globalThis.fetch = async (_url, options) => {
+    seenSignal = options.signal;
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const controller = new AbortController();
+    controller.abort(); // the board's watchdog has already fired
+    await withAbortScope(controller.signal, async () => {
+      await fetchJson('https://example.test/a').catch(() => {});
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.ok(seenSignal, 'the request carried an AbortSignal');
+  assert.equal(seenSignal.aborted, true, 'the board abort reached the request signal');
 });
 
 test('a timed-out board issues no further network requests', async () => {
