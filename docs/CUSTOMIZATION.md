@@ -77,7 +77,7 @@ Save hooks in `.claude/settings.json` (Claude Code). OpenCode does not support h
 
 `templates/states.yml` lists the tracker's canonical states and the aliases each one accepts (`aplicado` → `Applied`). The Node scripts read it at run time: `set-status.mjs` rejects a status it does not list, and `normalize-statuses.mjs`, `merge-tracker.mjs` and `dedup-tracker.mjs` resolve aliases through it.
 
-It is a system-layer file (see [DATA_CONTRACT.md](../DATA_CONTRACT.md)), so an update replaces it, and no user-layer file adds states or aliases. A state you add only in your own copy is lost on the next update, and until then the Go dashboard and the web app don't recognize it. For detail the states don't capture (ghosted, on hold, a referral), use the Notes column.
+It is a system-layer file (see [DATA_CONTRACT.md](../DATA_CONTRACT.md)), so an update replaces it, and no user-layer file adds states or aliases. A state you add only in your own copy is lost on the next update. Until then the scripts and the web app's status API accept it, but the Go dashboard and the web app's tabs, pills and funnel don't, because they keep their own copies of the list. For detail the states don't capture (ghosted, on hold, a referral), use the Notes column.
 
 A new state is a change to career-ops itself, so open an issue first (see [CONTRIBUTING.md](../CONTRIBUTING.md)). The pull request touches more than `states.yml`, because the dashboard, the web app and the funnel keep their own copies of the list:
 
