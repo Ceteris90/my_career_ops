@@ -19,7 +19,7 @@ import {
   withConnectionScope,
   currentAbortSignal,
 } from '../providers/_connection-scope.mjs';
-import { fetchJsonWithRetry, fetchJson } from '../providers/_http.mjs';
+import { fetchJsonWithRetry, fetchJson, abortableSleep } from '../providers/_http.mjs';
 
 test('the board abort signal rides in the scope; none leaks outside it', async () => {
   assert.equal(currentAbortSignal(), null, 'no signal outside a board');
@@ -95,6 +95,22 @@ test('the shared HTTP layer folds the board signal into the request it sends', a
   }
   assert.ok(seenSignal, 'the request carried an AbortSignal');
   assert.equal(seenSignal.aborted, true, 'the board abort reached the request signal');
+});
+
+test('abortableSleep resolves on abort and propagates a rejecting clock', async () => {
+  // Resolves early when the signal aborts mid-sleep.
+  const c1 = new AbortController();
+  const p1 = abortableSleep(10_000, undefined, c1.signal);
+  c1.abort();
+  await p1; // must not hang on the 10s timer
+
+  // A rejecting clock propagates (not an unhandled rejection, not a hang).
+  const c2 = new AbortController();
+  const boom = new Error('clock failed');
+  await assert.rejects(
+    () => abortableSleep(5, { sleep: async () => { throw boom; } }, c2.signal),
+    /clock failed/,
+  );
 });
 
 test('a timed-out board issues no further network requests', async () => {

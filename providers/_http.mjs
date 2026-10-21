@@ -381,10 +381,16 @@ export function sleep(ms, ctx) {
 export function abortableSleep(ms, ctx, signal) {
   if (!signal) return sleep(ms, ctx);
   if (signal.aborted) return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => { signal.removeEventListener('abort', done); resolve(); };
-    signal.addEventListener('abort', done, { once: true });
-    Promise.resolve(sleep(ms, ctx)).then(done);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => { cleanup(); resolve(); };
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    signal.addEventListener('abort', onAbort, { once: true });
+    // Settle with the sleep's own result so a rejecting clock propagates
+    // instead of hanging the promise and surfacing as an unhandled rejection.
+    Promise.resolve(sleep(ms, ctx)).then(
+      (value) => { cleanup(); resolve(value); },
+      (err) => { cleanup(); reject(err); },
+    );
   });
 }
 
