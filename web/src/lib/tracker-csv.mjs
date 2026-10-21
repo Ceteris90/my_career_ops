@@ -24,11 +24,11 @@ const COLUMNS = [
   { name: "notes", read: (r) => r.notes },
 ];
 
-// Same reading as tracker-parse.mjs parseScore, decimal comma included, but
-// empty instead of 0 when the cell has no number.
+// Same rule as `tracker.mjs query --csv`: a score such as `4.2/5` or `4,2/5`
+// becomes a number, and any other cell, such as `N/A`, stays empty.
 function score(cell) {
-  const m = String(cell ?? "").match(/(\d+(?:[.,]\d+)?)/);
-  return m ? parseFloat(m[1].replace(",", ".")) : "";
+  const m = String(cell ?? "").replace(/\*\*/g, "").trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?$/);
+  return m ? Number(m[1].replace(",", ".")) : "";
 }
 
 // A leading `'` stops a spreadsheet from running the cell as a formula. Same

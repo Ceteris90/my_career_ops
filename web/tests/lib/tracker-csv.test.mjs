@@ -14,12 +14,14 @@ test("trackerCsv writes the rows in the order given, ready for a spreadsheet", (
   const csv = trackerCsv([
     row({ n: "7", company: "Acme, Inc.", notes: 'recruiter said "soon"' }),
     row({ n: "5", score: "4,5/5" }),
+    row({ n: "4", score: "N/A (2026-09-01)", status: "Discarded" }),
     row({ n: "3", company: "Globex", score: "N/A", status: "SKIP", pdf: "❌", report: "—", notes: '=HYPERLINK("https://jobs.example/3")' }),
   ]);
   assert.equal(csv, BOM + [
     "id,date,company,role,score,status,pdf,report,notes",
     '7,2026-09-01,"Acme, Inc.",Analytics Engineer,4.6,Applied,yes,reports/001-acme-2026-09-01.md,"recruiter said ""soon"""',
     "5,2026-09-01,Acme,Analytics Engineer,4.5,Applied,yes,reports/001-acme-2026-09-01.md,",
+    "4,2026-09-01,Acme,Analytics Engineer,,Discarded,yes,reports/001-acme-2026-09-01.md,",
     `3,2026-09-01,Globex,Analytics Engineer,,SKIP,no,,"'=HYPERLINK(""https://jobs.example/3"")"`,
     "",
   ].join("\n"));
