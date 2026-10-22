@@ -243,8 +243,11 @@ so this piece runs `claude -p` (or your CLI's headless equivalent, see
    draft file, with the data root passed through `--add-dir`. It also runs
    in `dontAsk` mode, so an `acceptEdits` or `auto` default in your own
    settings doesn't widen that, and it denies `set-status.mjs`,
-   `followup-seed.mjs` and any edit under `data/`, so the run can't record
-   a follow-up as sent even if your settings allow those.
+   `followup-seed.mjs` and file edits under `data/`, even where your own
+   allow rules cover them. A broad `Bash` rule in your own settings still
+   applies to other shell commands, and a command such as `node -e` can
+   write files, so keep such a rule out of the settings this job runs with
+   if you want the sweep strictly draft-only.
 3. Logs start/end to `data/followup-sweep.log` (gitignored).
 4. Exits before starting Claude when follow-ups are turned off: with
    `follow_ups.enabled: false` in `config/profile.yml` the sweep calls

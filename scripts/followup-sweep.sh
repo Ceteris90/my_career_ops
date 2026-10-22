@@ -59,8 +59,10 @@ PROMPT="Run the career-ops 'followup' mode (modes/followup.md) against $ROOT/dat
 # --allowedTools only adds approvals; it does not narrow what the user's own
 # settings already allow. dontAsk overrides an inherited acceptEdits or auto
 # default, so nothing beyond these rules and the user's explicit allow rules
-# runs, and the deny rules (which beat any allow rule) keep the run from
-# recording a follow-up as sent or editing the tracker and follow-up log.
+# runs, and the deny rules (which beat any allow rule) block the recording
+# scripts and Edit/Write under data/. They can't fence off a broad Bash rule
+# in the user's own settings (`node -e` can write any file); that is the
+# user's grant, and the sweep adds nothing to it.
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') follow-up sweep starting ==="
   claude -p "$PROMPT" \
