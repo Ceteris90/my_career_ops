@@ -35,6 +35,7 @@ import 'dotenv/config';
 import {
   AUTO_DETECT_DEFAULTS,
   PrivacyConfigError,
+  bypassRequested,
   getPrivacyConfigPath,
   getPrivacyExamplePath,
   loadPrivacyGuard,
@@ -69,17 +70,19 @@ function collect() {
     llmHostCount: LLM_HOSTS.length,
   };
 
+  // Check the two-factor process bypass before parsing configuration so
+  // PRIVACY_GUARD=off + PRIVACY_BYPASS_TOKEN is honored even if config is malformed.
+  if (bypassRequested()) {
+    report.state = 'bypassed';
+    return report;
+  }
+
   try {
     const config = readPrivacyConfig();
     report.configSource = config.source;
     report.autoDetect = { ...AUTO_DETECT_DEFAULTS, ...config.autoDetect };
 
     const guard = loadPrivacyGuard({ config });
-    if (guard.source === 'bypass') {
-      // Explicit two-factor env bypass (PRIVACY_GUARD=off + PRIVACY_BYPASS_TOKEN).
-      report.state = 'bypassed';
-      return report;
-    }
     if (!guard.enabled) {
       // Guard disabled by configuration (enabled: false in privacy.yml).
       report.state = 'disabled-by-config';
@@ -90,7 +93,7 @@ function collect() {
   } catch (err) {
     if (err instanceof PrivacyConfigError) {
       report.state = 'config-error';
-      report.error = err.message;
+      report.error = `Could not parse configuration file at ${configPath}. Fix the YAML syntax or remove the file.`;
       return report;
     }
     throw err;
