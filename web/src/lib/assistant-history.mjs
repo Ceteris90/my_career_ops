@@ -23,6 +23,10 @@ export function cleanMessages(input) {
       // Confirm callbacks exist only in the live component; never resurrect them.
       if (p.type === 'confirm' && p.state === 'pending') return [];
       if (p.type === 'confirm' && ['done', 'cancelled'].includes(p.state) && typeof p.summary === 'string') return [{ type: 'note', text: `${p.summary} (${p.state})` }];
+      // A confirmed profile or scan-target write the route refused or failed.
+      if (p.type === 'confirm' && p.state === 'failed' && typeof p.summary === 'string') {
+        return [{ type: 'note', text: `${p.summary} (failed${typeof p.message === 'string' ? `: ${p.message.replace(/\.\s*$/, '')}` : ''})` }];
+      }
       throw new Error('Invalid message part');
     }) };
   });

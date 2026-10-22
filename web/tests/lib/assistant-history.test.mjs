@@ -40,3 +40,9 @@ test('status confirmation history is inert and never upgrades failed or in-fligh
     assert.deepEqual(cleanMessages(clean), clean, 'repeated cleaning cannot revive controls');
   }
 });
+
+test('a failed profile or scan-target confirmation is saved as an inert failed note', () => {
+  const clean = cleanMessages([{ role: 'assistant', parts: [{ type: 'confirm', cid: 'c2', summary: 'Save your profile?', state: 'failed', message: 'Your profile was NOT saved: write failed.' }] }]);
+  assert.deepEqual(clean[0].parts, [{ type: 'note', text: 'Save your profile? (failed: Your profile was NOT saved: write failed)' }]);
+  assert.deepEqual(cleanMessages(clean), clean);
+});

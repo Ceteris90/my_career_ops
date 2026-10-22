@@ -31,7 +31,7 @@ type Part =
   | { type: "note"; text: string }
   | { type: "card"; jobId: string }
   | { type: "batch"; batchId: string; jobIds: string[] }
-  | { type: "confirm"; cid: string; summary: string; state: "pending" | "done" | "cancelled"; statusChange?: undefined }
+  | { type: "confirm"; cid: string; summary: string; state: "pending" | "done" | "cancelled" | "failed"; message?: string; statusChange?: undefined }
   | StatusConfirmationPart;
 type Msg = { role: "user" | "assistant"; parts: Part[] };
 type RequestFeedback = { id: number; phase: "working" | "ready" | "error"; announce: boolean };
@@ -539,19 +539,17 @@ export function AssistantConsole() {
         setTimeout(() => applyRef.current.open(u), 60);
       },
       applyExplore: (patch, opts) => exploreRef.current.applyPatch(patch, opts),
-      // A refused or failed write must not pass for a saved one (same rule as
-      // writePersonalization below): the route answers 4xx/5xx with the reason.
-      writeProfile: (patch) => {
-        void postAssistantWrite("/api/profile", patch).then((failure) => {
-          if (failure) appendParts([{ type: "note", text: `Your profile was NOT saved: ${failure}` }]);
-          else router.refresh();
-        });
-      },
-      writePortals: (roles, location) => {
-        void postAssistantWrite("/api/portals", { roles, location }).then((failure) => {
-          if (failure) appendParts([{ type: "note", text: `Your scan targets were NOT saved: ${failure}` }]);
-        });
-      },
+      // A refused or failed write must not pass for a saved one: the route
+      // answers 4xx/5xx with the reason, and resolveConfirm puts it on the card.
+      writeProfile: (patch) =>
+        postAssistantWrite("/api/profile", patch).then((failure) => {
+          if (!failure) router.refresh();
+          return failure ? `Your profile was NOT saved: ${failure}.` : null;
+        }),
+      writePortals: (roles, location) =>
+        postAssistantWrite("/api/portals", { roles, location }).then((failure) =>
+          failure ? `Your scan targets were NOT saved: ${failure}.` : null,
+        ),
       writePersonalization: (patch) => {
         fetch("/api/personalization", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })
           .then(async (r) => {
@@ -621,6 +619,14 @@ export function AssistantConsole() {
     const run = confirmRuns.current.get(cid);
     confirmRuns.current.delete(cid);
     const info = accept && run ? run() : null;
+    // Matched by cid, so a write that settles after the user switched chats
+    // updates only the card that started it, never the chat now on screen.
+    void info?.failure?.then((message) => {
+      if (!message) return;
+      setMessages((ms) => ms.map((m) => ({ ...m,
+        parts: m.parts.map((p) => p.type === "confirm" && !p.statusChange && p.cid === cid ? { ...p, state: "failed" as const, message } : p),
+      })));
+    });
     setMessages((ms) =>
       ms.map((m) => {
         if (!m.parts.some((p) => p.type === "confirm" && p.cid === cid)) return m;
@@ -1115,7 +1121,9 @@ function ConfirmationCard({ part, onConfirm }: {
         </div>
       ) : (
         <div ref={resultRef} tabIndex={-1} aria-labelledby={`${summaryId} ${resultId}`} className="mt-1 rounded text-xs text-faint focus-visible:outline-2 focus-visible:outline-brand">
-          <span id={resultId}>{part.state === "done" ? "✓ started" : "cancelled"}</span>
+          <span id={resultId} role={part.state === "failed" ? "alert" : undefined} className={part.state === "failed" ? "text-red-600 dark:text-red-400" : undefined}>
+            {part.state === "done" ? "✓ started" : part.state === "failed" ? part.message : "cancelled"}
+          </span>
         </div>
       )}
     </div>
