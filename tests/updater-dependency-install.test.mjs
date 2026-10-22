@@ -198,7 +198,9 @@ function writeStubs(stubDir, { npmFails }) {
   ].join('\n'));
   writeFileSync(join(stubDir, 'npm.cmd'), [
     `@copy /y package.json "${saw}" >nul`,
-    `@echo %PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD%> "${skip}"`,
+    // Redirection first: `echo 1> file` is cmd's "redirect handle 1", so the
+    // value would never reach the file.
+    `@> "${skip}" echo %PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD%`,
     ...(npmFails ? ['@echo npm error code ENOTFOUND 1>&2', '@exit /b 1'] : []),
     '',
   ].join('\r\n'));
