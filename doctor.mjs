@@ -20,7 +20,7 @@ import { getCareerOpsRoot, getProfilePath, hasProfileOverride } from './path-res
 import { validateProfile, EXAMPLE_PATH } from './validate-profile.mjs';
 import { resolveExtractorMode } from './browser-extract.mjs';
 import { parseConfigByExtension } from './jsonc-parse.mjs';
-import { validateFlags } from './lib/cli-flags.mjs';
+import { validateFlags, flagValue } from './lib/cli-flags.mjs';
 import { geminiNodeFloor } from './lib/gemini-node-floor.mjs';
 import { SKILL_ENTRYPOINTS } from './scaffolder/bin/skill-entrypoints.mjs';
 import { nodeFloor } from './lib/node-floor.mjs';
@@ -38,7 +38,9 @@ const argv = process.argv.slice(2);
 // flags before --help so `--help --bogus` still errors.
 const KNOWN_FLAGS = ['--target', '--json', '--init-templates', '--strict', '--cli', '--help', '-h'];
 
-// Both take their value as the next argv token.
+// Both take a value, as the next argv token or as `--flag=value`. validateFlags
+// accepts either form, so both are read with flagValue(): an indexOf() lookup
+// cannot see `--target=<path>` and would diagnose this checkout instead.
 const VALUE_FLAGS = ['--target', '--cli'];
 
 const USAGE = `Usage:
@@ -53,15 +55,14 @@ const USAGE = `Usage:
 CLIs: ${AGENT_CLIS.join(', ')}`;
 
 // requireOperand: without it, `--target --json` reads --json as the target
-// path (argv[targetIdx + 1] below has no adjacency check of its own), and the
+// path (flagValue() below takes the next token as-is), and the
 // doctor silently diagnoses a directory literally named "--json" at exit 0
 // (#3087) — this is the onboarding entrypoint, so that's a user told to
 // create files that already exist. Nothing more specific to say than the
 // shared message.
 validateFlags(argv, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS, requireOperand: true });
 
-const targetIdx = argv.indexOf('--target');
-const explicitTarget = targetIdx !== -1 && argv[targetIdx + 1] ? argv[targetIdx + 1] : null;
+const explicitTarget = flagValue(argv, '--target') || null;
 const projectRoot = explicitTarget || getCareerOpsRoot();
 // --target diagnoses a whole other checkout, so that checkout's profile is the
 // one that counts; otherwise CAREER_OPS_PROFILE applies as it does everywhere.
@@ -99,8 +100,7 @@ if (INIT_TEMPLATES && !JSON_OUT) {
 // Opt-in so the default `npm run doctor` stays fast and fully offline.
 const STRICT = argv.includes('--strict');
 
-const cliIdx = argv.indexOf('--cli');
-const cliFlag = cliIdx !== -1 ? argv[cliIdx + 1] : null;
+const cliFlag = flagValue(argv, '--cli') ?? null;
 
 // ANSI colors (only on TTY)
 const isTTY = process.stdout.isTTY;

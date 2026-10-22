@@ -3910,6 +3910,27 @@ export function refspecForTarget(targetRef) {
 // ── CHANNEL RESOLUTION ──────────────────────────────────────────
 
 /**
+ * Value of a value-taking flag in either `--flag value` or `--flag=value`
+ * form; `undefined` when the flag is absent, `null` when it is present with
+ * no value after it. Same reading as lib/cli-flags.mjs's flagValue()/hasFlag(),
+ * kept local because this file must stay self-loading (see the NOTE at the
+ * top). An `argv.indexOf('--flag')` lookup cannot see the `=` form, so
+ * `apply --channel=main` silently installed the release channel and
+ * `--channel=mian` skipped the unknown-channel check below.
+ *
+ * @param {string[]} argv
+ * @param {string} flag - Flag name including leading dashes.
+ * @returns {string|null|undefined}
+ */
+function argvFlagValue(argv, flag) {
+  const eq = argv.find((a) => typeof a === 'string' && a.startsWith(`${flag}=`));
+  if (eq !== undefined) return eq.slice(flag.length + 1);
+  const idx = argv.indexOf(flag);
+  if (idx === -1) return undefined;
+  return argv[idx + 1] ?? null;
+}
+
+/**
  * Which channel apply() should fetch from: the `--channel` flag wins over
  * CAREER_OPS_UPDATE_CHANNEL (the re-exec'd child's copy of the parent's
  * resolved choice — see resolveTargetRef()'s callers). Unset means the
@@ -3922,9 +3943,9 @@ export function refspecForTarget(targetRef) {
  * @returns {'release'|'main'}
  */
 function resolveChannel(argv, env) {
-  const idx = argv.indexOf('--channel');
-  const requested = idx !== -1 ? argv[idx + 1] : env.CAREER_OPS_UPDATE_CHANNEL;
-  if (requested === undefined || requested === 'release') return 'release';
+  const fromFlag = argvFlagValue(argv, '--channel');
+  const requested = fromFlag !== undefined ? fromFlag : env.CAREER_OPS_UPDATE_CHANNEL;
+  if (requested === undefined || requested === null || requested === 'release') return 'release';
   if (requested === 'main') return 'main';
   throw new Error(`Unknown --channel '${requested}'. Supported channels: release (default), main.`);
 }
@@ -5950,10 +5971,10 @@ function rollback() {
  * @param {{curlGet?: typeof curlGet, root?: string, now?: () => Date}} [ctx] - test seams.
  */
 export async function dismiss(argv = process.argv, ctx = {}) {
-  const idx = argv.indexOf('--version');
-  let version = idx !== -1 ? String(argv[idx + 1] || '').trim().replace(/^v/i, '') : '';
-  if (idx !== -1 && !/^\d+\.\d+\.\d+$/.test(version)) {
-    throw new Error(`--version '${argv[idx + 1] ?? ''}' is not a release version (X.Y.Z). Nothing was dismissed.`);
+  const raw = argvFlagValue(argv, '--version');
+  let version = raw !== undefined ? String(raw || '').trim().replace(/^v/i, '') : '';
+  if (raw !== undefined && !/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`--version '${raw ?? ''}' is not a release version (X.Y.Z). Nothing was dismissed.`);
   }
   if (!version) {
     const latest = await latestRelease(ctx.curlGet || curlGet);
