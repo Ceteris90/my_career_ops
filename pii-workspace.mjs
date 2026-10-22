@@ -62,9 +62,19 @@ function loadTokenMap() {
   }
 }
 
+function atomicWriteFileSync(targetPath, content, options = {}) {
+  const dir = path.dirname(targetPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tempPath = path.join(
+    dir,
+    `.tmp-${path.basename(targetPath)}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+  fs.writeFileSync(tempPath, content, options);
+  fs.renameSync(tempPath, targetPath);
+}
+
 function saveTokenMap(map) {
-  fs.mkdirSync(path.dirname(tokenMapPath), { recursive: true });
-  fs.writeFileSync(tokenMapPath, JSON.stringify(map, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  atomicWriteFileSync(tokenMapPath, JSON.stringify(map, null, 2), { encoding: 'utf-8', mode: 0o600 });
 }
 
 /**
@@ -135,12 +145,12 @@ function main() {
       if (scrubbed !== content) {
         // Persist the token map immediately before each rewritten file loses its real values.
         saveTokenMap(map);
-        fs.writeFileSync(filePath, scrubbed, 'utf8');
+        atomicWriteFileSync(filePath, scrubbed, 'utf8');
       }
       console.log(`[privacy] ${file}: tokenized (${Object.keys(map).length} token(s) mapped)`);
     } else if (mode === 'restore') {
       const restored = rehydrate(content, map);
-      if (restored !== content) fs.writeFileSync(filePath, restored, 'utf8');
+      if (restored !== content) atomicWriteFileSync(filePath, restored, 'utf8');
       console.log(`[privacy] ${file}: real values restored`);
     } else {
       const hasTokens = /\{\{PRIVACY_VALUE_|PRIVACY_REDACTED_|CANDIDATE_/.test(content);
