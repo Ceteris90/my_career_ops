@@ -293,6 +293,10 @@ test('7c. a digit_run value is detected even when other numbers surround it in t
 
   // A value that only appears merged with adjacent digits must NOT match.
   assert.equal(guard.assertSafe('total: 1987650'), true, 'no match inside a larger run');
+
+  // Adjacent numeric values in a JSON array without space: [1024,98765]
+  // Comma must not be stripped as a thousands separator here, so 98765 stays separate.
+  assert.throws(() => guard.assertSafe('tokens: [1024,98765]'), PrivacyGuardError, 'adjacent array numbers');
 });
 
 // ---------------------------------------------------------------------------
@@ -318,6 +322,14 @@ test('7b. a profile URL derived handle is guarded however the URL was written', 
   const portfolio = new PrivacyGuard({ values: ['https://johndoe-example.com/projects/portfolio'] });
   assert.throws(() => portfolio.assertSafe('hosted on johndoe-example.com'), PrivacyGuardError);
   assert.equal(portfolio.assertSafe('my portfolio section'), true, 'generic path segment must not be guarded');
+
+  // User-info URLs (like emails parsed as URLs): host must NOT be derived as a secret.
+  const emailGuard = new PrivacyGuard({ values: ['jane@acme-example.com'] });
+  assert.equal(emailGuard.assertSafe('visiting acme-example.com website'), true, 'email host is not a guarded secret');
+
+  // Country-subdomain LinkedIn profile URL: handle is guarded correctly.
+  const ukLinkedIn = new PrivacyGuard({ values: ['https://uk.linkedin.com/in/jane-example'] });
+  assert.throws(() => ukLinkedIn.assertSafe('find jane-example on linkedin'), PrivacyGuardError);
 });
 
 // ---------------------------------------------------------------------------
