@@ -100,6 +100,11 @@ function readFile(path) {
   return content;
 }
 
+function readOfertaMode() {
+  return readFile('modes/oferta.md')
+    .replace(/^\*\*\d+\. .+?\*\*\. Read `(modes\/oferta-signals\/[^`]+)` when .*$/gm, (_, file) => readFile(file));
+}
+
 /**
  * Normalize CRLF line endings to LF (#1771).
  *
@@ -1021,6 +1026,14 @@ try {
       fail(`${name} declares an unusable timeoutMs (${String(timeoutMs)}) — must be a positive integer number of milliseconds`);
       continue;
     }
+    // Same rule for the declared exit status. Every entry wrote `expectExit`
+    // and nothing read it: a pass meant exit 0 whatever the entry said, so
+    // cv-sync-check.mjs's `expectExit: 1` was a claim no check stood behind.
+    const expectExit = Object.hasOwn(script, 'expectExit') ? script.expectExit : 0;
+    if (!Number.isInteger(expectExit) || expectExit < 0) {
+      fail(`${name} declares an unusable expectExit (${String(expectExit)}) — must be a non-negative integer exit status`);
+      continue;
+    }
     const budgetMs = declared ? timeoutMs : DEFAULT_SCRIPT_TIMEOUT_MS;
     const startedAt = Date.now();
     // Spread rather than defaulted: `{ timeout: undefined }` reads to
@@ -1048,11 +1061,17 @@ try {
       warn(`${name} used ${(elapsedMs / 1000).toFixed(1)}s of its ${(budgetMs / 1000).toFixed(0)}s budget `
         + `(${Math.round((elapsedMs / budgetMs) * 100)}%) — it is passing, but it is close to being killed for time`);
     }
-    if (result !== null) {
-      pass(`${name} runs OK`);
-    } else if (allowFail && !crashedBeforeRunning(lastRunFailure())) {
-      warn(`${name} exited with error (expected without user data)`);
-    } else if (allowFail) {
+    // A signal kill (a timeout) has no exit status, so it can never match.
+    const failure = result === null ? lastRunFailure() : null;
+    const status = result !== null ? 0 : (failure?.status ?? null);
+    const crashed = result === null && crashedBeforeRunning(failure);
+    if (status === expectExit && !crashed) {
+      pass(expectExit === 0 ? `${name} runs OK` : `${name} exits ${expectExit} as declared`);
+    } else if (allowFail && status !== null && !crashed) {
+      // Allowed, not confirmed: the exit depends on user data a developer's
+      // copy may carry, so say what happened rather than why it might have.
+      warn(`${name} exited ${status}, not the declared ${expectExit} (allowFail: its exit depends on user data)`);
+    } else if (allowFail && crashed) {
       // allowFail says "a non-zero exit is expected here", never "any outcome
       // is fine". A script that dies with an uncaught exception did not run at
       // all, and reporting that as the expected failure is how #3440 sat in
@@ -1064,7 +1083,7 @@ try {
       // Include the child's exit status and streams. Without them a CI-only
       // failure arrives as a bare `<name> crashed`: no stack, no assertion
       // text, no exit code, and nothing a reader can act on.
-      fail(`${name} crashed${formatRunFailure()}`);
+      fail(`${name} ${crashed || status === null ? 'crashed' : `exited ${status}, not the declared ${expectExit}`}${formatRunFailure()}`);
     }
   }
 
@@ -2584,6 +2603,8 @@ const allowedFiles = [
 // the ones this PR actually intends to allow, so they get the tighter
 // check instead of loosening the shared one.
 const exactAllowedFiles = new Set([
+  // Exempt only the root Indonesian README, not similarly named files.
+  'README.id.md',
   // GitHub Sponsors funding target + Codex plugin manifest (#4131) — same
   // maintainer-credit shape as the .claude-plugin/.github/plugin ones above.
   'funding.json', '.codex-plugin/plugin.json',
@@ -2663,18 +2684,26 @@ console.log('\n7. Absolute path check');
 
 // Same git grep approach: only scans tracked files. Untracked AI tool
 // outputs, local debate artifacts, etc. can't false-positive here.
+// stderr is piped (captured, not printed) so a failure below can report it.
 const absPathRaw = run(
   'git',
   ['grep', '-n', '/Users/', '--', '*.mjs', '*.sh', '*.md', '*.go', '*.yml'],
-  { stdio: ['pipe', 'pipe', 'ignore'] }
+  { stdio: ['pipe', 'pipe', 'pipe'] }
 );
+// run() returns null for every failure, but only exit 1 means "no matches".
+// Any other failure (git missing, not a repository, the timeout) means the
+// scan never ran, and reading that null as "no absolute paths" would pass
+// this check without checking anything.
+const absPathScanFailed = absPathRaw === null && lastRunFailure()?.status !== 1;
 // The old shell pipeline's `grep -v` exclusions, now as a JS filter.
 const ABS_PATH_EXCLUDE = ['README.md', 'LICENSE', 'CLAUDE.md', 'test-all.mjs'];
 const absPathLines = (absPathRaw || '')
   .split('\n')
   .filter(Boolean)
   .filter(line => !ABS_PATH_EXCLUDE.some(x => line.includes(x)));
-if (absPathLines.length === 0) {
+if (absPathScanFailed) {
+  fail(`Absolute path check could not run: git grep failed${formatRunFailure()}`);
+} else if (absPathLines.length === 0) {
   pass('No absolute paths in code files');
 } else {
   for (const line of absPathLines) {
@@ -2858,7 +2887,7 @@ try {
   if (
     generatePdfScript.includes('preferCSSPageSize: true') &&
     generatePdfScript.includes("right: '0'") &&
-    generatePdfScript.includes('injectPrintPageCss(html, format)') &&
+    generatePdfScript.includes('injectPrintPageCss(html, format, opts.country)') &&
     !/page\.pdf\(\{\s*format:/s.test(generatePdfScript)
   ) {
     pass('PDF renderer uses CSS @page margins instead of Playwright margins');
@@ -2934,14 +2963,15 @@ console.log('\n7c. Updater dashboard rebuild');
 const updateSystemScript = readFile('update-system.mjs');
 if (
   /git\('diff',\s*'--name-only',\s*'HEAD',\s*'--',\s*'dashboard'\)/.test(updateSystemScript) &&
-  /path\.startsWith\(['"]dashboard\/['"]\)\s*&&\s*path\.endsWith\(['"]\.go['"]\)/.test(updateSystemScript) &&
-  /go build -o career-dashboard \./.test(updateSystemScript) &&
+  /return dashboardBuildInputsChanged\(changed\.split\('\\n'\)\)/.test(updateSystemScript) &&
+  /execFileSync\('go',\s*\['build',\s*'-o',\s*binary,\s*'\.'\]/.test(updateSystemScript) &&
+  /const binary = dashboardBinaryName\(\);/.test(updateSystemScript) &&
   /cwd:\s*join\(ROOT,\s*['"]dashboard['"]\)/.test(updateSystemScript) &&
   /dashboard binary rebuild skipped/.test(updateSystemScript)
 ) {
-  pass('update-system rebuilds dashboard binary when dashboard Go sources change');
+  pass('update-system rebuilds dashboard binary when dashboard Go sources or go.mod/go.sum change');
 } else {
-  fail('update-system does not rebuild dashboard binary after dashboard Go source updates');
+  fail('update-system does not rebuild dashboard binary after dashboard Go source or dependency updates');
 }
 
 if (updateSystemScript.includes("'CODEX.md'")) {
@@ -3787,7 +3817,7 @@ if (
   fail('application-answers CLI accepted a missing option value');
 }
 
-const ofertaMode = readFile('modes/oferta.md');
+const ofertaMode = readOfertaMode();
 const autoPipelineMode = readFile('modes/auto-pipeline.md');
 if (
   ofertaMode.includes('## Liveness gate (URL inputs)') &&
@@ -5987,7 +6017,6 @@ try {
   const nodeTrackerWriters = [
     ['dedup-tracker.mjs', 1],
     ['normalize-statuses.mjs', 1],
-    ['reply-watch.mjs', 1],
     ['tracker.mjs', 2],
   ];
   const unsafeWriters = nodeTrackerWriters.filter(([name, minTransactions]) => {
@@ -9755,6 +9784,10 @@ try {
       // via lib/local-today.mjs (#3070), so the fixture carries that too.
       mkdirSync(join(e2eTmp, 'lib'), { recursive: true });
       copyFileSync(join(ROOT, 'lib', 'local-today.mjs'), join(e2eTmp, 'lib', 'local-today.mjs'));
+      // ...and pipeline-lock.mjs runs the shared lock protocol from
+      // lib/dir-lock.mjs (#5358), so the fixture carries that too.
+      copyFileSync(join(ROOT, 'lib', 'dir-lock.mjs'), join(e2eTmp, 'lib', 'dir-lock.mjs'));
+      copyFileSync(join(ROOT, 'lib', 'yaml-document.mjs'), join(e2eTmp, 'lib', 'yaml-document.mjs'));
       // ...and followup-cadence now delegates flag validation to the shared
       // lib/cli-flags.mjs helper, so the fixture carries that too.
       copyFileSync(join(ROOT, 'lib', 'cli-flags.mjs'), join(e2eTmp, 'lib', 'cli-flags.mjs'));
@@ -9762,6 +9795,11 @@ try {
       // which is what lets the copy answer "am I main?" correctly from a
       // symlinked tmpdir in the first place.
       copyFileSync(join(ROOT, 'lib', 'is-main-module.mjs'), join(e2eTmp, 'lib', 'is-main-module.mjs'));
+      // ...and it reads the apply date from status-log.tsv with funnel-velocity.mjs's
+      // ledger parser, so the fixture carries that module and its imports too.
+      for (const rel of ['funnel-velocity.mjs', 'stats.mjs', 'funnel-stages.mjs', 'lib/scan-history-columns.mjs', 'lib/tsv-formula-escape.mjs']) {
+        copyFileSync(join(ROOT, rel), join(e2eTmp, rel));
+      }
       mkdirSync(join(e2eTmp, 'templates'), { recursive: true });
       copyFileSync(join(ROOT, 'templates', 'states.yml'), join(e2eTmp, 'templates', 'states.yml'));
       // The sandbox resolves js-yaml (and the rest of followup-cadence's
@@ -14423,8 +14461,8 @@ try {
   const env = { ...process.env, PATH: `${fakeBin}${delimiter}${process.env.PATH}`, BATCH_ARG_FILE: argFile };
   const out = run(getBash(), [toBashPath(join(batchDir, 'batch-runner.sh')), '--parallel', '1'], { cwd: tmp, env, stdio: ['pipe', 'pipe', 'pipe'] }) || '';
   const argv = existsSync(argFile) ? readFileSync(argFile, 'utf-8') : '';
-  if (argv.includes('--model') && argv.includes('claude-haiku-4-5') && out.includes('spend_tier=economy')) {
-    pass('economy spend_tier resolves to claude-haiku-4-5');
+  if (argv.includes('--model') && argv.includes('claude-haiku-5-5') && out.includes('spend_tier=economy')) {
+    pass('economy spend_tier resolves to claude-haiku-5-5');
   } else {
     fail(`economy spend_tier did not route to haiku: argv=${JSON.stringify(argv)}, out=${JSON.stringify(out.slice(-240))}`);
   }
@@ -16866,7 +16904,7 @@ try {
     { file: 'web/src/lib/format.ts', re: /CANONICAL_STATES\s*=\s*\[([\s\S]*?)\]/, upper: false, exclude: [] },
     { file: 'web/src/app/actions/registry.ts', re: /CANON_STATUS\s*=\s*\[([\s\S]*?)\]/, upper: false, exclude: [] },
     { file: 'web/src/app/actions/registry.ts', re: /TAB_VALUES\s*=\s*\[([\s\S]*?)\]/, upper: true, exclude: [] },
-    { file: 'web/src/components/pipeline-view.tsx', re: /TABS\s*=\s*\[([\s\S]*?)\]/, upper: true, exclude: [] },
+    { file: 'web/src/lib/pipeline-navigation.mjs', re: /PIPELINE_TABS\s*=[^[]*\[([\s\S]*?)\]/, upper: true, exclude: [] },
     // Analytics now derives its funnel from canonStatus in analytics-metrics;
     // it no longer owns a hardcoded status-list copy to keep in sync.
     // The states ACL used to be checked here too. It moved to its own block
@@ -16934,7 +16972,7 @@ try {
     // The assistant preamble also enumerates the states in PROSE (the setStatus
     // list + the filterPipeline tab enum). Those drift the same way — the AI
     // couldn't offer to set/filter by Hired — so check them too (#2249).
-    const assistantPath = join(ROOT, 'web', 'src', 'app', 'api', 'assistant', 'route.ts');
+    const assistantPath = join(ROOT, 'web', 'src', 'lib', 'assistant-preamble.mjs');
     if (existsSync(assistantPath)) {
       const src = readFileSync(assistantPath, 'utf-8');
       const proseChecks = [
@@ -17222,6 +17260,8 @@ try {
       'claude-invocation.mjs': join(webLib, 'claude-invocation.mjs'),
       'worker-capabilities.mjs': join(webLib, 'worker-capabilities.mjs'),
       'cv-envelope.mjs': join(webLib, 'cv-envelope.mjs'),
+      'report-envelope.mjs': join(webLib, 'report-envelope.mjs'),
+      'report-persist.mjs': join(webLib, 'report-persist.mjs'),
       'run-prompts.mjs': join(webLib, 'run-prompts.mjs'),
       'api/run/route.ts': runRoutePath,
     };
@@ -17239,10 +17279,12 @@ try {
         // about Claude (#2507).
         capabilities = await import(pathToFileURL(required['worker-capabilities.mjs']).href);
         prompts = await import(pathToFileURL(required['run-prompts.mjs']).href);
-        // Imported for its side effect of resolving: run-prompts pulls cv-envelope
-        // for CV_ENVELOPE_INSTRUCTION, so a break there would surface here anyway,
-        // but naming it keeps the failure message specific.
+        // Imported for their side effect of resolving: run-prompts pulls
+        // cv-envelope and report-envelope; report-persist is the evaluate
+        // backend writer. Naming them keeps the failure message specific.
         await import(pathToFileURL(required['cv-envelope.mjs']).href);
+        await import(pathToFileURL(required['report-envelope.mjs']).href);
+        await import(pathToFileURL(required['report-persist.mjs']).href);
       } catch (err) {
         fail(`web pdf write-scope modules could not be imported (${err.message}) — the #2185 freeze cannot verify`);
       }
@@ -17335,6 +17377,28 @@ try {
         } else {
           const granted = WRITE_CAPABLE_TOOLS.filter((t) => toolNames(allowed).includes(t));
           fail(`web pdf command line grants write access via ${granted.join(', ')} — an unscoped write grant is the #2185 hole`);
+        }
+
+        // evaluate (and CLI mode names oferta / auto-pipeline) ingest a posting.
+        // Job postings are data, never instructions — Write/Bash on that kind is
+        // the same unscoped grant #2185 closed for pdf.
+        const jdKinds = invocation.UNTRUSTED_JD_KINDS ?? ['evaluate', 'oferta', 'auto-pipeline'];
+        const jdWrite = [];
+        for (const kind of jdKinds) {
+          const jdArgs = claudeCliArgs({ kind, prompt: 'freeze-probe' });
+          const jdAllowed = argValue(jdArgs, '--allowedTools');
+          const jdDenied = argValue(jdArgs, '--disallowedTools');
+          if (grantsWriteCapability({ allowed: jdAllowed, disallowed: jdDenied })) {
+            const granted = WRITE_CAPABLE_TOOLS.filter((t) => toolNames(jdAllowed).includes(t));
+            jdWrite.push(`${kind}:${granted.join(',')}`);
+          }
+          const undeniedJd = WRITE_CAPABLE_TOOLS.filter((t) => !toolNames(jdDenied).includes(t));
+          if (undeniedJd.length) jdWrite.push(`${kind}:undenied:${undeniedJd.join(',')}`);
+        }
+        if (jdWrite.length === 0) {
+          pass('web evaluate/oferta/auto-pipeline command lines grant no write-capable tool');
+        } else {
+          fail(`web untrusted-JD kinds still grant write access (${jdWrite.join('; ')}) — a posting can aim Write/Bash`);
         }
 
         // Denied by name, not merely omitted: --permission-mode acceptEdits exists
@@ -19057,7 +19121,7 @@ console.log('\n68. Immigration-status requirement overreach (#2033)');
   // 2. Mode section structure: oferta signal (jurisdiction derivation,
   //    exceptions honesty, ITAR note) + apply step (status-vs-authorization
   //    rule, never-auto-answer guarantees).
-  const ofertaNow = readFile('modes/oferta.md');
+  const ofertaNow = readOfertaMode();
   const applyNow = readFile('modes/apply.md');
   const sigStart = ofertaNow.indexOf('**11. Immigration-Status Requirement Overreach**');
   const sigEnd = ofertaNow.indexOf('### Output format:', Math.max(sigStart, 0));
