@@ -75,7 +75,7 @@ export default {
     }
     const jobs = json;
     return jobs
-      .filter(/** @param {any} j */ j => (j.portalJobPost?.portalUrl || j.applyUrl) && j.title)
+      .filter(/** @param {any} j */ j => j && typeof j === 'object' && (j.portalJobPost?.portalUrl || j.applyUrl) && j.title)
       .map(/** @param {any} j */ j => {
         const externalId = coerceId(j.id);
         return {

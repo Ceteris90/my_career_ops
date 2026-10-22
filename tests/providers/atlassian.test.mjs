@@ -123,6 +123,16 @@ try {
       : fail(`atlassian url fallback: ${jobs[0]?.url}`);
   }
 
+  // A null or primitive row is a malformed listing: skip it, keep the board.
+  {
+    const { ctx } = recordingCtx(() => [null, 'x', 7, LISTING]);
+    let jobs = null; let msg = '';
+    try { jobs = await provider.fetch(ENTRY, ctx); } catch (e) { msg = e.message; }
+    jobs && jobs.length === 1 && jobs[0].title === LISTING.title
+      ? pass('atlassian.fetch() skips null and primitive feed rows and keeps the valid listing')
+      : fail(`atlassian non-object rows: ${msg || JSON.stringify(jobs)}`);
+  }
+
   // Rows missing the fields the scanner contract requires are dropped, not
   // emitted with empty strings.
   {
