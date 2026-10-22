@@ -398,7 +398,7 @@ Batch mode limitation: Playwright is not available, so exact apply-button state 
 
 Signals 1-5, 7-9 and 18 set the tier. Signal 6 is `not evaluated` in batch, so it never feeds the tier either — it stays a descriptive, informational finding, as the Risk Summary already reports. Signals 10-16 never change the tier: report each one separately as its own finding, keep every one of them descriptive rather than assertive, and close them as informational, not legal advice. Signals 19, 20, 21 and 22 likewise never change the tier: report each as its own informational finding. Signal 17 likewise never changes the tier: keep it informational, never treat its modeled purchasing-power comparison as a verdict on the offer, and close it as not financial or tax advice. Keep Signal 21 warn-only and informational, and close it as not legal advice.
 
-Use one tier: **High Confidence**, **Proceed with Caution**, or **Suspicious**. Present observations, not accusations, and explain thin evidence.
+Use one tier: **High Confidence**, **Proceed with Caution**, or **Suspicious**. Present observations, not accusations, and explain thin evidence. When the tier-setting signals give too little evidence to decide either way, use **Proceed with Caution** and say what was missing; never pick **Suspicious** without evidence.
 
 #### Verdict (lead)
 
