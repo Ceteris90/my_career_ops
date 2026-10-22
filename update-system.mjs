@@ -3778,29 +3778,55 @@ function pathsOutsideUpdate(listed, owned, preserved) {
       || (!files.has(path) && !dirs.some(dir => path.startsWith(dir))));
 }
 
-function dashboardGoSourcesChanged() {
+/**
+ * Whether any of these paths is an input to the compiled dashboard: a Go
+ * source, or the go.mod/go.sum that pin its dependencies. A dependency bump
+ * changes only those two files, and a binary built before it keeps the old
+ * dependency code until something rebuilds it.
+ *
+ * @param {string[]} paths - Changed paths, relative to the install root.
+ * @returns {boolean}
+ */
+export function dashboardBuildInputsChanged(paths) {
+  return paths.some((path) => path.startsWith('dashboard/')
+    && (path.endsWith('.go') || path === 'dashboard/go.mod' || path === 'dashboard/go.sum'));
+}
+
+/**
+ * The dashboard binary's filename, as build-dashboard.mjs names it. `go build
+ * -o` uses the name exactly as given, so on Windows it must carry the `.exe`:
+ * without it Go writes an extension-less file beside the career-dashboard.exe
+ * the user runs, and that one stays stale.
+ *
+ * @param {string} [platform]
+ * @returns {string}
+ */
+export function dashboardBinaryName(platform = process.platform) {
+  return platform === 'win32' ? 'career-dashboard.exe' : 'career-dashboard';
+}
+
+function dashboardInputsChangedSinceHead() {
   try {
     const changed = git('diff', '--name-only', 'HEAD', '--', 'dashboard');
-    return changed
-      .split('\n')
-      .some(path => path.startsWith('dashboard/') && path.endsWith('.go'));
+    return dashboardBuildInputsChanged(changed.split('\n'));
   } catch {
     return false;
   }
 }
 
 function rebuildDashboardBinaryIfNeeded() {
-  if (!dashboardGoSourcesChanged()) return;
+  if (!dashboardInputsChangedSinceHead()) return;
 
+  const binary = dashboardBinaryName();
   try {
-    execFileSync('go', ['build', '-o', 'career-dashboard', '.'], {
+    execFileSync('go', ['build', '-o', binary, '.'], {
       cwd: join(ROOT, 'dashboard'),
       timeout: DASHBOARD_REBUILD_TIMEOUT_MS,
       stdio: 'pipe',
     });
-    console.log('dashboard binary rebuilt');
+    console.log(`dashboard binary rebuilt (dashboard/${binary})`);
   } catch {
-    console.log('dashboard binary rebuild skipped -- run: cd dashboard && go build -o career-dashboard . manually');
+    console.log('dashboard binary rebuild skipped -- run `npm run build:dashboard` manually');
   }
 }
 
