@@ -36,7 +36,7 @@ try {
       try {
         await installLivenessRouteGuard(page);
         for (const [frameUrl, frameBody] of Object.entries({ [url]: body, ...frames })) {
-          await page.route(frameUrl, (route) => route.fulfill({ contentType: 'text/html', body: html(frameBody) }));
+          await page.route((u) => u.href === frameUrl, (route) => route.fulfill({ contentType: 'text/html', body: html(frameBody) }));
         }
         return await checkUrlLiveness(page, url);
       } finally {
@@ -57,11 +57,13 @@ try {
     }
 
     // The site's own links stay chrome: its jobs page, another posting, a sign-in
-    // link carrying this posting only in its return address, the footer, and a
-    // skip link back into this page. A link to this posting is still read only
-    // where it is visible.
+    // link carrying this posting only in its return address, the footer, and
+    // links back into this page under another fragment, query or trailing
+    // slash. A link to this posting is still read only where it is visible.
     const chrome = await check(POSTING_URL, [
       `<nav><a href="${POSTING_URL}#apply">Skip to apply</a></nav>`,
+      `<nav><a href="${POSTING_URL}?utm_source=header#apply">Skip to apply</a></nav>`,
+      `<header><a href="${POSTING_URL}/">Apply</a></header>`,
       '<header><a href="/jobs">Apply</a></header>',
       `<nav><a href="/jobs/${OTHER_ID}/apply">Apply</a></nav>`,
       `<header><a href="/login?returnUrl=%2Fjobs%2F${ID}">Sign in to apply</a></header>`,
@@ -85,6 +87,43 @@ try {
       pass('an Apply link to the posting in a same-origin frame\'s header reads as an Apply control');
     } else {
       fail(`Apply link to the posting in a frame's header: ${JSON.stringify(framed)}`);
+    }
+
+    // The id has to be a whole path segment: posting 12345 claims
+    // /jobs/12345/apply, not another posting's /jobs/123456/apply, nor a
+    // segment that only contains it.
+    const numericUrl = 'https://www.example.com/jobs/12345';
+    const numericOwn = await check(numericUrl, `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`);
+    const numericOther = await check(numericUrl, [
+      '<header><a href="/jobs/123456/apply">Apply</a></header>',
+      '<nav><a href="/jobs/job-12345/apply">Apply</a></nav>',
+      `<main>${POSTING}</main>`,
+    ].join(''));
+    if (numericOwn.result === 'active' && numericOther.result === 'uncertain' && numericOther.code === 'no_apply_control') {
+      pass('a posting id counts only as a whole path segment: its own Apply link reads, a longer id\'s does not');
+    } else {
+      fail(`numeric id: own ${JSON.stringify(numericOwn)}, other segments ${JSON.stringify(numericOther)}`);
+    }
+
+    // The id comes from the URL's last path segment: a number in the query is
+    // not taken for it.
+    const queried = await check(`${POSTING_URL}?campaign=123456`, `<header><a href="/jobs/${ID}/apply">APPLY FOR JOB</a></header><main>${POSTING}</main>`);
+    if (queried.result === 'active' && queried.code === 'apply_control_visible') {
+      pass('a number in the posting URL\'s query is not taken for its id');
+    } else {
+      fail(`posting URL with a numeric query value: ${JSON.stringify(queried)}`);
+    }
+
+    // A last segment with no id falls back to the whole URL, as the redirect
+    // guard reads it. On UltiPro's posting URL the path's UUID is the board's,
+    // so a link under the board's path stays chrome.
+    const BOARD = '7fde8f3e-7920-4d9d-8394-87bd44cc2330';
+    const boardUrl = `https://www.example.com/T/JobBoard/${BOARD}/OpportunityDetail?opportunityId=${ID}`;
+    const board = await check(boardUrl, `<header><a href="/T/JobBoard/${BOARD}/Search">Apply</a></header><main>${POSTING}</main>`);
+    if (board.result === 'uncertain' && board.code === 'no_apply_control') {
+      pass('a link under the board\'s path stays chrome when the posting\'s id is in the query (UltiPro)');
+    } else {
+      fail(`board link on a URL whose posting id is in the query: ${JSON.stringify(board)}`);
     }
 
     // With no id in the posting URL, nothing tells the posting's own link from

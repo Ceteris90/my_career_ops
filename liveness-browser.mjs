@@ -492,16 +492,17 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // and 40 of 40 closed ones answer "Job not found" with no such link. Only
       // the path counts, so a sign-in link that carries the posting in its
       // return address (?returnUrl=/jobs/<id>) is still chrome, and so is a
-      // link back into this page, such as a skip link to #main-content.
+      // link back into this page under another query, fragment or trailing
+      // slash, such as a skip link to #main-content. The id has to be a whole
+      // path segment, so posting 12345 does not claim /jobs/123456/apply.
       const linksToPosting = (element) => {
         const href = postingId && element.getAttribute('href');
         if (!href) return false;
         try {
           const target = new URL(href, document.baseURI);
-          target.hash = '';
-          const here = new URL(location.href);
-          here.hash = '';
-          return target.href !== here.href && target.pathname.toLowerCase().includes(postingId);
+          const pageKey = (u) => u.origin + u.pathname.replace(/\/+$/, '');
+          if (pageKey(target) === pageKey(new URL(location.href))) return false;
+          return target.pathname.toLowerCase().split('/').includes(postingId);
         } catch {
           return false;
         }
@@ -564,7 +565,13 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
             }
           });
 
-    const postingId = jobIdToken(url);
+    // The id in the posting URL's last path segment, so a number in its query
+    // (?campaign=123456) is not taken for it. When that segment has none, the
+    // last id in the whole URL, as the redirect guard reads it: on UltiPro,
+    // /JobBoard/{board}/OpportunityDetail?opportunityId={posting}, the path's
+    // only id is the board's, and every link under the board's path has it.
+    const lastSegment = new URL(url).pathname.split('/').filter(Boolean).pop() ?? '';
+    const postingId = jobIdToken(lastSegment) ?? jobIdToken(url);
 
     // One reading of the page: the top-level document plus every same-origin
     // child frame, so a posting rendered inside a frame and one rendered inline
