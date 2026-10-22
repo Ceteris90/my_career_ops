@@ -113,7 +113,7 @@ npm run verify
 
 ## normalize
 
-Maps non-canonical statuses to the canonical states in `templates/states.yml` (`Evaluated`, `Applied`, `Responded`, `Assessment`, `Interview`, `Offer`, `Hired`, `Rejected`, `Discarded`, `SKIP`) and strips markdown bold from the status column (and from the score on any row whose status it changes). Aliases are read from `states.yml`, so `Enviada` becomes `Applied`, `CERRADA` becomes `Discarded`, `Mülakat` becomes `Interview`, etc. A few legacy forms are handled in the script itself: `Aplicado 2026-03-02` / `Rechazado 2026-03-02` lose the date, and `DUPLICADO`, `Repost #NNN` and an empty or `—` status become `Discarded`, with the DUPLICADO / Repost text moved to the notes column. Anything else it cannot map is listed as unknown and left as it is.
+Maps non-canonical statuses to the canonical states in `templates/states.yml` (`Evaluated`, `Applied`, `Responded`, `Assessment`, `Interview`, `Offer`, `Hired`, `Rejected`, `Discarded`, `SKIP`) and strips markdown bold from the status column (and from the score on any row whose status it changes). Aliases are read from `states.yml`, so `Enviada` becomes `Applied`, `CERRADA` becomes `Discarded`, `Mülakat` becomes `Interview`, etc. A few legacy forms are handled in the script itself: `Aplicado 2026-03-02` / `Rechazado 2026-03-02` lose the date, and `DUPLICADO` / `DUP`, `Repost #NNN` and an empty, `—` or `-` status become `Discarded`, with the DUPLICADO / DUP / Repost text moved to the notes column. Anything else it cannot map is listed as unknown and left as it is.
 
 ```bash
 npm run normalize             # apply changes
