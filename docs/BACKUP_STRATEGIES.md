@@ -143,8 +143,8 @@ restic -r /Volumes/Backup/career-data snapshots
 restic -r /Volumes/Backup/career-data restore latest --target ~/restore
 ```
 
-`restore` recreates the full original path under the target (for example
-`~/restore/Users/you/career-data`), so move that folder into place afterwards.
+`restore` recreates the folder's full original path inside the target directory, so
+find `career-data` under `~/restore` and move it into place afterwards.
 
 restic also writes to S3, Backblaze B2, SFTP and rclone remotes. If you lose the password,
 the backup cannot be read.
