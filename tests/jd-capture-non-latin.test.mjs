@@ -18,6 +18,22 @@ import { pathToFileURL } from 'node:url';
 const { captureSlug, findCaptureForReport } = await import(pathToFileURL(join(ROOT, 'jd-capture.mjs')).href);
 const ok = (name, fn) => { try { fn(); pass(name); } catch (e) { fail(`${name} — ${e.message}`); } };
 
+ok('a long non-Latin name is cut to the byte budget of an ASCII slug, and the whole filename stays under 255 bytes', () => {
+  const cjk = '株式会社'.repeat(20);
+  const slug = captureSlug(cjk);
+  assert.ok(slug !== '' && Buffer.byteLength(slug) <= 60, `${Buffer.byteLength(slug)} bytes`);
+  assert.ok(cjk.startsWith(slug), 'the slug is a prefix of the name');
+  const filename = `012-2026-10-22_${slug}_${captureSlug('データエンジニア'.repeat(10))}_${'0123456789abcdef'}.pdf`;
+  assert.ok(Buffer.byteLength(filename) <= 255, `${Buffer.byteLength(filename)} bytes`);
+});
+
+ok('cutting a non-Latin slug never splits a character', () => {
+  const slug = captureSlug(String.fromCodePoint(0x20000).repeat(40));
+  assert.equal(Buffer.byteLength(slug), 60);
+  assert.equal(Buffer.from(slug).toString('utf8'), slug);
+  assert.equal(captureSlug('Яндекс '.repeat(20)).endsWith('-'), false);
+});
+
 ok('a name with no ASCII letters is not reduced to an empty slug', () => {
   for (const name of ['株式会社アクメ', 'Яндекс', 'شركة النفط', 'データエンジニア']) {
     assert.notEqual(captureSlug(name), '', name);
