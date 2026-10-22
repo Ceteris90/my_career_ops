@@ -46,3 +46,9 @@ test('a failed profile or scan-target confirmation is saved as an inert failed n
   assert.deepEqual(clean[0].parts, [{ type: 'note', text: 'Save your profile? (failed: Your profile was NOT saved: write failed)' }]);
   assert.deepEqual(cleanMessages(clean), clean);
 });
+
+test('a profile or scan-target confirmation still saving is saved as unconfirmed, never done', () => {
+  const clean = cleanMessages([{ role: 'assistant', parts: [{ type: 'confirm', cid: 'c3', summary: 'Set your scan targets to: Engineer?', state: 'saving' }] }]);
+  assert.deepEqual(clean[0].parts, [{ type: 'note', text: 'Set your scan targets to: Engineer? (unconfirmed: the write had not finished)' }]);
+  assert.doesNotMatch(clean[0].parts[0].text, /\(done\)/);
+});

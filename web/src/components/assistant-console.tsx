@@ -31,7 +31,7 @@ type Part =
   | { type: "note"; text: string }
   | { type: "card"; jobId: string }
   | { type: "batch"; batchId: string; jobIds: string[] }
-  | { type: "confirm"; cid: string; summary: string; state: "pending" | "done" | "cancelled" | "failed"; message?: string; statusChange?: undefined }
+  | { type: "confirm"; cid: string; summary: string; state: "pending" | "saving" | "done" | "cancelled" | "failed"; message?: string; statusChange?: undefined }
   | StatusConfirmationPart;
 type Msg = { role: "user" | "assistant"; parts: Part[] };
 type RequestFeedback = { id: number; phase: "working" | "ready" | "error"; announce: boolean };
@@ -619,19 +619,23 @@ export function AssistantConsole() {
     const run = confirmRuns.current.get(cid);
     confirmRuns.current.delete(cid);
     const info = accept && run ? run() : null;
-    // Matched by cid, so a write that settles after the user switched chats
-    // updates only the card that started it, never the chat now on screen.
-    void info?.failure?.then((message) => {
-      if (!message) return;
-      setMessages((ms) => ms.map((m) => ({ ...m,
-        parts: m.parts.map((p) => p.type === "confirm" && !p.statusChange && p.cid === cid ? { ...p, state: "failed" as const, message } : p),
-      })));
-    });
+    // A write card stays "saving" until its write settles, so a chat saved in
+    // between records it as unconfirmed, never done. Matched by cid, so a write
+    // that settles after the user switched chats updates only the card that
+    // started it, never the chat now on screen.
+    void info?.failure
+      ?.catch(() => "The write could not be confirmed.")
+      .then((message) => {
+        setMessages((ms) => ms.map((m) => ({ ...m,
+          parts: m.parts.map((p) => p.type === "confirm" && !p.statusChange && p.cid === cid
+            ? (message ? { ...p, state: "failed" as const, message } : { ...p, state: "done" as const }) : p),
+        })));
+      });
     setMessages((ms) =>
       ms.map((m) => {
         if (!m.parts.some((p) => p.type === "confirm" && p.cid === cid)) return m;
         const parts: Part[] = m.parts.map((p) =>
-          p.type === "confirm" && p.cid === cid ? { ...p, state: accept ? "done" : "cancelled" } : p,
+          p.type === "confirm" && p.cid === cid ? { ...p, state: !accept ? "cancelled" : info?.failure ? "saving" : "done" } : p,
         );
         if (info?.jobIds?.length) {
           if (info.batchId && info.jobIds.length > 1) parts.push({ type: "batch", batchId: info.batchId, jobIds: info.jobIds });
@@ -1122,7 +1126,7 @@ function ConfirmationCard({ part, onConfirm }: {
       ) : (
         <div ref={resultRef} tabIndex={-1} aria-labelledby={`${summaryId} ${resultId}`} className="mt-1 rounded text-xs text-faint focus-visible:outline-2 focus-visible:outline-brand">
           <span id={resultId} role={part.state === "failed" ? "alert" : undefined} className={part.state === "failed" ? "text-red-600 dark:text-red-400" : undefined}>
-            {part.state === "done" ? "✓ started" : part.state === "failed" ? part.message : "cancelled"}
+            {part.state === "done" ? "✓ started" : part.state === "saving" ? "saving…" : part.state === "failed" ? part.message : "cancelled"}
           </span>
         </div>
       )}
