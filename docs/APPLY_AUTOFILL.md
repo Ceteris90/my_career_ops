@@ -56,6 +56,8 @@ This saves you from spending time tailoring responses for a job that the ATS wil
 - **Multiple roles in one session:** Running batch applies? Always run the `pipeline` mode **Liveness sweep** first to drop dead postings from your pipeline so you never waste time opening an expired role tab. To run the check by hand, give `check-liveness.mjs --file` a file of bare URLs, one per line. It cannot read `data/pipeline.md` directly: each `- [ ] URL | Company | Role` entry comes back `uncertain` as an invalid URL. Collect the pending URLs first, leaving LinkedIn ones for the pipeline mode:
 
   ```bash
-  sed -nE 's/^- \[ \] (https?:\/\/[^ |]+).*/\1/p' data/pipeline.md | grep -v 'linkedin\.com' > /tmp/pending-urls.txt
-  node check-liveness.mjs --file /tmp/pending-urls.txt
+  urls=$(mktemp)
+  sed -nE 's/^- \[ \] (https?:\/\/[^ |]+).*/\1/p' data/pipeline.md | grep -viE '^https?://([^/]+\.)?linkedin\.com([:/?#]|$)' > "$urls"
+  node check-liveness.mjs --file "$urls"
+  rm -f "$urls"
   ```
