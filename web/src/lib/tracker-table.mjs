@@ -187,7 +187,6 @@ export function parseApplications(md, rootDir, systemRootDir) {
     const line = raw.trim();
     if (!line.startsWith("|")) continue;
     const cells = trackerCells(line);
-    if (cells.length < 8) continue;
     if (map) {
       // Width guard, mirroring parseTrackerRow: a row missing an INTERIOR cell
       // shifts every later column one left, so requiring merely that the
@@ -206,6 +205,10 @@ export function parseApplications(md, rootDir, systemRootDir) {
       rows.push(emptyRow((k) => urlCell(k, at(k))));
     } else {
       // Legacy fixed order; tolerate the 8-cell variant where Notes is absent.
+      // Only this branch needs eight cells: a header-mapped row is held to the
+      // header's own width above, so a tracker without PDF/Report columns
+      // (7 cells) still reads, as it does in parseTrackerRow.
+      if (cells.length < 8) continue;
       if (!/^\d+$/.test(cells[0])) continue; // header / separator / malformed
       const [n, date, company, role, score, status, pdf, report, ...rest] = cells;
       // Same derivation, then the positional fields on top: everything the
