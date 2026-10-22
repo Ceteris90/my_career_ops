@@ -54,22 +54,38 @@ if (!mode || !['scrub', 'restore', 'status'].includes(mode)) {
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function loadTokenMap() {
+  if (!fs.existsSync(tokenMapPath)) return {};
   try {
     const parsed = JSON.parse(fs.readFileSync(tokenMapPath, 'utf-8'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('invalid token map structure');
+    }
+    return parsed;
+  } catch (err) {
+    console.error(`[privacy] Error reading token map at ${tokenMapPath}: ${err.message}`);
+    process.exit(1);
   }
 }
 
 function atomicWriteFileSync(targetPath, content, options = {}) {
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
+  let mode;
+  if (options.mode !== undefined) {
+    mode = options.mode;
+  } else if (fs.existsSync(targetPath)) {
+    try {
+      mode = fs.statSync(targetPath).mode;
+    } catch {
+      /* ignore */
+    }
+  }
+  const writeOptions = mode !== undefined ? { ...options, mode } : options;
   const tempPath = path.join(
     dir,
     `.tmp-${path.basename(targetPath)}-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
-  fs.writeFileSync(tempPath, content, options);
+  fs.writeFileSync(tempPath, content, writeOptions);
   fs.renameSync(tempPath, targetPath);
 }
 
@@ -85,7 +101,7 @@ function scrub(text, guard, map) {
   let out = text;
   let maxIndex = 0;
   for (const token of Object.keys(map)) {
-    const match = token.match(/^\{\{PRIVACY_VALUE_(\d+)\}\}$/);
+    const match = token.match(/PRIVACY_VALUE_(\d+)/);
     if (match) {
       const n = parseInt(match[1], 10);
       if (n > maxIndex) maxIndex = n;
@@ -97,9 +113,11 @@ function scrub(text, guard, map) {
     if (value.length < 5) continue;
     const re = new RegExp(escapeRe(value), 'gi');
     out = out.replace(re, (matched) => {
-      const existing = Object.entries(map).find(([, v]) => v.toLowerCase() === value);
+      // Reuse an existing token only when the spelling and casing match exactly.
+      const existing = Object.entries(map).find(([, v]) => v === matched);
       if (existing) return existing[0];
-      const token = `{{PRIVACY_VALUE_${++index}}}`;
+      // Use an identifier valid as an unquoted YAML scalar (no braces).
+      const token = `PRIVACY_VALUE_${++index}`;
       map[token] = matched;
       return token;
     });
@@ -114,23 +132,27 @@ function rehydrate(text, map) {
 }
 
 function main() {
-  const config = readPrivacyConfig();
-  if (config.source === 'empty' || config.source === 'absent') {
-    console.log(
-      `[privacy] No configured values found (${config.source === 'absent' ? 'config/privacy.yml is absent' : 'config/privacy.yml is empty'}).\n` +
-        `          Copy config/privacy.example.yml to config/privacy.yml and fill it in first.\n` +
-        `          Path checked: ${getPrivacyConfigPath()}`
-    );
-    if (mode !== 'status') process.exit(1);
-  }
+  let guard = null;
 
-  // Use an empty env so scrub mode is never disabled by an outbound LLM bypass.
-  const guard = loadPrivacyGuard({ config, env: {} });
-  if (mode === 'scrub' && guard.textValues.size === 0) {
-    console.error(
-      `[privacy] No guardable text values loaded. Check config/privacy.yml (minimum text length: 5 characters).`
-    );
-    process.exit(1);
+  if (mode === 'scrub') {
+    const config = readPrivacyConfig();
+    if (config.source === 'empty' || config.source === 'absent') {
+      console.log(
+        `[privacy] No configured values found (${config.source === 'absent' ? 'config/privacy.yml is absent' : 'config/privacy.yml is empty'}).\n` +
+          `          Copy config/privacy.example.yml to config/privacy.yml and fill it in first.\n` +
+          `          Path checked: ${getPrivacyConfigPath()}`
+      );
+      process.exit(1);
+    }
+
+    // Use an empty env so scrub mode is never disabled by an outbound LLM bypass.
+    guard = loadPrivacyGuard({ config, env: {} });
+    if (guard.textValues.size === 0) {
+      console.error(
+        `[privacy] No guardable text values loaded. Check config/privacy.yml (minimum text length: 5 characters).`
+      );
+      process.exit(1);
+    }
   }
 
   const map = loadTokenMap();
@@ -153,8 +175,8 @@ function main() {
       if (restored !== content) atomicWriteFileSync(filePath, restored, 'utf8');
       console.log(`[privacy] ${file}: real values restored`);
     } else {
-      const hasTokens = /\{\{PRIVACY_VALUE_|PRIVACY_REDACTED_|CANDIDATE_/.test(content);
-      console.log(`[privacy] ${file}: ${hasTokens ? 'TOKENIZED (no real PII)' : 'holds real PII'}`);
+      const hasTokens = /PRIVACY_VALUE_|PRIVACY_REDACTED_|CANDIDATE_/.test(content);
+      console.log(`[privacy] ${file}: ${hasTokens ? 'TOKENIZED (contains tokens)' : 'holds real PII'}`);
     }
   }
 
