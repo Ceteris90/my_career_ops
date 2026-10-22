@@ -96,7 +96,7 @@ Seçenekler (Options):
 - `--resume-paused` — Claude oturumu/kullanım sınırı aşıldığı için duraklatılan işlere devam et
 - `--start-from N` — N numaralı ID'den başla
 - `--limit N` — bu çalışmada işlenecek maksimum iş (job) sayısı
-- `--parallel N` — N adet paralel çalışan (worker)
+- `--parallel N` — N adet paralel çalışan (worker) (yalnızca `claude`; diğer CLI'lar her zaman tek çalışan kullanır)
 - `--max-retries N` — iş başına deneme sayısı (varsayılan: 2)
 - `--rate-limit-sleep N` — anlık rate-limit engeline takılan bir çalışanı yeniden denemeden önce beklenecek saniye (varsayılan: 300; yığını hemen duraklatmak için 0 kullanın)
 
