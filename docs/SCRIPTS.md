@@ -46,6 +46,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
 | `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
 | `npm run closing-soon` | `closing-soon.mjs` | List tracker rows whose Notes (or matching `jds/` capture) carry a closing date within N days, plus separate `overdue` and `unparsed` groups (read-only) |
+| `npm run reeval-candidates` | `reeval-candidates.mjs` | List `Evaluated` tracker rows whose last evaluation predates the latest change to `cv.md`, `article-digest.md`, `config/profile.yml` or `modes/_profile.md` (read-only) |
 | `npm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
 | `npm run jd-archive` | `check-jd-archive.mjs` | Validate every `reports/*.md` has an archived JD (embedded section or `jds/` capture) — flags `missing-jd-archive` |
 | `npm run openai:tailor` | `openai-tailor.mjs` | Tailor a CV via any OpenAI-compatible endpoint (headless companion to `openai-eval.mjs`) |
@@ -676,6 +677,28 @@ node closing-soon.mjs --tracker path/to/applications.md --jds path/to/jds
 ```
 
 **Exit codes:** `0` on a report (a missing tracker yields an empty result with a warning), `1` unrecognized flag, `2` invalid `--today` / `--within` / `--status` value.
+
+---
+
+## reeval-candidates
+
+Lists tracker rows that were scored against older candidate evidence. A row's score is fixed when the role is evaluated, while the primary sources the evaluation read keep changing (`expand` adds proof points, `add` adds a project, the profile gains a target). This script compares each row's last evaluation date with the last change to `cv.md`, `article-digest.md`, `config/profile.yml` (through `getProfilePath()`, so `CAREER_OPS_PROFILE` is honored) and `modes/_profile.md`, all under the data root, and lists the rows that predate it, oldest evaluation first, with the source(s) that changed after each one.
+
+- **When a source last changed:** the committer date of the last commit that touched it, when the file is tracked in the git repository that contains it and has no uncommitted changes. Otherwise (no git, an untracked or gitignored file, which is the default layout, or uncommitted edits) the file's mtime, labelled `mtime` because it is approximate: a copy, sync, restore or checkout moves it without changing the content.
+- **When a row was last evaluated:** the latest of the Date column (which `merge-tracker.mjs` rewrites on a re-evaluation), every `Re-eval YYYY-MM-DD` marker in Notes, and the header date of each linked report (the first bold header field holding an ISO date, in any label language), falling back to the date in the report filename. The latest wins because a re-evaluation writes its score through to the row. A report link to a missing file is flagged and the row is still dated from the tracker; a row with no readable date at all is listed under `undated`.
+- **Rule:** a row is listed when a source changed on a later calendar day than its evaluation date. A change on the same day is not listed, since the evaluation date has no time of day.
+- **Statuses:** `--status` (default `Evaluated`; any canonical state from `templates/states.yml`, comma-separated). Applied, Rejected, Discarded and the rest are checked only when asked.
+
+Read-only and zero-LLM: it never re-evaluates a row and never writes the tracker, a report or any other file (its `git status` runs with `--no-optional-locks`, so not even the index is refreshed). To refresh a score, evaluate the posting again; the merge updates the row in place.
+
+```bash
+node reeval-candidates.mjs                          # JSON (sources, candidates, undated)
+node reeval-candidates.mjs --summary                # human-readable table
+node reeval-candidates.mjs --status Evaluated,Applied
+node reeval-candidates.mjs --tracker path/to/applications.md
+```
+
+**Exit codes:** `0` on a report (a missing tracker or missing sources yield an empty result with a warning), `1` unrecognized flag, `2` invalid `--status` value or `--json` together with `--summary`.
 
 ---
 
