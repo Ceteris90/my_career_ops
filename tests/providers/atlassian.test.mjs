@@ -94,6 +94,16 @@ try {
       : fail(`atlassian shape error was ${JSON.stringify(msg)}`);
   }
 
+  // A bare non-object body is the same API change: name its type, never read 0.
+  for (const [label, body] of [['null', null], ['a string', 'maintenance'], ['a number', 0]]) {
+    const { ctx } = recordingCtx(() => body);
+    let msg = '';
+    await provider.fetch(ENTRY, ctx).catch((e) => { msg = e.message; });
+    /did not return an array/.test(msg)
+      ? pass(`atlassian.fetch() throws when the feed body is ${label}`)
+      : fail(`atlassian ${label} body: ${JSON.stringify(msg)}`);
+  }
+
   // An empty board is a legitimate answer and must stay quiet.
   {
     const { ctx } = recordingCtx(() => []);

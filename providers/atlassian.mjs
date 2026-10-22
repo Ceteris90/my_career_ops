@@ -76,19 +76,22 @@ export default {
     const jobs = json;
     return jobs
       .filter(/** @param {any} j */ j => (j.portalJobPost?.portalUrl || j.applyUrl) && j.title)
-      .map(/** @param {any} j */ j => ({
-        title: j.title || '',
-        url: j.portalJobPost?.portalUrl || j.applyUrl,
-        company: entry.name,
-        location: formatLocation(j),
-        // No postedAt. The feed's only date is portalJobPost.updatedDate, which
-        // is when the posting was last EDITED — Job.postedAt is the publication
-        // date (schema.org datePosted), and scan.mjs's max-age filter treats it
-        // as one, so an old role edited yesterday would read as new. The value is
-        // also a zone-less "2026-09-11 01:00 AM", which Date.parse reads in local
-        // time (a 16h spread between UTC and Asia/Tokyo). An absent date means
-        // "unknown", never "stale" — same call as successfactors.mjs.
-        ...(coerceId(j.id) ? { externalId: /** @type {string} */ (coerceId(j.id)) } : {}),
-      }));
+      .map(/** @param {any} j */ j => {
+        const externalId = coerceId(j.id);
+        return {
+          title: j.title || '',
+          url: j.portalJobPost?.portalUrl || j.applyUrl,
+          company: entry.name,
+          location: formatLocation(j),
+          // No postedAt. The feed's only date is portalJobPost.updatedDate, which
+          // is when the posting was last EDITED — Job.postedAt is the publication
+          // date (schema.org datePosted), and scan.mjs's max-age filter treats it
+          // as one, so an old role edited yesterday would read as new. The value is
+          // also a zone-less "2026-09-11 01:00 AM", which Date.parse reads in local
+          // time (a 16h spread between UTC and Asia/Tokyo). An absent date means
+          // "unknown", never "stale" — same call as successfactors.mjs.
+          ...(externalId ? { externalId } : {}),
+        };
+      });
   },
 };
