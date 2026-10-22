@@ -268,6 +268,28 @@ test('7. normalization matches spelling variants but drops unguardable values', 
 });
 
 // ---------------------------------------------------------------------------
+// 7c. digit_run matching preserves run boundaries across a serialized body.
+// ---------------------------------------------------------------------------
+test('7c. a digit_run value is detected even when other numbers surround it in the payload', () => {
+  // 98765 is a 5-digit amount that normalizes to kind:'digit_run'.
+  // A serialized chat body carries other numbers too (token counts, dates,
+  // team sizes). The guard must isolate each numeric run rather than
+  // collapsing the whole text into one digit string — the old bug turned
+  // '42 items 98765 and ref 2026' into '42987652026', so 98765 never
+  // appeared as a standalone run and was silently missed.
+  const guard = new PrivacyGuard({ values: [98765] });
+  const chatBody = JSON.stringify({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'Team of 42, budget 98765, year 2026' }],
+    max_tokens: 1024,
+  });
+  assert.throws(() => guard.assertSafe(chatBody), PrivacyGuardError, 'digit_run detected in serialized body');
+
+  // A value that only appears merged with adjacent digits must NOT match.
+  assert.equal(guard.assertSafe('total: 1987650'), true, 'no match inside a larger run');
+});
+
+// ---------------------------------------------------------------------------
 // 7b. A profile URL guards its bare handle in BOTH the scheme'd and bare forms.
 // ---------------------------------------------------------------------------
 test('7b. a profile URL derived handle is guarded however the URL was written', () => {
