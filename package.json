@@ -60,6 +60,7 @@
     "jd-archive": "node check-jd-archive.mjs",
     "rejection-latency": "node rejection-latency.mjs",
     "closing-soon": "node closing-soon.mjs",
+    "reeval-candidates": "node reeval-candidates.mjs",
     "invite-match": "node invite-match.mjs",
     "paste-reply": "node paste-reply.mjs",
     "gemini:eval": "node gemini-eval.mjs",
@@ -73,7 +74,7 @@
     "application:init": "node application-artifacts.mjs --init",
     "build:dashboard": "node build-dashboard.mjs",
     "serve:dashboard": "cd dashboard && go run .",
-    "postinstall": "node -e \"process.exit(['','0','false'].includes((process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD||'').toLowerCase())?1:0)\" || npx playwright install chromium || npx playwright install chromium",
+    "postinstall": "node -e \"process.exit(['','0','false'].includes((process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD||'').toLowerCase())?1:0)\" || npx playwright install chromium || npx playwright install chromium || node -e \"console.warn('\\ncareer-ops: could not install Playwright Chromium. Everything else is installed; PDF generation and browser checks need it. Run: npx playwright install chromium')\"",
     "manifesto": "node manifesto.mjs"
   },
   "keywords": [
