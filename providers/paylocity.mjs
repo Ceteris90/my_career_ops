@@ -24,7 +24,8 @@ import { safeEncodeURIComponent } from './_safe-url.mjs';
 //   is not used: it is often the tenant's default (`USA`) on postings whose
 //   LocationName is a German or UK site. City/State are a fallback for an
 //   empty LocationName. A posting with `ShouldDisplayLocation: false` gets
-//   no location. "Remote" is appended when `IsRemote` is set.
+//   no place. "Remote" or "Hybrid" is appended the way the board page labels
+//   the posting (see REMOTE_TYPE_LABELS), also when the place is hidden.
 // - postedAt: `PublishedDate` (ISO with offset).
 // - description: omitted — the list carries only a truncated ~110-char snippet.
 // - requisitionId / language: omitted — the payload has no such fields.
@@ -51,6 +52,11 @@ const TIMEOUT_MS = 30_000;
 // a Retry-After header (up to maxDelayMs * 4) and otherwise backs off
 // exponentially; a 302 is not retried.
 const RETRY_POLICY = { retries: 3, baseDelayMs: 2_000, maxDelayMs: 15_000 };
+// The board page labels a posting from `IndeedRemoteType`, and only when
+// `IsRemote` is true: 0 "Temporarily WFH due to COVID-19", 1 "Hybrid Remote",
+// 2 "Fully Remote", any other value no label. The label is shown whether or not
+// the location itself is displayed.
+const REMOTE_TYPE_LABELS = { 0: 'Remote', 1: 'Hybrid', 2: 'Remote' };
 
 /**
  * Canonical board URL for a board GUID, or null when the value is not a GUID.
@@ -144,7 +150,8 @@ export function parsePaylocityBoard(html, companyName) {
     const hidden = row.ShouldDisplayLocation === false;
     const name = hidden ? '' : clean(row.LocationName);
     const parts = hidden ? [] : name ? [name] : [clean(place.City), clean(place.State)].filter(Boolean);
-    if (row.IsRemote === true) parts.push('Remote');
+    const workMode = row.IsRemote === true ? REMOTE_TYPE_LABELS[String(row.IndeedRemoteType)] : undefined;
+    if (workMode) parts.push(workMode);
 
     /** @type {{title: string, url: string, company: string, location: string, postedAt?: number}} */
     const job = {

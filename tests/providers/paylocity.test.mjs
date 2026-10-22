@@ -30,7 +30,7 @@ const SAMPLE = {
     },
     {
       JobId: '4002', JobTitle: 'R&D Lead', LocationName: '', ShouldDisplayLocation: true,
-      PublishedDate: 'not a date', IsInternal: false, IsRemote: true,
+      PublishedDate: 'not a date', IsInternal: false, IsRemote: true, IndeedRemoteType: 2,
       JobLocation: { City: 'Austin', State: 'TX', Country: 'USA' },
     },
     {
@@ -137,6 +137,25 @@ try {
 
   if (hidden?.location === '') pass('parsePaylocityBoard leaves location empty when ShouldDisplayLocation is false');
   else fail(`parsePaylocityBoard hidden location was ${JSON.stringify(hidden?.location)}`);
+
+  // Work-mode label, the way the board page derives it from IsRemote + IndeedRemoteType.
+  {
+    const row = (id, extra) => ({ JobId: id, JobTitle: `Role ${id}`, LocationName: 'Denver, CO', ShouldDisplayLocation: true, ...extra });
+    const cases = [
+      ['IndeedRemoteType 2 (fully remote)', { IsRemote: true, IndeedRemoteType: 2 }, 'Denver, CO, Remote'],
+      ['IndeedRemoteType 1 (hybrid)', { IsRemote: true, IndeedRemoteType: 1 }, 'Denver, CO, Hybrid'],
+      ['IndeedRemoteType 0 (temporary work from home)', { IsRemote: true, IndeedRemoteType: 0 }, 'Denver, CO, Remote'],
+      ['IsRemote without IndeedRemoteType', { IsRemote: true }, 'Denver, CO'],
+      ['IsRemote with an unknown IndeedRemoteType', { IsRemote: true, IndeedRemoteType: 7 }, 'Denver, CO'],
+      ['IndeedRemoteType without IsRemote', { IsRemote: false, IndeedRemoteType: 2 }, 'Denver, CO'],
+      ['a hidden location on a fully remote posting', { IsRemote: true, IndeedRemoteType: 2, ShouldDisplayLocation: false }, 'Remote'],
+    ];
+    const parsed = parsePaylocityBoard(page({ Jobs: cases.map(([, extra], i) => row(5000 + i, extra)) }), 'ExampleCo');
+    cases.forEach(([label, , expected], i) => {
+      if (parsed[i]?.location === expected) pass(`parsePaylocityBoard location for ${label} is ${JSON.stringify(expected)}`);
+      else fail(`parsePaylocityBoard location for ${label} was ${JSON.stringify(parsed[i]?.location)}, expected ${JSON.stringify(expected)}`);
+    });
+  }
 
   if (jobs.every(j => !('description' in j))) pass('parsePaylocityBoard does not emit the truncated description snippet');
   else fail('parsePaylocityBoard should not emit description');
