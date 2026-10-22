@@ -50,9 +50,22 @@ esac
 
 PROMPT="Run the career-ops 'followup' mode (modes/followup.md) against $ROOT/data/applications.md and $ROOT/data/follow-ups.md. Run node followup-cadence.mjs, and for every overdue/urgent entry generate the follow-up email/LinkedIn draft per the mode's framework (voice-dna.md guardrails apply). Write the full dashboard plus every generated draft to $DRAFT_FILE as markdown. Do NOT send, submit, or record anything as sent -- draft-only, for the user to review later. If there is nothing overdue/urgent, write a one-line note to that file saying so instead."
 
+# Headless claude -p denies any tool call that would need approval, so grant
+# exactly what the sweep needs: the read-only scripts modes/followup.md runs,
+# and a write to today's draft file. Nothing that records a follow-up as sent
+# (set-status.mjs, followup-seed.mjs) is allowed. --add-dir lets it read the
+# tracker when the data root is outside the checkout. `//` makes the Edit rule
+# an absolute path.
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') follow-up sweep starting ==="
-  claude -p "$PROMPT"
+  claude -p "$PROMPT" \
+    --add-dir "$ROOT" \
+    --allowedTools \
+      "Bash(node followup-cadence.mjs *)" \
+      "Bash(node funnel-velocity.mjs *)" \
+      "Bash(node rejection-latency.mjs *)" \
+      "Bash(node company-history.mjs *)" \
+      "Edit(/$DRAFT_FILE)"
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') follow-up sweep done -> $DRAFT_FILE ==="
 } >> "$LOG_FILE" 2>&1
 

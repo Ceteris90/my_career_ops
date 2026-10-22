@@ -236,6 +236,12 @@ so this piece runs `claude -p` (or your CLI's headless equivalent, see
    read the cadence (`node followup-cadence.mjs`), draft a follow-up for
    every overdue/urgent entry, and **write the drafts to a dated file**
    (`output/followup-drafts-{date}.md`) instead of trying to act on them.
+   Headless `claude -p` denies any tool call that would need approval, so
+   the script allows exactly what that takes: the read-only scripts the mode
+   runs (`followup-cadence.mjs`, `funnel-velocity.mjs`,
+   `rejection-latency.mjs`, `company-history.mjs`) and a write to that one
+   draft file, with the data root passed through `--add-dir`. Scripts that
+   record a follow-up as sent, such as `set-status.mjs`, are not allowed.
 3. Logs start/end to `data/followup-sweep.log` (gitignored).
 4. Exits before starting Claude when follow-ups are turned off: with
    `follow_ups.enabled: false` in `config/profile.yml` the sweep calls
