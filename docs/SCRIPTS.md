@@ -21,7 +21,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run sync-check` | `cv-sync-check.mjs` | Validate CV/profile consistency |
 | `npm run patterns` | `analyze-patterns.mjs` | Analyze tracker outcomes and report patterns |
 | `npm run upskill` | `upskill.mjs` | Aggregate skill-gap map from tracked reports (or `--url-text <url\|file>` for a single-JD targeted gap analysis) |
-| `npm run add` | `add-entry.mjs` | Dedup + insert a `/career-ops add` entry into cv.md / article-digest.md |
+| `npm run add` | `add-entry.mjs` | Dedup + insert a `/career-ops add` entry into cv.md / article-digest.md, or append one update bullet under an existing article-digest.md entry (`articleDigestUpdate`) |
 | `npm run update:check` | `update-system.mjs check` | Check for a newer published release |
 | `npm run update` | `update-system.mjs apply --confirm` | Apply upstream update |
 | `npm run rollback` | `update-system.mjs rollback` | Rollback last update |
@@ -553,6 +553,7 @@ repository, stars, visibility); it never reads source code and never writes
 ```bash
 node github-evidence.mjs          # writes output/github-evidence-{date}.{md,json}
 node github-evidence.mjs --json   # same, and prints the JSON on stdout
+node github-evidence.mjs --since 2026-10-01   # new activity on named repos since that day
 ```
 
 - Only PRs and commits you authored count. Your own repos (owning is not
@@ -592,6 +593,20 @@ node github-evidence.mjs --json   # same, and prints the JSON on stdout
   then a lower bound with `first: null` (the search reads newest first). A failed or partial commit search does not change the
   exit code: the report is written as usual, and `commitSearch.status` (`ok`,
   `partial`, `failed`) and `commitSearch.detail` say what happened.
+- `claimCheck.namedWithNewActivity`: repos that `cv.md` or `article-digest.md`
+  already names (`matchedOn`, and `digestEntries` for the entries that name
+  it) with new activity since a baseline: `newMerged` with up to 8
+  `recentNewMerged` titles, and `newCommits` (`count`, `lowerBound`; `null`
+  when the commit search failed), never added together. The baseline is in
+  `since`: the newest `output/github-evidence-{date}.json` dated before today,
+  timed by its `scannedAt` (a report without one counts from the start of its
+  day), or the start of the day given by `--since YYYY-MM-DD`. With neither,
+  `since.status` is `none` and the list is empty. A PR is new when it merged
+  at or after the baseline, and a commit when it was applied (committer time)
+  at or after it. The evidence rules above apply unchanged, so forks, your own
+  repos and non-allowlisted private repos are never listed. `expand` turns a
+  row into a dated bullet under the existing `article-digest.md` entry
+  (`add-entry.mjs` → `articleDigestUpdate`), after your confirmation.
 
 **Exit codes:** `0` report written, `1` usage error or `candidate.github`
 missing/malformed (normalized as in `expand`'s Input step, so a repo link such
