@@ -140,14 +140,13 @@ function render(report) {
   }
 
   if (report.configSource === 'absent') {
-    lines.push('  ℹ️  No config/privacy.yml — running with pattern detection only.');
-    lines.push('      To guard your own values too:');
+    lines.push('  ℹ️  No config/privacy.yml — privacy guard is inactive (opt-in).');
+    lines.push('      To guard your own values and enable pattern detection:');
     lines.push(`        copy ${getPrivacyExamplePath()}`);
     lines.push(`          →  ${report.configPath}`);
     lines.push('      and replace the fictional placeholders with your own.');
   } else if (report.configSource === 'empty') {
-    lines.push('  ℹ️  config/privacy.yml exists but configures no values —');
-    lines.push('      running with pattern detection only.');
+    lines.push('  ℹ️  config/privacy.yml exists but configures no values.');
   } else if (report.configuredCount === 0) {
     lines.push('  ℹ️  config/privacy.yml loaded, but every value was too short to guard');
     lines.push('      safely (5+ characters, 5+ digits). Nothing configured is protected.');

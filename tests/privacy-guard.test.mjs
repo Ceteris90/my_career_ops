@@ -202,7 +202,7 @@ test('4b. a blocked request names the config key, never the value', () => {
 // ---------------------------------------------------------------------------
 // 5. A missing config file is a documented SAFE state, not a failure.
 // ---------------------------------------------------------------------------
-test('5. an absent config is not an error — the guard keeps pattern detection', () => {
+test('5. an absent config does not block by default (auto-detect is opt-in)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'privacy-absent-'));
   const missing = join(dir, 'does-not-exist.yml');
   try {
@@ -211,10 +211,16 @@ test('5. an absent config is not an error — the guard keeps pattern detection'
     assert.equal(config.source, 'absent');
     assert.deepEqual(config.values, []);
 
-    // It loads into a working guard that still auto-detects patterns.
+    // Without config/privacy.yml, the guard does not block by default:
+    // a job posting or CV evaluation containing contact details (email, phone)
+    // continues to be evaluated without interruption.
     const guard = loadPrivacyGuard({ configPath: missing });
     assert.equal(guard.enabled, true);
-    assert.throws(() => guard.assertSafe('mail me at someone@example.org'), PrivacyGuardError);
+    assert.equal(
+      guard.assertSafe('Job posting: contact the recruiter at jobs@company.com or call +1 555 123 4567'),
+      true,
+      'third-party contact details pass when unconfigured'
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

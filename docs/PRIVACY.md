@@ -57,16 +57,20 @@ Exact values you list under `protected:` in `config/privacy.yml`. Matching is:
 
 ### Tier 2 — automatically detected PII
 
-Patterns, not your values. Each kind is switchable under `auto_detect:`:
+Patterns, not your values. Each kind is switchable under `auto_detect:` in
+`config/privacy.yml`:
 
-| Kind | Default | What it matches |
-|------|---------|-----------------|
-| `email` | **on** | Addresses with a dotted domain (`name@host.tld`) |
-| `phone` | **on** | Phone-shaped numbers with a `+` or separator groups |
+| Kind | In sample config | What it matches |
+|------|------------------|-----------------|
+| `email` | on | Addresses with a dotted domain (`name@host.tld`) |
+| `phone` | on | Phone-shaped numbers with a `+` or separator groups |
 | `profile_url` | off | Personal profile URLs (`linkedin.com/in/…`, `github.com/<user>`, …) |
 
-`profile_url` is off by default because a CV may legitimately cite a personal
-project repository.
+> **No-config policy:** Without a `config/privacy.yml`, pattern detection is
+> **opt-in (off by default)**. This ensures ordinary job postings that include
+> a recruiter's contact email or telephone are not blocked during evaluation.
+> Once you copy `config/privacy.example.yml` to `config/privacy.yml`, the
+> enabled patterns above take effect.
 
 ---
 
