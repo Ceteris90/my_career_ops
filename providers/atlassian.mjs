@@ -44,6 +44,23 @@ function formatLocation(job) {
   return locs.map(l => String(l).replace(/\s+/g, ' ').trim()).filter(Boolean).join('; ');
 }
 
+// The posting link the row keeps: the iCIMS posting page, else the apply form.
+// Only an absolute http(s) URL string qualifies, so a relative path, a non-string
+// or a javascript: link from the feed is dropped rather than copied into Job.url.
+/** @param {any} job @returns {string|null} */
+function postingUrl(job) {
+  for (const raw of [job.portalJobPost?.portalUrl, job.applyUrl]) {
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    try {
+      const u = new URL(raw.trim());
+      if (u.protocol === 'https:' || u.protocol === 'http:') return raw.trim();
+    } catch {
+      // relative or malformed — try the next candidate
+    }
+  }
+  return null;
+}
+
 /** @type {Provider} */
 export default {
   id: 'atlassian',
@@ -74,24 +91,30 @@ export default {
       throw new Error(`atlassian: ${LISTINGS_URL} did not return an array of listings — got ${keys}`);
     }
     const jobs = json;
-    return jobs
-      .filter(/** @param {any} j */ j => j && typeof j === 'object' && (j.portalJobPost?.portalUrl || j.applyUrl) && j.title)
-      .map(/** @param {any} j */ j => {
-        const externalId = coerceId(j.id);
-        return {
-          title: j.title || '',
-          url: j.portalJobPost?.portalUrl || j.applyUrl,
-          company: entry.name,
-          location: formatLocation(j),
-          // No postedAt. The feed's only date is portalJobPost.updatedDate, which
-          // is when the posting was last EDITED — Job.postedAt is the publication
-          // date (schema.org datePosted), and scan.mjs's max-age filter treats it
-          // as one, so an old role edited yesterday would read as new. The value is
-          // also a zone-less "2026-09-11 01:00 AM", which Date.parse reads in local
-          // time (a 16h spread between UTC and Asia/Tokyo). An absent date means
-          // "unknown", never "stale" — same call as successfactors.mjs.
-          ...(externalId ? { externalId } : {}),
-        };
+    /** @type {import('./_types.js').Job[]} */
+    const out = [];
+    for (const j of jobs) {
+      // Null, primitive and malformed rows are skipped, never the board.
+      if (!j || typeof j !== 'object') continue;
+      const title = typeof j.title === 'string' ? j.title.trim() : '';
+      const url = postingUrl(j);
+      if (!title || !url) continue;
+      const externalId = coerceId(j.id);
+      out.push({
+        title,
+        url,
+        company: entry.name,
+        location: formatLocation(j),
+        // No postedAt. The feed's only date is portalJobPost.updatedDate, which
+        // is when the posting was last EDITED — Job.postedAt is the publication
+        // date (schema.org datePosted), and scan.mjs's max-age filter treats it
+        // as one, so an old role edited yesterday would read as new. The value is
+        // also a zone-less "2026-09-11 01:00 AM", which Date.parse reads in local
+        // time (a 16h spread between UTC and Asia/Tokyo). An absent date means
+        // "unknown", never "stale" — same call as successfactors.mjs.
+        ...(externalId ? { externalId } : {}),
       });
+    }
+    return out;
   },
 };

@@ -133,6 +133,23 @@ try {
       : fail(`atlassian non-object rows: ${msg || JSON.stringify(jobs)}`);
   }
 
+  // Job.title and Job.url are strings, and url is absolute: a truthy non-string
+  // title, a non-string URL or a relative/non-http one drops that row only.
+  {
+    const { ctx } = recordingCtx(() => [
+      { ...LISTING, id: 11, title: { text: 'Obj' } },
+      { ...LISTING, id: 12, title: '   ' },
+      { ...LISTING, id: 13, portalJobPost: { portalUrl: 42 }, applyUrl: undefined },
+      { ...LISTING, id: 14, portalJobPost: { portalUrl: '/job/14' }, applyUrl: undefined },
+      { ...LISTING, id: 15, portalJobPost: { portalUrl: 'javascript:alert(1)' }, applyUrl: undefined },
+      { ...LISTING, id: 16, title: 'Fallback', portalJobPost: { portalUrl: '/rel' }, applyUrl: 'https://jobs.atlassian.com/job/16?mode=apply' },
+    ]);
+    const jobs = await provider.fetch(ENTRY, ctx);
+    jobs.length === 1 && jobs[0].title === 'Fallback' && jobs[0].url === 'https://jobs.atlassian.com/job/16?mode=apply'
+      ? pass('atlassian.fetch() keeps only string titles and absolute http(s) URLs, falling back to applyUrl')
+      : fail(`atlassian title/url validation: ${JSON.stringify(jobs)}`);
+  }
+
   // Rows missing the fields the scanner contract requires are dropped, not
   // emitted with empty strings.
   {
