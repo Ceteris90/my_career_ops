@@ -13,7 +13,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { stripTypeScriptTypes } from 'node:module';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -75,8 +74,11 @@ test('Explore add preserves a valid posting date in pipeline and scan history', 
     + `const rootScript = (name) => {\n`
     + `  if (name !== "scan") throw new Error("Unexpected script name: " + name);\n`
     + `  return ${JSON.stringify(scanPath)};\n};`;
-  const runtimeSource = stripTypeScriptTypes(original.replace(alias, shim), { mode: 'strip' });
-  const webWriter = await import(`data:text/javascript;base64,${Buffer.from(runtimeSource).toString('base64')}`);
+  // Node >=22.6.0 supports --experimental-strip-types for .mts files,
+  // but node:module.stripTypeScriptTypes() was only added in 22.13.0.
+  const runtimePath = path.join(tmp, 'pipeline-for-test.mts');
+  fs.writeFileSync(runtimePath, original.replace(alias, shim), 'utf8');
+  const webWriter = await import(pathToFileURL(runtimePath).href);
   const { parseInbox } = await import(pathToFileURL(pipelineReaderPath).href);
   const { parseScanHistoryLine } = await import(pathToFileURL(historyReaderPath).href);
   const core = await import(pathToFileURL(scanPath).href);
