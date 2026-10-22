@@ -740,7 +740,7 @@ npm run update
 
 **From a linked git worktree** (the default session layout of agents such as Claude Code), `check`, `update`, `rollback` and `dismiss` re-run themselves in the checkout that has `main` checked out, so the update is committed to `main` rather than the worktree's throwaway branch. Afterwards, `git merge main` inside the worktree picks it up. If no checkout has `main`, or that checkout has uncommitted changes to tracked files, `update` and `rollback` refuse without changing anything. Set `CAREER_OPS_UPDATE_IN_WORKTREE=1` to update the worktree's own branch instead.
 
-**Exit codes:** `0` success, `1` lock conflict or safety violation.
+**Exit codes:** `0` success, `1` lock conflict, safety violation, or a failed `npm install` after the files were updated (the update stays applied; run `npm install`).
 
 ---
 
@@ -752,7 +752,7 @@ Restores system-layer files from the most recent backup branch created during an
 npm run rollback
 ```
 
-**Exit codes:** `0` success, `1` no backup branch found or git error.
+**Exit codes:** `0` success, `1` no backup branch found, git error, or a failed `npm install` after the files were restored (rollback reinstalls so `node_modules` matches the restored `package.json`; run `npm install`).
 
 ---
 
