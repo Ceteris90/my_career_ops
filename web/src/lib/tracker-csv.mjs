@@ -20,7 +20,7 @@ const COLUMNS = [
   { name: "via", read: (r) => r.via, optional: true },
   { name: "url", read: (r) => postingHref(r.url), optional: true },
   { name: "pdf", read: (r) => (r.pdf.includes("✅") ? "yes" : "no") },
-  { name: "report", read: (r) => firstMarkdownLinkTarget(r.report) ?? "" },
+  { name: "report", read: (r) => report(r.report) },
   { name: "notes", read: (r) => r.notes },
 ];
 
@@ -29,6 +29,11 @@ const COLUMNS = [
 function score(cell) {
   const m = String(cell ?? "").replace(/\*\*/g, "").trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?$/);
   return m ? Number(m[1].replace(",", ".")) : "";
+}
+
+function report(cell) {
+  const text = String(cell ?? "").trim();
+  return firstMarkdownLinkTarget(text) ?? (text === "—" || text === "-" ? "" : text);
 }
 
 // A leading `'` stops a spreadsheet from running the cell as a formula. Same
