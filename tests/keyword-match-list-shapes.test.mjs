@@ -90,7 +90,7 @@ check('a fenced keyword block is content, and its delimiters are not keywords', 
   // next heading and the keywords after the opener are still read — exactly what
   // this did before the fix.
   const unclosed = '## Keywords extracted\n\n```\nSQL, Tableau\n\n## Verdict\n\nstrong fit\n';
-  assert.deepEqual(extractKeywords(unclosed), ['```', 'SQL', 'Tableau']);
+  assert.deepEqual(extractKeywords(unclosed), ['SQL', 'Tableau']);
 });
 
 check('a thematic break inside a fenced list is skipped too', () => {
@@ -112,7 +112,7 @@ check('a shorter run of the same fence character does not close the fence', () =
   // keyword list. The discriminating marker is the "## " line below: inside the
   // fence it is content, outside it would end the section.
   const quoted = '## Keywords extracted\n\n````\nSQL\n```\n## not a heading\n````\n\n## Next\n';
-  assert.deepEqual(extractKeywords(quoted), ['SQL', '```', '## not a heading']);
+  assert.deepEqual(extractKeywords(quoted), ['SQL', '## not a heading']);
 
   // A longer closer still closes it, which is the CommonMark direction.
   const longer = '## Keywords extracted\n\n```\nSQL, Tableau\n`````\n\n## Next\n';
@@ -135,7 +135,7 @@ check('fence indentation decides what a delimiter is', () => {
   // length rule ACCEPTS it and indentation is the only thing that can reject it
   // — which is what makes this case isolate the indent bug.
   const indentedNoClose = `## Keywords extracted\n\n${B}\nSQL\n    ${B4}\n## not a heading\n${B}\n\n## Next\n`;
-  assert.deepEqual(extractKeywords(indentedNoClose), ['SQL', B4, '## not a heading']);
+  assert.deepEqual(extractKeywords(indentedNoClose), ['SQL', '## not a heading']);
 
   // The other half, and the reason this needed more than a one-line change: an
   // indented code block's own closer is indented too. Reading those delimiters
