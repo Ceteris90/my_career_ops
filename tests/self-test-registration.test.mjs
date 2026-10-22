@@ -38,8 +38,59 @@ import { pass, fail, ROOT } from './helpers.mjs';
 console.log('\ntest-all.mjs — every --self-test is run by something');
 
 const SELF_TEST_FLAG = /['"`]--self-test['"`]/;
-const isComment = (line) => /^\s*(\/\/|\*|\/\*)/.test(line);
-const codeLines = (src) => src.split('\n').filter((line) => !isComment(line));
+/**
+ * `src` with every `//` and `/* *\/` comment blanked out, newlines kept, so a
+ * launch call quoted inside a block comment is not read as code. String and
+ * regex literals are copied through untouched: `'https://…'` is not a comment
+ * opener, and `/['"]x['"]/` does not open a string. A `/` starts a regex only
+ * where a value cannot just have ended, the same rule
+ * tests/root-tests-registration.test.mjs uses.
+ */
+function stripComments(src) {
+  let out = '';
+  let i = 0;
+  let prev = '';
+  const regexPos = () => prev === '' || '([{,;:=!&|?+-*%~^<>'.includes(prev);
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] === '\n') out += '\n';
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`' || (c === '/' && regexPos())) {
+      const close = c;
+      let inClass = false;
+      out += src[i++];
+      while (i < src.length) {
+        const d = src[i];
+        if (d === '\\') { out += src.slice(i, i + 2); i += 2; continue; }
+        if (d === '\n' && close !== '`') break;
+        out += d;
+        i++;
+        if (close === '/' && d === '[') inClass = true;
+        else if (close === '/' && d === ']') inClass = false;
+        else if (d === close && !inClass) break;
+      }
+      prev = 'x';
+      continue;
+    }
+    if (!/\s/.test(c)) prev = c;
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+const codeLines = (src) => stripComments(src).split('\n');
 const LAUNCH_CALL = /\b(?:run|runScript|runNode|spawn|spawnSync|execFile|execFileSync)\s*\(/;
 
 /** Whether a root script's own code (not its comments) handles `--self-test`. */
@@ -83,9 +134,14 @@ function spawnedBySuite(suiteSrc, name) {
   if (spawnedBySuite("// run(NODE, ['x.mjs', '--self-test'])", 'x.mjs')) failures.push('a commented spawn read as a run');
   if (spawnedBySuite("import { f } from '../x.mjs';\nconst flag = '--self-test';", 'x.mjs')) failures.push('the name and the flag on different lines read as a run');
   if (spawnedBySuite("const ARGS = ['x.mjs', '--self-test'];", 'x.mjs')) failures.push('a bare literal with no launch call read as a run');
+  if (spawnedBySuite("/*\n  run(NODE, ['x.mjs', '--self-test']);\n*/", 'x.mjs')) failures.push('a launch inside a block comment read as a run');
+  if (spawnedBySuite("cleanup(); // run(NODE, ['x.mjs', '--self-test'])", 'x.mjs')) failures.push('a launch in a trailing comment read as a run');
+  if (!spawnedBySuite("const u = 'https://x.test/a'; run(NODE, ['x.mjs', '--self-test']);", 'x.mjs')) failures.push('a // inside a string hid the launch after it');
+  if (!spawnedBySuite("const re = /['\"]x/; run(NODE, ['x.mjs', '--self-test']);", 'x.mjs')) failures.push('a quote inside a regex literal hid the launch after it');
   if (!declaresSelfTest("if (args.includes('--self-test')) runSelfTest();")) failures.push('an argv check was not read as a declaration');
   if (declaresSelfTest("// Run with '--self-test' to check it.\nmain();")) failures.push('a comment mentioning the flag read as a declaration');
-  if (failures.length === 0) pass('the reachability rule rejects comments, suffixes, split lines, failing entries and bare literals (10 fixtures)');
+  if (declaresSelfTest("/**\n Usage: node x.mjs '--self-test'\n */\nmain();")) failures.push('a block comment mentioning the flag read as a declaration');
+  if (failures.length === 0) pass('the reachability rule rejects comments of both kinds, suffixes, split lines, failing entries and bare literals, and keeps strings and regexes intact (15 fixtures)');
   else fail(`reachability rule fixtures failed:\n${failures.map((f) => `    ${f}`).join('\n')}`);
 }
 
