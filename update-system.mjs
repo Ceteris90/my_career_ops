@@ -158,6 +158,11 @@ export const PLAYWRIGHT_INSTALL_TIMEOUT_MS = parsePositiveInt(process.env.CAREER
 export const DASHBOARD_REBUILD_TIMEOUT_MS = parsePositiveInt(process.env.CAREER_OPS_DASHBOARD_REBUILD_TIMEOUT_MS, 60000);
 export const UPDATE_PATH_CHECKOUT_BUDGET_MS = parsePositiveInt(process.env.CAREER_OPS_UPDATE_PATH_CHECKOUT_BUDGET_MS, 5000);
 export const REEXEC_BUFFER_TIMEOUT_MS = parsePositiveInt(process.env.CAREER_OPS_REEXEC_BUFFER_TIMEOUT_MS, 60000);
+// apply()'s exit code when the update was applied but `npm install` failed.
+// The re-exec'd child exits with it after its commit, so the parent can tell
+// "finished, with a follow-up step for the user" from a child that failed
+// partway, which still needs the parent to put its updater files back.
+export const UPDATE_APPLIED_INSTALL_FAILED_EXIT = 3;
 
 // The only byte-exact files the system deliberately owns inside user-layer
 // directories. Keep this escape hatch small and reviewable: aliases, parents,
@@ -5041,6 +5046,13 @@ async function apply() {
         });
         return;
       } catch (err) {
+        // The child committed the update and already said what is left to do.
+        // Restoring "the updater files loaded to run the new version" now would
+        // copy the pre-update versions over the committed ones.
+        if (err?.status === UPDATE_APPLIED_INSTALL_FAILED_EXIT) {
+          process.exitCode = UPDATE_APPLIED_INSTALL_FAILED_EXIT;
+          return;
+        }
         const timedOut = isTimeoutLikeError(err);
         if (timedOut) {
           console.error(`Updater self-reexec timed out after ${timeoutSeconds(timeout)}s.`);
@@ -5622,7 +5634,7 @@ async function apply() {
       console.error('Scripts can fail to load until node_modules matches package.json.');
       console.error('Run `npm install`, then `node doctor.mjs`.');
       console.error('Rollback available: node update-system.mjs rollback');
-      process.exitCode = 1;
+      process.exitCode = UPDATE_APPLIED_INSTALL_FAILED_EXIT;
       return;
     }
 
@@ -5695,8 +5707,9 @@ export function installDependencies(ctx = {}) {
  * apply() runs this after checking out the target and rollback() after
  * restoring the backup. Both have just changed package.json, and node_modules
  * keeps the previous set until npm runs. The browser step stays non-fatal,
- * since only PDF generation and browser checks need it. A failed npm install
- * is returned, so the caller does not report success over it.
+ * since only PDF generation and browser checks need it, and is skipped when
+ * npm failed. A failed npm install is returned, so the caller does not report
+ * success over it.
  *
  * @param {{exec?: typeof execSync, root?: string}} [ctx] - test seams.
  * @returns {{ok: true} | {ok: false, reason: string}}
@@ -5707,7 +5720,13 @@ export function refreshDependencies(ctx = {}) {
   if (!existsSync(join(root, 'package.json'))) return { ok: true };
 
   const install = installDependencies({ exec, root });
-  if (!install.ok) console.log(`npm install failed: ${install.reason}`);
+  if (!install.ok) {
+    // Without the pinned playwright in node_modules, npx would fetch whatever
+    // version is current and install that version's browser, and a network
+    // failure would cost another PLAYWRIGHT_INSTALL_TIMEOUT_MS first.
+    console.log(`npm install failed: ${install.reason}`);
+    return install;
+  }
 
   try {
     exec('npx playwright install chromium', { cwd: root, timeout: PLAYWRIGHT_INSTALL_TIMEOUT_MS, stdio: 'ignore' });

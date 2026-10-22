@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import {
   NPM_INSTALL_TIMEOUT_MS,
   PLAYWRIGHT_INSTALL_TIMEOUT_MS,
+  UPDATE_APPLIED_INSTALL_FAILED_EXIT,
   installDependencies,
   refreshDependencies,
 } from '../update-system.mjs';
@@ -122,7 +123,7 @@ console.log('\n🧪 Testing the updater dependency install (apply + rollback)...
   );
 }
 
-// ── 3. refreshDependencies: browser after npm, npm failure survives ──
+// ── 3. refreshDependencies: browser after npm, and only after a working npm ──
 {
   const dir = mkdtempSync(join(tmpdir(), 'co-deps-refresh-'));
   try {
@@ -149,8 +150,8 @@ console.log('\n🧪 Testing the updater dependency install (apply + rollback)...
     const npmFails = fakeExec({ 'npm install': commandFailure('npm error code E404\n') });
     const failed = refreshDependencies({ exec: npmFails.exec, root: dir });
     check(
-      failed.ok === false && failed.reason === 'npm error code E404' && npmFails.calls.length === 2,
-      'a failed npm install is returned to the caller, and the browser step still runs',
+      failed.ok === false && failed.reason === 'npm error code E404' && npmFails.calls.length === 1,
+      'a failed npm install is returned to the caller, and the browser step is skipped',
       `refresh after a failed npm install returned ${JSON.stringify(failed)} after ${npmFails.calls.length} call(s)`,
     );
 
@@ -175,9 +176,20 @@ console.log('\n🧪 Testing the updater dependency install (apply + rollback)...
   const complete = applyBody.indexOf('Update complete:');
   check(
     applyStart > 0 && refresh > 0 && guard > refresh && complete > guard
-      && /if \(!dependencies\.ok\) \{[\s\S]*?process\.exitCode = 1;\s*return;/.test(applyBody),
-    'apply() checks the install result and exits non-zero before printing "Update complete"',
+      && /if \(!dependencies\.ok\) \{[\s\S]*?process\.exitCode = UPDATE_APPLIED_INSTALL_FAILED_EXIT;\s*return;/.test(applyBody),
+    'apply() checks the install result and exits with its own code before printing "Update complete"',
     'apply() no longer guards "Update complete" with the npm install result',
+  );
+
+  // The parent of the re-exec sees that code as "applied", not as a failure:
+  // no "self-reexec failed", and no restore over the committed updater files.
+  const parentCatch = applyBody.match(/\} catch \(err\) \{\s*([\s\S]*?)const timedOut = isTimeoutLikeError\(err\);/);
+  check(
+    UPDATE_APPLIED_INSTALL_FAILED_EXIT !== 0 && UPDATE_APPLIED_INSTALL_FAILED_EXIT !== 1
+      && Boolean(parentCatch)
+      && /if \(err\?\.status === UPDATE_APPLIED_INSTALL_FAILED_EXIT\) \{\s*process\.exitCode = UPDATE_APPLIED_INSTALL_FAILED_EXIT;\s*return;\s*\}/.test(parentCatch[1]),
+    'the re-exec parent passes the applied-but-not-installed exit through before any restore',
+    'the re-exec parent no longer recognizes the applied-but-not-installed exit code',
   );
 }
 
