@@ -450,26 +450,6 @@ Block format:
 | Relocation purchasing power | ℹ️ {home.jurisdiction} ~{home.takeHome} vs {dest.jurisdiction} ~{dest.takeHome} |
 ```
 
-#### Score Global
-Read `modes/_custom.md` → Scoring Rules, if it exists, and apply its override here. Default (if absent or silent): calculate global score based on dimension scores below.
-
-Use available signals:
-
-1. JD specificity and realism
-2. salary transparency
-3. boilerplate ratio
-4. company hiring/freeze/layoff signals from WebSearch
-5. prior appearances in `data/scan-history.tsv`
-6. suspicious or scam-like language
-
-Use one tier:
-
-- High Confidence
-- Proceed with Caution
-- Suspicious
-
-If evidence is thin, default to `Proceed with Caution` and explain the limitation.
-
 #### Global Score
 
 Provide a score table:
