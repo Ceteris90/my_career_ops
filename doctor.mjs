@@ -399,6 +399,16 @@ function isDebianLike() {
 
 function playwrightDepsFix() {
   if (existsSync('/etc/NIXOS')) return playwrightInstallFix();
+  // On Windows the missing pieces are Media Foundation DLLs. install-deps
+  // installs them through Playwright's install_media_pack.ps1, which enables a
+  // Windows Server feature and so needs an administrator shell; Windows N
+  // editions lack them by design and need Microsoft's Media Feature Pack.
+  if (process.platform === 'win32') {
+    return [
+      'Run in an administrator terminal: npx playwright install-deps chromium',
+      'On a Windows N edition, install the Media Feature Pack from Microsoft instead (Settings → Apps → Optional features).',
+    ];
+  }
   if (process.platform === 'linux' && !isDebianLike()) {
     return 'Install the packages that provide these libraries with your distribution\'s package manager. `npx playwright install-deps` uses apt-get, so it only works on Debian and Ubuntu.';
   }
