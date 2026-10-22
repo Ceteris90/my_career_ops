@@ -750,7 +750,7 @@ npm run update
 
 Restores system-layer files from the most recent backup branch created during an update. Rollback prefers the newest timestamped branch matching `backup-pre-update-<version>-<YYYYMMDDTHHMMSSZ>` and still accepts legacy `backup-pre-update-<version>` branches for older installs.
 
-Rollback does not keep local edits the way `update` does. Every system file the backup holds is checked out over the one on disk, so an uncommitted change to a system file is lost, with no `.bak` copy. Commit or copy such changes before you roll back. User-layer files are never touched.
+Rollback does not keep local edits the way `update` does. It checks the backup's version of each system file out over the one on disk, skipping only paths it reports as unsafe (a symlinked parent, a file that is now a directory). An uncommitted change to a restored file is lost, with no `.bak` copy. Commit or copy such changes before you roll back. User-layer files are never touched.
 
 ```bash
 npm run rollback
