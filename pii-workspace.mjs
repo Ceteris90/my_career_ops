@@ -70,22 +70,31 @@ function loadTokenMap() {
 function atomicWriteFileSync(targetPath, content, options = {}) {
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
-  let mode;
-  if (options.mode !== undefined) {
-    mode = options.mode;
-  } else if (fs.existsSync(targetPath)) {
+
+  const opts = typeof options === 'string' ? { encoding: options } : { ...options };
+
+  let mode = opts.mode;
+  if (mode === undefined && fs.existsSync(targetPath)) {
     try {
-      mode = fs.statSync(targetPath).mode;
+      mode = fs.statSync(targetPath).mode & 0o777;
     } catch {
       /* ignore */
     }
   }
-  const writeOptions = mode !== undefined ? { ...options, mode } : options;
+  if (mode === undefined) {
+    mode = 0o600;
+  }
+
   const tempPath = path.join(
     dir,
     `.tmp-${path.basename(targetPath)}-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
-  fs.writeFileSync(tempPath, content, writeOptions);
+  fs.writeFileSync(tempPath, content, { ...opts, mode });
+  try {
+    fs.chmodSync(tempPath, mode);
+  } catch {
+    /* on Windows chmod is limited, ignore chmod failures */
+  }
   fs.renameSync(tempPath, targetPath);
 }
 
