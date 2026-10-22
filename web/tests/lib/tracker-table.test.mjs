@@ -130,3 +130,13 @@ test('reads a header-mapped tracker narrower than the legacy eight columns', () 
 test('still drops a headerless row shorter than the legacy eight columns', () => {
   assert.deepEqual(parseApplications('| 3 | 2026-01-02 | Example | Engineer | 4.0/5 | Applied | fixture |', root), []);
 });
+
+test('a header with unrecognized trailing columns still drops a seven-cell row', () => {
+  // Eight header cells, the last one unknown to the alias table, so the mapped
+  // width is seven. A row that lost its Date cell must not be read shifted.
+  const md = `| # | Date | Company | Role | Score | Status | Notes | Custom |
+|---|---|---|---|---|---|---|---|
+| 4 | Example | Engineer | 4.0/5 | Applied | fixture | x |
+| 5 | 2026-01-02 | Example | Engineer | 4.0/5 | Applied | fixture | x |`;
+  assert.deepEqual(parseApplications(md, root).map((row) => row.n), ['5']);
+});
