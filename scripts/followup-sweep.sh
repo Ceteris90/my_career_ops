@@ -52,20 +52,30 @@ PROMPT="Run the career-ops 'followup' mode (modes/followup.md) against $ROOT/dat
 
 # Headless claude -p denies any tool call that would need approval, so grant
 # exactly what the sweep needs: the read-only scripts modes/followup.md runs,
-# and a write to today's draft file. Nothing that records a follow-up as sent
-# (set-status.mjs, followup-seed.mjs) is allowed. --add-dir lets it read the
-# tracker when the data root is outside the checkout. `//` makes the Edit rule
-# an absolute path.
+# and a write to today's draft file. --add-dir lets it read the tracker when
+# the data root is outside the checkout. `//` makes an Edit rule an absolute
+# path.
+#
+# --allowedTools only adds approvals; it does not narrow what the user's own
+# settings already allow. dontAsk overrides an inherited acceptEdits or auto
+# default, so nothing beyond these rules and the user's explicit allow rules
+# runs, and the deny rules (which beat any allow rule) keep the run from
+# recording a follow-up as sent or editing the tracker and follow-up log.
 {
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') follow-up sweep starting ==="
   claude -p "$PROMPT" \
+    --permission-mode dontAsk \
     --add-dir "$ROOT" \
     --allowedTools \
       "Bash(node followup-cadence.mjs *)" \
       "Bash(node funnel-velocity.mjs *)" \
       "Bash(node rejection-latency.mjs *)" \
       "Bash(node company-history.mjs *)" \
-      "Edit(/$DRAFT_FILE)"
+      "Edit(/$DRAFT_FILE)" \
+    --disallowedTools \
+      "Bash(node set-status.mjs *)" \
+      "Bash(node followup-seed.mjs *)" \
+      "Edit(/$ROOT/data/**)"
   echo "=== $(date '+%Y-%m-%d %H:%M:%S') follow-up sweep done -> $DRAFT_FILE ==="
 } >> "$LOG_FILE" 2>&1
 

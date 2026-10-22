@@ -240,8 +240,11 @@ so this piece runs `claude -p` (or your CLI's headless equivalent, see
    the script allows exactly what that takes: the read-only scripts the mode
    runs (`followup-cadence.mjs`, `funnel-velocity.mjs`,
    `rejection-latency.mjs`, `company-history.mjs`) and a write to that one
-   draft file, with the data root passed through `--add-dir`. Scripts that
-   record a follow-up as sent, such as `set-status.mjs`, are not allowed.
+   draft file, with the data root passed through `--add-dir`. It also runs
+   in `dontAsk` mode, so an `acceptEdits` or `auto` default in your own
+   settings doesn't widen that, and it denies `set-status.mjs`,
+   `followup-seed.mjs` and any edit under `data/`, so the run can't record
+   a follow-up as sent even if your settings allow those.
 3. Logs start/end to `data/followup-sweep.log` (gitignored).
 4. Exits before starting Claude when follow-ups are turned off: with
    `follow_ups.enabled: false` in `config/profile.yml` the sweep calls

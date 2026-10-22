@@ -15,7 +15,12 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { pass, fail, ROOT, rmSync } from './helpers.mjs';
 
-const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// The sweep names its draft file with `date +%Y-%m-%d`, the local calendar day.
+const localDate = (d = new Date()) => [
+  d.getFullYear(),
+  String(d.getMonth() + 1).padStart(2, '0'),
+  String(d.getDate()).padStart(2, '0'),
+].join('-');
 
 console.log('\nfollowup-sweep.sh grants the tools the headless run needs');
 
@@ -48,6 +53,7 @@ if (zshProbe.error?.code === 'ENOENT') {
     chmodSync(join(bin, 'claude'), 0o755);
 
     const sweep = join(ROOT, 'scripts', 'followup-sweep.sh');
+    const dayBefore = localDate();
     const result = spawnSync('zsh', [sweep], {
       cwd: ROOT,
       env: {
@@ -61,6 +67,7 @@ if (zshProbe.error?.code === 'ENOENT') {
       encoding: 'utf8',
       timeout: 30000,
     });
+    const dayAfter = localDate();
 
     if (result.status === 0) pass('sweep exits 0 with follow-ups on');
     else fail(`sweep exit ${result.status}: ${result.stdout}\n${result.stderr}`);
@@ -68,7 +75,8 @@ if (zshProbe.error?.code === 'ENOENT') {
     if (!existsSync(argvFile)) {
       fail(`sweep did not start claude.\nstdout=${result.stdout}\nstderr=${result.stderr}`);
     } else {
-      const argv = readFileSync(argvFile, 'utf8').split('\n');
+      // printf ends every argument with a newline, so drop the empty tail.
+      const argv = readFileSync(argvFile, 'utf8').replace(/\n$/, '').split('\n');
       const after = (flag) => {
         const i = argv.indexOf(flag);
         if (i === -1) return [];
@@ -79,29 +87,45 @@ if (zshProbe.error?.code === 'ENOENT') {
         }
         return values;
       };
-      const allowed = after('--allowedTools');
+      const sorted = (list) => [...list].sort();
+      const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
       if (argv[0] === '-p') pass('claude runs headless (-p)');
       else fail(`claude argv did not start with -p: ${JSON.stringify(argv.slice(0, 2))}`);
 
-      if (after('--add-dir').includes(dir)) pass('--add-dir names the data root');
-      else fail(`--add-dir does not name the data root ${dir}: ${JSON.stringify(after('--add-dir'))}`);
+      if (same(after('--permission-mode'), ['dontAsk'])) pass('--permission-mode dontAsk overrides an inherited acceptEdits/auto default');
+      else fail(`expected --permission-mode dontAsk: ${JSON.stringify(after('--permission-mode'))}`);
 
-      if (allowed.includes('Bash(node followup-cadence.mjs *)')) pass('followup-cadence.mjs is allowed');
-      else fail(`followup-cadence.mjs is not in --allowedTools: ${JSON.stringify(allowed)}`);
+      if (same(after('--add-dir'), [dir])) pass('--add-dir names the data root');
+      else fail(`--add-dir does not name only the data root ${dir}: ${JSON.stringify(after('--add-dir'))}`);
 
-      // `//` anchors a permission path at the filesystem root; a single `/`
-      // would anchor it at the working directory.
-      const draftRule = new RegExp(`^Edit\\(/${escapeRe(join(dir, 'output'))}/followup-drafts-\\d{4}-\\d{2}-\\d{2}\\.md\\)$`);
-      if (allowed.some((rule) => draftRule.test(rule))) pass('today\'s draft file under the data root may be written (absolute // rule)');
-      else fail(`no absolute Edit rule for the draft file under ${dir}/output: ${JSON.stringify(allowed)}`);
+      // The complete allow list: the four read-only scripts and one write,
+      // to today's draft file. `//` anchors a permission path at the
+      // filesystem root; a single `/` would anchor it at the working directory.
+      // Either day is accepted in case the run straddles midnight.
+      const readOnly = [
+        'Bash(node followup-cadence.mjs *)',
+        'Bash(node funnel-velocity.mjs *)',
+        'Bash(node rejection-latency.mjs *)',
+        'Bash(node company-history.mjs *)',
+      ];
+      const allowed = after('--allowedTools');
+      const expectedFor = (day) => [...readOnly, `Edit(/${join(dir, 'output', `followup-drafts-${day}.md`)})`];
+      if (same(allowed, expectedFor(dayBefore)) || same(allowed, expectedFor(dayAfter))) {
+        pass('--allowedTools is exactly the four read-only scripts and today\'s draft file');
+      } else {
+        fail(`--allowedTools ${JSON.stringify(allowed)} != ${JSON.stringify(expectedFor(dayBefore))}`);
+      }
 
-      if (allowed.filter((rule) => rule.startsWith('Edit(')).length === 1) pass('exactly one Edit rule');
-      else fail(`expected one Edit rule: ${JSON.stringify(allowed)}`);
-
-      const recording = allowed.filter((rule) => /set-status|followup-seed|^Bash$|^Edit$|^Write/.test(rule));
-      if (recording.length === 0) pass('nothing that records a follow-up as sent, and no blanket Bash/Edit/Write');
-      else fail(`sweep grants more than drafting needs: ${JSON.stringify(recording)}`);
+      // Deny rules beat any allow rule, the user's own included.
+      const denied = after('--disallowedTools');
+      const expectedDenied = [
+        'Bash(node set-status.mjs *)',
+        'Bash(node followup-seed.mjs *)',
+        `Edit(/${join(dir, 'data')}/**)`,
+      ];
+      if (same(denied, expectedDenied)) pass('--disallowedTools blocks recording a follow-up and editing the data folder');
+      else fail(`--disallowedTools ${JSON.stringify(denied)} != ${JSON.stringify(expectedDenied)}`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
