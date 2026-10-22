@@ -186,7 +186,7 @@ These files contain system logic, scripts, templates, and instructions that impr
 
 ## The Rule
 
-**If a file is user-owned, no update process may modify or delete it.** The only files the updater writes inside user-layer directories are the exact system-owned `.gitkeep` scaffolds listed above.
+**If a file is user-owned, no update process may modify or delete it.** The only files the updater writes inside user-layer directories are the system-owned scaffolds listed above: the exact `.gitkeep` files, and the `README.md` in `documents/`, `interview-prep/sessions/` and `writing-samples/`.
 
 **If a file is in the System Layer, it can be safely replaced with the latest version from the upstream repo.**
 
