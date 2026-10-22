@@ -36,7 +36,15 @@ test("either setProfile write failing is reported on its confirmation", async ()
   assert.equal(await info.failure, "Your profile was saved. Your scan targets were NOT saved: write failed.");
 
   const profileOnly = context({ profile: "Your profile was NOT saved: HTTP 500." });
-  assert.equal(await dispatch("setProfile", { roles: ["Engineer"] }, profileOnly.ctx).run().failure, "Your profile was NOT saved: HTTP 500.");
+  assert.equal(
+    await dispatch("setProfile", { roles: ["Engineer"] }, profileOnly.ctx).run().failure,
+    "Your profile was NOT saved: HTTP 500. Your scan targets were saved.",
+  );
+  // No roles, so no scan-target write: nothing to report as saved alongside.
+  assert.equal(
+    await dispatch("setProfile", { location: "Berlin" }, profileOnly.ctx).run().failure,
+    "Your profile was NOT saved: HTTP 500.",
+  );
 
   const both = context({ profile: "Your profile was NOT saved: HTTP 409.", portals: "Your scan targets were NOT saved: HTTP 409." });
   const reason = await dispatch("setProfile", { roles: ["Engineer"] }, both.ctx).run().failure;

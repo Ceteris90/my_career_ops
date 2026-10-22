@@ -347,11 +347,13 @@ const ACTIONS: Record<string, ActionDef> = {
         run: () => {
           const profile = ctx.writeProfile!(p as Record<string, unknown>);
           const portals = p.roles?.length && ctx.writePortals ? ctx.writePortals(p.roles, p.location ? [p.location] : undefined) : null;
-          // Two writes, one card: when only the scan targets fail, the card
-          // still says the profile itself was saved.
-          const failure = Promise.all([profile, portals]).then(([profileFailure, portalsFailure]) =>
-            profileFailure && portalsFailure ? `${profileFailure} ${portalsFailure}`
-              : profileFailure ?? (portalsFailure ? `Your profile was saved. ${portalsFailure}` : null));
+          // Two writes, one card: when only one of them fails, the card also
+          // says the other one was saved.
+          const failure = Promise.all([profile, portals]).then(([profileFailure, portalsFailure]) => {
+            if (profileFailure && portalsFailure) return `${profileFailure} ${portalsFailure}`;
+            if (profileFailure) return portals ? `${profileFailure} Your scan targets were saved.` : profileFailure;
+            return portalsFailure ? `Your profile was saved. ${portalsFailure}` : null;
+          });
           return { note: "Profile saved — your matches will sharpen.", failure };
         },
       };
