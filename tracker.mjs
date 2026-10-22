@@ -673,13 +673,18 @@ const CSV_COLUMNS = [
   ['score', (r) => csvScore(r.score)],
   ['status', (r) => r.status],
   ['pdf', (r) => (String(r.pdf ?? '').includes('✅') ? 'yes' : 'no')],
-  ['report', (r) => firstLinkTarget(r.report) ?? ''],
+  ['report', (r) => csvReport(r.report)],
   ['notes', (r) => r.notes],
 ];
 
 function csvScore(cell) {
   const m = String(cell ?? '').replace(/\*\*/g, '').trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?$/);
   return m ? Number(m[1].replace(',', '.')) : '';
+}
+
+function csvReport(cell) {
+  const text = String(cell ?? '').trim();
+  return firstLinkTarget(text) ?? (text === '—' || text === '-' ? '' : text);
 }
 
 function csvField(value) {

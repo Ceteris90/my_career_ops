@@ -17,6 +17,7 @@ function trackerRoot(t) {
     '| 2 | 2026-09-02 | Globex | Data Analyst | 4,5/5 | Evaluated | ❌ | — | =HYPERLINK("https://jobs.example/2") |',
     '| 3 | 2026-09-03 | Initech | BI Engineer | N/A | SKIP | ❌ | — | |',
     '| 4 | 2026-09-04 | Hooli | Data Analyst | N/A (2026-09-01) | Discarded | ❌ | — | |',
+    '| 5 | 2026-09-05 | Umbrella | Data Engineer | 3.9/5 | Evaluated | ❌ | reports/005-umbrella-2026-09-05.md | |',
   ].join('\n') + '\n');
   return root;
 }
@@ -29,11 +30,12 @@ function query(root, args) {
   });
 }
 
-test('--csv prints spreadsheet-ready rows: numeric score, yes/no PDF, report path', (t) => {
+test('--csv prints spreadsheet-ready rows: numeric score, yes/no PDF, report path from a link or a plain cell', (t) => {
   const result = query(trackerRoot(t), ['--csv']);
   assert.equal(result.status, 0, describeSpawn(result));
   assert.equal(result.stdout, [
     'id,date,company,role,score,status,pdf,report,notes',
+    '5,2026-09-05,Umbrella,Data Engineer,3.9,Evaluated,no,reports/005-umbrella-2026-09-05.md,',
     '4,2026-09-04,Hooli,Data Analyst,,Discarded,no,,',
     '3,2026-09-03,Initech,BI Engineer,,SKIP,no,,',
     `2,2026-09-02,Globex,Data Analyst,4.5,Evaluated,no,,"'=HYPERLINK(""https://jobs.example/2"")"`,
