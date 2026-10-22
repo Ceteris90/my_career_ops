@@ -14,7 +14,7 @@
 //   200 {"gepubliceerd":false,"status":"PASSIEF"} -> expired
 //   200 {"gepubliceerd":false,"status":"HANGEND"} -> uncertain (pending), never expired
 //   404 {"code":"NOT_FOUND"}                      -> expired (gone)
-//   a record for another id, no flag, any other 404, 403 -> null (the browser decides)
+//   a record for another id, no flag, any other 404, 410, 403 -> null (the browser decides)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveAtsApi, checkLivenessViaApi, classifyVdabVacancy } from '../liveness-api.mjs';
@@ -92,7 +92,7 @@ test('a pending vacancy (HANGEND) stays uncertain, never expired', async () => {
   }
 });
 
-test('an id VDAB does not have (404 NOT_FOUND) is gone; any other 404 falls back to the browser', async () => {
+test('an id VDAB does not have (404 NOT_FOUND) is gone; any other 404, or a 410, falls back to the browser', async () => {
   const gone = await withFetch(async () => json({ code: 'NOT_FOUND', application: 'vindeenjob', httpStatus: 404, message: `Vacature met ID of UUID [${ID}] niet gevonden` }, 404),
     () => checkLivenessViaApi(POSTING));
   assert.equal(gone.result, 'expired');
@@ -101,6 +101,7 @@ test('an id VDAB does not have (404 NOT_FOUND) is gone; any other 404 falls back
   for (const response of [
     () => new Response('<!DOCTYPE html><html><body>Not Found</body></html>', { status: 404 }),
     () => json({ code: 'ROUTE_NOT_FOUND', httpStatus: 404 }, 404),
+    () => new Response('', { status: 410 }),
   ]) {
     const verdict = await withFetch(async () => response(), () => checkLivenessViaApi(POSTING));
     assert.equal(verdict, null);

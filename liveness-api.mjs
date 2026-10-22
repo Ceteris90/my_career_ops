@@ -517,8 +517,9 @@ const ATS_PROVIDERS = [
     // true, an unpublished one 200 with gepubliceerd false and a status, and an
     // id VDAB never had 404 {"code":"NOT_FOUND"}. The 404 body is read too, so
     // a 404 saying anything else falls back to the browser instead of closing
-    // the vacancy for good.
+    // the vacancy for good, and so does a 410, which VDAB never answered.
     interpretStatuses: [200, 404],
+    api404Authoritative: false,
     async interpret(res, { id }) {
       let json;
       try { json = await res.json(); } catch { return null; }
