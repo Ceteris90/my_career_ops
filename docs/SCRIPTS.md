@@ -589,7 +589,7 @@ node github-evidence.mjs --json   # same, and prints the JSON on stdout
   its stars read `?`.
 - GitHub search returns at most 1000 results per query; the `truncated` flags
   say when a list may be incomplete, and a commit count with `exact: false` is
-  then a lower bound. A failed or partial commit search does not change the
+  then a lower bound with `first: null` (the search reads newest first). A failed or partial commit search does not change the
   exit code: the report is written as usual, and `commitSearch.status` (`ok`,
   `partial`, `failed`) and `commitSearch.detail` say what happened.
 

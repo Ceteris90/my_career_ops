@@ -253,11 +253,15 @@ export function buildEvidence({
   }
   // With no search to go by, a repo it did not return has an unknown count, not zero.
   const searched = commitSearch != null && commitSearch.status !== 'failed';
+  // A search that stopped early read newest first, so the oldest commit it saw
+  // is not the first one: that date is left out unless read from the repo.
+  const searchCut = commitSearch != null && commitSearch.status !== 'ok';
   /** A row's commit figures. Dates only where PR titles may be shown too. */
   const commitsOf = (key, withDates) => {
     const s = commitStats.get(key);
     const base = { count: s ? s.count : searched ? 0 : null, exact: Boolean(s?.exact) };
-    return withDates ? { ...base, first: s?.first ?? null, last: s?.last ?? null } : base;
+    if (!withDates) return base;
+    return { ...base, first: (s && (s.exact || !searchCut) ? s.first : null) ?? null, last: s?.last ?? null };
   };
   const commitTotal = searched || commitStats.size
     ? [...commitStats.values()].reduce((n, s) => n + (s.count ?? 0), 0) : null;
@@ -628,7 +632,7 @@ export function renderMarkdown(result) {
   if (search?.status === 'failed') {
     md.push('', `Commit search: ${search.detail}. Commit counts come only from own and allowlisted repos, read one by one.`);
   } else if (search?.status === 'partial') {
-    md.push('', `Commit search: read ${search.read} of ${search.total ?? '?'} authored commits, newest first (${search.detail}). A count marked ≥ is a lower bound and a repo with only older commits may be missing; own and allowlisted repos are counted from the repo itself.`);
+    md.push('', `Commit search: read ${search.read} of ${search.total ?? '?'} authored commits, newest first (${search.detail}). A count marked ≥ is a lower bound with no first-commit date, and a repo with only older commits may be missing; own and allowlisted repos are counted from the repo itself.`);
   }
   // A search count is a lower bound once the search stopped short; an exact one never is.
   const fmtCommits = (c) => {

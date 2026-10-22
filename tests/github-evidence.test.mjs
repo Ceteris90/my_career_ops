@@ -655,8 +655,10 @@ const countTarget = (a) => /^repos\/([^/]+\/[^/?]+)\/commits\?/.exec(String(a[1]
   const cappedMd = renderMarkdown(capped);
   check(capped.truncated.commits === true && capped.commitSearch.total === 5000 && capped.commitSearch.read === 1000,
     'cap: truncated.commits is set, with GitHub\'s total and how many were read');
+  check(capped.contributions[0]?.commits.first === null && capped.contributions[0]?.commits.last === '2026-10-01',
+    'cap: a search-derived first date is withheld (the search read newest first); last is kept');
   check(cappedMd.includes('read 1000 of 5000 authored commits') && cappedMd.includes('Authored commits on default branches: ≥1000')
-    && cappedMd.includes('Commits to the default branch: ≥1000') && /these lists may be incomplete: commits/.test(cappedMd),
+    && cappedMd.includes('Commits to the default branch: ≥1000 (last 2026-10-01)') && /these lists may be incomplete: commits/.test(cappedMd),
     'cap: the Markdown flags the list and marks search counts as lower bounds');
 
   g = commitGh({ pages: [searchBody(page(100), 300), searchBody(page(100), 300), { fail: 'HTTP 403: You have exceeded a secondary rate limit' }] });
@@ -675,6 +677,12 @@ const countTarget = (a) => /^repos\/([^/]+\/[^/?]+)\/commits\?/.exec(String(a[1]
   check(failed.truncated.commits === true && failed.totals.commits === 4 && failed.excluded.ownRepos[0]?.commits.count === 4,
     'search failed: exact counts still reach the report');
   check(renderMarkdown(failed).includes('Commit search: page 1 failed'), 'search failed: the Markdown says so');
+  const cutExact = buildEvidence({
+    user: USER, merged: [], open: [], closed: [], repoMeta: new Map([['jane-doe/tool', { private: false, fork: false, stars: 1 }]]),
+    commitSearch: { status: 'partial', total: 5000, read: 1000, detail: 'cap' }, commitItems: [],
+    commitCounts: new Map([['jane-doe/tool', { count: 4, first: '2026-01-01', last: '2026-02-01' }]]), generatedAt: '2026-10-22',
+  });
+  check(cutExact.excluded.ownRepos[0]?.commits.first === '2026-01-01', 'search cut short: a count read from the repo keeps its first date');
 
   g = commitGh({ pages: [searchBody(page(3), 3, { incomplete_results: true })] });
   s = searchAuthoredCommits(USER, g.runner, () => {});
