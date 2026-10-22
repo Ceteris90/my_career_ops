@@ -64,7 +64,7 @@ function loadTokenMap() {
 
 function saveTokenMap(map) {
   fs.mkdirSync(path.dirname(tokenMapPath), { recursive: true });
-  fs.writeFileSync(tokenMapPath, JSON.stringify(map, null, 2), 'utf-8');
+  fs.writeFileSync(tokenMapPath, JSON.stringify(map, null, 2), { encoding: 'utf-8', mode: 0o600 });
 }
 
 /**
@@ -73,15 +73,24 @@ function saveTokenMap(map) {
  */
 function scrub(text, guard, map) {
   let out = text;
-  let index = 0;
+  let maxIndex = 0;
+  for (const token of Object.keys(map)) {
+    const match = token.match(/^\{\{PRIVACY_VALUE_(\d+)\}\}$/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n > maxIndex) maxIndex = n;
+    }
+  }
+  let index = maxIndex;
+
   for (const value of guard.textValues) {
     if (value.length < 5) continue;
     const re = new RegExp(escapeRe(value), 'gi');
-    out = out.replace(re, () => {
+    out = out.replace(re, (matched) => {
       const existing = Object.entries(map).find(([, v]) => v.toLowerCase() === value);
       if (existing) return existing[0];
       const token = `{{PRIVACY_VALUE_${++index}}}`;
-      map[token] = value;
+      map[token] = matched;
       return token;
     });
   }
@@ -105,7 +114,15 @@ function main() {
     if (mode !== 'status') process.exit(1);
   }
 
-  const guard = loadPrivacyGuard({ config });
+  // Use an empty env so scrub mode is never disabled by an outbound LLM bypass.
+  const guard = loadPrivacyGuard({ config, env: {} });
+  if (mode === 'scrub' && guard.textValues.size === 0) {
+    console.error(
+      `[privacy] No guardable text values loaded. Check config/privacy.yml (minimum text length: 5 characters).`
+    );
+    process.exit(1);
+  }
+
   const map = loadTokenMap();
 
   for (const file of USER_FILES) {
@@ -115,7 +132,11 @@ function main() {
 
     if (mode === 'scrub') {
       const scrubbed = scrub(content, guard, map);
-      if (scrubbed !== content) fs.writeFileSync(filePath, scrubbed, 'utf8');
+      if (scrubbed !== content) {
+        // Persist the token map immediately before each rewritten file loses its real values.
+        saveTokenMap(map);
+        fs.writeFileSync(filePath, scrubbed, 'utf8');
+      }
       console.log(`[privacy] ${file}: tokenized (${Object.keys(map).length} token(s) mapped)`);
     } else if (mode === 'restore') {
       const restored = rehydrate(content, map);
