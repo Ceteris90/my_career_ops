@@ -107,6 +107,10 @@ const without = (text, line) => {
   check(throws({ articleDigestUpdate: { dedupKey: 'Widgets', bullet: '- one\n- two' } }, DIGEST, /one line/), 'a multi-line bullet is rejected');
   check(throws({ articleDigestUpdate: { dedupKey: 'Widgets', bullet: '- ' } }, DIGEST, /one line/), 'an empty bullet is rejected');
   check(throws({ articleDigestUpdate: { dedupKey: '', bullet: BULLET } }, DIGEST, /non-empty dedupKey/), 'a missing dedupKey is rejected');
+  const twice = `${DIGEST}\n---\n\n## Widgets -- An older write-up\n\n- Same project, second entry\n`;
+  check(appendDigestBullet(twice, 'Widgets', BULLET).status === 'ambiguous'
+    && throws({ articleDigestUpdate: { dedupKey: 'Widgets', bullet: BULLET } }, twice, /2 entries named "Widgets"/),
+  'two entries with the same name: ambiguous, the update fails and nothing is appended to either');
 
   const both = applyAdd({
     articleDigest: { dedupKey: 'Gadgets', entry: '## Gadgets — New\n\n- Shipped gadgets' },

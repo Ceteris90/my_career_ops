@@ -596,8 +596,8 @@ node github-evidence.mjs --since 2026-10-01   # new activity on named repos sinc
 - `claimCheck.namedWithNewActivity`: repos that `cv.md` or `article-digest.md`
   already names (`matchedOn`, and `digestEntries` for the entries that name
   it) with new activity since a baseline: `newMerged` with up to 8
-  `recentNewMerged` titles, and `newCommits` (`count`, `lowerBound`; `null`
-  when the commit search failed), never added together. The baseline is in
+  `recentNewMerged` titles, and `newCommits` (`count`, and `lowerBound` when the commit
+  search stopped early; `null` when it failed), never added together. The baseline is in
   `since`: the newest `output/github-evidence-{date}.json` dated before today,
   timed by its `scannedAt` (a report without one counts from the start of its
   day), or the start of the day given by `--since YYYY-MM-DD`. With neither,

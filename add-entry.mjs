@@ -43,7 +43,7 @@
  *
  * Exit codes: 0 on success (including a no-op "duplicate"); non-zero only on a
  * hard error (bad/empty payload, a requested target file missing, unwritable,
- * or an update whose entry is not in article-digest.md).
+ * or an update whose entry is not in article-digest.md or is there twice).
  *
  * Test isolation: CAREER_OPS_CV / CAREER_OPS_ARTICLE_DIGEST override the target
  * files so tests never touch a real user CV.
@@ -201,13 +201,17 @@ const bulletText = (line) => String(line).trim().replace(/^[-*+](?:\s+|$)/, '').
  * line, before the blank lines and `---` that separate it from the next entry.
  * After a list item it continues that list; after a paragraph it starts one
  * with a blank line. A bullet whose text the entry already has is a duplicate.
+ * Two entries with the same name are ambiguous: nothing is appended, since
+ * the key cannot say which one was meant.
  *
- * @returns {{text: string, status: 'appended'|'duplicate'|'missing', entry?: string}}
+ * @returns {{text: string, status: 'appended'|'duplicate'|'missing'|'ambiguous', entry?: string, matches?: number}}
  */
 export function appendDigestBullet(md, dedupKey, bullet) {
   const key = normalizeKey(dedupKey);
-  const entry = digestEntries(md).find((e) => normalizeKey(e.name) === key);
-  if (!key || !entry) return { text: md, status: 'missing' };
+  const matches = key ? digestEntries(md).filter((e) => normalizeKey(e.name) === key) : [];
+  if (!matches.length) return { text: md, status: 'missing' };
+  if (matches.length > 1) return { text: md, status: 'ambiguous', matches: matches.length };
+  const [entry] = matches;
   const lines = md.split('\n');
   const want = bulletText(bullet);
   for (let k = entry.start + 1; k < entry.end; k++) {
@@ -285,6 +289,9 @@ export function applyAdd(payload, { cvText = null, articleText = null } = {}) {
     const out = appendDigestBullet(articleDigest, dedupKey, bullet);
     if (out.status === 'missing') {
       throw new Error(`article-digest.md has no entry named "${dedupKey}" — an update goes under an existing entry`);
+    }
+    if (out.status === 'ambiguous') {
+      throw new Error(`article-digest.md has ${out.matches} entries named "${dedupKey}" — rename one so the update has a single entry to go under`);
     }
     articleDigest = out.text;
     result.articleDigestUpdate = { status: out.status, entry: out.entry };

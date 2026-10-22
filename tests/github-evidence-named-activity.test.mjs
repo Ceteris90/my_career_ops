@@ -178,12 +178,14 @@ function evidence({ since = SINCE, commitSearch = { status: 'ok', total: 7, read
   })() });
   const w = cut.claimCheck.namedWithNewActivity.find((r) => r.repo === 'acme/widgets');
   check(w?.newCommits?.lowerBound === true && w.newCommits.count === 1,
-    `a search cut short before reaching the baseline gives a lower bound (got ${JSON.stringify(w?.newCommits)})`);
+    `a search cut short gives a lower bound (got ${JSON.stringify(w?.newCommits)})`);
   check(renderMarkdown(cut).includes('| acme/widgets | public | 1.2K | repo | Widgets (repo) | 2 | ≥1 |'), 'the Markdown marks it ≥');
 
+  // Ordered by author date, judged by committer time: a rebased commit with an
+  // old author date can sit past the cut, so reading older commits proves nothing.
   const reached = evidence({ commitSearch: { status: 'partial', total: 5000, read: 1000, detail: 'cap' } });
-  check(reached.claimCheck.namedWithNewActivity.find((r) => r.repo === 'acme/widgets')?.newCommits.lowerBound === false,
-    'a search cut short after reaching commits older than the baseline is complete for it');
+  check(reached.claimCheck.namedWithNewActivity.find((r) => r.repo === 'acme/widgets')?.newCommits.lowerBound === true,
+    'a search cut short is a lower bound even after it read commits older than the baseline');
 
   const failed = evidence({ commitSearch: { status: 'failed', total: null, read: 0, detail: 'page 1 failed' } });
   const fw = failed.claimCheck.namedWithNewActivity.find((r) => r.repo === 'acme/widgets');

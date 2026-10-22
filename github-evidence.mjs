@@ -697,9 +697,9 @@ export function findPreviousScan(outDir, today) {
  * A PR is new when it merged at or after the baseline. A commit is new when it
  * was applied (committer time) at or after it, so a commit that reached the
  * default branch through a merge commit keeps its earlier time and is not
- * counted. The commit search reads newest first: when it stopped early before
- * reaching a commit older than the baseline, the count is a lower bound, and
- * when it failed (or did not run) the count is unknown.
+ * counted. When the commit search stopped early, the count is a lower bound
+ * (a rebased commit with an old author date can sit past the cut); when it
+ * failed (or did not run), the count is unknown.
  *
  * @param {object} input
  * @param {object} input.result - buildEvidence() output.
@@ -725,8 +725,9 @@ export function namedWithNewActivity({
     name: e.name, text: digestLines.slice(e.start, e.end).join('\n').toLowerCase(),
   })) : [];
   const commitsKnown = commitSearch != null && commitSearch.status !== 'failed';
-  const atDay = new Date(at).toISOString().slice(0, 10);
-  const lowerBound = commitsKnown && commitSearch.status !== 'ok' && !commitItems.some((c) => c.date && c.date < atDay);
+  // The search is ordered by author date and newness is judged by committer
+  // time, so a search that stopped early never proves it saw every new commit.
+  const lowerBound = commitsKnown && commitSearch.status !== 'ok';
 
   const rows = [];
   for (const c of result.contributions) {
