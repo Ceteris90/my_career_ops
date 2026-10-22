@@ -342,9 +342,9 @@ export function extractKeywords(reportText) {
     const body = line.replace(BULLET_RE, '').replace(CJK_MARKER_RE, '');
     for (const part of body.split(LIST_SEPARATOR_RE)) {
       const kw = part.trim()
-        .replace(TRAILING_PUNCT_RE, '')
         .replace(STARTING_BACKTICKS_RE, '')
         .replace(TRAILING_BACKTICKS_RE, '')
+        .replace(TRAILING_PUNCT_RE, '')
         .trim();
       if (kw) out.push(kw);
     }
