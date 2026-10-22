@@ -105,6 +105,17 @@ const HEADER = 'id\turl\tsource\tnotes';
 
 {
   const input = `${HEADER}\n`;
+  const pipeline = '- [ ] https://co.example/1 | Acme\tCo | Senior\rData Scientist';
+  const { additions } = computeAdditions(pipeline, input);
+  if (additions.length === 1 && additions[0].notes === 'Acme Co - Senior Data Scientist') {
+    pass('notes remove tabs and newlines so the TSV row stays well-formed');
+  } else {
+    fail(`notes delimiters were not sanitized: ${JSON.stringify(additions)}`);
+  }
+}
+
+{
+  const input = `${HEADER}\n`;
   const { additions } = computeAdditions('', input);
   if (additions.length === 0) {
     pass('an empty pipeline.md (no checkbox lines) yields no additions, not a crash');

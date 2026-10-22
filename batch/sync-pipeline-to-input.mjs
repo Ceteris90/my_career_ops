@@ -38,7 +38,7 @@ function parseArgs(argv) {
   const opts = {
     dryRun: false,
     pipelinePath: join(CAREER_OPS, 'data/pipeline.md'),
-    inputPath: join(CAREER_OPS, 'data/batch/batch-input.tsv'),
+    inputPath: join(CAREER_OPS, 'batch/batch-input.tsv'),
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--dry-run') opts.dryRun = true;
@@ -92,7 +92,7 @@ export function computeAdditions(pipelineText, inputText) {
     const { url, company, role } = parsed;
     if (existingUrls.has(url) || seenThisRun.has(url)) continue;
     seenThisRun.add(url);
-    const notes = [company, role].filter(Boolean).join(' - ');
+    const notes = [company, role].filter(Boolean).join(' - ').replace(/[\t\r\n]/g, ' ');
     additions.push({ id: ++maxId, url, source: 'scan', notes });
   }
 
@@ -141,7 +141,7 @@ function main() {
 
 // Main CLI execution guard (repo convention: lib/is-main-module.mjs, #3170)
 if (isMainModule(import.meta.url) && process.argv.slice(2).some((a) => a === '--help' || a === '-h')) {
-  console.log('Usage: node batch/sync-pipeline-to-input.mjs  (tops up data/batch/batch-input.tsv from data/pipeline.md; idempotent)');
+  console.log('Usage: node batch/sync-pipeline-to-input.mjs  (tops up batch/batch-input.tsv from data/pipeline.md; idempotent)');
 } else if (isMainModule(import.meta.url)) {
   main();
 }
