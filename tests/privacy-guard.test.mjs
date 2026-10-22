@@ -379,15 +379,15 @@ test('9. a payload that cannot be inspected is refused, not allowed', () => {
   const cyclic = {};
   cyclic.self = cyclic;
 
-  assert.throws(() => assertLlmRequestAllowed('https://openrouter.ai/api/v1/chat/completions', cyclic), PrivacyGuardError);
+  assert.throws(() => assertLlmRequestAllowed('https://openrouter.ai/api/v1/chat/completions', cyclic, { guard }), PrivacyGuardError);
 
   // checkLlmRequest has the same fail-closed property in its non-throwing form.
-  const decision = checkLlmRequest('https://openrouter.ai/api/v1/chat/completions', cyclic);
+  const decision = checkLlmRequest('https://openrouter.ai/api/v1/chat/completions', cyclic, { guard });
   assert.equal(decision.allowed, false);
 
   // Absent/empty bodies are genuinely nothing to leak, and are allowed.
-  assert.deepEqual(checkLlmRequest('https://openrouter.ai/x', undefined).allowed, true);
-  assert.deepEqual(checkLlmRequest('https://openrouter.ai/x', '').allowed, true);
+  assert.deepEqual(checkLlmRequest('https://openrouter.ai/x', undefined, { guard }).allowed, true);
+  assert.deepEqual(checkLlmRequest('https://openrouter.ai/x', '', { guard }).allowed, true);
 });
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ import { buildTitleFilter } from './title-keywords.mjs';
 import { createAdmissionGate, formatSkipCounts } from './lib/admission-gate.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { assertGoogleRequestAllowed } from './lib/llm-outbound.mjs';
-import { installPiiInterceptor } from './lib/pii-interceptor.mjs';
+import { installPiiInterceptor, PrivacyGuardError } from './lib/pii-interceptor.mjs';
 
 // The Google SDK issues its own global fetch; this ambient install covers it.
 // The explicit gate inside extractWithAI() is the primary layer.
@@ -167,7 +167,11 @@ async function main() {
       } catch (err) {
         aiFailures++;
         if (!firstAiError) firstAiError = `${modelName}: ${err?.message || err}`;
-        gate.markSeen(job);
+        // A PrivacyGuardError means a configured value was found in the job
+        // text before it reached the network. The job was never evaluated, so
+        // it must NOT be recorded as seen — it should surface again on the next
+        // scan once the user has resolved the privacy configuration.
+        if (err?.code !== 'PRIVACY_GUARD_BLOCKED') gate.markSeen(job);
         continue;
       }
       if (!extracted || !extracted.company || !extracted.title) { gate.markSeen(job); continue; }

@@ -28,6 +28,10 @@
  */
 
 import { existsSync } from 'node:fs';
+// Load .env before reading privacy-guard config so PRIVACY_GUARD and
+// PRIVACY_BYPASS_TOKEN from .env are applied consistently with other
+// evaluator entrypoints.
+import 'dotenv/config';
 import {
   AUTO_DETECT_DEFAULTS,
   PrivacyConfigError,
@@ -42,7 +46,7 @@ const asJson = process.argv.includes('--json');
 
 /**
  * @typedef {object} StatusReport
- * @property {'active'|'bypassed'|'config-error'} state
+ * @property {'active'|'bypassed'|'disabled-by-config'|'config-error'} state
  * @property {string} configPath
  * @property {boolean} configPresent
  * @property {string} configSource
@@ -71,8 +75,14 @@ function collect() {
     report.autoDetect = { ...AUTO_DETECT_DEFAULTS, ...config.autoDetect };
 
     const guard = loadPrivacyGuard({ config });
-    if (!guard.enabled) {
+    if (guard.source === 'bypass') {
+      // Explicit two-factor env bypass (PRIVACY_GUARD=off + PRIVACY_BYPASS_TOKEN).
       report.state = 'bypassed';
+      return report;
+    }
+    if (!guard.enabled) {
+      // Guard disabled by configuration (enabled: false in privacy.yml).
+      report.state = 'disabled-by-config';
       return report;
     }
     report.configuredCount = guard.configuredCount;
@@ -119,7 +129,13 @@ function render(report) {
   if (report.state === 'bypassed') {
     lines.push('  ⚠️  The guard is BYPASSED for this process');
     lines.push('      (PRIVACY_GUARD=off with PRIVACY_BYPASS_TOKEN set).');
-    lines.push('      Nothing is being inspected. Unset both to re-enable.');
+    lines.push('      Nothing is being inspected. Unset both environment variables to re-enable.');
+    return lines.join('\n');
+  }
+
+  if (report.state === 'disabled-by-config') {
+    lines.push('  ℹ️  The guard is disabled by configuration (enabled: false in privacy.yml).');
+    lines.push('      Nothing is being inspected. Set enabled: true in config/privacy.yml to re-enable.');
     return lines.join('\n');
   }
 
