@@ -345,9 +345,13 @@ const ACTIONS: Record<string, ActionDef> = {
         status: "confirm",
         summary: `Save your profile?${bits ? ` (${bits})` : ""}`,
         run: () => {
-          const writes = [ctx.writeProfile!(p as Record<string, unknown>)];
-          if (p.roles?.length && ctx.writePortals) writes.push(ctx.writePortals(p.roles, p.location ? [p.location] : undefined));
-          const failure = Promise.all(writes).then((reasons) => reasons.filter(Boolean).join(" ") || null);
+          const profile = ctx.writeProfile!(p as Record<string, unknown>);
+          const portals = p.roles?.length && ctx.writePortals ? ctx.writePortals(p.roles, p.location ? [p.location] : undefined) : null;
+          // Two writes, one card: when only the scan targets fail, the card
+          // still says the profile itself was saved.
+          const failure = Promise.all([profile, portals]).then(([profileFailure, portalsFailure]) =>
+            profileFailure && portalsFailure ? `${profileFailure} ${portalsFailure}`
+              : profileFailure ?? (portalsFailure ? `Your profile was saved. ${portalsFailure}` : null));
           return { note: "Profile saved — your matches will sharpen.", failure };
         },
       };
