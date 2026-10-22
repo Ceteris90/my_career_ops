@@ -1651,14 +1651,43 @@ export function gitToplevelMismatch(root = ROOT) {
 }
 
 /**
- * Throw when git operations from ROOT would land in an enclosing repository.
+ * True when ROOT is not a git checkout at all: it has no `.git` of its own and
+ * git finds no repository from it either — a ZIP download unpacked on its own,
+ * or a copy made without its `.git` directory. The nested variant, where git
+ * DOES find a repository by walking up, is gitToplevelMismatch()'s case.
+ *
+ * Requiring both keeps a checkout git cannot read right now (`.git` present,
+ * but git missing or refusing the directory) on its existing error paths.
+ *
+ * @param {string} [root=ROOT] - Directory to test.
+ * @returns {boolean}
+ */
+export function outsideGitCheckout(root = ROOT) {
+  if (existsSync(join(root, '.git'))) return false;
+  try {
+    gitQuietIn(root, 'rev-parse', '--show-toplevel');
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Throw when ROOT is not a git checkout of its own: git operations would land
+ * in an enclosing repository, or there is no repository for them at all.
  * First statement of apply() and rollback(); check() reports a status instead.
  */
 function assertOwnGitToplevel() {
+  const reclone = `Nothing was changed. To make updates work, clone career-ops fresh (git clone ${CANONICAL_REPO}) and move your user-layer files (cv.md, config/, data/, reports/ — see DATA_CONTRACT.md) into the new clone.`;
   const foreignToplevel = gitToplevelMismatch();
   if (foreignToplevel) {
     throw new Error(
-      `career-ops at ${ROOT} is not a git checkout of its own, so git operations would land in the enclosing repository at ${foreignToplevel} — this happens when the install was unpacked from a ZIP or copied without its .git directory. Nothing was changed. To make updates work, clone career-ops fresh (git clone ${CANONICAL_REPO}) and move your user-layer files (cv.md, config/, data/, reports/ — see DATA_CONTRACT.md) into the new clone.`,
+      `career-ops at ${ROOT} is not a git checkout of its own, so git operations would land in the enclosing repository at ${foreignToplevel} — this happens when the install was unpacked from a ZIP or copied without its .git directory. ${reclone}`,
+    );
+  }
+  if (outsideGitCheckout()) {
+    throw new Error(
+      `career-ops at ${ROOT} is not a git checkout, and updates are installed with git — this happens when the install was downloaded as a ZIP or copied without its .git directory. ${reclone}`,
     );
   }
 }
@@ -1798,6 +1827,8 @@ function redirectToMainCheckout(cmd, argv = process.argv, env = process.env) {
   // A nested .git-less install has its own guards and messages (#3334);
   // its enclosing repo's worktrees are not ours to pick from.
   if (gitToplevelMismatch()) return null;
+  // No repository at all: no worktrees to redirect to.
+  if (outsideGitCheckout()) return null;
 
   const target = worktreeUpdateTarget();
   if (!target) return null;
@@ -4306,6 +4337,12 @@ async function check() {
   const foreignToplevel = gitToplevelMismatch();
   if (foreignToplevel) {
     console.log(JSON.stringify({ status: 'not-a-git-toplevel', local: localVersion(), toplevel: foreignToplevel }));
+    return;
+  }
+  // No repository at all: apply() cannot install anything here, so reporting
+  // update-available would only lead the agent to offer an update that fails.
+  if (outsideGitCheckout()) {
+    console.log(JSON.stringify({ status: 'not-a-git-checkout', local: localVersion() }));
     return;
   }
 
