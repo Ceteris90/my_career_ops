@@ -21,6 +21,7 @@ import { pendingActOpenerStart } from "@/lib/act-envelope.mjs";
 import { cleanMessages } from "@/lib/assistant-history.mjs";
 import { StatusConfirmationCard, type StatusConfirmationPart } from "@/components/assistant-status-confirmation";
 import { StatusWriteError, writeAssistantStatus } from "@/lib/assistant-status-write.mjs";
+import { postAssistantWrite } from "@/lib/assistant-file-write.mjs";
 import { cn } from "@/lib/cn";
 
 // ── message model: messages are PART arrays so a live worker card can render
@@ -538,13 +539,18 @@ export function AssistantConsole() {
         setTimeout(() => applyRef.current.open(u), 60);
       },
       applyExplore: (patch, opts) => exploreRef.current.applyPatch(patch, opts),
+      // A refused or failed write must not pass for a saved one (same rule as
+      // writePersonalization below): the route answers 4xx/5xx with the reason.
       writeProfile: (patch) => {
-        fetch("/api/profile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })
-          .then(() => router.refresh())
-          .catch(() => {});
+        void postAssistantWrite("/api/profile", patch).then((failure) => {
+          if (failure) appendParts([{ type: "note", text: `Your profile was NOT saved: ${failure}` }]);
+          else router.refresh();
+        });
       },
       writePortals: (roles, location) => {
-        fetch("/api/portals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roles, location }) }).catch(() => {});
+        void postAssistantWrite("/api/portals", { roles, location }).then((failure) => {
+          if (failure) appendParts([{ type: "note", text: `Your scan targets were NOT saved: ${failure}` }]);
+        });
       },
       writePersonalization: (patch) => {
         fetch("/api/personalization", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })
