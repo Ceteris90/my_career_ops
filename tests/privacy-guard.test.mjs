@@ -283,6 +283,13 @@ test('7b. a profile URL derived handle is guarded however the URL was written', 
   // A non-URL value derives nothing extra and does not throw.
   const plain = new PrivacyGuard({ values: [FAKE.name] });
   assert.equal(plain.assertSafe('ordinary professional text'), true);
+
+  // A non-profile-host URL (e.g. a personal portfolio site) derives the
+  // hostname, NOT the path segment — "portfolio" must not become a guarded
+  // keyword that blocks every mention of the word.
+  const portfolio = new PrivacyGuard({ values: ['https://johndoe-example.com/projects/portfolio'] });
+  assert.throws(() => portfolio.assertSafe('hosted on johndoe-example.com'), PrivacyGuardError);
+  assert.equal(portfolio.assertSafe('my portfolio section'), true, 'generic path segment must not be guarded');
 });
 
 // ---------------------------------------------------------------------------
