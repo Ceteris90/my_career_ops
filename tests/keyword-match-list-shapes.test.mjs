@@ -79,8 +79,8 @@ check('markdown backtick wrappers are stripped from keyword edges only', () => {
   assert.deepEqual(extractKeywords(oneSided), ['Python', 'Kubernetes', 'CI/CD']);
 
   // Interior backticks remain part of the term text.
-  const interior = block('- `node` and `bun` runtimes');
-  assert.deepEqual(extractKeywords(interior), ['node` and `bun` runtimes']);
+  const interior = block('- stack `node` and `bun` runtimes');
+  assert.deepEqual(extractKeywords(interior), ['stack `node` and `bun` runtimes']);
 });
 
 check('a fenced keyword block is content, and its delimiters are not keywords', () => {
