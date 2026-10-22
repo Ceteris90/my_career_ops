@@ -44,6 +44,9 @@ try {
   distinct('a different code on each side splits even next to a shared one',
     'Solutions Architect, AI', 'Solutions Architect, SMB');
 
+  distinct('codes are read in titles written in another script',
+    'Μηχανικός Δεδομένων AWS', 'Μηχανικός Δεδομένων GCP');
+
   same('the same code on both sides still matches',
     'Senior Data Engineer (GCP)', 'Data Engineer - GCP');
   same('a code on one side only still matches',
@@ -56,6 +59,10 @@ try {
   const codes = (t) => [...extractShortAcronyms(t)].sort().join(',');
   if (codes('Engineer (AWS/GCP), EMEA') === 'AWS,GCP') pass('acronyms are read from the raw title');
   else fail(`extractShortAcronyms: ${codes('Engineer (AWS/GCP), EMEA')}`);
+  if (codes('Μηχανικός Δεδομένων AWS') === 'AWS') pass('acronyms are read in a title with Greek lower case');
+  else fail(`extractShortAcronyms Greek: ${codes('Μηχανικός Δεδομένων AWS')}`);
+  if (codes('ΜΗΧΑΝΙΚΟΣ ΔΕΔΟΜΕΝΩΝ AWS') === '') pass('an all-capitals Greek title carries no code signal');
+  else fail(`extractShortAcronyms Greek capitals: ${codes('ΜΗΧΑΝΙΚΟΣ ΔΕΔΟΜΕΝΩΝ AWS')}`);
   if (codes('Engineer II (ALL GENDERS)') === '') pass('level and filler words are not codes');
   else fail(`extractShortAcronyms noise: ${codes('Engineer II (ALL GENDERS)')}`);
 } catch (error) {

@@ -215,8 +215,11 @@ const SHORT_ACRONYM_NOISE = new Set([
 
 export function extractShortAcronyms(title) {
   const text = String(title ?? '');
-  const letters = text.replace(/[^A-Za-z]/g, '');
-  if (letters === '' || letters === letters.toUpperCase()) return new Set();
+  // Any letter that is not upper case (lower case, or a script without case
+  // such as Japanese or Arabic) means the title is not written in capitals,
+  // whatever the script around the code.
+  const letters = text.replace(/[^\p{L}]/gu, '');
+  if (letters === '' || letters.replace(/\p{Lu}/gu, '') === '') return new Set();
   const found = text.match(/(?<![A-Za-z0-9])[A-Z]{2,3}(?![A-Za-z0-9])/g) ?? [];
   return new Set(found.filter(w => !SHORT_ACRONYM_NOISE.has(w)));
 }
