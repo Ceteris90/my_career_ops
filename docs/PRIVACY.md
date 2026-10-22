@@ -183,18 +183,8 @@ or narrowing your config.
 
 The guard protects requests **career-ops itself makes**. It cannot see a CLI
 agent reading `cv.md` and `config/profile.yml` from disk with its own file tools.
-`pii-workspace.mjs` is the manual companion for that gap:
-
-```bash
-node pii-workspace.mjs status    # tokenized or holding real PII?
-node pii-workspace.mjs scrub     # replace configured values with tokens
-node pii-workspace.mjs restore   # put the real values back
-```
-
-> **`scrub` mutates your CV and profile in place.** A crash or a forgotten
-> `restore` leaves those files tokenized. Always run `restore` when the session
-> ends. The token map (`.pii-token-map.json`, gitignored) holds your real values,
-> so treat it exactly as you treat `cv.md`.
+If you use an interactive coding CLI, ensure you do not ask it to send files
+containing personal data you want kept off external servers.
 
 ---
 
@@ -217,8 +207,7 @@ Read these. The guard is useful precisely because its edges are stated.
    does not cover a different transport.
 5. **Not a guarantee of anonymity.** It reduces the chance that recognized
    personal data leaves your machine. It does not make you anonymous to the
-   provider, and it does not see what a CLI agent does with the files on disk
-   unless you use `pii-workspace.mjs`.
+   provider, and it does not see what a CLI agent does with the files on disk.
 6. **Your provider still sees your prompt.** Anything not caught by the guard —
    and everything you deliberately allow — reaches the provider as usual.
 7. **Redact mode rehydrates only `text()` and `json()`.** In opt-in redact mode
@@ -239,7 +228,6 @@ Read these. The guard is useful precisely because its edges are stated.
 | `config/privacy.example.yml` | Committed sample (fictional values only) |
 | `config/privacy.yml` | Your real config — **gitignored** |
 | `privacy-status.mjs` | Diagnostic — reports counts, never values |
-| `pii-workspace.mjs` | Manual on-disk tokenization for CLI sessions |
 
 Design reference: the `PIIGuard` class in the
 [`hunter`](https://github.com/asimthaha/hunter) project — the flattening,
