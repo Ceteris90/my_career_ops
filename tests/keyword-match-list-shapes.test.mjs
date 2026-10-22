@@ -71,6 +71,18 @@ check('every separator shape in the report splits into its keywords', () => {
   }
 });
 
+check('markdown backtick wrappers are stripped from keyword edges only', () => {
+  const wrapped = block('- `Python`, ``Kubernetes``, ```CI/CD```');
+  assert.deepEqual(extractKeywords(wrapped), ['Python', 'Kubernetes', 'CI/CD']);
+
+  const oneSided = block('- `Python\n- Kubernetes`\n- ``CI/CD');
+  assert.deepEqual(extractKeywords(oneSided), ['Python', 'Kubernetes', 'CI/CD']);
+
+  // Interior backticks remain part of the term text.
+  const interior = block('- `node` and `bun` runtimes');
+  assert.deepEqual(extractKeywords(interior), ['node` and `bun` runtimes']);
+});
+
 check('a fenced keyword block is content, and its delimiters are not keywords', () => {
   // The biggest single shape in the report: 186 of 503 sections. A fence that
   // leaked its delimiter produced a keyword no CV can ever contain.
