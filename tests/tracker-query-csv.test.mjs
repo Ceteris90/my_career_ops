@@ -17,7 +17,7 @@ function trackerRoot(t) {
     '| 2 | 2026-09-02 | Globex | Data Analyst | 4,5/5 | Evaluated | ❌ | — | =HYPERLINK("https://jobs.example/2") |',
     '| 3 | 2026-09-03 | Initech | BI Engineer | N/A | SKIP | ❌ | — | |',
     '| 4 | 2026-09-04 | Hooli | Data Analyst | N/A (2026-09-01) | Discarded | ❌ | — | |',
-    '| 5 | 2026-09-05 | Umbrella | Data Engineer | 3.9/5 | Evaluated | ❌ | reports/005-umbrella-2026-09-05.md | |',
+    '| 5 | 2026-09-05 | Umbrella | Data Engineer | 3.9 (solid fit) | Evaluated | ❌ | reports/005-umbrella-2026-09-05.md | |',
   ].join('\n') + '\n');
   return root;
 }

@@ -678,7 +678,7 @@ const CSV_COLUMNS = [
 ];
 
 function csvScore(cell) {
-  const m = String(cell ?? '').replace(/\*\*/g, '').trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?$/);
+  const m = String(cell ?? '').replace(/\*\*/g, '').trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?(?:\s.*)?$/);
   return m ? Number(m[1].replace(',', '.')) : '';
 }
 
