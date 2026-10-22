@@ -13,7 +13,7 @@ const BOM = "\uFEFF";
 test("trackerCsv writes the rows in the order given, ready for a spreadsheet", () => {
   const csv = trackerCsv([
     row({ n: "7", company: "Acme, Inc.", notes: 'recruiter said "soon"' }),
-    row({ n: "5", score: "4,5/5", report: "reports/005-acme-2026-09-05.md" }),
+    row({ n: "5", score: "4,5/5 (solid fit)", report: "reports/005-acme-2026-09-05.md" }),
     row({ n: "4", score: "N/A (2026-09-01)", status: "Discarded" }),
     row({ n: "3", company: "Globex", score: "N/A", status: "SKIP", pdf: "❌", report: "—", notes: '=HYPERLINK("https://jobs.example/3")' }),
   ]);

@@ -24,10 +24,10 @@ const COLUMNS = [
   { name: "notes", read: (r) => r.notes },
 ];
 
-// Same rule as `tracker.mjs query --csv`: a score such as `4.2/5` or `4,2/5`
-// becomes a number, and any other cell, such as `N/A`, stays empty.
+// Same rule as `tracker.mjs query --csv`: a score such as `4.2/5`, `4,2/5`, or
+// `4.2 (strong fit)` becomes a number, and any other cell, such as `N/A`, stays empty.
 function score(cell) {
-  const m = String(cell ?? "").replace(/\*\*/g, "").trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?$/);
+  const m = String(cell ?? "").replace(/\*\*/g, "").trim().match(/^(\d+(?:[.,]\d+)?)(?:\/5)?(?:\s.*)?$/);
   return m ? Number(m[1].replace(",", ".")) : "";
 }
 
