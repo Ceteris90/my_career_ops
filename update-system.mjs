@@ -4561,7 +4561,7 @@ async function apply() {
   const olderTarget = newerThanTarget(local, targetRef);
   if (olderTarget) {
     console.log(`Installed v${local} is newer than the latest release v${olderTarget}. Nothing to install.`);
-    console.log('To follow every merge on main instead: node update-system.mjs apply --channel main --confirm');
+    console.log('To install the latest commit on main instead (one-off; checks keep following releases): node update-system.mjs apply --channel main --confirm');
     return;
   }
 

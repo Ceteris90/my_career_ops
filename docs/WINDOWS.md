@@ -85,11 +85,13 @@ git ls-files --eol batch/batch-runner.sh
 node test-all.mjs
 ```
 
-To run one suite on its own — useful when you are adding tests, and the fastest way to see a specific failure:
+To run one suite on its own — useful when you are adding tests, and the fastest way to see a specific failure — pass part of its path under `tests/`:
 
 ```powershell
-node --test tests/cli-flags.test.mjs
+node test-all.mjs --only providers/themuse
 ```
+
+`--only` runs every suite whose path contains that text, and exits 1 if one of them fails. Don't use `node --test` or `node tests/<file>.test.mjs` for this: most suites report through `pass()`/`fail()` from `tests/helpers.mjs`, which print a ❌ but leave the exit code at 0, so a failing suite still ends green. `--only` also skips the checks `test-all.mjs` runs inline, so run the full `node test-all.mjs` before pushing.
 
 Windows-specific failures in the suite are almost always one of the three problems above rather than a logic bug. If a group of tests fails while their own captured output shows the correct behaviour, suspect the shell before the code.
 
