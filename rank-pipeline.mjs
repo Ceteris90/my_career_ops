@@ -32,7 +32,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
-import { delimiter, dirname, extname, join } from 'path';
+import { dirname, extname, join, win32 } from 'path';
 import { fileURLToPath } from 'url';
 import { flagValue, hasFlag, safeIntFlag, validateFlags } from './lib/cli-flags.mjs';
 import { sanitizeMarkdownField } from './scan.mjs';
@@ -254,7 +254,8 @@ function findOnWindowsPath(bin, env) {
   const exts = (env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')
     .map(e => e.trim().toLowerCase()).filter(e => WIN_EXTS.includes(e));
   const names = WIN_EXTS.includes(extname(bin).toLowerCase()) ? [bin] : exts.map(e => bin + e);
-  for (const dir of (env.PATH ?? env.Path ?? '').split(delimiter).filter(Boolean)) {
+  // win32.delimiter, not the host's: the test simulates Windows on POSIX too.
+  for (const dir of (env.PATH ?? env.Path ?? '').split(win32.delimiter).filter(Boolean)) {
     for (const name of names) {
       if (isFile(join(dir, name))) return join(dir, name);
     }

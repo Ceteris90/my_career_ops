@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ROOT } from './helpers.mjs';
 import { describeCliFailure, resolveCliLaunch } from '../rank-pipeline.mjs';
@@ -97,7 +97,10 @@ test('on Windows the shim resolves to the script npm wrapped, run by this node',
   const dir = mkdtempSync(join(tmpdir(), 'rank-npm-resolve-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const cli = npmShims(dir, 'codex', '');
-  const env = { PATH: `${join(dir, 'missing')}${delimiter}${dir}`, PATHEXT: '.COM;.EXE;.BAT;.CMD' };
+  // The shim's directory sits between two that do not exist, so splitting PATH
+  // on anything but `;` leaves no entry that names it.
+  const PATH = [join(dir, 'missing'), dir, join(dir, 'missing-too')].join(win32.delimiter);
+  const env = { PATH, PATHEXT: '.COM;.EXE;.BAT;.CMD' };
   assert.deepEqual(resolveCliLaunch('codex', ['exec', 'p'], { platform: 'win32', env }),
     { command: process.execPath, args: [cli, 'exec', 'p'] });
   // Not on PATH: the bare name is kept, so the caller still reports "not found".
