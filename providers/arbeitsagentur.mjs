@@ -180,6 +180,10 @@ export default {
     if (!keywords.length) {
       throw new Error(`arbeitsagentur: entry "${entry.name || '(unnamed)'}" has no arbeitsagentur.keywords[]`);
     }
+    // ctx.maxPages is set only by verify-portals.mjs's health probe. While
+    // probing, a ctx.fetch* rejection (its budget sentinel included) must
+    // propagate unwrapped instead of being swallowed by a recall-first catch.
+    const probing = Number(ctx?.maxPages) > 0;
 
     /** @param {string} was @param {Record<string,string>} [extra] @param {boolean} [retry] */
     const fetchKeyword = async (was, extra = {}, retry = false) => {
@@ -216,6 +220,7 @@ export default {
           out.push(...await fetchKeyword(was, { ...extra, angebotsart: art }));
           ok++;
         } catch (err) {
+          if (probing) throw err;
           firstErr = firstErr || err;
           if (angebotsart.length > 1) errors.push(`"${was}"${label} angebotsart=${art}: ${(err && err.message) || err}`);
         }
@@ -237,6 +242,7 @@ export default {
           : await fetchAllTypes(kw, {}, '');
         succeeded++;
       } catch (err) {
+        if (probing) throw err;
         // Recall-first: tolerate a single failed keyword and keep going.
         errors.push(`"${kw}": ${(err && err.message) || err}`);
         continue;
@@ -269,6 +275,7 @@ export default {
                   if (res.length < size) break; // short page → done
                 }
               } catch (err) {
+                if (probing) throw err;
                 errors.push(`"${kw}" (remote pass) angebotsart=${art}: ${(err && err.message) || err}`);
               }
             }
@@ -277,6 +284,7 @@ export default {
             wide = nationwide.filter(j => REMOTE_RE.test(String((j && j.stellenangebotsTitel) || '')));
           }
         } catch (err) {
+          if (probing) throw err;
           errors.push(`"${kw}" (remote pass): ${(err && err.message) || err}`);
         }
       }
@@ -316,6 +324,9 @@ export default {
     // deduped result size — otherwise a legitimately-empty search throws.
     if (succeeded === 0 && errors.length) {
       throw new Error(`arbeitsagentur: all ${keywords.length} keyword request(s) failed — ${errors[0]}`);
+    }
+    if (errors.length) {
+      console.warn(`arbeitsagentur: "${entry.name || '(unnamed)'}" returned partial results — ${errors.join('; ')}`);
     }
 
     return [...byRef.values()].map(({ refnr, ...job }) => job);

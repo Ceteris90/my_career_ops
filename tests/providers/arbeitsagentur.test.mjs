@@ -361,6 +361,25 @@ try {
     fail(`aa.fetch() filter per-type failure: ${JSON.stringify(afterExhaust)}`);
   }
 
+  // While probing (ctx.maxPages set), a fetch rejection propagates unwrapped.
+  class Sentinel extends Error {}
+  const sentinel = new Sentinel('budget reached');
+  let caught = null;
+  try {
+    await aa.fetch(
+      { name: 'AA', arbeitsagentur: { keywords: ['ESG', 'CSRD'], wo: 'Bochum', angebotsart: [1, 34] } },
+      { maxPages: 1, fetchJson: async (url) => {
+          if (new URL(url).searchParams.get('angebotsart') === '34') throw sentinel;
+          return page(v6('J', 'ESG Analyst', 'Bochum'));
+        } },
+    );
+  } catch (err) { caught = err; }
+  if (caught === sentinel) {
+    pass('aa.fetch() rethrows a ctx.fetch* rejection unwrapped while probing (ctx.maxPages)');
+  } else {
+    fail(`aa.fetch() probe rejection was swallowed or wrapped: ${caught && caught.message}`);
+  }
+
 } catch (e) {
   fail(`arbeitsagentur provider tests crashed: ${e.message}`);
 }
