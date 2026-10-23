@@ -493,15 +493,17 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // the path counts, so a sign-in link that carries the posting in its
       // return address (?returnUrl=/jobs/<id>) is still chrome, and so is a
       // link back into this page under another query, fragment or trailing
-      // slash, such as a skip link to #main-content. The id has to be a whole
-      // path segment, so posting 12345 does not claim /jobs/123456/apply.
+      // slash, such as a skip link to #main-content. In a frame, the page the
+      // frame sits in is this page too. The id has to be a whole path segment,
+      // so posting 12345 does not claim /jobs/123456/apply.
       const linksToPosting = (element) => {
         const href = postingId && element.getAttribute('href');
         if (!href) return false;
         try {
           const target = new URL(href, document.baseURI);
           const pageKey = (u) => u.origin + u.pathname.replace(/\/+$/, '');
-          if (pageKey(target) === pageKey(new URL(location.href))) return false;
+          const thisPage = [location.href, window.top.location.href].map((u) => pageKey(new URL(u)));
+          if (thisPage.includes(pageKey(target))) return false;
           return target.pathname.toLowerCase().split('/').includes(postingId);
         } catch {
           return false;

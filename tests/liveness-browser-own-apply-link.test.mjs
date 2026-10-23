@@ -78,15 +78,20 @@ try {
     }
 
     // The same inside a same-origin frame, which the walk reads too (iCIMS
-    // renders the posting in one).
+    // renders the posting in one). From the frame, a link back into the frame
+    // or to the page it sits in is a link into this page, so it stays chrome.
     const frameUrl = `https://www.example.com/jobs/${ID}/frame`;
-    const framed = await check(POSTING_URL, `<main>${POSTING}</main><iframe src="${frameUrl}"></iframe>`, {
+    const framePage = `<main>${POSTING}</main><iframe src="${frameUrl}"></iframe>`;
+    const framed = await check(POSTING_URL, framePage, {
       [frameUrl]: `<header><a href="/jobs/${ID}/apply">Apply</a></header>`,
     });
-    if (framed.result === 'active' && framed.code === 'apply_control_visible') {
-      pass('an Apply link to the posting in a same-origin frame\'s header reads as an Apply control');
+    const framedBack = await check(POSTING_URL, framePage, {
+      [frameUrl]: `<nav><a href="${frameUrl}#apply">Skip to apply</a></nav><header><a href="${POSTING_URL}">Apply</a></header>`,
+    });
+    if (framed.result === 'active' && framed.code === 'apply_control_visible' && framedBack.result === 'uncertain' && framedBack.code === 'no_apply_control') {
+      pass('an Apply link to the posting in a same-origin frame\'s header reads as an Apply control, and links back into the frame or the page around it do not');
     } else {
-      fail(`Apply link to the posting in a frame's header: ${JSON.stringify(framed)}`);
+      fail(`Apply links in a frame's chrome: to the posting ${JSON.stringify(framed)}, back into the frame or the page around it ${JSON.stringify(framedBack)}`);
     }
 
     // The id has to be a whole path segment: posting 12345 claims
