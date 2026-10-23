@@ -185,9 +185,12 @@ async function attempt(name) {
     const tests = count(out, "tests");
     const skipped = count(out, "skipped");
     const todo = count(out, "todo");
-    if (code !== 0) problem = { message: `exited ${code}`, retryable: true };
+    // Skips first: a run that both skipped and failed must not be cleared by a
+    // clean retry.
+    if (skipped > 0 || todo > 0) problem = { message: `${skipped ?? "?"} skipped, ${todo ?? "?"} todo — a skip here is a failure`, retryable: false };
+    else if (code !== 0) problem = { message: `exited ${code}`, retryable: true };
     else if (!tests) problem = { message: "ran no tests", retryable: false };
-    else if (skipped !== 0 || todo !== 0) problem = { message: `${skipped ?? "?"} skipped, ${todo ?? "?"} todo — a skip here is a failure`, retryable: false };
+    else if (skipped === null || todo === null) problem = { message: "the reporter printed no skipped/todo counts", retryable: false };
   } catch (err) {
     problem = { message: err.message, retryable: true };
   } finally {
