@@ -172,7 +172,9 @@ for (const name of selected) {
     server = startServer(root, port, log);
     fs.closeSync(log);
     await waitReady(url, server);
-    const env = { ...process.env, [REQUIRE_WEB_SERVER_ENV]: "1" };
+    // FORCE_COLOR=0: an inherited FORCE_COLOR colors the reporter's summary
+    // lines, and count() would then find no tests.
+    const env = { ...process.env, [REQUIRE_WEB_SERVER_ENV]: "1", FORCE_COLOR: "0" };
     for (const name of SUITE_VARS) delete env[name];
     env[suite.url] = url;
     if (suite.root) env[suite.root] = root;
