@@ -3845,10 +3845,12 @@ export async function verifyOffers(offers, { headedFallback = false, throttleBas
     : checkUrlLiveness(page, url);
 
   // Two permanent buckets, one observational, one transient passthrough:
-  //   verified  → active pages and transient nav errors (retry next scan)
+  //   verified  → active pages, transient nav errors and a still-empty page
+  //               (empty_page)
   //   expired   → classifier-confirmed dead postings (HTTP 4xx, redirect markers,
-  //               body patterns, listing pages, insufficient content)
-  //   dropped   → page loaded but classifier saw no Apply control. --verify is an
+  //               body patterns, listing pages)
+  //   dropped   → page loaded but classifier saw no Apply control, including a
+  //               page too short to read (insufficient_content). --verify is an
   //               opt-in stricter filter; keeping these defeats the purpose. Not
   //               proof the posting is closed, so the row never pins the URL and
   //               the next --verify scan loads the page again (#4832).
@@ -3907,8 +3909,9 @@ export async function verifyOffers(offers, { headedFallback = false, throttleBas
         // with a precise status, dedup-blocking them on subsequent scans.
         invalid.push({ ...offer, code, reason });
         console.log(`  ⛔ invalid   ${offer.company} | ${offer.title} (${reason})`);
-      } else if (result === 'uncertain' && code === 'no_apply_control') {
-        // Page loaded but classifier could not find an Apply control. Drop from
+      } else if (result === 'uncertain' && (code === 'no_apply_control' || code === 'insufficient_content')) {
+        // Page loaded but classifier could not find an Apply control (or too
+        // little text to hold one: insufficient_content). Drop from
         // pipeline and record in scan-history for visibility only: the row does
         // not pin the URL (OBSERVATIONAL_SCAN_HISTORY_STATUSES), so the next
         // --verify scan checks it again rather than losing a live posting whose

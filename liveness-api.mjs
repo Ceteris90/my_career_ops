@@ -156,9 +156,9 @@ const ATS_PROVIDERS = [
     },
     api: ({ account, shortcode }) => `https://apply.workable.com/api/v2/accounts/${account}/jobs/${shortcode}`,
     // Workable's posting pages render client-side, so the browser rung reads a
-    // not-yet-painted live posting as nav/footer only (insufficient_content) and
-    // reports it expired, the costly direction: scan --verify writes that to
-    // scan-history as skipped. The v2 JSON endpoint is per-job and needs no
+    // not-yet-painted live posting as nav/footer only (insufficient_content),
+    // which used to read as expired, the costly direction: scan --verify wrote
+    // that to scan-history as skipped. The v2 JSON endpoint is per-job and needs no
     // browser. Measured live (#5000): 200 with state "published" is the live
     // shape and 404 ("Job not found") is the removed shape, so a 404 is
     // authoritative here and any other readable state stays uncertain.

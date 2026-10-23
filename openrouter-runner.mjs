@@ -40,7 +40,7 @@ import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { withJdArchiveSection } from './lib/jd-archive-section.mjs';
 import { locateApplyReport } from './apply-scope.mjs';
-import { classifyLiveness } from './liveness-core.mjs';
+import { classifyLiveness, isUnreadableVerdict } from './liveness-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const tracker = new TokenAccumulator();
@@ -452,8 +452,10 @@ function assertSafeRemoteUrl(url) {
 }
 
 // Verdicts from the liveness check that mean the page is not an open posting
-// that can be read: besides any `expired` one (404, nav/footer text only, a
-// closed or listing page), a bot wall or a redirect away from the posting.
+// that can be read: besides any `expired` one (404, a closed or listing page),
+// a page too short to read (isUnreadableVerdict: nav/footer only, or not
+// rendered yet, which classifyLiveness reports as `uncertain`), a bot wall or
+// a redirect away from the posting.
 const UNREADABLE_PAGE_CODES = new Set(['bot_challenge', 'redirected_off_posting']);
 
 // Why a fetched page holds no job description to evaluate, or null when it
@@ -463,7 +465,7 @@ const UNREADABLE_PAGE_CODES = new Set(['bot_challenge', 'redirected_off_posting'
 export function unreadableJobPage({ status = 0, requestedUrl = '', finalUrl = '', text = '' } = {}) {
   if (status >= 400) return `HTTP ${status}`;
   const verdict = classifyLiveness({ status, requestedUrl, finalUrl, bodyText: text });
-  if (verdict.result === 'expired' || UNREADABLE_PAGE_CODES.has(verdict.code)) {
+  if (verdict.result === 'expired' || isUnreadableVerdict(verdict) || UNREADABLE_PAGE_CODES.has(verdict.code)) {
     return `${verdict.code}: ${verdict.reason}`;
   }
   return null;
