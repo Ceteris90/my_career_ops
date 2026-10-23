@@ -549,7 +549,8 @@ tracker row, so a contact cannot be attached across companies.
 Optional GitHub evidence step of the `expand` mode (#5295). Reads the pull
 requests you authored through your existing `gh auth` (no new token) and checks
 what `cv.md` claims against them. Read-only, metadata only (PR title, state,
-repository, stars, visibility); it never reads source code and never writes
+repository, stars, visibility, document file names); it never reads source
+code or file contents and never writes
 `cv.md`. Candidates reach `cv.md` only through `expand`'s confirm gate and
 `add-entry.mjs`.
 

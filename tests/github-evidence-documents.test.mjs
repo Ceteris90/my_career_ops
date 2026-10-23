@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { pass, fail, rmSync, ROOT } from './helpers.mjs';
 import {
-  isDocumentPath, documentKeywords, summarizeDocuments, collectDocuments, renderDocumentsMarkdown, runCli,
+  isDocumentPath, documentKeywords, summarizeDocuments, collectDocuments, renderDocumentsMarkdown, codeSpan, runCli,
   MAX_DOCUMENT_REPOS, MAX_DOCUMENTS_PER_REPO,
 } from '../github-evidence.mjs';
 
@@ -115,6 +115,22 @@ const PATHS = [
   check(row.files[0].path === 'docs/zz-prd.md', 'per-repo cap keeps flagged names first');
   const ctrl = summarizeDocuments({ repo: `${USER}/x`, visibility: 'public', own: true, allowlisted: false, paths: ['docs/a\nb.md'] });
   check(ctrl.files[0].path === 'docs/a�b.md', 'a control character in a name cannot break its line');
+}
+
+{
+  // A file name is untrusted: in the Markdown report it must show literally,
+  // never as a link or formatting. CommonMark code spans: no escapes inside, a
+  // fence longer than any backtick run, one space of padding at a backtick edge.
+  check(codeSpan('docs/[Q3 plan](#requirements).md') === '`docs/[Q3 plan](#requirements).md`', 'a link-like name becomes a code span');
+  check(codeSpan('docs/a`b.md') === '``docs/a`b.md``', 'a backtick inside a name gets a longer fence');
+  check(codeSpan('`edge`.md') === '`` `edge`.md ``', 'a backtick at an edge gets padded');
+  check(codeSpan(' spaced ') === '`  spaced  `', 'a name with a space at both ends keeps them');
+  const docs = {
+    status: 'ok', ownRepos: { total: 1, listed: 1, max: MAX_DOCUMENT_REPOS }, scanned: 1, gaps: [],
+    repos: [summarizeDocuments({ repo: `${USER}/x`, visibility: 'public', own: true, allowlisted: false, paths: ['docs/[Q3 plan](#requirements).md'] })],
+  };
+  check(renderDocumentsMarkdown(docs).includes('- `docs/[Q3 plan](#requirements).md` (flagged: requirement)'),
+    'the Markdown report renders a link-like name as a code span, keyword kept');
 }
 
 // ── 4. The gh calls ─────────────────────────────────────────────────
@@ -236,7 +252,7 @@ const rowOf = (docs, repo) => docs.repos.find((r) => r.repo === repo);
   check(/untrusted external content/i.test(md) && /No file was opened/.test(md), 'the Markdown section says names only, untrusted');
   check(md.includes(`### ${USER}/client-portal (private, yours): 2 documents, 1 flagged`) && md.includes('Names hidden (private, not allowlisted)'),
     'the Markdown says which names are hidden and how to list them');
-  check(md.includes('- docs/需求变更对比.docx (flagged: 需求)'), 'the Markdown lists a flagged name with its keyword');
+  check(md.includes('- `docs/需求变更对比.docx` (flagged: 需求)'), 'the Markdown lists a flagged name with its keyword');
   check(md.includes(`- ${USER}/broken: tree read failed`) && md.includes('8 of your 45 own non-fork repos'),
     'the Markdown lists the gaps and the repo cap');
 }
@@ -369,4 +385,6 @@ function cli(root, runGh) {
   check(has('Ask which reflect the user\'s own work'), 'expand asks which documents are the user\'s own work');
   check(has('Read only what the user confirms') && has('Never read source code'), 'expand reads a document only after the user confirms it, and never source code');
   check(has('`documents`') && has('Untrusted External Content'), 'expand treats a confirmed document as untrusted external content');
+  check(has('the branch the way `encodeURIComponent` does') && has('leave out `?ref=<branch>`'),
+    'expand URL-encodes the path and branch before a read, and drops ?ref= when the branch is unknown');
 }

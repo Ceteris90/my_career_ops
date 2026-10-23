@@ -696,6 +696,20 @@ export function collectDocuments(user, runGh, {
   };
 }
 
+/**
+ * A name as a CommonMark code span, so it shows literally: a valid path such as
+ * `docs/[plan](#x).md` must not render as a link. The fence is one backtick
+ * longer than any run inside, and padded when the content would otherwise lose
+ * or merge with an edge character.
+ */
+export function codeSpan(text) {
+  const s = String(text);
+  const longest = Math.max(0, ...(s.match(/`+/g) || []).map((run) => run.length));
+  const fence = '`'.repeat(longest + 1);
+  const pad = /^`|`$/.test(s) || (/^ [^]* $/.test(s) && s.trim() !== '') ? ' ' : '';
+  return `${fence}${pad}${s}${pad}${fence}`;
+}
+
 /** The Markdown section for `documents`, written after the rest of the report. */
 export function renderDocumentsMarkdown(documents) {
   const md = ['## Documents on default branches (names only, never opened)', ''];
@@ -714,7 +728,7 @@ export function renderDocumentsMarkdown(documents) {
       const why = r.visibility === 'private' ? 'private, not allowlisted' : 'visibility could not be read';
       md.push(`Names hidden (${why}): add the repo to \`github_evidence.private_allowlist\` in config/profile.yml to list them.`);
     }
-    for (const f of r.files) md.push(`- ${f.path}${f.keywords.length ? ` (flagged: ${f.keywords.join(', ')})` : ''}`);
+    for (const f of r.files) md.push(`- ${codeSpan(f.path)}${f.keywords.length ? ` (flagged: ${f.keywords.join(', ')})` : ''}`);
     if (r.filesCapped) md.push(`- … and ${r.total - r.files.length} more`);
     md.push('');
   }
