@@ -3,30 +3,96 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { prepareCliLaunch } from "../../src/lib/cli-launch.mjs";
 
-const sourcePath = fileURLToPath(new URL("../../src/lib/clis.ts", import.meta.url));
-const source = fs.readFileSync(sourcePath, "utf8");
-const compiled = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  fileName: sourcePath,
-}).outputText;
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`;
-const { KNOWN, searchDirs } = await import(moduleUrl);
-
-test("registers Kimi Code CLI for headless prompts", () => {
-  const kimi = KNOWN.find((cli) => cli.id === "kimi");
-
-  assert.ok(kimi);
-  assert.equal(kimi.name, "Kimi Code CLI");
-  assert.equal(kimi.bin, "kimi");
-  assert.equal(kimi.run, "kimi -p");
-  assert.deepEqual(kimi.args("hello"), ["-p", "hello"]);
+test("prepareCliLaunch leaves POSIX commands unchanged", () => {
+  const args = ["-p", "hello"];
+  assert.deepEqual(prepareCliLaunch("/usr/local/bin/gemini", args, "linux"), {
+    command: "/usr/local/bin/gemini",
+    args,
+  });
 });
 
-test("searches the official Kimi Code installation directory", () => {
-  const expected = path.join(os.homedir(), ".kimi-code", "bin");
+test("prepareCliLaunch leaves native Windows executables unchanged", () => {
+  const args = ["exec", "hello"];
+  assert.deepEqual(prepareCliLaunch("C:\\tools\\codex.exe", args, "win32"), {
+    command: "C:\\tools\\codex.exe",
+    args,
+  });
+});
 
-  assert.ok(searchDirs().includes(expected));
+test("prepareCliLaunch resolves an npm Windows shim to its real Node entrypoint", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-cli-"));
+  try {
+    const bare = path.join(dir, "gemini");
+    const ps1 = `${bare}.ps1`;
+    const entry = path.join(dir, "node_modules", "example", "cli.js");
+    fs.mkdirSync(path.dirname(entry), { recursive: true });
+    fs.writeFileSync(entry, "// test entry\n", "utf8");
+    fs.writeFileSync(ps1, '& "node$exe" "$basedir/node_modules/example/cli.js" $args\n', "utf8");
+    const prompt = 'review this & echo "not a shell command"';
+    const launch = prepareCliLaunch(bare, ["-p", prompt], "win32");
+
+    assert.equal(launch.command, process.execPath);
+    assert.deepEqual(launch.args, [entry, "-p", prompt]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("prepareCliLaunch handles a discovered .cmd shim when an adjacent .ps1 exists", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-cli-"));
+  try {
+    const cmd = path.join(dir, "gemini.cmd");
+    const ps1 = path.join(dir, "gemini.ps1");
+    const entry = path.join(dir, "node_modules", "example", "cli.cjs");
+    fs.mkdirSync(path.dirname(entry), { recursive: true });
+    fs.writeFileSync(entry, "// test entry\n", "utf8");
+    fs.writeFileSync(ps1, '& "node$exe" "$basedir/node_modules/example/cli.cjs" $args\n', "utf8");
+    const launch = prepareCliLaunch(cmd, ["--help"], "win32");
+    assert.equal(launch.command, process.execPath);
+    assert.deepEqual(launch.args, [entry, "--help"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("prepareCliLaunch resolves an npm shim that targets a native executable", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-cli-"));
+  try {
+    const bare = path.join(dir, "opencode");
+    const ps1 = `${bare}.ps1`;
+    const entry = path.join(dir, "node_modules", "example", "opencode.exe");
+    fs.mkdirSync(path.dirname(entry), { recursive: true });
+    fs.writeFileSync(entry, "", "utf8");
+    fs.writeFileSync(ps1, '& "$basedir/node_modules/example/opencode.exe" $args\n', "utf8");
+    const launch = prepareCliLaunch(bare, ["run", "hello"], "win32");
+    assert.deepEqual(launch, { command: entry, args: ["run", "hello"] });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("prepareCliLaunch preserves the original command when no PowerShell shim exists", () => {
+  const missing = path.join(os.tmpdir(), `career-ops-missing-${Date.now()}`, "gemini");
+  assert.deepEqual(prepareCliLaunch(missing, ["-p", "hello"], "win32"), {
+    command: missing,
+    args: ["-p", "hello"],
+  });
+});
+
+test("prepareCliLaunch refuses a .cmd/.bat wrapper it cannot resolve instead of spawning it without a shell", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "career-ops-cli-"));
+  try {
+    // No adjacent .ps1 at all.
+    assert.throws(() => prepareCliLaunch(path.join(dir, "claude.cmd"), ["-p", "hello"], "win32"), /without a shell/);
+    // A .ps1 that cannot be read (here: a directory).
+    fs.mkdirSync(path.join(dir, "qwen.ps1"));
+    assert.throws(() => prepareCliLaunch(path.join(dir, "qwen.cmd"), ["-p", "hello"], "win32"), /without a shell/);
+    // A .ps1 whose target does not exist.
+    fs.writeFileSync(path.join(dir, "gemini.ps1"), '& "node$exe" "$basedir/node_modules/missing/cli.js" $args\n', "utf8");
+    assert.throws(() => prepareCliLaunch(path.join(dir, "gemini.bat"), ["-p", "hello"], "win32"), /without a shell/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

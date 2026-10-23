@@ -13,6 +13,8 @@ import {
 import { cn } from "@/lib/cn";
 import { CONFIG_CHANGED_EVENT, CONFIG_KEY, patchClientConfig, readConfiguredCli } from "@/lib/client-config.mjs";
 import { CadenceSettings } from "@/components/followups/cadence-settings";
+import { persistCliId, readSavedCliId } from "@/lib/saved-cli";
+import { keepIfInstalled, pickDefaultInstalled } from "@/lib/cli-pick.mjs";
 
 type Cli = {
   id: string;
@@ -100,19 +102,22 @@ export function ConfigForm() {
       .then((d) => {
         const list: Cli[] = d.clis ?? [];
         setClis(list);
-        const savedCli = readConfiguredCli(localStorage.getItem(CONFIG_KEY));
-        const savedIsInstalled = !!savedCli && list.some((c) => c.installed && c.id === savedCli);
-        const nextCli = savedIsInstalled ? savedCli : list.find((c) => c.installed)?.id || "";
-        setCliId(nextCli);
-        // A visible auto-selection must be real, not cosmetic. Persist it and
-        // notify the persistent assistant mounted outside this page.
-        if (nextCli && nextCli !== savedCli) {
-          localStorage.setItem(
-            CONFIG_KEY,
-            patchClientConfig(localStorage.getItem(CONFIG_KEY), { mode: "cli", cliId: nextCli }),
-          );
-          window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
-        }
+        // Highlight + persist the default installed CLI when Config was never
+        // saved. Highlight-only looks configured while jobs still read empty
+        // localStorage -- so whatever is rendered as selected must be written.
+        // This applies at ANY installed count: restricting it to a SOLE install
+        // left every multi-CLI machine (claude + codex, say) in exactly the
+        // broken state the highlight was meant to avoid.
+        setCliId((prev) => {
+          // A restored id whose CLI is no longer installed must not stick: it
+          // would stay selected and save() would write it straight back, so
+          // "open Config and click Save config" could never clear it (#4012).
+          if (keepIfInstalled(prev, list)) return prev;
+          const auto = pickDefaultInstalled(list, typeof d.remembered === "string" ? d.remembered : null);
+          if (!auto) return "";
+          if (!readSavedCliId()) persistCliId(auto);
+          return auto;
+        });
       })
       .catch(() => setClis([]));
   }, []);
@@ -217,56 +222,62 @@ export function ConfigForm() {
               <div className="space-y-2">
                 {clis.map((c) => {
                   const selected = c.id === cliId;
+                  const rowClassName = cn(
+                    "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition-colors",
+                    selected
+                      ? "border-brand/50 bg-brand-soft"
+                      : c.installed
+                        ? "border-border bg-surface/50"
+                        : "border-border/60 bg-surface/20",
+                  );
+
+                  if (c.installed) {
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setCliId(c.id)}
+                        aria-pressed={selected}
+                        className={cn(rowClassName, "w-full cursor-pointer text-left")}
+                      >
+                        <Check className="size-4 shrink-0 text-emerald-400" />
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className={cn("font-medium", selected ? "text-foreground" : "")}>
+                            {c.name}
+                          </span>
+                          <span className="font-mono text-xs text-faint">{c.run}</span>
+                        </span>
+                        <span className="hidden max-w-[40%] shrink-0 truncate text-xs text-faint sm:block">
+                          {c.path}
+                        </span>
+                      </button>
+                    );
+                  }
+
                   return (
                     <div
                       key={c.id}
-                      className={cn(
-                        "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition-colors",
-                        selected
-                          ? "border-brand/50 bg-brand-soft"
-                          : c.installed
-                            ? "border-border bg-surface/50"
-                            : "border-border/60 bg-surface/20",
-                      )}
+                      className={rowClassName}
                     >
-                      {c.installed ? (
-                        <Check className="size-4 shrink-0 text-emerald-400" />
-                      ) : (
-                        <CircleDashed className="size-4 shrink-0 text-faint" />
-                      )}
+                      <CircleDashed className="size-4 shrink-0 text-faint" />
                       <button
                         type="button"
-                        disabled={!c.installed}
-                        onClick={() => selectCli(c.id)}
-                        className={cn(
-                          "flex flex-1 items-center gap-2 text-left max-sm:min-h-[44px]",
-                          c.installed ? "" : "cursor-default",
-                        )}
+                        disabled
+                        className="flex flex-1 items-center gap-2 text-left max-sm:min-h-[44px] cursor-default"
                       >
-                        <span
-                          className={cn(
-                            "font-medium",
-                            selected ? "text-foreground" : c.installed ? "" : "text-muted",
-                          )}
-                        >
+                        <span className="font-medium text-muted">
                           {c.name}
                         </span>
                         <span className="font-mono text-xs text-faint">{c.run}</span>
                       </button>
-                      {c.installed ? (
-                        <span className="hidden max-w-[40%] shrink-0 truncate text-xs text-faint sm:block">
-                          {c.path}
-                        </span>
-                      ) : (
-                        <a
-                          href={c.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex shrink-0 items-center justify-center gap-1 text-xs text-brand hover:underline max-sm:min-h-[44px]"
-                        >
-                          Install <ExternalLink className="size-3" />
-                        </a>
-                      )}
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex shrink-0 items-center justify-center gap-1 text-xs text-brand hover:underline max-sm:min-h-[44px]"
+                      >
+                        Install <ExternalLink className="size-3" />
+                      </a>
                     </div>
                   );
                 })}

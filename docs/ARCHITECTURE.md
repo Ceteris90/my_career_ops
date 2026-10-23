@@ -27,7 +27,7 @@ system/user data-contract layers live in [../ARCHITECTURE.md](../ARCHITECTURE.md
      │                    Output Pipeline                      │
      │  ┌──────────┐  ┌────────────┐  ┌───────────────────┐  │
      │  │ Report.md│  │  PDF (HTML  │  │ Tracker TSV       │  │
-     │  │ (A-G eval)│  │  → Playwright)│ │ (merge-tracker)  │  │
+     │  │ (A-H eval)│  │  → Playwright)│ │ (merge-tracker)  │  │
      │  └──────────┘  └────────────┘  └───────────────────┘  │
      └────────────────────────────────────────────────────────┘
                                │
@@ -42,15 +42,17 @@ system/user data-contract layers live in [../ARCHITECTURE.md](../ARCHITECTURE.md
 1. **Input**: User pastes JD text or URL
 2. **Extract**: Playwright/WebFetch extracts JD from URL
 3. **Classify**: Detect archetype (1 of 6 types)
-4. **Evaluate**: 7 blocks (A-G):
+4. **Evaluate**: 8 blocks (A-H; H is conditional on scores ≥ 4.5):
    - A: Role summary
-   - B: CV match (gaps + mitigation)
+   - B: CV match (per-requirement importance + gaps + mitigation)
    - C: Level strategy
    - D: Comp research (WebSearch)
    - E: CV personalization plan
    - F: Interview prep (STAR stories)
    - G: Posting legitimacy (scam / ghost-job signals)
-5. **Score**: Weighted average across 5 dimensions (1-5)
+   - H: Draft application answers (only when the score is 4.5 or above)
+5. **Score**: One global score (1-5), a holistic judgment across 5 dimensions
+   with no arithmetic formula; blocks A-H are not averaged (`modes/_shared.md` → Scoring System)
 6. **Report**: Save as `reports/{num}-{company}-{date}.md`
 7. **PDF**: Generate ATS-optimized CV (`generate-pdf.mjs`)
 8. **Track**: New entries via TSV in `batch/tracker-additions/` merged by
@@ -89,7 +91,7 @@ templates/cv-template.html → PDF generation template
 ## File Naming Conventions
 
 - Reports: `{###}-{company-slug}-{YYYY-MM-DD}.md` (3-digit zero-padded)
-- PDFs: `cv-candidate-{company-slug}-{YYYY-MM-DD}.pdf`
+- PDFs: `cv-candidate-{report-num}-{company-slug}-{YYYY-MM-DD}.pdf`
 - Tracker TSVs: `batch/tracker-additions/{id}.tsv`
 
 ## Pipeline Integrity
@@ -102,14 +104,15 @@ Scripts maintain data consistency:
 | `verify-pipeline.mjs` | Health check: statuses, duplicates, links |
 | `dedup-tracker.mjs` | Removes duplicate entries by company+role |
 | `normalize-statuses.mjs` | Maps status aliases to canonical values |
+| `fix-report-links.mjs` | Rewrites Report cells that link to a missing file to `—` (previewable, backed up) |
 | `cv-sync-check.mjs` | Validates setup consistency |
 
 ## Dashboard TUI
 
 The `dashboard/` directory contains a standalone Go TUI application that visualizes the pipeline:
 
-- Filter tabs: All, Evaluada, Aplicado, Entrevista, Top >=4, No Aplicar
-- Sort modes: Score, Date, Company, Status
+- Filter tabs: All, Evaluated, Interview, Assessment, Responded, Applied, Top ≥4, Skip, Rejected, Discarded
+- Sort modes: Score, Date, Company, Status, Location, Pay, Last contact, Posted
 - Grouped/flat view
 - Lazy-loaded report previews
 - Inline status picker
