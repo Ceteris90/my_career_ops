@@ -58,6 +58,19 @@ if (!declaresTool(stripJsComments("// toolUnavailable('browser', 'x')\n"), 'brow
   fail('declaresTool matched a comment, or a call for another tool');
 }
 
+// Every tool has a declaration pattern, and only a listed tool is one: the name
+// reaches these helpers from `--needs` on the command line.
+const missingPattern = Object.keys(REQUIRED_TOOL_ENV).filter((tool) => {
+  try { declaresTool('', tool); return false; } catch { return true; }
+});
+if (missingPattern.length === 0) pass('every tool in REQUIRED_TOOL_ENV has a declaration pattern');
+else fail(`no declaration pattern for: ${missingPattern.join(', ')} — add it to DECLARATION_RE in tests/required-tools.mjs`);
+const notTools = ['constructor', '__proto__', 'toString', 'browser.*'].filter((name) => {
+  try { declaresTool('', name); return true; } catch { return false; }
+});
+if (notTools.length === 0) pass('declaresTool refuses names that are not listed tools');
+else fail(`declaresTool accepted: ${notTools.join(', ')}`);
+
 // toolUnavailable: a warning normally, a failure when the tool is required.
 function countsUnder(env) {
   const r = spawnSync(NODE, ['--input-type=module', '-e', `

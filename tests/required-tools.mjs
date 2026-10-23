@@ -25,8 +25,16 @@ export const REQUIRED_TOOL_ENV = Object.freeze({
   latex: 'CAREER_OPS_REQUIRE_LATEX',
 });
 
+// One fixed pattern per tool, never a RegExp built from the name: `--needs`
+// hands test-all.mjs the name straight from the command line.
+const DECLARATION_RE = Object.freeze({
+  browser: /\btool(?:Required|Unavailable)\(\s*['"]browser['"]/,
+  latex: /\btool(?:Required|Unavailable)\(\s*['"]latex['"]/,
+});
+
 function envFor(tool) {
-  const name = REQUIRED_TOOL_ENV[tool];
+  // Object.hasOwn: a name such as "constructor" is not a tool.
+  const name = Object.hasOwn(REQUIRED_TOOL_ENV, tool) ? REQUIRED_TOOL_ENV[tool] : null;
   if (!name) throw new Error(`unknown tool "${tool}" (known: ${Object.keys(REQUIRED_TOOL_ENV).join(', ')})`);
   return name;
 }
@@ -56,5 +64,5 @@ export function toolRequired(tool) {
  */
 export function declaresTool(src, tool) {
   envFor(tool);
-  return new RegExp(`\\btool(?:Required|Unavailable)\\(\\s*['"]${tool}['"]`).test(src);
+  return DECLARATION_RE[tool].test(src);
 }
