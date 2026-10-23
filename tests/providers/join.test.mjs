@@ -121,7 +121,8 @@ try {
     pdCalls === 2 &&
     pdJobs.length === 2 &&
     pdJobs[0].url === 'https://join.com/companies/acme-corp/jobs/a' &&
-    pdJobs[0].location === 'Berlin'
+    pdJobs[0].location === 'Berlin' &&
+    pdJobs[1].url === 'https://join.com/companies/acme-corp/jobs/b'
   ) {
     pass('join.fetch() reads the newer pageProps.pageData shape, including pagination');
   } else {
