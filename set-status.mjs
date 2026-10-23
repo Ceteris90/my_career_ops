@@ -821,7 +821,10 @@ try {
   // tracker file so CAREER_OPS_TRACKER redirects (tests, custom layouts) keep
   // the ledger next to the tracker it describes. Inside the lock window, so
   // concurrent writers can't interleave lines.
-  if (statusChanged && !flags.dryRun && undone) {
+  // An undo retracts the entry it selected even when that entry left the
+  // status as it was (Applied → Applied), or the next undo would pick it again.
+  // The retraction is the undo, so a failed append puts the old status back.
+  if (undone && !flags.dryRun) {
     statusLogged = appendStatusTransition(APPS_FILE, {
       num: target.num,
       date: localToday(),
@@ -830,6 +833,19 @@ try {
       source: flags.source ?? 'set-status',
       note: `undo ${undone.from} → ${undone.to}`,
     });
+    if (!statusLogged) {
+      let restored = !statusChanged;
+      if (statusChanged) {
+        lines[target.lineIdx] = rawLine;
+        try {
+          writeFileAtomic(APPS_FILE, lines.join('\n'));
+          restored = true;
+        } catch { /* reported below */ }
+      }
+      failWith(EXIT_USAGE, 'undo-not-logged', restored
+        ? `Could not log the undo for #${target.num}, so it stays ${oldStatus}`
+        : `Could not log the undo for #${target.num}, and could not put it back to ${oldStatus}; it now reads ${newStatus}`);
+    }
   } else if (statusChanged && !flags.dryRun) {
     // LOCAL today: the UTC day is TOMORROW for a west-of-Greenwich evening run,
     // so this appended a status-log row dated a day that had not happened yet
