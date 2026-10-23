@@ -3,6 +3,11 @@
  * Run: node test-all.mjs --only salary-gap-third-party
  */
 import { parseObservations, fold } from '../salary-gap.mjs';
+import { spawnSync } from 'child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { pass, fail } from './helpers.mjs';
 
 console.log('\nsalary-gap third-party source');
@@ -44,3 +49,23 @@ r = fold(parseObservations('1\t2026-07-01\tadvertised\t85k\tUSD\tjd\t'), apps, n
 assert(!('unverified' in adv(r)), 'no unverified key emitted for existing sources');
 assert(Object.keys(adv(r)).sort().join() === 'currency,date,period,postingLocation,raw,source,value',
   'advertised object shape unchanged for jd');
+
+// --summary renders the estimate with its marker and label (user-visible path)
+{
+  const root = mkdtempSync(join(tmpdir(), 'sg-third-party-'));
+  try {
+    mkdirSync(join(root, 'data'), { recursive: true });
+    writeFileSync(join(root, 'data', 'applications.md'), [
+      '# Applications Tracker', '',
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+      '|---|------|---------|------|-------|--------|-----|--------|-------|',
+      '| 1 | 2026-07-01 | Acme | Eng | 4.0/5 | Applied | n | - | n |',
+    ].join(String.fromCharCode(10)) + String.fromCharCode(10));
+    writeFileSync(join(root, 'data', 'salary-observations.tsv'), ['1', '2026-07-01', 'advertised', '80-90k', 'USD', 'third-party', 'est'].join(String.fromCharCode(9)) + String.fromCharCode(10));
+    const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'salary-gap.mjs');
+    const out = spawnSync(process.execPath, [script, '--summary'], { encoding: 'utf-8', env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_TRACKER: '' } });
+    const line = (out.stdout || '').split(String.fromCharCode(10)).find(l => l.trim().startsWith('advertised')) || '';
+    assert(out.status === 0 && line.includes('~ 85k USD') && line.includes('[unverified estimate]'),
+      '--summary shows the third-party advertised value with ~ and [unverified estimate]');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+}
