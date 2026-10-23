@@ -3,13 +3,9 @@
 **Strategic Programs & AI-Enabled Operations Leader**
 Technical Program Management | Enterprise Transformation | Platform Operations | AI Infrastructure
 
-**Location:** Atlanta, GA
-**Email:** bashiraaliya@gmail.com
-**Phone:** +1-678-594-1031
-**LinkedIn:** linkedin.com/in/aaliya-bashir/
-**Portfolio:** https://bus-ops-deck.vercel.app
-**Platform case study:** https://aaliya-ai-ops-ecosystem.vercel.app
-**GitHub:** https://github.com/nuriygold
+Atlanta, GA | bashiraaliya@gmail.com | +1-678-594-1031 | https://linkedin.com/in/aaliya-bashir/
+Portfolio: https://bus-ops-deck.vercel.app
+Platform case study: https://aaliya-ai-ops-ecosystem.vercel.app
 
 ## Professional Summary
 
@@ -122,4 +118,5 @@ Concurrent SME consulting engagement
 - Harvard University, Graduate Certificate, Corporate Sustainability and Innovation
 - Augusta University, Master of Public Administration
 - Paine College, Bachelor of Arts, Philosophy
+- Private Pilot License, ATP Flight School
 - Certifications: Project Management Professional (PMP), Certified ScrumMaster (CSM)

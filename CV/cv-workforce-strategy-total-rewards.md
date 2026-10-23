@@ -2,9 +2,7 @@
 
 **Workforce Strategy, Total Rewards & HR Transformation Leader**
 
-Atlanta, GA | bashiraaliya@gmail.com | +1-678-594-1031
-
-LinkedIn: https://www.linkedin.com/in/aaliya-bashir/
+Atlanta, GA | bashiraaliya@gmail.com | +1-678-594-1031 | https://www.linkedin.com/in/aaliya-bashir/
 Portfolio: https://bus-ops-deck.vercel.app
 Platform case study: https://aaliya-ai-ops-ecosystem.vercel.app
 
@@ -89,7 +87,8 @@ Concurrent SME consulting engagement
 
 ## Education & Credentials
 
-Harvard University - Graduate Certificate, Corporate Sustainability and Innovation
-Augusta University - Master of Public Administration
-Paine College - Bachelor of Arts, Philosophy
-Project Management Professional (PMP) | Certified ScrumMaster (CSM)
+- Harvard University - Graduate Certificate, Corporate Sustainability and Innovation
+- Augusta University - Master of Public Administration
+- Paine College - Bachelor of Arts, Philosophy
+- Private Pilot License - ATP Flight School
+- Project Management Professional (PMP) | Certified ScrumMaster (CSM)
