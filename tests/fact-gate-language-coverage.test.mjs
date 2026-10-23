@@ -128,6 +128,11 @@ test('unlisted noun next to a listed one remains unreported — remaining gap (#
   assert.equal(ok.coverage, null);
 });
 
+test('a recognized German count does not hide an unrecognized count', () => {
+  const r = verifyFacts('Leitete 45 Spezialisten in 3 Standorten.', BARE);
+  assert.ok(r.coverage, 'the unrecognized count should remain visible as unchecked');
+});
+
 test('German headcount, user, and engineering inflections fold to canonical nouns (#5125)', () => {
   assert.deepEqual([...verifyFacts('45 Nutzer.', BARE).invented], ['45 users']);
   assert.deepEqual([...verifyFacts('12 Entwicklerinnen.', BARE).invented], ['12 engineers']);
