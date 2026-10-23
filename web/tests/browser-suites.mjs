@@ -124,7 +124,9 @@ function runSuite(file, env) {
     for (const stream of [child.stdout, child.stderr]) {
       stream.on("data", (chunk) => { out += chunk; process.stdout.write(chunk); });
     }
-    child.once("exit", (code) => resolve({ code, out }));
+    // close, not exit: exit can fire before the last of stdout arrives, and
+    // the summary counts are read from the end of it.
+    child.once("close", (code) => resolve({ code, out }));
   });
 }
 
