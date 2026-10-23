@@ -159,6 +159,21 @@ test('CLI: --interviews overrides the path; a missing file warns and yields no c
   }
 });
 
+test('CLI: a relative --interviews path is resolved from the data root, not the cwd', () => {
+  const box = sandbox();
+  try {
+    const args = ['--today', '2026-10-17', '--within', '14', '--clashes'];
+    const base = JSON.parse(run(args, box).stdout);
+    const rel = JSON.parse(run([...args, '--interviews', 'data/active-interviews.md'], box).stdout);
+    assert.deepEqual(rel.clashes, base.clashes);
+    assert.deepEqual(rel.warnings, base.warnings);
+    const abs = JSON.parse(run([...args, '--interviews', join(box.dataRoot, 'data', 'active-interviews.md')], box).stdout);
+    assert.deepEqual(abs.clashes, base.clashes);
+  } finally {
+    cleanup(box);
+  }
+});
+
 test('CLI: flag validation', () => {
   const box = sandbox();
   try {

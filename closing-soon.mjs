@@ -43,7 +43,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { loadYaml } from './lib/yaml-document.mjs';
 
@@ -569,7 +569,10 @@ if (isMainModule(import.meta.url)) {
     const interviewsDefault = existsSync(join(dataRoot, 'data/active-interviews.md'))
       ? join(dataRoot, 'data/active-interviews.md')
       : join(dataRoot, 'active-interviews.md');
-    const interviewsPath = valueOf('--interviews') || interviewsDefault;
+    // A relative --interviews override is resolved from the data root, not the cwd;
+    // an absolute one is kept as given.
+    const interviewsOverride = valueOf('--interviews');
+    const interviewsPath = interviewsOverride ? resolve(dataRoot, interviewsOverride) : interviewsDefault;
     let interviewsMd = '';
     if (existsSync(interviewsPath)) {
       interviewsMd = readFileSync(interviewsPath, 'utf-8');
