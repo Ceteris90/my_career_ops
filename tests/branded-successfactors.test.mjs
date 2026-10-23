@@ -1,5 +1,5 @@
 import assert from 'assert/strict';
-import { detectBrandedSuccessFactors, classifyUnknownHostSeeds } from '../branded-successfactors.mjs';
+import { detectBrandedSuccessFactors, classifyUnknownHostSeeds, makeHeadProbe } from '../branded-successfactors.mjs';
 import { runHistorySeedScan, parseArgs } from '../scan-ats-full.mjs';
 import { pass, fail } from './helpers.mjs';
 
@@ -63,6 +63,19 @@ try {
   assert.equal(calls.length, 3, 'cached verdicts (including failures) are not re-probed');
   assert.equal(await classifyUnknownHostSeeds(seeds, {}), seeds, 'no probe injected means no change');
   pass('seed classification probes each unknown host once, caches verdicts, and fails closed');
+
+  // Header-only marker: body is clean, the Link header carries the SF host.
+  let seenOpts = null;
+  const headProbe = makeHeadProbe(async (url, opts) => {
+    seenOpts = opts;
+    opts.onResponse({ headers: new Headers({ link: '<https://rmkcdn.successfactors.com/x.css>; rel=preload' }) });
+    return '<html><body>Careers</body></html>';
+  });
+  const headerSeeds = [{ company: 'H', vendor: 'careers.headeronly.test', careersUrl: 'https://careers.headeronly.test', source: 'tracker' }];
+  const headerOut = await classifyUnknownHostSeeds(headerSeeds, { probe: headProbe });
+  assert.equal(seenOpts.maxBytes, 262144, 'body limit is preserved');
+  assert.equal(headerOut[0].vendor, 'successfactors', 'a header-only marker is seen by the default probe');
+  pass('default probe captures response headers alongside the capped body');
 
   assert.equal(parseArgs(['node', 'scan-ats-full.mjs', '--history-seeds', '--probe-unknown-hosts']).probeUnknownHosts, true);
   assert.equal(parseArgs(['node', 'scan-ats-full.mjs', '--history-seeds']).probeUnknownHosts, false);

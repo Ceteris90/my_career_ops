@@ -405,6 +405,7 @@ const SYSTEM_PATHS = [
   'path-resolver.mjs',
   'ats-vendor.mjs',
   'history-ats-seeds.mjs',
+  'branded-successfactors.mjs',
 
   'reserve-report-num.mjs',
   'scan.mjs',

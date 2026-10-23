@@ -75,7 +75,7 @@ import { getCareerOpsRoot } from './path-resolver.mjs';
 import { barePrefixDomainKeywords, buildDomainFilter } from './title-keywords.mjs';
 import { KNOWN_ATS_VENDORS } from './ats-vendor.mjs';
 import { loadHistoryAtsSeeds } from './history-ats-seeds.mjs';
-import { classifyUnknownHostSeeds } from './branded-successfactors.mjs';
+import { classifyUnknownHostSeeds, makeHeadProbe } from './branded-successfactors.mjs';
 import { loadProviders } from './providers/_registry.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -1193,7 +1193,7 @@ async function main() {
   // a failed probe leaves the hostname label as it was.
   if (opts.probeUnknownHosts && historySeeds.length) {
     historySeeds = await classifyUnknownHostSeeds(historySeeds, {
-      probe: async (origin) => ({ html: await fetchTextHead(origin, { maxBytes: 262144 }) }),
+      probe: makeHeadProbe(fetchTextHead),
     });
   }
 

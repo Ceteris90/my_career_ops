@@ -71,6 +71,22 @@ export function detectBrandedSuccessFactors(html, headers = null) {
   return headerValues(headers).some((value) => SF_HEADER_RE.test(value));
 }
 
+/**
+ * Build the default probe around fetchTextHead: body capped at maxBytes, and the
+ * response headers captured through onResponse so header-only markers count.
+ * @param {(url: string, opts: object) => Promise<string>} fetchHead
+ */
+export function makeHeadProbe(fetchHead, maxBytes = 262144) {
+  return async (origin) => {
+    let headers = null;
+    const html = await fetchHead(origin, {
+      maxBytes,
+      onResponse: (response) => { headers = response?.headers ?? null; },
+    });
+    return { html, headers };
+  };
+}
+
 /** A seed is "unknown-host" when its vendor label is just a hostname. */
 export function isUnknownHostSeed(seed) {
   return Boolean(seed?.vendor)
