@@ -254,7 +254,10 @@ export function findMeetingUrl(...texts) {
 
 function personName(prop) {
   const cn = prop?.params?.CN;
-  return cn && cn.trim() ? unescapeText(cn).trim() : null;
+  const name = cn ? unescapeText(cn).trim() : '';
+  // Names only: a CN that is itself an address (or a mailto:) is never emitted.
+  if (!name || /^mailto:/i.test(name) || /\S+@\S+/.test(name)) return null;
+  return name;
 }
 
 /**
@@ -378,7 +381,7 @@ export function buildRow(event, tracker = null) {
   if (event.start?.tzid && event.start.kind !== 'unknown-tzid') notes.push(`invite zone ${event.start.tzid}`);
   if (event.meetingUrl) notes.push(event.meetingUrl);
   const cells = [
-    cell(tracker?.company), cell(tracker?.role), DASH, dateTimeCell(event),
+    cell(tracker?.company), cell(tracker?.role), DASH, cell(dateTimeCell(event)),
     cell(event.organizer), 'Scheduled', cell(notes.join('; ')),
   ];
   return `| ${cells.join(' | ')} |`;

@@ -35,12 +35,12 @@ const TOR = 'America/Toronto';
     'DTEND;TZID=America/Toronto:20261105T144500',
     'ORGANIZER;CN=Jane Doe:mailto:jane@example.com',
     'ATTENDEE;CN="Sam Lee";ROLE=REQ-PARTICIPANT:mailto:sam@example.com',
-  ), { displayZone: 'America/Vancouver' });
+  ), { displayZone: 'Asia/Tokyo' });
   eq('TZID: no warnings', warnings, []);
   eq('TZID: UTC instant (EST = UTC-5)', event.start.utc, '2026-11-05T19:00:00Z');
   eq('TZID: original TZID kept', event.start.tzid, TOR);
   eq('TZID: duration from DTEND', event.durationMinutes, 45);
-  eq('TZID: same instant in display zone', [event.display.start.date, event.display.start.time, event.display.end.time], ['2026-11-05', '11:00', '11:45']);
+  eq('TZID: same instant in display zone', [event.display.start.date, event.display.start.time, event.display.end.time], ['2026-11-06', '04:00', '04:45']);
   eq('TZID: organizer name only', event.organizer, 'Jane Doe');
   eq('TZID: attendee names only', event.attendees, ['Sam Lee']);
 }
@@ -153,6 +153,22 @@ eq('DST: July wall time is UTC-4', new Date(wallToInstant({ y: 2026, mo: 7, d: 1
   eq('row: no event -> null', buildRow(null), null);
 }
 
+// 13b. Names only: addresses never emitted; a pipe in TZID cannot add columns
+{
+  const { event } = parseIcs(ics(
+    'DTSTART:20261105T190000Z',
+    'ORGANIZER;CN=jane@example.com:mailto:jane@example.com',
+    'ATTENDEE;CN="mailto:x@example.com":mailto:x@example.com',
+    'ATTENDEE;CN=Sam Lee:mailto:sam@example.com',
+  ), { displayZone: 'UTC' });
+  eq('names only: address-like organizer CN dropped', event.organizer, null);
+  eq('names only: address-like attendee CN dropped', event.attendees, ['Sam Lee']);
+  const piped = parseIcs(ics('DTSTART;TZID=A|B:20261105T140000', 'DTEND;TZID=A|B:20261105T150000'), { displayZone: 'UTC' });
+  const row = buildRow(piped.event);
+  eq('pipe in TZID: row still has 7 cells', row.split(' | ').length, 7);
+  eq('pipe in TZID: pipe replaced', row.includes('A/B'), true);
+}
+
 // 14. CLI: file, --tz, --summary, missing file, bad flag
 {
   const dir = mkdtempSync(join(tmpdir(), 'ics-interview-'));
@@ -178,10 +194,14 @@ eq('DST: July wall time is UTC-4', new Date(wallToInstant({ y: 2026, mo: 7, d: 1
     eq('cli --match: length from .ics', [matched.match.lengthMinutes, matched.match.lengthSource], [45, '.ics']);
     eq('cli --match: row gets Company and Role', matched.row.startsWith('| Example Industries | Analyst | — |'), true);
 
-    const missing = (() => { try { execFileSync(process.execPath, [SCRIPT, join(dir, 'nope.ics')], { encoding: 'utf-8', env, stdio: 'pipe' }); return 0; } catch (e) { return e.status; } })();
-    eq('cli: missing file exits 1, no crash trace', missing, 1);
-    const bad = (() => { try { execFileSync(process.execPath, [SCRIPT, f, '--bogus'], { encoding: 'utf-8', env, stdio: 'pipe' }); return 0; } catch (e) { return e.status; } })();
-    eq('cli: unknown flag exits 1', bad, 1);
+    const missing = (() => { try { execFileSync(process.execPath, [SCRIPT, join(dir, 'nope.ics')], { encoding: 'utf-8', env, stdio: 'pipe' }); return { status: 0, stderr: '' }; } catch (e) { return { status: e.status, stderr: String(e.stderr) }; } })();
+    eq('cli: missing file exits 1', missing.status, 1);
+    eq('cli: missing file gives the user-facing message', missing.stderr.includes('ics-interview: cannot read') && missing.stderr.includes('file not found'), true);
+    eq('cli: missing file has no stack trace', /\n\s+at |node:internal|Error:/.test(missing.stderr), false);
+    const bad = (() => { try { execFileSync(process.execPath, [SCRIPT, f, '--bogus'], { encoding: 'utf-8', env, stdio: 'pipe' }); return { status: 0, stderr: '' }; } catch (e) { return { status: e.status, stderr: String(e.stderr) }; } })();
+    eq('cli: unknown flag exits 1', bad.status, 1);
+    eq('cli: unknown flag gives the user-facing message', bad.stderr.includes('unrecognized flag(s): --bogus'), true);
+    eq('cli: unknown flag has no stack trace', /\n\s+at |node:internal/.test(bad.stderr), false);
 
     // Profile zone: a non-IANA value (e.g. "PST") is reported, not trusted
     const cfg = join(dir, 'config');
@@ -189,9 +209,9 @@ eq('DST: July wall time is UTC-4', new Date(wallToInstant({ y: 2026, mo: 7, d: 1
     writeFileSync(join(cfg, 'profile.yml'), 'location:\n  timezone: "Pacific Standard Time"\n');
     const viaProfile = JSON.parse(execFileSync(process.execPath, [SCRIPT, f], { encoding: 'utf-8', env }));
     eq('cli: invalid profile zone warns', viaProfile.warnings.map((w) => w.code), ['display-zone-invalid']);
-    writeFileSync(join(cfg, 'profile.yml'), 'location:\n  timezone: "America/Vancouver"\n');
+    writeFileSync(join(cfg, 'profile.yml'), 'location:\n  timezone: "Asia/Tokyo"\n');
     const viaGood = JSON.parse(execFileSync(process.execPath, [SCRIPT, f], { encoding: 'utf-8', env }));
-    eq('cli: profile zone used', viaGood.event.display.start.time, '11:00');
+    eq('cli: profile zone used', viaGood.event.display.start.time, '04:00');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
