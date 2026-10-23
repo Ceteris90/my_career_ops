@@ -124,7 +124,7 @@ A general job board with one host per Latin American country. Only the Colombian
 
 **Rule 2 (canonical URL is the employer's).** The listing card carries no employer or ATS URL, only the board's own posting page, so `url` is that page (fragment dropped). Whether the posting page links on to the employer: unverified.
 
-**Rule 3 (complete inventory, no paid placement).** Not met as shipped, flagged for the maintainer: the default "Relevancia" order interleaves paid "Empleo destacado" cards (9 of the 20 measured), and the provider stops at 3 pages / 15 postings by design (the contributor's crawl limit), so paid cards take part of that budget. The provider keeps every card it reads and does no ranking of its own. Pagination (`?p=N`) is unverified.
+**Rule 3 (complete inventory, no paid placement).** Partly met, flagged for the maintainer. Employers can pay Computrabajo (not career-ops) to feature a posting as "Empleo destacado", and the board interleaves those cards in every sort order: 9 of 20 in the default "Relevancia" order and 11 of 20 in the "Fecha" order (`?by=publicationtime`), measured on 2026-10-23. There is no order without them, and they are real postings by real employers, so the provider keeps them. It requests the "Fecha" order so the newest postings come first, keeps every card it reads, does no ranking of its own, and stops at 3 pages / 15 postings by design. career-ops receives nothing from Computrabajo or from any employer. Pagination (`?p=N`) is unverified.
 
 **Rule 4 (operator declared).** Operator not declared in the PR; unverified.
 

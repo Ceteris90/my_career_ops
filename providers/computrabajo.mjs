@@ -151,6 +151,10 @@ export default {
       if (page > 1) await sleep(2000 + Math.random() * 3000, ctx);
 
       const pageUrl = new URL(listUrl);
+      // Newest first (the board's own "Fecha" sort). Employers can pay Computrabajo to
+      // feature a posting ("Empleo destacado"), and those cards are interleaved in every
+      // sort order; a `by=` the user put in their URL wins.
+      if (!pageUrl.searchParams.has('by')) pageUrl.searchParams.set('by', 'publicationtime');
       pageUrl.searchParams.set('p', String(page));
 
       let html;

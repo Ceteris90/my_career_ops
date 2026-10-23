@@ -88,6 +88,7 @@ test('fetch() keeps the real employer, decodes entities, drops the fragment and 
   const jobs = await provider.fetch({ name: 'Computrabajo Colombia', careers_url: `${BASE}?foo=bar` }, ctx);
 
   assert.equal(new URL(calls[0].url).searchParams.get('foo'), 'bar');
+  assert.equal(new URL(calls[0].url).searchParams.get('by'), 'publicationtime');
   assert.ok(calls.every((c) => c.opts.redirect === 'error'), 'every request passes redirect: error');
   assert.ok(calls.every((c) => !('User-Agent' in (c.opts.headers || {}))), 'no provider-set User-Agent');
   assert.deepEqual(jobs, [
@@ -202,4 +203,10 @@ test('parseCards ignores non-posting links and non-card articles', () => {
   const cards = parseCards(html, 'https://co.computrabajo.com');
   assert.equal(cards.length, 1);
   assert.equal(cards[0].id, 'K1');
+});
+
+test('computrabajo keeps a sort order the user put in the URL', async () => {
+  const { ctx, calls } = makeCtx({ 1: page(card('S1')) });
+  await provider.fetch({ name: 'Computrabajo Colombia', careers_url: `${BASE}?by=salary` }, ctx);
+  assert.equal(new URL(calls[0].url).searchParams.get('by'), 'salary');
 });
