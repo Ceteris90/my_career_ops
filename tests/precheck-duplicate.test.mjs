@@ -112,6 +112,20 @@ try {
   if (companyRelation('Fabrikam University [East]', 'Fabrikam University [West]') === 'parent') pass('different square-bracket units are a parent relation');
   else fail('[East] vs [West] should be parent');
 
+  // 11c. A REQ- label is not part of the requisition identity; a decorated status still warns.
+  const reqRows = [
+    { num: 7, date: '2026-04-01', company: 'Northwind Hospital', role: 'Coordinator', status: '**Rejected** 2026-04-02', notes: 'req REQ-2026-32061', url: '' },
+    { num: 8, date: '2026-04-01', company: 'Northwind Hospital', role: 'Analyst', status: 'Applied', notes: 'job id 88214', url: '' },
+  ];
+  for (const q of ['REQ-2026-32061', '2026-32061']) {
+    const r = findDuplicateCandidates(reqRows, { company: 'Northwind Hospital', title: 'Zzz', req: q });
+    if (r.length === 1 && r[0].num === 7 && r[0].reason === 'req') pass(`requisition "${q}" matches the row written as REQ-2026-32061`);
+    else fail(`requisition "${q}" should match #7 by req, got ${JSON.stringify(r)}`);
+  }
+  const w = findDuplicateCandidates(reqRows, { company: 'Northwind Hospital', title: 'Zzz', req: '2026-32061' })[0];
+  if (w && w.warning === true) pass('a bold/dated Rejected status still sets the warning flag');
+  else fail('decorated Rejected status should warn');
+
   // 12. A lookup with no usable key is rejected, not reported as "no duplicate".
   const rejects = (args) => {
     try { run(args); return false; } catch (e) { return e.status === 1; }

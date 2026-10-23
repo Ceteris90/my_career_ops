@@ -27,14 +27,26 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { resolveColumns, parseTrackerRow, extractReqNumber, normalizeTextKey } from './tracker-parse.mjs';
-import { resolveTrackerPath, normalizeCompany, companiesMatchIgnoringCorporateForm } from './tracker-utils.mjs';
+import {
+  resolveTrackerPath, normalizeCompany, companiesMatchIgnoringCorporateForm,
+  loadCanonicalStates, resolveCanonicalStateId,
+} from './tracker-utils.mjs';
 import { normalizeUrl } from './url-key.mjs';
 import { titleIdentityKey } from './detect-reposts.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+
+const CANONICAL_STATES = loadCanonicalStates(join(dirname(fileURLToPath(import.meta.url)), 'templates', 'states.yml'));
+
+/** Requisition ID without a leading REQ label, so "REQ-2026-32061" and "2026-32061" compare equal. */
+function normReq(v) {
+  return String(v ?? '').trim().replace(/^REQ[-s:#_]+/i, '').toUpperCase();
+}
 
 // ADDING A FLAG: add it to BOTH lists below and to USAGE (validateFlags reads these).
 const KNOWN_FLAGS = ['--company', '--title', '--req', '--url', '--json', '--help', '-h'];
@@ -92,7 +104,7 @@ export function companyRelation(a, b) {
  */
 export function findDuplicateCandidates(rows, { company = '', title = '', req = '', url = '' } = {}) {
   const wantUrl = normalizeUrl(url);
-  const wantReq = req ? String(req).trim().toUpperCase() : '';
+  const wantReq = normReq(req);
   const wantTitleKey = title ? titleIdentityKey(title) : '';
   const out = [];
   for (const row of rows) {
@@ -100,7 +112,7 @@ export function findDuplicateCandidates(rows, { company = '', title = '', req = 
     let reason = null;
     if (wantUrl && normalizeUrl(row.url) === wantUrl) {
       reason = 'url';
-    } else if (wantReq && rel && extractReqNumber(row.notes) === wantReq) {
+    } else if (wantReq && rel && normReq(extractReqNumber(row.notes)) === wantReq) {
       reason = 'req';
     } else if (rel === 'same' && wantTitleKey && titleIdentityKey(row.role) === wantTitleKey) {
       reason = 'same-title';
@@ -117,7 +129,7 @@ export function findDuplicateCandidates(rows, { company = '', title = '', req = 
     }[reason];
     out.push({
       num: row.num, company: row.company, role: row.role, status: row.status, date: row.date,
-      reason, detail, tier: TIER_RANK[reason], warning: /^rejected$/i.test(row.status || ''),
+      reason, detail, tier: TIER_RANK[reason], warning: resolveCanonicalStateId(row.status, CANONICAL_STATES) === 'rejected',
     });
   }
   return out.sort((x, y) => x.tier - y.tier || String(y.date).localeCompare(String(x.date)) || y.num - x.num);
