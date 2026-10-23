@@ -336,10 +336,29 @@ try {
       },
     },
   );
-  if (tripped && filterArts.join(',') === '1:1,1:2,34:1,34:2' && paced.length === 4 && sleeps.length >= 3) {
+  if (tripped && filterArts.join(',') === '1:1,1:2,34:1,34:2' && paced.length === 4 && sleeps.filter(ms => ms === 200).length === 3) {
     pass('aa.fetch() remoteMatch:filter paces pages across offer types and retries a 429');
   } else {
     fail(`aa.fetch() filter pacing/retry: pages=${filterArts} sleeps=${JSON.stringify(sleeps)} jobs=${paced.length}`);
+  }
+
+  // An offer type that exhausts its retries must not stop the next type.
+  const afterExhaust = await aa.fetch(
+    { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', remoteNationwide: true, remoteMatch: 'filter', angebotsart: [1, 34] } },
+    {
+      sleep: async () => {},
+      fetchJson: async (url) => {
+        const sp = new URL(url).searchParams;
+        if (!sp.has('homeoffice')) return page();
+        if (sp.get('angebotsart') === '1') throw Object.assign(new Error('HTTP 503'), { status: 503 });
+        return page(v6('R34', 'ESG Analyst (Remote)', 'Hamburg'));
+      },
+    },
+  );
+  if (afterExhaust.length === 1 && afterExhaust[0].url.endsWith('R34')) {
+    pass('aa.fetch() remoteMatch:filter continues with the next offer type after one exhausts its retries');
+  } else {
+    fail(`aa.fetch() filter per-type failure: ${JSON.stringify(afterExhaust)}`);
   }
 
 } catch (e) {

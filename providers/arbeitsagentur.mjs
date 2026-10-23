@@ -258,12 +258,18 @@ export default {
             // Paced and retried: this walk is up to remoteMaxPages requests per
             // offer type, back to back.
             let requests = 0;
+            // A type that exhausts its retries keeps the pages it already
+            // returned and does not stop the next type.
             for (const art of angebotsart) {
-              for (let page = 1; page <= remoteMaxPages; page++) {
-                if (requests++ > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
-                const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art }, true);
-                wide.push(...res);
-                if (res.length < size) break; // short page → done
+              try {
+                for (let page = 1; page <= remoteMaxPages; page++) {
+                  if (requests++ > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
+                  const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art }, true);
+                  wide.push(...res);
+                  if (res.length < size) break; // short page → done
+                }
+              } catch (err) {
+                errors.push(`"${kw}" (remote pass) angebotsart=${art}: ${(err && err.message) || err}`);
               }
             }
           } else { // 'title'
