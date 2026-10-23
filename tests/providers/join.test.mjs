@@ -127,6 +127,26 @@ try {
     fail(`join.fetch() job shape wrong: ${JSON.stringify(singleJobs)}`);
   }
 
+  // fetch() — postedAt from createdAt, description from descriptionHtml as plain text.
+  const richCtx = makeCtx(() => gqlPage([
+    { ...job(1), createdAt: '2025-03-11T09:30:00.000Z', descriptionHtml: '<p>Build <strong>Rust</strong> services &amp; tools.</p><ul><li>Visa sponsorship</li></ul>' },
+    { ...job(2), createdAt: 'not a date', descriptionHtml: '' },
+    job(3),
+  ]));
+  const richJobs = await joinProvider.fetch(entry, richCtx);
+  const richQuery = richCtx.jsonCalls[0].body.query;
+  if (/\bcreatedAt\b/.test(richQuery) && /\bdescriptionHtml\b/.test(richQuery)) pass('join.fetch() requests createdAt and descriptionHtml in the list query');
+  else fail(`join.fetch() list query should request createdAt and descriptionHtml: ${richQuery}`);
+  if (richJobs[0].postedAt === Date.parse('2025-03-11T09:30:00.000Z')) pass('join.fetch() maps createdAt to postedAt (epoch ms)');
+  else fail(`join.fetch() postedAt wrong: ${richJobs[0].postedAt}`);
+  if (richJobs[0].description === 'Build Rust services & tools. Visa sponsorship') pass('join.fetch() maps descriptionHtml to plain-text description');
+  else fail(`join.fetch() description wrong: ${JSON.stringify(richJobs[0].description)}`);
+  if (!('postedAt' in richJobs[1]) && !('description' in richJobs[1]) && !('postedAt' in richJobs[2]) && !('description' in richJobs[2])) {
+    pass('join.fetch() omits postedAt/description when createdAt is unparseable or the body is empty/absent');
+  } else {
+    fail(`join.fetch() should omit absent fields: ${JSON.stringify(richJobs.slice(1))}`);
+  }
+
   // fetch() — the URL uses the company's own domain from the page, not the careers_url slug.
   const renamedCtx = makeCtx(() => gqlPage([job(1)]), { html: pageHtml({ id: 4242, domain: 'acme-renamed' }) });
   const renamedJobs = await joinProvider.fetch(entry, renamedCtx);

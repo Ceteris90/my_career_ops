@@ -2,6 +2,7 @@
 /** @typedef {import('./_types.js').Provider} Provider */
 
 import { fetchJsonWithRetry, fetchTextWithRetry } from './_http.mjs';
+import { htmlToText } from './_html-to-text.mjs';
 import { safeEncodeURIComponent } from './_safe-url.mjs';
 
 // join.com provider — single-company ATS adapter for `tracked_companies:`.
@@ -30,6 +31,8 @@ const PUBLIC_JOBS_QUERY = `query PublicJobsList($input: PublicJobsQueryInput!) {
     items {
       id
       title
+      createdAt
+      descriptionHtml
       city {
         cityName
       }
@@ -57,6 +60,14 @@ const MAX_PAGES_CAP = 200;
 // the refusal window several times over.
 const RETRY_POLICY = { retries: 4, baseDelayMs: 2_000, maxDelayMs: 10_000 };
 const RATE_LIMIT_RE = /too many requests/i;
+
+// NaN-safe ISO → epoch ms; an absent or unparseable date leaves postedAt unset
+// so the age filters treat the posting as undated instead of as epoch zero.
+function toEpochMs(value) {
+  if (typeof value !== 'string') return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 /** Resolve the page cap: a positive integer `max_pages` on the entry, capped. */
 function resolveMaxPages(entry) {
@@ -175,14 +186,24 @@ export default {
     // whose number changes whenever the posting is republished; join.com
     // redirects `/companies/<domain>/<id>` to the current `<idParam>` page.
     const companySlug = (typeof company.domain === 'string' && safeEncodeURIComponent(company.domain)) || slug;
+    // postedAt is `createdAt`, the day the posting was first created. A
+    // republished posting keeps it, so a role left open for a year reads as a
+    // year old. The list payload carries each posting's full body, so the
+    // description costs no extra request.
     const jobs = allItems
       .filter(j => Number.isInteger(j?.id))
-      .map(j => ({
-        title: j.title || '',
-        url: `https://join.com/companies/${companySlug}/${j.id}`,
-        company: entry.name,
-        location: j.city?.cityName || '',
-      }));
+      .map(j => {
+        const postedAt = toEpochMs(j.createdAt);
+        const description = htmlToText(j.descriptionHtml);
+        return {
+          title: j.title || '',
+          url: `https://join.com/companies/${companySlug}/${j.id}`,
+          company: entry.name,
+          location: j.city?.cityName || '',
+          ...(postedAt ? { postedAt } : {}),
+          ...(description ? { description } : {}),
+        };
+      });
     // Tag a cap-truncated board (the workdayTruncated convention) so a caller can tell without reading stderr.
     if (truncated) /** @type {any} */ (jobs).joinTruncated = true;
     return jobs;
