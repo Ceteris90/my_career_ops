@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Extraer el nombre de la empresa y el título del puesto desde la página
 2. Buscar en `reports/` por nombre de empresa (Grep case-insensitive)
 3. Si hay match -> cargar el report completo
-4. Si hay Bloque H (borradores de respuestas) o una sección `## Application Answers` -> cargar las respuestas previas como base
+4. Si hay una sección `## Application Answers` (estado `filled` o `submitted`) -> cargarla como base; si no, y hay Bloque H (borradores de la evaluación) -> cargar esos borradores
 5. Si NO hay match -> avisar al candidato y proponer un auto-pipeline rápido
 
 ## Paso 3 -- Detectar cambios de rol
@@ -62,7 +62,7 @@ Identificar TODAS las preguntas visibles:
 - Campos de subida de archivos (CV, carta de presentación en PDF, referencias)
 
 Clasificar cada pregunta:
-- **Ya respondida en el Bloque H o en `## Application Answers`** -> retomar la respuesta existente
+- **Ya respondida en `## Application Answers`, o, si esa sección no la tiene, en el Bloque H** -> retomar la respuesta existente
 - **Pregunta nueva** -> generar la respuesta desde el report + `cv.md`
 
 ## Paso 5 -- Generar las respuestas
@@ -70,7 +70,7 @@ Clasificar cada pregunta:
 Para cada pregunta, construir la respuesta según este esquema:
 
 1. **Contexto del report**: Usar los proof points del bloque B, las stories STAR del bloque F
-2. **Bloque H / `## Application Answers` previos**: Si existe un borrador o una respuesta final, tomarlo como base y refinarlo
+2. **`## Application Answers` previas, o si no el Bloque H**: Si `## Application Answers` existe, tomar sus respuestas como base (sea `filled` o `submitted`); el Bloque H es solo el borrador de la evaluación y se usa cuando esa sección no existe. Refinar la respuesta
 3. **Tono "Te elijo a ti"**: mismo framework que en el auto-pipeline — confiado, no suplicante
 4. **Especificidad**: citar algo concreto de la oferta visible en pantalla
 5. **career-ops proof point**: incluir en "Información adicional" si existe ese campo

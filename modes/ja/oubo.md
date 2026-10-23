@@ -59,7 +59,7 @@ Application answers を生成する前に、form が意図した active job を�
 1. Page から company name と role title を抽出
 2. `reports/` を company name で検索（case-insensitive grep）
 3. Match があれば full report を load
-4. Section H（draft answers）か `## Application Answers` があれば、それを base として load
+4. `## Application Answers` があれば（`filled` でも `submitted` でも）それを base として load。無いときだけ Section H（evaluation の draft answers）を load
 5. Match がなければ notify し、quick auto-pipeline の実行を提案
 
 ## Step 3 -- Detect changes in the role
@@ -82,7 +82,7 @@ Visible questions をすべて特定する：
 - Upload fields（resume、cover letter PDF）
 
 各 question を分類する：
-- **Already answered in Section H or `## Application Answers`** → 既存 response を adapt
+- **Already answered in `## Application Answers`（無ければ Section H）** → 既存 response を adapt
 - **New question** → report + `cv.md` から response を generate
 
 各 field について、application form contract を preserve する：
@@ -99,7 +99,7 @@ Legal、demographic、work-authorization、visa/sponsorship、salary、disabilit
 各 question について、以下に従って response を生成する：
 
 1. **Report context:** Block B の proof points、Block F の STAR stories を使う
-2. **Previous Section H / `## Application Answers`:** Draft か final response があれば base として使い refine
+2. **Previous `## Application Answers`, else Section H:** `## Application Answers` があればその answer を base にする（`filled` / `submitted` どちらでも）。Section H は evaluation の draft なので、`## Application Answers` が無いときだけ base として使い refine
 3. **"I'm choosing you" tone:** Same auto-pipeline framework
 4. **Specificity:** 画面上に見える JD の specific detail を reference
 5. **career-ops proof point:** "Additional info" field があれば含める

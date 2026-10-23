@@ -34,7 +34,7 @@ Aday bir başvuru formunu doldururken çalışan etkileşimli mod. Ekrandakileri
 1. Sayfadan şirket adını ve rol başlığını çıkar
 2. `reports/` klasöründe şirket adına göre Grep yap (büyük/küçük harf duyarsız)
 3. Eşleşme bulunursa → tam raporu yükle
-4. Blok H (taslak yanıtlar) veya `## Application Answers` varsa → önceki yanıtları temel olarak al
+4. `## Application Answers` bölümü varsa (`filled` veya `submitted`) → önceki yanıtları ondan al; yoksa ve Blok H (değerlendirmenin taslak yanıtları) varsa → onu temel al
 5. Eşleşme bulunamazsa → adayı bilgilendirip hızlı auto-pipeline öner
 
 ## Adım 3 — Rol Değişikliğini Tespit Et
@@ -57,7 +57,7 @@ Görünen tüm alanları tespit et:
 - Dosya yükleme alanları (CV, ön yazı PDF'i)
 
 Her soruyu sınıflandır:
-- **Blok H'de veya `## Application Answers` bölümünde zaten yanıtlanmış** → mevcut yanıtı uyarla
+- **`## Application Answers` bölümünde, o soru orada yoksa Blok H'de zaten yanıtlanmış** → mevcut yanıtı uyarla
 - **Yeni soru** → rapor + `cv.md`'den yanıt üret
 
 ## Adım 5 — Yanıtları Üret
@@ -65,7 +65,7 @@ Her soruyu sınıflandır:
 Her soru için yanıtı şu şemaya göre oluştur:
 
 1. **Rapor bağlamı:** Blok B'deki kanıt noktalarını ve Blok F'teki STAR hikayelerini kullan
-2. **Önceki Blok H / `## Application Answers`:** Taslak veya final yanıt varsa temel al ve geliştir
+2. **Önceki `## Application Answers`, yoksa Blok H:** Aynı soru ikisinde de varsa `## Application Answers` yanıtını (`filled` veya `submitted`), yoksa Blok H taslağını temel al ve geliştir
 3. **"Sizi seçiyorum" tonu:** Özgüvenli, yalvaran değil
 4. **Özgüllük:** Ekrandaki ilandan somut bir şeye doğrudan değin
 5. **Kanıt URL'si:** "Ek bilgi" alanı varsa demo/proje linkini ekle
