@@ -670,7 +670,9 @@ const LENGTH_ADJECTIVE = /\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|h
 const LENGTH_BRACKETED = /\(\s*\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s*\)/i;
 const LENGTH_NAMED = /\b(?:half|one|an)[-\s]hour\b/i;
 function statesDuration(text) {
-  return LENGTH_CONTEXT.test(text) || LENGTH_ADJECTIVE.test(text) || LENGTH_BRACKETED.test(text) || LENGTH_NAMED.test(text);
+  // "The interview will be 30 minutes": an interview noun + copula + duration.
+  const copula = /\b(?:interview|call|conversation|session|meeting|chat|screen|screening|assessment)\s+(?:will\s+be|would\s+be|should\s+be|is|runs?)\s+(?:about\s+|around\s+|approximately\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b/i;
+  return LENGTH_CONTEXT.test(text) || LENGTH_ADJECTIVE.test(text) || LENGTH_BRACKETED.test(text) || LENGTH_NAMED.test(text) || copula.test(text);
 }
 
 const NAME = "[\\p{Lu}][\\p{L}'.-]*(?:\\s+[\\p{Lu}][\\p{L}'.-]*){0,3}";

@@ -120,7 +120,7 @@ check('length-not-stated: a start-time offset is not the interview length', () =
 });
 check('length-not-stated: common length phrasings are recognised', () => {
   const pre = 'We would like to invite you to schedule your interview. ';
-  for (const t of ['Duration: 30 minutes.', 'Interview (30 minutes).', 'This is a one-hour interview.', 'Plan for 45 minutes.', 'The call is 30 minutes long.']) {
+  for (const t of ['Your interview will be 30 minutes.', 'The call is about 45 minutes.', 'Duration: 30 minutes.', 'Interview (30 minutes).', 'This is a one-hour interview.', 'Plan for 45 minutes.', 'The call is 30 minutes long.']) {
     assert.ok(!keys(pre + t).includes('length-not-stated'), t);
   }
   for (const t of ['Please join 10 minutes early.', 'Reply within 24 hours.', 'The link expires after 30 minutes of inactivity.']) {
