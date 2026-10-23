@@ -341,11 +341,16 @@ export function extractKeywords(reportText) {
     if (THEMATIC_BREAK_RE.test(line)) return;
     const body = line.replace(BULLET_RE, '').replace(CJK_MARKER_RE, '');
     for (const part of body.split(LIST_SEPARATOR_RE)) {
-      const kw = part.trim()
-        .replace(STARTING_BACKTICKS_RE, '')
-        .replace(TRAILING_BACKTICKS_RE, '')
-        .replace(TRAILING_PUNCT_RE, '')
-        .trim();
+      let kw = part.trim();
+      let previous;
+      do {
+        previous = kw;
+        kw = kw
+          .replace(STARTING_BACKTICKS_RE, '')
+          .replace(TRAILING_BACKTICKS_RE, '')
+          .replace(TRAILING_PUNCT_RE, '')
+          .trim();
+      } while (kw !== previous);
       if (kw) out.push(kw);
     }
   };
@@ -375,6 +380,7 @@ export function extractKeywords(reportText) {
         i = close;
         continue;
       }
+      continue;
     }
 
     collect(line);

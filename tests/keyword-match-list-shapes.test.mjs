@@ -75,6 +75,10 @@ check('markdown backtick wrappers are stripped from keyword edges only', () => {
   const wrapped = block('- `Python`, ``Kubernetes``, ```CI/CD```');
   assert.deepEqual(extractKeywords(wrapped), ['Python', 'Kubernetes', 'CI/CD']);
 
+  // Punctuation outside a wrapper should not leave a trailing backtick behind.
+  const wrappedWithPunct = block('- `Python`.');
+  assert.deepEqual(extractKeywords(wrappedWithPunct), ['Python']);
+
   const oneSided = block('- `Python\n- Kubernetes`\n- ``CI/CD');
   assert.deepEqual(extractKeywords(oneSided), ['Python', 'Kubernetes', 'CI/CD']);
 
@@ -103,6 +107,12 @@ check('a fenced keyword block is content, and its delimiters are not keywords', 
   // this did before the fix.
   const unclosed = '## Keywords extracted\n\n```\nSQL, Tableau\n\n## Verdict\n\nstrong fit\n';
   assert.deepEqual(extractKeywords(unclosed), ['SQL', 'Tableau']);
+
+  // An unclosed fence opener with a language label is still a fence delimiter,
+  // not a keyword. Without this guard, cleanup could turn ```python into
+  // "python" and create a false ATS hit when the CV mentions Python.
+  const unclosedLang = '## Keywords extracted\n\n```python\nSQL, Tableau\n\n## Verdict\n\nstrong fit\n';
+  assert.deepEqual(extractKeywords(unclosedLang), ['SQL', 'Tableau']);
 });
 
 check('a thematic break inside a fenced list is skipped too', () => {
