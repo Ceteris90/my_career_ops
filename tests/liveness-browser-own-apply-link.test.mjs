@@ -140,22 +140,42 @@ try {
     }
 
     // A last segment with no id falls back to a query parameter that names the
-    // posting, then to the path. On UltiPro's posting URL the path's UUID is
-    // the board's, so a link under the board's path stays chrome. Any other
-    // query value, a campaign number here, is not the posting's id: the path's
-    // id is.
+    // posting, then to the path. On UltiPro's posting URL the id is
+    // opportunityId's, so a link carrying it reads, and the path's UUID is the
+    // board's, so a link under the board's path stays chrome. Any other query
+    // value, a campaign number here, is not the posting's id: the path's id is.
     const BOARD = '7fde8f3e-7920-4d9d-8394-87bd44cc2330';
     const boardUrl = `https://www.example.com/T/JobBoard/${BOARD}/OpportunityDetail?opportunityId=${ID}`;
+    const boardOwn = await check(boardUrl, `<header><a href="/T/JobBoard/${BOARD}/Apply/${ID}">Apply</a></header><main>${POSTING}</main>`);
     const board = await check(boardUrl, `<header><a href="/T/JobBoard/${BOARD}/Search">Apply</a></header><main>${POSTING}</main>`);
     const campaignUrl = 'https://www.example.com/jobs/12345/details?campaign=67890';
     const campaignOwn = await check(campaignUrl, `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`);
     const campaignOther = await check(campaignUrl, `<header><a href="/jobs/67890/apply">Apply</a></header><main>${POSTING}</main>`);
-    if (board.result === 'uncertain' && board.code === 'no_apply_control'
+    if (boardOwn.result === 'active' && boardOwn.code === 'apply_control_visible'
+      && board.result === 'uncertain' && board.code === 'no_apply_control'
       && campaignOwn.result === 'active' && campaignOwn.code === 'apply_control_visible'
       && campaignOther.result === 'uncertain' && campaignOther.code === 'no_apply_control') {
       pass('with no id in the last segment, the id comes from a query parameter that names the posting (UltiPro), then the path, never another query value');
     } else {
-      fail(`id outside the last segment: board link ${JSON.stringify(board)}, own link with a campaign number in the query ${JSON.stringify(campaignOwn)}, the campaign number's ${JSON.stringify(campaignOther)}`);
+      fail(`id outside the last segment: the posting's link on the board ${JSON.stringify(boardOwn)}, board link ${JSON.stringify(board)}, own link with a campaign number in the query ${JSON.stringify(campaignOwn)}, the campaign number's ${JSON.stringify(campaignOther)}`);
+    }
+
+    // The id comes from the address the page landed on, so a posting reached
+    // through a redirect reads the Apply link to that address. A redirect that
+    // loses the requested URL's id still reads as off the posting.
+    const LANDED = 'https://www.example.com/jobs/12345';
+    const refresh = (to) => `<meta http-equiv="refresh" content="0; url=${to}">`;
+    const moved = await check('https://www.example.com/jobs/senior-engineer', refresh(LANDED), {
+      [LANDED]: `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`,
+    });
+    const elsewhere = await check(LANDED, refresh('https://www.example.com/jobs/67890'), {
+      'https://www.example.com/jobs/67890': `<header><a href="/jobs/67890/apply">Apply</a></header><main>${POSTING}</main>`,
+    });
+    if (moved.result === 'active' && moved.code === 'apply_control_visible'
+      && elsewhere.result === 'uncertain' && elsewhere.code === 'redirected_off_posting') {
+      pass('a posting reached through a redirect reads the Apply link to the address it landed on, and a redirect off the posting still reads uncertain');
+    } else {
+      fail(`redirects: to the posting ${JSON.stringify(moved)}, off it ${JSON.stringify(elsewhere)}`);
     }
 
     // With no id in the posting URL, nothing tells the posting's own link from

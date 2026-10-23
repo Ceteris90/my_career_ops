@@ -579,22 +579,30 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
             }
           });
 
-    // The id in the posting URL's last path segment, so a number in its query
-    // (?campaign=123456) is not taken for it. When that segment has none, the
-    // id in a query parameter that names the posting, and only then the last
-    // id in the path: on UltiPro,
+    // The posting's id, from the address of the page being read, so a posting
+    // reached through a redirect (/jobs/senior-engineer to /jobs/12345) is
+    // matched by the address it landed on. A page whose address lost the
+    // requested URL's id reads as off the posting whatever its controls (the
+    // redirect guard). The id in the last path segment, so a number in the
+    // query (?campaign=123456) is not taken for it. When that segment has
+    // none, the id in a query parameter that names the posting, and only then
+    // the last id in the path: on UltiPro,
     // /JobBoard/{board}/OpportunityDetail?opportunityId={posting}, the path's
     // only id is the board's, and every link under the board's path has it.
     // The segment itself is kept only when the id came from it, so a generic
     // last segment (/jobs/12345/details) claims nothing.
-    const postingUrl = new URL(url);
-    const lastSegment = postingUrl.pathname.split('/').filter(Boolean).pop() ?? '';
-    const queryId = [...postingUrl.searchParams]
-      .filter(([name]) => POSTING_ID_PARAMS.has(name.toLowerCase()))
-      .map(([, value]) => jobIdToken(value))
-      .find(Boolean);
-    const postingId = jobIdToken(lastSegment) ?? queryId ?? jobIdToken(postingUrl.pathname);
-    const postingSegment = jobIdToken(lastSegment) ? lastSegment.toLowerCase() : null;
+    const postingIdentity = (address) => {
+      const postingUrl = new URL(address);
+      const lastSegment = postingUrl.pathname.split('/').filter(Boolean).pop() ?? '';
+      const queryId = [...postingUrl.searchParams]
+        .filter(([name]) => POSTING_ID_PARAMS.has(name.toLowerCase()))
+        .map(([, value]) => jobIdToken(value))
+        .find(Boolean);
+      return {
+        postingId: jobIdToken(lastSegment) ?? queryId ?? jobIdToken(postingUrl.pathname),
+        postingSegment: jobIdToken(lastSegment) ? lastSegment.toLowerCase() : null,
+      };
+    };
 
     // One reading of the page: the top-level document plus every same-origin
     // child frame, so a posting rendered inside a frame and one rendered inline
@@ -602,7 +610,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // that detaches or turns cross-origin mid-read is skipped.
     const readPage = async () => {
       const finalUrl = page.url();
-      const walkArgs = { postingId, postingSegment, pageUrl: finalUrl };
+      const walkArgs = { ...postingIdentity(finalUrl), pageUrl: finalUrl };
       let bodyText = await page.evaluate(() => document.body?.innerText ?? '');
       let applyControls = await page.evaluate(extractApplyControls, walkArgs);
       for (const frame of childFrames(finalUrl)) {
