@@ -102,6 +102,28 @@ const isNote = (line) => line.trim() === "" || line.trim().startsWith("#");
 const indentOf = (line) => line.length - line.trimStart().length;
 
 /**
+ * Split a line into its content and its trailing comment (with the spaces in
+ * front of it). A YAML comment starts at a `#` that follows whitespace and
+ * sits outside quotes, so `"C#"` and `a#b` are content.
+ * @param {string} line
+ * @returns {[string, string]}
+ */
+function splitComment(line) {
+  let quote = "";
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quote === '"' && c === "\\") { i++; continue; }
+    if (quote) { if (c === quote) quote = ""; continue; }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === "#" && (i === 0 || /\s/.test(line[i - 1]))) {
+      const start = line.slice(0, i).trimEnd().length;
+      return [line.slice(0, start), line.slice(start)];
+    }
+  }
+  return [line, ""];
+}
+
+/**
  * Replace (or add) one list, `section.key`, in portals.yml text, line by line,
  * so every other line, comments included, stays byte-for-byte. Returns null
  * for a shape this edit does not handle (a flow-style section, a scalar
@@ -130,7 +152,8 @@ function setListInText(lines, section, key, items) {
     lines.splice(head + 1, 0, `${childIndent}${key}:`, ...items.map((i) => `${childIndent}  - ${JSON.stringify(i)}`));
     return lines;
   }
-  const value = lines[at].slice(childIndent.length + key.length + 1).replace(/\s+#.*$/, "").trim();
+  const [keyContent, keyComment] = splitComment(lines[at]);
+  const value = keyContent.slice(childIndent.length + key.length + 1).trim();
   if (value !== "" && !/^\[.*\]$/.test(value)) return null;
   // The list's own lines: everything more indented than the key, up to its last
   // item. Notes between items stay (ahead of the new items, as onboard-write.mjs
@@ -145,7 +168,14 @@ function setListInText(lines, section, key, items) {
   const body = lines.slice(at + 1, last + 1);
   const firstItem = body.find((l) => !isNote(l));
   const itemIndent = firstItem ? " ".repeat(indentOf(firstItem)) : `${childIndent}  `;
-  lines.splice(at, last - at + 1, `${childIndent}${key}:`, ...body.filter(isNote), ...items.map((i) => `${itemIndent}- ${JSON.stringify(i)}`));
+  // A replaced entry that carried its own comment stays as a commented-out
+  // line, so the note is kept with the entry it was written about.
+  const kept = body.flatMap((l) => {
+    if (isNote(l)) return [l];
+    const [content, comment] = splitComment(l);
+    return comment ? [`${" ".repeat(indentOf(l))}# ${content.trim()}${comment}`] : [];
+  });
+  lines.splice(at, last - at + 1, `${childIndent}${key}:${keyComment}`, ...kept, ...items.map((i) => `${itemIndent}- ${JSON.stringify(i)}`));
   return lines;
 }
 

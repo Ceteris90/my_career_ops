@@ -162,9 +162,11 @@ test("an existing allow list is replaced and the other location tiers stay", () 
     "",
   ].join("\n");
   const text = expectPatched(source, ["New"], ["Lisbon"]);
-  assert.deepEqual(commentLines(text), commentLines(source));
+  // Every comment line survives; the replaced entry that had its own comment is
+  // kept as one more, commented out.
+  assert.deepEqual(commentLines(text), [...commentLines(source).slice(0, 1), '    # - "Old"  # was here', ...commentLines(source).slice(1)]);
   // A note after the last item (a commented-out suggestion) stays after the new items.
-  assert.match(text, /  positive:\n    - "New"\n    # - "Maybe later"\n  negative: \[Intern\]/);
+  assert.match(text, /  positive:\n    # - "Old"  # was here\n    - "New"\n    # - "Maybe later"\n  negative: \[Intern\]/);
   assert.match(text, /  allow:\n    - "Lisbon"\n  # trailing note\n/);
 });
 
@@ -187,4 +189,26 @@ test("CRLF line endings are kept", () => {
 test("shapes the line edit cannot place return null so the route falls back", () => {
   assert.equal(patchPortalFiltersText("title_filter: { positive: [A] }\n", ["B"], undefined), null);
   assert.equal(patchPortalFiltersText("title_filter:\n  positive: A\n", ["B"], undefined), null);
+});
+
+test("inline comments on the key and on replaced entries are kept", () => {
+  const source = [
+    "title_filter:",
+    "  positive: [A]  # roles I am targeting",
+    "  negative:",
+    "    - \"C#\"  # not a comment inside quotes: \"x # y\"",
+    "location_filter:",
+    "  allow:",
+    "    - Berlin  # relocating there",
+    "    - Paris",
+    "    - 'O''Hare # airport'",
+    "",
+  ].join("\n");
+  const text = expectPatched(source, ["B"], ["Lisbon"]);
+  assert.match(text, /^  positive:  # roles I am targeting\n    - "B"$/m);
+  assert.match(text, /^  allow:\n    # - Berlin  # relocating there\n    - "Lisbon"$/m);
+  // Entries without a comment of their own, including a quoted `#`, are replaced outright.
+  assert.doesNotMatch(text, /Paris|O''Hare/);
+  // The untouched negative list keeps its line exactly.
+  assert.ok(text.includes('    - "C#"  # not a comment inside quotes: "x # y"'));
 });
