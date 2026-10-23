@@ -1213,8 +1213,8 @@ search_queries:
 #                   Newer tenants are issued a NUMBERED apex, e.g. <tenant>.fa.ocs.oraclecloud26.com — same shapes,
 #                   same provider; just use whichever host the employer's careers link actually points at.)
 #   taleo           <tenant>.taleo.net/careersection/<section>/jobsearch.ftl (Taleo Enterprise Edition public sections)
-#   eightfold       <tenant>.eightfold.ai  (Eightfold AI talent-acquisition boards; a branded CNAME like
-#                   careers.<company>.com is NOT matched — point at the eightfold.ai host. Optional domain:
+#   eightfold       <tenant>.eightfold.ai  (Eightfold AI talent-acquisition boards; a branded host like
+#                   careers.<company>.com is NOT matched unless the entry names it in eightfold_host:. Optional domain:
 #                   for multi-brand tenants. Page size is server-capped at 10, so bound big boards with max_pages)
 #   gem             jobs.gem.com/<boardId>; or explicit api:
 #                   https://api.gem.com/job_board/v0/<vanity_path>/job_posts/
@@ -1435,9 +1435,14 @@ search_queries:
 #
 # - name: Example Eightfold Co
 #   # Eightfold AI talent-acquisition board. Auto-detects any *.eightfold.ai
-#   # tenant host. A branded CNAME (careers.exampleco.com) is NOT matched — the
-#   # API is host-pinned, so point careers_url (or api:) at the eightfold.ai form.
+#   # tenant host. A branded host (careers.exampleco.com) is NOT matched unless
+#   # named in eightfold_host: (below); otherwise point careers_url (or api:) at
+#   # the eightfold.ai form.
 #   careers_url: https://exampleco.eightfold.ai/careers
+#   # Some tenants serve the same API only from their own domain. Name that
+#   # one host exactly to allow it (bare hostname: no scheme, port, path or *):
+#   # careers_url: https://careers.exampleco.com/careers?domain=exampleco.com
+#   # eightfold_host: careers.exampleco.com
 #   # domain: exampleco.com  # optional — the server infers it from the tenant
 #                            # host; set it only for multi-brand tenants that
 #                            # scope their board by domain.
