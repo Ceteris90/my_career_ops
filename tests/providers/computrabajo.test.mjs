@@ -216,3 +216,10 @@ test('computrabajo adds no sort under /ofertas-de-trabajo/, which robots.txt kee
   await provider.fetch({ name: 'Computrabajo Colombia', careers_url: 'https://co.computrabajo.com/ofertas-de-trabajo/?q=python' }, ctx);
   assert.equal(new URL(calls[0].url).searchParams.has('by'), false);
 });
+
+test('computrabajo drops a by= the user put under /ofertas-de-trabajo/', async () => {
+  const { ctx, calls } = makeCtx({ 1: page(card('R2')) });
+  await provider.fetch({ name: 'Computrabajo Colombia', careers_url: 'https://co.computrabajo.com/ofertas-de-trabajo/?q=python&by=salary' }, ctx);
+  assert.equal(new URL(calls[0].url).searchParams.has('by'), false);
+  assert.equal(new URL(calls[0].url).searchParams.get('q'), 'python');
+});
