@@ -64,3 +64,35 @@ check('analyzeInvite keeps every existing key and adds constraints', () => {
   assert.equal(r.candidates[0].appNumber, 7);
   assert.ok(r.constraints.some(c => c.key === 'no-ai'));
 });
+
+// --- review follow-ups (#5734) ---
+check('panel: two named interviewers without titles', () => {
+  const c = extractConstraints(`${base} Your interview is with Jordan Reyes and Sam Ito.`).find(x => x.key === 'panel');
+  assert.ok(c, 'panel expected');
+  assert.equal(c.detail, 'Jordan Reyes; Sam Ito');
+});
+check('panel: three untitled names with a serial comma', () => {
+  const c = extractConstraints(`${base} You will meet with Jordan Reyes, Sam Ito, and Priya Nair.`).find(x => x.key === 'panel');
+  assert.ok(c);
+  assert.equal(c.detail, 'Jordan Reyes; Sam Ito; Priya Nair');
+});
+check('panel: platforms are not interviewers', () => {
+  assert.ok(!keys(`${base} Please join with Microsoft Teams and Zoom.`).includes('panel'));
+});
+check('negated constraints are not reported', () => {
+  assert.ok(!keys(`${base} AI tools are not prohibited.`).includes('no-ai'));
+  assert.ok(!keys(`${base} A camera is not required.`).includes('camera-required'));
+  assert.ok(!keys(`${base} Photo ID is not required.`).includes('id-required'));
+});
+check('affirmative constraints are still reported', () => {
+  assert.ok(keys(`${base} AI tools are prohibited.`).includes('no-ai'));
+  assert.ok(keys(`${base} A camera is required.`).includes('camera-required'));
+  assert.ok(keys(`${base} Photo ID is required.`).includes('id-required'));
+});
+check('length-not-stated: a preparation interval is not the interview length', () => {
+  assert.ok(keys('We would like to invite you to schedule your interview. Please join 10 minutes early.').includes('length-not-stated'));
+  assert.ok(keys('We would like to invite you to schedule your interview. Please reply within 24 hours.').includes('length-not-stated'));
+});
+check('length-not-stated: a stated length still counts next to a preparation interval', () => {
+  assert.ok(!keys('We would like to invite you to schedule your interview. It lasts 30 minutes. Please join 10 minutes early.').includes('length-not-stated'));
+});

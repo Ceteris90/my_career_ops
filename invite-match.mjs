@@ -660,6 +660,12 @@ export function classifyEmail(text) {
 // invite says it. Keys are stable; the tag form `[constraint:<key>]` mirrors
 // the `[process-friction]` convention parsed by process-quality.mjs.
 const DURATION_PATTERN = /\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b(?:half|one|an)\s+hour\b/i;
+// An interval that is not the interview's length ("join 10 minutes early",
+// "reply within 24 hours", "2 hours before") must not count as a stated duration.
+const NON_DURATION_INTERVAL = /\b(?:within|in the next|over the next|by|after)\s+(?:the\s+)?(?:next\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s+(?:early|before|prior|ahead|in advance|notice|later|ago|after)\b|\b(?:join|arrive|log ?in|dial ?in|connect)\b[^.\n]{0,40}\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b/gi;
+function statesDuration(text) {
+  return DURATION_PATTERN.test(text.replace(NON_DURATION_INTERVAL, ' '));
+}
 
 const NAME = "[\\p{Lu}][\\p{L}'.-]*(?:\\s+[\\p{Lu}][\\p{L}'.-]*){0,3}";
 const DASH = "\\s*[-\\u2013\\u2014,]\\s*";
@@ -670,21 +676,30 @@ const PANEL_DASH = new RegExp(DASH, 'u');
 
 const CONSTRAINT_DETECTORS = [
   // The prohibition must sit in the same sentence as the AI-tool mention.
-  { key: 'no-ai', test: t => /\b(?:ai|artificial intelligence|chatgpt|copilot|generative)\b[^.\n]{0,120}\b(?:not (?:be )?(?:permitted|allowed)|prohibited|forbidden|not be used)\b/i.test(t)
+  { key: 'no-ai', test: t => /\b(?:ai|artificial intelligence|chatgpt|copilot|generative)\b[^.\n]{0,120}\b(?:not (?:be )?(?:permitted|allowed)|(?<!\bnot\s)(?<!n't\s)(?<!\bno longer\s)(?:prohibited|forbidden)|not be used)\b/i.test(t)
       || /\b(?:not (?:be )?(?:permitted|allowed)|prohibited|forbidden|may not use|do not use|must not use)\b[^.\n]{0,80}\b(?:ai|artificial intelligence|chatgpt|copilot)\b/i.test(t) },
   { key: 'recorded', test: t => /\b(?:will|may) be (?:audio[- ]?|video[- ]?)?recorded\b|\bwe (?:will|may) record\b|\bthis (?:interview|call|session|meeting) is (?:being )?recorded\b/i.test(t) },
   { key: 'no-recording', test: t => /\b(?:recording|recordings)\b[^.\n]{0,60}\b(?:not (?:be )?(?:permitted|allowed)|prohibited)\b|\b(?:do not|don't|may not|must not) (?:record|screenshot)\b|\bno recording\b/i.test(t) },
-  { key: 'camera-required', test: t => /\bcamera\b[^.\n]{0,40}\b(?:required|must be on|on throughout|mandatory)\b|\b(?:required|must|please) (?:to )?(?:have|keep|turn on|enable)\b[^.\n]{0,30}\b(?:camera|video on)\b|\bvideo (?:must be|required)\b/i.test(t) },
+  { key: 'camera-required', test: t => /\bcamera\b[^.\n]{0,40}\b(?:(?<!\bnot\s)(?<!n't\s)(?<!\bno longer\s)(?:required|mandatory)|must be on|on throughout)\b|\b(?:required|must|please) (?:to )?(?:have|keep|turn on|enable)\b[^.\n]{0,30}\b(?:camera|video on)\b|\bvideo (?:must be|required)\b/i.test(t) },
   { key: 'test-link', test: t => /\b(?:test|check|try)\b[^.\n]{0,40}\b(?:link|connection|audio|video|setup)\b[^.\n]{0,40}\b(?:before(?:hand)?|ahead of|in advance|prior to)\b/i.test(t) },
-  { key: 'id-required', test: t => /\b(?:photo |government[- ]issued |valid )?(?:id|identification)\b[^.\n]{0,40}\b(?:required|must|will be (?:checked|verified|requested))\b|\b(?:bring|have|present|show)\b[^.\n]{0,40}\b(?:photo id|government[- ]issued id|identification)\b/i.test(t) },
+  { key: 'id-required', test: t => /\b(?:photo |government[- ]issued |valid )?(?:id|identification)\b[^.\n]{0,40}\b(?:(?<!\bnot\s)(?<!n't\s)(?<!\bno longer\s)required|must|will be (?:checked|verified|requested))\b|\b(?:bring|have|present|show)\b[^.\n]{0,40}\b(?:photo id|government[- ]issued id|identification)\b/i.test(t) },
 ];
 
+// Untitled list: "with Jordan Reyes and Sam Ito" / "with A B, C D and E F".
+// Product and platform words are not interviewers.
+const PANEL_UNTITLED = new RegExp(`\\bwith\\s+(${NAME}(?:\\s*,\\s*(?:and\\s+)?|\\s+and\\s+|\\s*&\\s*)${NAME}(?:(?:\\s*,\\s*(?:and\\s+)?|\\s+and\\s+|\\s*&\\s*)${NAME})*)`, 'u');
+const NOT_A_PERSON = /\b(?:teams|zoom|google|meet|microsoft|webex|skype|outlook|calendar|link|phone|video|camera|team|hr|recruiter|us|me)\b/i;
 function extractPanel(text) {
   const m = text.match(PANEL_LINE);
-  if (!m) return null;
-  const people = m[1].replace(/[.\s]+$/, '').split(PANEL_SPLIT).map(p => p.trim()).filter(Boolean);
-  if (people.length < 2) return null;
-  return people.map(p => p.split(PANEL_DASH)[0].trim());
+  if (m) {
+    const people = m[1].replace(/[.\s]+$/, '').split(PANEL_SPLIT).map(p => p.trim()).filter(Boolean);
+    if (people.length >= 2) return people.map(p => p.split(PANEL_DASH)[0].trim());
+  }
+  const u = text.match(PANEL_UNTITLED);
+  if (!u) return null;
+  const names = u[1].split(/\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*/).map(n => n.replace(/[.\s]+$/, '').trim()).filter(Boolean);
+  if (names.length < 2 || names.some(n => NOT_A_PERSON.test(n))) return null;
+  return names;
 }
 
 /**
@@ -705,7 +720,7 @@ export function extractConstraints(text) {
   for (const { key, test } of CONSTRAINT_DETECTORS) if (test(text)) add(key);
   const panel = extractPanel(text);
   if (panel) add('panel', panel.join('; '));
-  if (classifyEmail(text).classification === 'invite' && !DURATION_PATTERN.test(text)) add('length-not-stated');
+  if (classifyEmail(text).classification === 'invite' && !statesDuration(text)) add('length-not-stated');
   return out;
 }
 
