@@ -197,15 +197,19 @@ async function resolveCompanyId(entry, slug, ctx) {
   const checkedAt = Date.parse(cached?.checkedAt ?? '');
   if (cachedId && Number.isFinite(checkedAt) && Date.now() - checkedAt < COMPANY_RECHECK_MS) return cachedId;
 
-  let html;
   try {
     // redirect:'error' prevents SSRF via server-side redirects; the URL is a
     // fixed https://join.com/... string, so the host is pinned regardless of
     // the original careers_url.
-    html = await fetchTextWithRetry(ctx, `https://join.com/companies/${slug}`, { redirect: 'error' });
+    const html = await fetchTextWithRetry(ctx, `https://join.com/companies/${slug}`, { redirect: 'error' });
+    const company = extractCompany(extractNextData(html));
+    if (!company) throw new Error('join: __NEXT_DATA__ not found or has no company id');
+    cache?.set(slug, { id: company.id, checkedAt: new Date().toISOString() });
+    return company.id;
   } catch (err) {
     // A company that is gone takes its cache entry with it. Any other failure
-    // of a recheck keeps using the id already known.
+    // of a recheck, a page in an unexpected shape included, keeps using the id
+    // already known.
     if (err?.status === 404 || err?.status === 410) {
       cache?.delete(slug);
       throw err;
@@ -213,10 +217,6 @@ async function resolveCompanyId(entry, slug, ctx) {
     if (cachedId) return cachedId;
     throw err;
   }
-  const company = extractCompany(extractNextData(html));
-  if (!company) throw new Error('join: __NEXT_DATA__ not found or has no company id');
-  cache?.set(slug, { id: company.id, checkedAt: new Date().toISOString() });
-  return company.id;
 }
 
 /**

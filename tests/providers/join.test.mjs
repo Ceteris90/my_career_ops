@@ -435,6 +435,18 @@ try {
     fail(`join.fetch() failed recheck wrong: jobs=${flakyJobs.length}, companyId=${flakyCtx.jsonCalls[0]?.body.variables.input.companyId}`);
   }
 
+  const reshapedCache = memCache({ 'acme-corp': { id: 777, domain: 'acme-corp', checkedAt: old } });
+  const reshapedCtx = makeCtx(() => gqlPage([job(1)]), {
+    idCache: reshapedCache,
+    fetchText: async () => '<html><body>no next data</body></html>',
+  });
+  const reshapedJobs = await joinProvider.fetch(entry, reshapedCtx);
+  if (reshapedJobs.length === 1 && reshapedCtx.jsonCalls[0].body.variables.input.companyId === 777 && reshapedCache.values.get('acme-corp').checkedAt === old) {
+    pass('join.fetch() keeps using the cached id when the 30-day recheck returns a page without a company id');
+  } else {
+    fail(`join.fetch() reshaped recheck wrong: jobs=${reshapedJobs.length}, companyId=${reshapedCtx.jsonCalls[0]?.body.variables.input.companyId}, cached=${JSON.stringify(reshapedCache.values.get('acme-corp'))}`);
+  }
+
   const goneCache = memCache({ 'acme-corp': { id: 777, domain: 'acme-corp', checkedAt: old } });
   const goneCtx = makeCtx(() => gqlPage([job(1)]), {
     idCache: goneCache,
