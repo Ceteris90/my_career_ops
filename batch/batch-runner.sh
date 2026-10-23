@@ -167,7 +167,8 @@ Options:
   --start-from N       Start from offer ID N (skip earlier IDs)
   --company A,B        Only process offers whose company matches (case- and
                        punctuation-insensitive substring of the notes' company
-                       half or of the URL; comma-separated). Applies before --limit
+                       half or of the URL, leaving out a shared ATS domain;
+                       comma-separated). Applies before --limit
   --limit N            Max offers: positive integer; omit for no limit
   --max-retries N      Max retry attempts per offer (default: 2)
   --min-score N        Skip PDF/tracker for offers scoring below N (default: 0 = off)
@@ -230,7 +231,7 @@ while [[ $# -gt 0 ]]; do
     --resume-paused) RESUME_PAUSED=true; shift ;;
     --start-from) START_FROM="$2"; shift 2 ;;
     --company)
-      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "ERROR: --company requires an argument"; exit 1; }
+      [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || { echo "ERROR: --company requires an argument"; exit 1; }
       SCOPE_COMPANY="$2"; shift 2 ;;
     --limit)
       if [[ $# -lt 2 ]] || ! [[ "$2" =~ ^[0-9]+$ ]] || [[ "$2" =~ ^0+$ ]]; then
