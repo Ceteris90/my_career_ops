@@ -73,7 +73,7 @@ import { resolveColumns, parseTrackerRow, extractTrackerReportLinks, extractTrac
 import { loadYaml } from './lib/yaml-document.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, hasFlag } from './lib/cli-flags.mjs';
-import { parseAmount, compensationPeriod } from './providers/_salary-text.mjs';
+import { parseAmount, compensationPeriod, compensationCurrency } from './providers/_salary-text.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
 const OBS_PATH = join(CAREER_OPS, 'data/salary-observations.tsv');
@@ -196,10 +196,84 @@ const yamlStr = (body, key) => {
   return v === 'null' || v === '' ? null : v;
 };
 
+// --- Labelled and multi-band advertised_comp ---
+// A JD that hires in more than one country often states one band per country
+// on one line ("Canada: CA$123k–CA$137k + equity / United States: $112k–$128k
+// + equity"), and advertised_comp copies it verbatim. parseAmount() reads one
+// amount, so the label, the "+ equity" tail or the second band made the whole
+// value null and the posting dropped out of the gap analysis. These helpers
+// split the value into bands, strip a leading "Country:" label and a trailing
+// "+ equity"-style extra, and pick ONE band; two currencies are never blended.
+
+// A country-prefixed dollar names one currency, unlike a bare `$`.
+const PREFIXED_DOLLAR = { US: 'USD', CA: 'CAD', C: 'CAD', AU: 'AUD', A: 'AUD', NZ: 'NZD', HK: 'HKD', SG: 'SGD', S: 'SGD', MX: 'MXN' };
+const PREFIXED_DOLLAR_RE = /(?<![A-Za-z])(US|CA|C|AU|A|NZ|HK|SG|S|MX)\$/g;
+// Only named extras on top of the stated figure; anything else stays and
+// leaves the band unparseable rather than guessed at.
+const EXTRAS_TAIL_RE = /(?:\s*\+\s*(?:equity|stock(?:\s+options)?|options|rsus?|shares|bonus|benefits|commission))+\s*$/i;
+const BAND_LABEL_RE = /^([A-Za-z][A-Za-z .,'()&-]*?)\s*:\s*/;
+// " / " between bands, never the "/year" of an annual suffix; a segment with
+// no digit ("80k / year") is glued back onto the band before it.
+const BAND_SEP_RE = /(\s+\/\s+|\s*[;|\n]\s*)/;
+
+const normWords = (s) => ` ${String(s ?? '').toLowerCase().replace(/[^a-z]+/g, ' ').trim()} `;
+
+function parseCompBand(text) {
+  const m = text.match(BAND_LABEL_RE);
+  const label = m ? m[1].trim() : null;
+  const rest = (m ? text.slice(m[0].length) : text).replace(EXTRAS_TAIL_RE, '').trim();
+  const codes = new Set([...rest.matchAll(PREFIXED_DOLLAR_RE)].map(x => PREFIXED_DOLLAR[x[1]]));
+  const amount = rest.replace(PREFIXED_DOLLAR_RE, '$');
+  const named = compensationCurrency(amount);
+  if (named) codes.add(named);
+  // '' means the band names more than one currency: no currency, not a guess.
+  const currency = named !== '' && codes.size === 1 ? [...codes][0] : null;
+  return { label, text, currency, parsed: parseAmount(amount) };
+}
+
+/**
+ * Read an advertised_comp that parseAmount() alone cannot: a labelled band, a
+ * trailing "+ equity", or several bands. With several, the band in the
+ * profile's currency wins, then the band labelled with the profile's country,
+ * then the first band naming its currency, then the first parseable band.
+ *
+ * @param {string} raw - advertised_comp, verbatim.
+ * @param {{currency?: string|null, country?: string|null}} [market] - From config/profile.yml.
+ * @returns {{parsed: object, currency: string|null, band: {label: string|null, text: string, index: number, of: number, chosenBy: string}} | null}
+ */
+export function parseAdvertisedBands(raw, market = {}) {
+  const parts = String(raw ?? '').split(BAND_SEP_RE);
+  const texts = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    if (texts.length && !/\d/.test(parts[i])) texts[texts.length - 1] += parts[i - 1] + parts[i];
+    else texts.push(parts[i]);
+  }
+  const bands = texts.map(t => t.trim()).filter(Boolean).map(parseCompBand);
+  const usable = bands.filter(b => b.parsed);
+  if (!usable.length) return null;
+  const wantCur = market.currency ? String(market.currency).toUpperCase() : null;
+  const wantCountry = market.country ? normWords(market.country) : null;
+  const pick = (chosenBy, test) => {
+    const b = usable.find(test);
+    return b ? { b, chosenBy } : null;
+  };
+  const choice = (wantCur && pick('profile-currency', b => b.currency === wantCur))
+    || (wantCountry && wantCountry.trim() && pick('profile-country', b => b.label && normWords(b.label).includes(wantCountry)))
+    || pick('first-with-currency', b => b.currency)
+    || pick('first', () => true);
+  const { b, chosenBy } = choice;
+  return {
+    parsed: b.parsed, currency: b.currency,
+    band: { label: b.label, text: b.text, index: bands.indexOf(b) + 1, of: bands.length, chosenBy },
+  };
+}
+
 // --- Report-derived advertised observations ---
 // Extracts advertised_comp + company + role from one report's Machine Summary.
-// num/date come from the filename ({###}-{slug}-{YYYY-MM-DD}.md).
-export function reportToObservation(content, num, date) {
+// num/date come from the filename ({###}-{slug}-{YYYY-MM-DD}.md); `market`
+// ({currency, country} from the profile) only picks a band when
+// advertised_comp states several.
+export function reportToObservation(content, num, date, market = {}) {
   const fence = String(content || '').match(FENCE_RE);
   if (!fence) return null;
   const body = fence[1];
@@ -216,13 +290,24 @@ export function reportToObservation(content, num, date) {
   // must not register as currencies. Tradeoff: a lowercase "100k eur" yields
   // UNKNOWN (excluded from gap math, surfaced in currencyMismatches) — acceptable;
   // a corrective TSV observation with an explicit currency overrides it.
-  const currencyGuess = adv ? (adv.match(/\b[A-Z]{3}\b/)?.[0] ?? 'UNKNOWN') : null;
+  let currency = adv ? (adv.match(/\b[A-Z]{3}\b/)?.[0] ?? 'UNKNOWN') : null;
+  let parsed = adv === null ? null : parseAmount(adv);
+  let band = null;
+  if (adv !== null && parsed === null) {
+    const read = parseAdvertisedBands(adv, market);
+    if (read) {
+      ({ parsed, band } = read);
+      // With several bands the whole-string guess may name another band's
+      // currency, so only the chosen band's own currency counts.
+      currency = read.currency ?? (band.of > 1 ? 'UNKNOWN' : currency);
+    }
+  }
   return {
     company, role, postingLocation,
     observation: adv === null ? null : {
-      num, date, type: 'advertised', amount: adv, currency: currencyGuess,
-      source: 'jd', note: 'from report Machine Summary', parsed: parseAmount(adv),
-      period: compensationPeriod(adv), postingLocation,
+      num, date, type: 'advertised', amount: adv, currency,
+      source: 'jd', note: 'from report Machine Summary', parsed,
+      period: compensationPeriod(adv), postingLocation, band,
     },
   };
 }
@@ -521,6 +606,7 @@ function pickEffective(type, candidates) {
     currency: top.currency, raw: top.amount,
     period: top.period ?? compensationPeriod(top.amount),
     postingLocation: top.postingLocation ?? null,
+    band: top.band ?? null,
   };
 }
 
@@ -1430,6 +1516,7 @@ export function mapTrackerToApps(rows, reportsByNum) {
 }
 
 function readReportsByNum() {
+  const market = loadProfileMarket();
   const reportsByNum = new Map();
   if (!existsSync(REPORTS_DIR)) return reportsByNum;
   for (const file of readdirSync(REPORTS_DIR)) {
@@ -1438,7 +1525,7 @@ function readReportsByNum() {
     const [, num, date] = m;
     let content;
     try { content = readFileSync(join(REPORTS_DIR, file), 'utf-8'); } catch { continue; }
-    const r = reportToObservation(content, num, date);
+    const r = reportToObservation(content, num, date, market);
     // A report with no Machine Summary is still a real application, so it
     // registers with null company/role rather than being dropped.
     reportsByNum.set(normalizeId(num), r ?? { company: null, role: null, observation: null });
@@ -1506,6 +1593,24 @@ function loadProfileDesired() {
   }
 }
 
+// The profile currency and country, used to pick one band when an
+// advertised_comp states one per country (parseAdvertisedBands).
+function loadProfileMarket() {
+  const profilePath = getProfilePath();
+  if (!existsSync(profilePath)) return {};
+  try {
+    const profile = loadYaml(readFileSync(profilePath, 'utf-8'));
+    const currency = profile?.compensation?.currency;
+    const country = profile?.location?.country;
+    return {
+      currency: typeof currency === 'string' && currency.trim() ? currency.trim() : null,
+      country: typeof country === 'string' && country.trim() ? country.trim() : null,
+    };
+  } catch {
+    return {}; // unreadable profile is a non-event here; doctor.mjs owns that complaint
+  }
+}
+
 // #4694: the candidate's own home location, as free text, for jurisdiction
 // matching. `candidate.location` (e.g. "Toronto, ON") is preferred — it
 // already follows the "city, province/state abbreviation" convention used
@@ -1550,6 +1655,10 @@ function printSummary(result) {
       console.log(`  #${a.num} ${who}`);
       console.log(`      desired    ${fmtEff(a.desired)}`);
       console.log(`      advertised ${fmtEff(a.advertised)}`);
+      if (a.advertised?.band?.of > 1) {
+        const b = a.advertised.band;
+        console.log(`      advertised band ${b.index} of ${b.of}: "${b.text}" (chosen by ${b.chosenBy})`);
+      }
       console.log(`      actual     ${fmtEff(a.actual)}`);
       if (a.advToActPct !== null || a.desiredToActPct !== null) {
         console.log(`      gap: advertised→actual ${fmtPct(a.advToActPct)}, desired→actual ${fmtPct(a.desiredToActPct)}`);
