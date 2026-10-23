@@ -27,6 +27,9 @@ function checkOffRun(label, command, args) {
     mkdirSync(join(dir, 'data'));
     mkdirSync(join(dir, 'config'));
     mkdirSync(join(dir, 'output'));
+    // An empty ZDOTDIR keeps the developer's own .zshenv/.zprofile out of the
+    // login-shell run, so the result doesn't depend on whose machine it is.
+    mkdirSync(join(dir, 'zdotdir'));
     writeFileSync(join(dir, 'data', 'applications.md'), [
       '# Applications Tracker',
       '',
@@ -52,6 +55,7 @@ function checkOffRun(label, command, args) {
         CAREER_OPS_TRACKER: join(dir, 'data', 'applications.md'),
         CAREER_OPS_FOLLOWUPS: join(dir, 'data', 'follow-ups.md'),
         CAREER_OPS_PROFILE: join(dir, 'config', 'profile.yml'),
+        ZDOTDIR: join(dir, 'zdotdir'),
       },
       encoding: 'utf8',
       timeout: 30000,
@@ -85,7 +89,8 @@ if (zshProbe.error?.code === 'ENOENT') {
 } else if (zshProbe.error || zshProbe.status !== 0) {
   fail(`zsh probe failed before the sweep could run: error=${zshProbe.error} status=${zshProbe.status} stderr=${zshProbe.stderr}`);
 } else {
-  checkOffRun('zsh (launchd)', 'zsh', [sweep]);
+  // -l as in the launchd recipe's ProgramArguments (/bin/zsh -l <script>).
+  checkOffRun('zsh -l (launchd)', 'zsh', ['-l', sweep]);
 }
 
 // Windows can't execute a script through its shebang; the sweep's recipes
