@@ -24,6 +24,9 @@
  * script that already references `invite-match.mjs` (e.g. #1495's own
  * history) — left as a maintainer call, not blocking.
  *
+ * Also reports interview rules found in the invite (`constraints`, #5732):
+ * read-only tags like [constraint:no-ai]; --apply never writes them.
+ *
  * Run: node invite-match.mjs < invite.txt          (JSON to stdout)
  *      node invite-match.mjs --file invite.txt
  *      echo "..." | node invite-match.mjs --summary
@@ -650,6 +653,62 @@ export function classifyEmail(text) {
   return { classification: 'unknown', matchedPhrases: [], phraseStrength: null };
 }
 
+// --- Interview constraints (#5732) ---
+
+// Phrase matching only (zero-token, no network). Each detector is deliberately
+// narrow: "silence stays silence" -- a constraint is reported only when the
+// invite says it. Keys are stable; the tag form `[constraint:<key>]` mirrors
+// the `[process-friction]` convention parsed by process-quality.mjs.
+const DURATION_PATTERN = /\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b(?:half|one|an)\s+hour\b/i;
+
+const NAME = "[\\p{Lu}][\\p{L}'.-]*(?:\\s+[\\p{Lu}][\\p{L}'.-]*){0,3}";
+const DASH = "\\s*[-\\u2013\\u2014,]\\s*";
+// "with Jordan Reyes - Director of X and Sam Ito - Manager of Y"
+const PANEL_LINE = new RegExp(`\\bwith\\s+(${NAME}${DASH}[^\\n]+)`, 'u');
+const PANEL_SPLIT = new RegExp(`\\s+and\\s+(?=${NAME}${DASH})`, 'u');
+const PANEL_DASH = new RegExp(DASH, 'u');
+
+const CONSTRAINT_DETECTORS = [
+  // The prohibition must sit in the same sentence as the AI-tool mention.
+  { key: 'no-ai', test: t => /\b(?:ai|artificial intelligence|chatgpt|copilot|generative)\b[^.\n]{0,120}\b(?:not (?:be )?(?:permitted|allowed)|prohibited|forbidden|not be used)\b/i.test(t)
+      || /\b(?:not (?:be )?(?:permitted|allowed)|prohibited|forbidden|may not use|do not use|must not use)\b[^.\n]{0,80}\b(?:ai|artificial intelligence|chatgpt|copilot)\b/i.test(t) },
+  { key: 'recorded', test: t => /\b(?:will|may) be (?:audio[- ]?|video[- ]?)?recorded\b|\bwe (?:will|may) record\b|\bthis (?:interview|call|session|meeting) is (?:being )?recorded\b/i.test(t) },
+  { key: 'no-recording', test: t => /\b(?:recording|recordings)\b[^.\n]{0,60}\b(?:not (?:be )?(?:permitted|allowed)|prohibited)\b|\b(?:do not|don't|may not|must not) (?:record|screenshot)\b|\bno recording\b/i.test(t) },
+  { key: 'camera-required', test: t => /\bcamera\b[^.\n]{0,40}\b(?:required|must be on|on throughout|mandatory)\b|\b(?:required|must|please) (?:to )?(?:have|keep|turn on|enable)\b[^.\n]{0,30}\b(?:camera|video on)\b|\bvideo (?:must be|required)\b/i.test(t) },
+  { key: 'test-link', test: t => /\b(?:test|check|try)\b[^.\n]{0,40}\b(?:link|connection|audio|video|setup)\b[^.\n]{0,40}\b(?:before(?:hand)?|ahead of|in advance|prior to)\b/i.test(t) },
+  { key: 'id-required', test: t => /\b(?:photo |government[- ]issued |valid )?(?:id|identification)\b[^.\n]{0,40}\b(?:required|must|will be (?:checked|verified|requested))\b|\b(?:bring|have|present|show)\b[^.\n]{0,40}\b(?:photo id|government[- ]issued id|identification)\b/i.test(t) },
+];
+
+function extractPanel(text) {
+  const m = text.match(PANEL_LINE);
+  if (!m) return null;
+  const people = m[1].replace(/[.\s]+$/, '').split(PANEL_SPLIT).map(p => p.trim()).filter(Boolean);
+  if (people.length < 2) return null;
+  return people.map(p => p.split(PANEL_DASH)[0].trim());
+}
+
+/**
+ * Extract the interview's rules from pasted invite text by phrase matching.
+ * Returns an array of `{key, tag, detail?}` in a fixed order. Keys: no-ai,
+ * recorded, no-recording, camera-required, test-link, id-required, panel
+ * (detail = names), length-not-stated. Empty/non-string input returns [];
+ * `length-not-stated` is only added when the text is non-empty and reads like
+ * an invite (so unrelated text does not gain a spurious constraint).
+ *
+ * @param {string} text
+ * @returns {Array<{key: string, tag: string, detail?: string}>}
+ */
+export function extractConstraints(text) {
+  if (!text || typeof text !== 'string') return [];
+  const out = [];
+  const add = (key, detail) => out.push({ key, tag: `[constraint:${key}]`, ...(detail ? { detail } : {}) });
+  for (const { key, test } of CONSTRAINT_DETECTORS) if (test(text)) add(key);
+  const panel = extractPanel(text);
+  if (panel) add('panel', panel.join('; '));
+  if (classifyEmail(text).classification === 'invite' && !DURATION_PATTERN.test(text)) add('length-not-stated');
+  return out;
+}
+
 // --- Tracker loading ---
 function loadTracker(appsFile = APPS_FILE) {
   if (!existsSync(appsFile)) return [];
@@ -741,7 +800,7 @@ export function matchInvite(signals, trackerRows) {
  *
  * @param {string} text - Raw invite/rejection email text.
  * @param {Array<object>} [trackerRows] - Injectable for tests; defaults to loadTracker().
- * @returns {{signals: object, classification: 'invite'|'rejection'|'unknown', matchedPhrases: string[], phraseStrength: 'strong'|'weak'|null, candidates: Array<object>}}
+ * @returns {{signals: object, classification: 'invite'|'rejection'|'unknown', matchedPhrases: string[], phraseStrength: 'strong'|'weak'|null, candidates: Array<object>, constraints: Array<{key: string, tag: string, detail?: string}>}}
  */
 export function analyzeInvite(text, trackerRows = null) {
   const signals = {
@@ -754,10 +813,12 @@ export function analyzeInvite(text, trackerRows = null) {
     // unaffected.
     isAIInterviewer: isAIInterviewerPlatform(text),
   };
+  // Additive (#5732): top-level so every existing key keeps its shape.
+  const constraints = extractConstraints(text);
   const rows = trackerRows ?? loadTracker();
   const candidates = matchInvite(signals, rows);
   const { classification, matchedPhrases, phraseStrength } = classifyEmail(text);
-  return { signals, classification, matchedPhrases, phraseStrength, candidates };
+  return { signals, classification, matchedPhrases, phraseStrength, candidates, constraints };
 }
 
 /**
@@ -881,7 +942,13 @@ function printSummary(result) {
   console.log(`  Extracted company:  ${result.signals.company || '(not found)'}`);
   console.log(`  Extracted date:     ${result.signals.date || '(not found)'}`);
   console.log(`  Extracted req ID:   ${result.signals.reqId || '(not found)'}`);
-  console.log(`  Extracted platform: ${result.signals.platform || '(not found)'}\n`);
+  console.log(`  Extracted platform: ${result.signals.platform || '(not found)'}`);
+  const constraints = result.constraints || [];
+  console.log(`  Constraints:        ${constraints.length ? constraints.map(c => c.tag + (c.detail ? ` (${c.detail})` : '')).join(' ') : '(none)'}`);
+  if (constraints.some(c => c.key === 'length-not-stated')) {
+    console.log('  Length not stated -- mark the calendar block as a guess.');
+  }
+  console.log('');
 
   if (!result.signals.company) {
     console.log('  Could not find a company name in the invite text — paste more context or check manually.\n');

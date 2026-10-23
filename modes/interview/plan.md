@@ -159,6 +159,7 @@ Save the plan to `interview-prep/{company-slug}-{role-slug}.md` if a file doesn'
 
 ## Rules
 
+- **AI-tools constraint.** If the invite carries a `no-ai` constraint (`node invite-match.mjs` prints `[constraint:no-ai]`), remind the candidate in one line: practice with the assistant beforehand, but never use any AI tool during the real interview.
 - **Calibrate to the round.** A screening prep plan looks very different from a design-panel prep plan. Don't default to maximum depth for every interview.
 - **Gaps first.** Time is finite. The candidate's strengths don't need prep — their gaps do.
 - **🔴 gaps from the question bank take priority over inferred gaps.** Real performance data beats CV-vs-JD analysis. If the candidate already knows they struggle on a topic, don't bury it.
