@@ -372,6 +372,14 @@ try {
   await expectThrow('publicJobs items is not an array on the first page', () => joinProvider.fetch(entry, makeCtx(() => gqlPage({ not: 'an array' }))));
   await expectThrow('publicJobs items is not an array on a later page', () =>
     joinProvider.fetch(entry, makeCtx(({ paginationPage }) => (paginationPage.page === 1 ? gqlPage([job(1)], 2) : gqlPage(null, 2)))));
+  await expectThrow('publicJobs has no pageInfo', () =>
+    joinProvider.fetch(entry, makeCtx(() => ({ data: { publicJobs: { items: [job(1)] } } }))));
+  await expectThrow('pageInfo.pageCount is not a non-negative integer', () =>
+    joinProvider.fetch(entry, makeCtx(() => ({ data: { publicJobs: { items: [job(1)], pageInfo: { pageCount: '2' } } } }))));
+  await expectThrow('a later page has no pageInfo.pageCount', () =>
+    joinProvider.fetch(entry, makeCtx(({ paginationPage }) => (paginationPage.page === 1
+      ? gqlPage([job(1)], 2)
+      : { data: { publicJobs: { items: [job(2)], pageInfo: {} } } }))));
 
   // fetch() — a careers_url that fails extractSlug() throws before any request.
   const noRequestCtx = makeCtx(() => { throw new Error('should not be called'); }, {

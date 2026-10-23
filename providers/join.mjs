@@ -217,8 +217,15 @@ export default {
       }
       const items = json?.data?.publicJobs?.items;
       if (!Array.isArray(items)) throw new Error('join: publicJobs response has no items array');
+      // A missing page count would end the walk after this page and return a
+      // partial board, so it fails like any other unexpected envelope. 0 is a
+      // valid count: an empty board reports it.
+      const pageCount = json.data.publicJobs.pageInfo?.pageCount;
+      if (!Number.isInteger(pageCount) || pageCount < 0) {
+        throw new Error(`join: publicJobs response has no valid pageInfo.pageCount (got ${JSON.stringify(pageCount)})`);
+      }
       allItems.push(...items);
-      reportedPageCount = Number(json.data.publicJobs.pageInfo?.pageCount) || 0;
+      reportedPageCount = pageCount;
     }
     const fetchedPages = page - 1;
     const truncated = fetchedPages === maxPages && reportedPageCount > maxPages && ctxCap === Infinity;
