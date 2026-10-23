@@ -175,6 +175,12 @@ try {
   } else {
     fail(`parseHnComment ipv6 url: ${JSON.stringify(ipv6?.url)}`);
   }
+  const bracketedIpv6 = parseHnComment('Acme | Engineer | Remote | [http://[::1]/jobs/123]', PERMALINK);
+  if (bracketedIpv6?.url === 'http://[::1]/jobs/123') {
+    pass('parseHnComment trims the wrapper bracket around an IPv6 link');
+  } else {
+    fail(`parseHnComment bracketed ipv6 url: ${JSON.stringify(bracketedIpv6?.url)}`);
+  }
 
   // parseHnComment ─ deleted / empty comments return null
   if (parseHnComment('', '') === null && parseHnComment(null, '') === null) {
