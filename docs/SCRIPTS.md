@@ -42,6 +42,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run validate:portals` | `validate-portals.mjs` | Validate portals.yml shape before scanning |
 | `npm run tracker` | `tracker.mjs` | SQLite derived index over applications.md — sync/query/history/export |
 | `npm run find` | `find.mjs` | Resolve a report#/tracker#/company query to its full pipeline identity |
+| `npm run ics-interview -- invite.ics` | `ics-interview.mjs` | Read an interview invite's `.ics` (first VEVENT: start/end/length, time zone, link, organizer) and print a row to paste into `data/active-interviews.md` (read-only) |
 | `npm run invite-match` | `invite-match.mjs` | Fuzzy-match a pasted interview-invite email against `data/applications.md` |
 | `npm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
 | `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
@@ -1097,6 +1098,20 @@ Multiple matches print as a table; zero matches print a clean message.
 **Exit codes:** `0` at least one match, `1` no match, missing query, or no `applications.md`.
 
 ---
+
+## ics-interview
+
+Reads the `.ics` that usually comes with an interview invite (#5743) — the one place holding the exact start, end, time zone and link — and prints, for the first `VEVENT`: start/end as sent (original `TZID` kept), the same instant in the display zone, `durationMinutes` (from `DTEND` or `DURATION`), summary, location, a meeting URL found in `LOCATION`/`DESCRIPTION`/`URL`, organizer and attendee names, and a ready-to-paste `| Company | Role | Round | Date/Time | Interviewer | Status | Notes |` row for `data/active-interviews.md`. It never writes that table.
+
+```
+node ics-interview.mjs invite.ics [--summary] [--tz America/Toronto] [--match "<invite text or file>"]
+node ics-interview.mjs < invite.ics
+```
+
+- Display zone: `--tz`, else `config/profile.yml` `location.timezone` (when Intl recognizes it), else the machine zone. A value that is not a zone is reported, not guessed.
+- Unreadable fields are an em dash in the row. All-day events are reported as a date, floating times (no zone, no `Z`) as written without conversion, and a `TZID` that is not an IANA name (e.g. a Windows zone name) as `unknown-tzid` without conversion. `RRULE` is ignored with a warning.
+- `--match` hands the invite text (or a file holding it) to `invite-match.mjs` to suggest the tracker row; Company and Role are filled in only when exactly one candidate matches the company exactly. The length shown comes from the `.ics`.
+- Hand-written parser for the handful of properties needed; zero-LLM, no dependency.
 
 ## paste-reply
 

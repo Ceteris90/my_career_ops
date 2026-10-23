@@ -504,6 +504,7 @@ const SYSTEM_PATHS = [
   'tracker-sync-check.mjs',
   'followup-cadence.mjs',
   'invite-match.mjs',
+  'ics-interview.mjs',
   'coverage-check.mjs',
   'agent-inbox.mjs',
   'followup-seed.mjs',
