@@ -59,7 +59,8 @@ try {
     // The site's own links stay chrome: its jobs page, another posting, a sign-in
     // link carrying this posting only in its return address, the footer, and
     // links back into this page under another fragment, query or trailing
-    // slash. A link to this posting is still read only where it is visible.
+    // slash. So does a link to another site with this posting's id in its
+    // path. A link to this posting is still read only where it is visible.
     const chrome = await check(POSTING_URL, [
       `<nav><a href="${POSTING_URL}#apply">Skip to apply</a></nav>`,
       `<nav><a href="${POSTING_URL}?utm_source=header#apply">Skip to apply</a></nav>`,
@@ -67,12 +68,13 @@ try {
       '<header><a href="/jobs">Apply</a></header>',
       `<nav><a href="/jobs/${OTHER_ID}/apply">Apply</a></nav>`,
       `<header><a href="/login?returnUrl=%2Fjobs%2F${ID}">Sign in to apply</a></header>`,
+      `<header><a href="https://jobs.example.org/jobs/${ID}/apply">Apply</a></header>`,
       '<footer><a href="/careers/apply">Apply now</a></footer>',
       `<header aria-hidden="true"><a href="/jobs/${ID}/apply">Apply</a></header>`,
       `<main>${POSTING}</main>`,
     ].join(''));
     if (chrome.result === 'uncertain' && chrome.code === 'no_apply_control') {
-      pass('Apply links in the chrome to the site, another posting, a sign-in page or this page itself, or hidden, are not Apply controls');
+      pass('Apply links in the chrome to the site, another posting, another site, a sign-in page or this page itself, or hidden, are not Apply controls');
     } else {
       fail(`chrome links that are not the posting's own Apply: ${JSON.stringify(chrome)}`);
     }

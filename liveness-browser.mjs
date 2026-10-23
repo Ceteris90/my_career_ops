@@ -492,8 +492,10 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
 
     const extractApplyControls = ({ postingId, postingSegment, pageUrl }) => {
       // Page chrome (nav, header, footer) is skipped because its links are the
-      // site's own: Jobs, Careers, Sign in. A link to this posting's own page is
-      // not chrome, wherever it sits. Tech in Asia puts its only Apply control,
+      // site's own: Jobs, Careers, Sign in. A link to this posting's own page,
+      // on the page's own origin, is not chrome, wherever it sits; a link to
+      // another site says nothing about this page's posting, even with its id
+      // in the path. Tech in Asia puts its only Apply control,
       // "APPLY FOR JOB" -> /jobs/<id>/apply, in the page header: measured
       // 2026-10-22, 20 of 20 live postings read no_apply_control without this,
       // and 40 of 40 closed ones answer "Job not found" with no such link. Only
@@ -515,6 +517,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
           const pageKey = (u) => u.origin + u.pathname.replace(/\/+$/, '');
           const thisPage = [location.href, pageUrl].map((u) => pageKey(new URL(u)));
           if (thisPage.includes(pageKey(target))) return false;
+          if (target.origin !== new URL(pageUrl).origin) return false;
           const segments = target.pathname.toLowerCase().split('/');
           return segments.includes(postingId) || segments.includes(postingSegment);
         } catch {
