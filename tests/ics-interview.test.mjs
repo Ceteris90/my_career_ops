@@ -32,6 +32,9 @@ eq('date: Feb 30 is unreadable', parseIcsDate('20260230T190000Z'), null);
 eq('date: Apr 31 is unreadable', parseIcsDate('20260431'), null);
 eq('date: Feb 29 in a non-leap year is unreadable', parseIcsDate('20270229T100000'), null);
 eq('date: Feb 29 in a leap year is readable', parseIcsDate('20280229T100000Z')?.kind, 'utc');
+eq('date: year 0000 is unreadable, not remapped to 1900', parseIcsDate('00000229T000000Z'), null);
+eq('date: year 0099 is unreadable', parseIcsDate('00990115T100000Z'), null);
+eq('date: year 1000 is readable', parseIcsDate('10000115T100000Z')?.kind, 'utc');
 eq('date: Dec 31 is readable', parseIcsDate('20261231')?.kind, 'date');
 
 // 1. TZID start/end, converted to a display zone
