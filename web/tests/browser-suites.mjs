@@ -41,21 +41,21 @@ process.env.TMPDIR = fs.realpathSync(os.tmpdir());
 
 // suite → its URL var, its data-root var (when it reads the root itself), and
 // the fixture generator for the root. Suites whose header asks only for
-// "disposable data" get pipeline-status, which also carries the fictional
-// cv.md assistant-focus needs.
+// "disposable data" get blank: no tracker, and the fictional cv.md
+// assistant-focus needs.
 const SUITES = {
   "analytics-views": { url: "ANALYTICS_TEST_URL", root: "ANALYTICS_TEST_ROOT", fixture: "pipeline-status" },
-  "apply-field-accessibility": { url: "APPLY_FIELDS_TEST_URL", fixture: "pipeline-status" },
-  "assistant-confirmation-accessibility": { url: "ASSISTANT_CONFIRM_TEST_URL", fixture: "pipeline-status" },
-  "assistant-focus": { url: "ASSISTANT_FOCUS_TEST_URL", fixture: "pipeline-status" },
-  "assistant-request-feedback": { url: "ASSISTANT_FEEDBACK_TEST_URL", fixture: "pipeline-status" },
-  "assistant-status-recovery": { url: "ASSISTANT_STATUS_TEST_URL", fixture: "pipeline-status" },
-  "employer-preset": { url: "EXPLORE_EMPLOYER_TEST_URL", fixture: "pipeline-status" },
+  "apply-field-accessibility": { url: "APPLY_FIELDS_TEST_URL", fixture: "blank" },
+  "assistant-confirmation-accessibility": { url: "ASSISTANT_CONFIRM_TEST_URL", fixture: "blank" },
+  "assistant-focus": { url: "ASSISTANT_FOCUS_TEST_URL", fixture: "blank" },
+  "assistant-request-feedback": { url: "ASSISTANT_FEEDBACK_TEST_URL", fixture: "blank" },
+  "assistant-status-recovery": { url: "ASSISTANT_STATUS_TEST_URL", fixture: "blank" },
+  "employer-preset": { url: "EXPLORE_EMPLOYER_TEST_URL", fixture: "blank" },
   "inbox-undo": { url: "INBOX_UNDO_TEST_URL", root: "INBOX_UNDO_TEST_ROOT", fixture: "inbox-undo" },
   "loading-transition": { url: "LOADING_TRANSITION_TEST_URL", root: "LOADING_TRANSITION_TEST_ROOT", fixture: "pipeline-status" },
   "pipeline-inline-status": { url: "PIPELINE_STATUS_TEST_URL", root: "PIPELINE_STATUS_TEST_ROOT", fixture: "pipeline-status" },
   "pipeline-return": { url: "PIPELINE_RETURN_TEST_URL", root: "PIPELINE_RETURN_TEST_ROOT", fixture: "pipeline-status" },
-  "worker-feedback": { url: "WORKER_FEEDBACK_TEST_URL", fixture: "pipeline-status" },
+  "worker-feedback": { url: "WORKER_FEEDBACK_TEST_URL", fixture: "blank" },
 };
 
 // Every var any suite reads, so a value from the caller's shell cannot point a
