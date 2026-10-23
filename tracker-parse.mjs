@@ -259,10 +259,16 @@ export function resolveTsvColumns(cells) {
 
 // The dashboard also reads legacy rows with a leading pipe and tab-separated
 // cells. Opt in only where readers/writers handle that format: other writers
-// still rebuild pipe rows and must not silently start accepting tab rows. A tab
-// inside a normal pipe table is ordinary whitespace, not a column delimiter.
+// still rebuild pipe rows and must not silently start accepting tab rows. The
+// first delimiter after the opening pipe decides the layout: a tab inside a
+// normal pipe table is note text, and a literal pipe in a legacy tab row's notes
+// does not turn it into a pipe row. dashboard/internal/data splitTrackerRow uses
+// the same rule; test-fixtures/tracker-row-split-parity.json pins both.
 export function trackerRowSeparator(line) {
-  return line.includes('\t') && line.split('|').length <= 3 ? '\t' : '|';
+  const body = line.trimStart().replace(/^\|/, '');
+  const tab = body.indexOf('\t');
+  const pipe = body.indexOf('|');
+  return tab >= 0 && (pipe < 0 || tab < pipe) ? '\t' : '|';
 }
 
 /** Return raw cells in the same index space as line.split('|'). */

@@ -1,5 +1,5 @@
 {
-  "_comment": "One table, two readers. Node (tracker-parse.mjs splitTrackerCells, asserted in tests/tracker-row-split-parity.test.mjs) and Go (dashboard/internal/data splitTrackerRow, asserted in career_test.go) must each split every line into these trimmed cells, first real column (#) first. A line is tab-delimited only when it holds a tab and at most two pipes; a tab inside a pipe table is note text. Generated from the Node reader; a change to either reader that breaks parity fails CI.",
+  "_comment": "One table, two readers. Node (tracker-parse.mjs splitTrackerCells, asserted in tests/tracker-row-split-parity.test.mjs) and Go (dashboard/internal/data splitTrackerRow, asserted in career_test.go) must each split every line into these trimmed cells, first real column (#) first. The first delimiter after the opening pipe decides the layout: a tab inside a pipe table is note text, and a pipe inside a legacy tab row's notes is note text too. Generated from the Node reader; a change to either reader that breaks parity fails CI.",
   "cases": [
     {
       "name": "pipe row",
@@ -105,6 +105,21 @@
         "❌",
         "—",
         "seed"
+      ]
+    },
+    {
+      "name": "legacy tab row whose notes contain a literal pipe",
+      "line": "| 14\t2026-09-08\tTabCo\tEngineer\t4/5\tApplied\t❌\t—\tA | B |",
+      "cells": [
+        "14",
+        "2026-09-08",
+        "TabCo",
+        "Engineer",
+        "4/5",
+        "Applied",
+        "❌",
+        "—",
+        "A | B"
       ]
     },
     {

@@ -849,18 +849,25 @@ func TestSplitTrackerRowMatchesNodeReader(t *testing.T) {
 	}
 }
 
-// A pipe row whose notes hold a tab must still reach the pipeline.
-func TestParseApplicationsKeepsPipeRowWithTabInNotes(t *testing.T) {
+// A pipe row whose notes hold a tab, and a legacy tab row whose notes hold a
+// pipe, must both still reach the pipeline.
+func TestParseApplicationsKeepsRowsWithTheOtherDelimiterInNotes(t *testing.T) {
 	tempDir, _ := writeTracker(t, "# Applications Tracker\n\n"+
 		"| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n"+
 		"|---|------|---------|------|-------|--------|-----|--------|-------|\n"+
-		"| 7 | 2026-09-01 | Example Co | Engineer | 4.2/5 | Applied | ✅ | — | recruiter said:\tcall Tue |\n")
+		"| 7 | 2026-09-01 | Example Co | Engineer | 4.2/5 | Applied | ✅ | — | recruiter said:\tcall Tue |\n"+
+		"| 8\t2026-09-02\tTabCo\tEngineer\t4.0/5\tApplied\t❌\t—\tA | B |\n")
 	apps := mustParseApplications(t, tempDir)
-	if len(apps) != 1 {
-		t.Fatalf("expected 1 application, got %d", len(apps))
+	if len(apps) != 2 {
+		t.Fatalf("expected 2 applications, got %d", len(apps))
 	}
-	if apps[0].Company != "Example Co" || apps[0].Status != "Applied" {
-		t.Errorf("row parsed as company %q status %q, want Example Co / Applied", apps[0].Company, apps[0].Status)
+	for i, want := range []struct{ company, notes string }{
+		{"Example Co", "recruiter said:\tcall Tue"},
+		{"TabCo", "A | B"},
+	} {
+		if apps[i].Company != want.company || apps[i].Status != "Applied" || apps[i].Notes != want.notes {
+			t.Errorf("row %d parsed as company %q status %q notes %q, want %s / Applied / %q", i, apps[i].Company, apps[i].Status, apps[i].Notes, want.company, want.notes)
+		}
 	}
 }
 
