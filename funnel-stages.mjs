@@ -30,7 +30,7 @@ export function parseStatusLogStages(content) {
     }
     const stale = retracted.get(num);
     retracted.delete(num);
-    observations.push({ num, from: from === stale ? '-' : from, to });
+    observations.push({ num, from: from.toUpperCase() === stale?.toUpperCase() ? '-' : from, to });
   }
   return [...byNum.values()].flat();
 }

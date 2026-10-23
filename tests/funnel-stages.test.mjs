@@ -44,3 +44,13 @@ test('a retracted transition proves no stage, and neither does the revert that f
   ].join('\n'));
   assert.deepEqual([...recoverFunnelStages(statuses, ledger)], [[1, 1], [2, 4]]);
 });
+
+test('the revert after a retraction proves nothing when it spells the stage in another case', () => {
+  const ledger = parseStatusLogStages([
+    '1\t2026-10-01\tEvaluated\tApplied\tset-status\t',
+    '1\t2026-10-02\tApplied\tOffer\tset-status\t',
+    '1\t2026-10-02\t-\t-\tmanual\tmis-click',
+    '1\t2026-10-02\toffer\tApplied\tmanual\t',
+  ].join('\n'));
+  assert.deepEqual([...recoverFunnelStages(new Map([[1, 'Applied']]), ledger)], [[1, 1]]);
+});
