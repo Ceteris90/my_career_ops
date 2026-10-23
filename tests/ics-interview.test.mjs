@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { parseIcs, unfoldLines, parseDurationMinutes, buildRow, dateTimeCell, wallToInstant } from '../ics-interview.mjs';
+import { parseIcsDate, parseIcs, unfoldLines, parseDurationMinutes, buildRow, dateTimeCell, wallToInstant } from '../ics-interview.mjs';
 import { pass, fail } from './helpers.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +26,13 @@ function eq(label, actual, expected) {
 
 const ics = (...lines) => ['BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT', ...lines, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
 const TOR = 'America/Toronto';
+
+// 0. Calendar-impossible dates are unreadable, not rolled into the next month
+eq('date: Feb 30 is unreadable', parseIcsDate('20260230T190000Z'), null);
+eq('date: Apr 31 is unreadable', parseIcsDate('20260431'), null);
+eq('date: Feb 29 in a non-leap year is unreadable', parseIcsDate('20270229T100000'), null);
+eq('date: Feb 29 in a leap year is readable', parseIcsDate('20280229T100000Z')?.kind, 'utc');
+eq('date: Dec 31 is readable', parseIcsDate('20261231')?.kind, 'date');
 
 // 1. TZID start/end, converted to a display zone
 {

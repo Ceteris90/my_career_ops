@@ -125,7 +125,9 @@ export function parseIcsDate(value, params = {}) {
   if (!m) return null;
   const [, y, mo, d, h, mi, s, z] = m;
   const base = { y: +y, mo: +mo, d: +d, h: +(h ?? 0), mi: +(mi ?? 0), s: +(s ?? 0), raw: value.trim() };
-  if (mo === '00' || +mo > 12 || +d < 1 || +d > 31 || base.h > 23 || base.mi > 59 || base.s > 60) return null;
+  if (mo === '00' || +mo > 12 || +d < 1 || base.h > 23 || base.mi > 59 || base.s > 60) return null;
+  // The day must exist in that month (Feb 30 would otherwise roll into March).
+  if (+d > new Date(Date.UTC(+y, +mo, 0)).getUTCDate()) return null;
   const isDateOnly = h === undefined || String(params.VALUE ?? '').toUpperCase() === 'DATE';
   if (isDateOnly) return { ...base, kind: 'date', tzid: null };
   if (z) return { ...base, kind: 'utc', tzid: null };
