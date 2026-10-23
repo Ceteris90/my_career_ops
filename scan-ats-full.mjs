@@ -247,6 +247,14 @@ function saveDeadBoardsBestEffort(rows) {
   }
 }
 
+/**
+ * `ctx` with `provider`'s slice of the id cache as ctx.idCache, or `ctx` as is
+ * when there is no store (a caller that does not pass one, tests).
+ */
+export function withIdCache(ctx, idCaches, provider) {
+  return idCaches ? { ...ctx, idCache: idCaches.forProvider(provider?.id) } : ctx;
+}
+
 // Same rule for the provider id cache: a failed write costs later runs a
 // lookup, never this sweep's matches. It never rejects, so a checkpoint can
 // start it without awaiting.
@@ -893,9 +901,10 @@ const SEED_PROVIDERS = [greenhouse, lever, ashby];
  * @param {object}   ctx         HTTP context from makeHttpCtx().
  * @param {Set}      seenUrls    Shared dedup set (mutated in place).
  * @param {string}   label       Human-readable source label for logs.
+ * @param {object}   [idCaches]  Store from openProviderIdCache(); each provider gets its slice as ctx.idCache.
  * @returns {Promise<object[]>}  New job offers (same shape as ATS scan offers).
  */
-export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
+export async function runSeedScan(seedId, opts, ctx, seenUrls, label, idCaches) {
   const source = SEED_SOURCES[seedId];
   if (!source) throw new Error(`runSeedScan: unknown seed "${seedId}"`);
 
@@ -933,7 +942,7 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
 
     let jobs;
     try {
-      jobs = await provider.fetch(entry, ctx);
+      jobs = await provider.fetch(entry, withIdCache(ctx, idCaches, provider));
     } catch (err) {
       errors++;
       if (opts.verbose) console.error(`  ✗ ${seedId}/${entry.name}: ${err.message}`);
@@ -972,8 +981,10 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
  * Unsupported vendor labels stay in the local seed set but make no network
  * request. Known labels begin feeding the sweep automatically when a provider
  * with the same id is added later, without a tracker migration.
+ * `idCaches` (optional, from openProviderIdCache()) gives each provider its
+ * slice as ctx.idCache.
  */
-export async function runHistorySeedScan(seeds, providers, opts, ctx, processJobs) {
+export async function runHistorySeedScan(seeds, providers, opts, ctx, processJobs, idCaches) {
   const selected = opts.atsExplicit
     ? seeds.filter((seed) => opts.ats.includes(seed.vendor))
     : seeds;
@@ -1021,7 +1032,7 @@ export async function runHistorySeedScan(seeds, providers, opts, ctx, processJob
       }
       const operation = { active: true };
       const operationPromise = (async () => {
-        const jobs = await provider.fetch(entry, ctx);
+        const jobs = await provider.fetch(entry, withIdCache(ctx, idCaches, provider));
         if (!operation.active) return;
         await processJobs(jobs, `${seed.vendor}-history`, provider, entry.name, () => operation.active);
       })();
@@ -1792,7 +1803,7 @@ async function main() {
   if (historySeeds.length && !stoppedByOutage) {
     const providers = await loadProviders(PROVIDERS_DIR);
     log(`\n🌱 Application history — ${historySeeds.length} unique ATS board(s) derived locally...`);
-    const result = await runHistorySeedScan(historySeeds, providers, opts, ctx, processJobs);
+    const result = await runHistorySeedScan(historySeeds, providers, opts, ctx, processJobs, idCaches);
     totalCompaniesScanned += result.total;
     totalErrors += result.errors;
     log(`  done — ${result.total} board(s) probed, ${result.unsupported} without a scanner provider (${result.errors} errors)`);
@@ -1802,7 +1813,7 @@ async function main() {
   for (const seedId of opts.seeds) {
     const seedSource = SEED_SOURCES[seedId];
     log(`\n🌱 ${seedSource.label} (${seedId}-seed) — fetching portfolio...`);
-    const result = await runSeedScan(seedId, opts, ctx, seenUrls, seedSource.label);
+    const result = await runSeedScan(seedId, opts, ctx, seenUrls, seedSource.label, idCaches);
     if (result && result.offers) {
       totalCompaniesScanned += result.total || 0;
       totalErrors += result.errors || 0;
@@ -1810,6 +1821,9 @@ async function main() {
       log(`  done — ${result.total} companies probed, ${result.offers.length} matches (${result.errors} errors)`);
     }
   }
+  // The history and VC seed passes run after every directory source has
+  // saved, so what they resolved is saved here.
+  if (!opts.dryRun) await saveProviderIdCacheBestEffort(idCaches);
 
   const blacklistResult = filterBlacklistedOffers(newOffers, blacklist, { includeBlacklisted: opts.includeBlacklisted });
   let offers = blacklistResult.offers;

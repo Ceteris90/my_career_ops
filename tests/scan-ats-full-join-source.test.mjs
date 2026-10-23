@@ -9,7 +9,7 @@ import { pass, fail, ROOT } from './helpers.mjs';
 
 console.log('\nscan-ats-full — join.com directory source');
 
-const { SOURCES, loadCompanyList } = await import(pathToFileURL(join(ROOT, 'scan-ats-full.mjs')).href);
+const { SOURCES, loadCompanyList, withIdCache } = await import(pathToFileURL(join(ROOT, 'scan-ats-full.mjs')).href);
 const { default: joinProvider, parseCompanySitemap } = await import(pathToFileURL(join(ROOT, 'providers/join.mjs')).href);
 
 // The SOURCES entry.
@@ -31,6 +31,20 @@ const { default: joinProvider, parseCompanySitemap } = await import(pathToFileUR
   }
   if (src?.toEntry('evil/..%2f') === null && src?.toEntry('') === null) pass('SOURCES.join.toEntry() rejects non-slug input');
   else fail('SOURCES.join.toEntry() accepted a hostile slug');
+}
+
+// withIdCache() — the seed passes hand each provider its own slice of the id cache.
+{
+  const asked = [];
+  const store = { forProvider: (id) => { asked.push(id); return { slice: id }; } };
+  const ctx = { fetchText: () => {} };
+  const withStore = withIdCache(ctx, store, { id: 'join' });
+  const without = withIdCache(ctx, undefined, { id: 'join' });
+  if (withStore.idCache?.slice === 'join' && withStore.fetchText === ctx.fetchText && !('idCache' in ctx) && asked.join() === 'join' && without === ctx) {
+    pass('withIdCache() adds the provider\'s own slice as ctx.idCache, and leaves ctx as is without a store');
+  } else {
+    fail(`withIdCache() wrong: ${JSON.stringify({ withStore: withStore.idCache, same: without === ctx, asked })}`);
+  }
 }
 
 // loadCompanyList() with parseDataset: the text is parsed, and the cache holds the array.
