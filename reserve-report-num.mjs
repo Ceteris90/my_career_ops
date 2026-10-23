@@ -164,8 +164,16 @@ function ledgerPathsFor(trackerPath, options = {}) {
   return {
     // Beside the tracker, as lib/status-hooks.mjs statusLogPath() writes it.
     statusLog: join(dirname(trackerPath), 'status-log.tsv'),
-    // Same override followup-seed.mjs and followup-cadence.mjs honor.
-    followups: process.env.CAREER_OPS_FOLLOWUPS || join(dataDir, 'follow-ups.md'),
+    // Every place a follow-up can land. A status change seeds it beside the
+    // tracker (lib/status-hooks.mjs seedFollowupOnApplied); followup-seed and
+    // the readers default to the data root's data/follow-ups.md or honor
+    // CAREER_OPS_FOLLOWUPS. These are one file in the default layout and
+    // split when the tracker lives elsewhere, so count each distinct one.
+    followups: [...new Set([
+      process.env.CAREER_OPS_FOLLOWUPS,
+      join(dataDir, 'follow-ups.md'),
+      join(dirname(trackerPath), 'follow-ups.md'),
+    ].filter(Boolean).map(p => resolve(p)))],
     salary: join(dataDir, 'salary-observations.tsv'),
     contacts: join(dataDir, 'contacts.tsv'),
   };
@@ -200,7 +208,7 @@ function occupiedFromLedgers(trackerPath, options) {
   // contacts.tsv: tracker# in column 8, `-` for no application.
   for (const line of readLines(paths.contacts)) addLedgerNum(occupied, line.split('\t')[7]);
   // follow-ups.md: table rows are `| num | appNum | ...`.
-  for (const line of readLines(paths.followups)) {
+  for (const line of paths.followups.flatMap(readLines)) {
     if (line.startsWith('|')) {
       const parts = line.split('|');
       if (LEDGER_NUM_RE.test(String(parts[1] ?? '').trim())) addLedgerNum(occupied, parts[2]);

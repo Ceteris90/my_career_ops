@@ -38,11 +38,11 @@ function scratchRoot(rows, { reports = [], data = {} } = {}) {
   return dir;
 }
 
-async function peek(dir) {
+async function peek(dir, { trackerPath = join(dir, 'data/applications.md') } = {}) {
   const opts = {
     rootDir: dir,
     reportsDir: join(dir, 'reports'),
-    trackerPath: join(dir, 'data/applications.md'),
+    trackerPath,
     batchStateFile: join(dir, 'batch/batch-state.tsv'),
   };
   const saved = process.env.CAREER_OPS_FOLLOWUPS;
@@ -70,9 +70,9 @@ function run(dir, args) {
   });
 }
 
-async function check(name, dir, expect) {
+async function check(name, dir, expect, peekOpts) {
   try {
-    const got = await peek(dir);
+    const got = await peek(dir, peekOpts);
     if (got === expect) pass(`${name} → ${got}`);
     else fail(`${name}: expected ${expect}, got ${got}`);
   } catch (err) {
@@ -199,6 +199,23 @@ async function check(name, dir, expect) {
   } catch (err) {
     if (err?.code === 'EISDIR') pass('an unreadable ledger fails the reservation instead of reading as empty');
     else fail(`an unreadable ledger: expected EISDIR, got ${err?.code ?? err?.message}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// A tracker outside the data root's data/ (CAREER_OPS_TRACKER): a status change
+// seeds its follow-up beside that tracker, not in data/follow-ups.md.
+{
+  const dir = scratchRoot([], { reports: ['001-acme-2026-10-01.md'] });
+  const elsewhere = join(dir, 'elsewhere');
+  mkdirSync(elsewhere, { recursive: true });
+  writeFileSync(join(elsewhere, 'applications.md'), HEADER
+    + '| 1 | 2026-10-01 | Acme | Backend Engineer | 4.0/5 | Applied | ❌ | [001](reports/001-acme-2026-10-01.md) | |\n');
+  writeFileSync(join(elsewhere, 'follow-ups.md'), '- next #6 2026-10-20 (set 2026-10-13)\n');
+  try {
+    await check('a follow-up seeded beside a relocated tracker is counted', dir, 7,
+      { trackerPath: join(elsewhere, 'applications.md') });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
