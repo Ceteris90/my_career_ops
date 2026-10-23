@@ -83,10 +83,28 @@ function main() {
       : 'config/profile.yml not found. Copy from config/profile.example.yml and fill in your details.');
   } else {
     const profileContent = readFileSync(profilePath, 'utf-8');
+    // Match the VALUE of each required field, against active YAML only. The
+    // shipped template documents optional fields with commented-out examples
+    // (`#   # signature_name: "Jane Smith"`), and a whole-file substring search
+    // treated that comment as proof the profile was unedited — then reported the
+    // first field it checked (`full_name`), naming an innocent field on a
+    // correctly filled profile. Strip comment lines so documentation can never
+    // trip the check.
+    const activeProfile = profileContent
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .join('\n');
     const requiredFields = ['full_name', 'email', 'location'];
     for (const field of requiredFields) {
-      if (!profileContent.includes(field) || profileContent.includes(`"Jane Smith"`)) {
-        warnings.push(`config/profile.yml may still have example data. Check field: ${field}`);
+      const match = activeProfile.match(new RegExp(`^\\s*${field}:\\s*(.*)$`, 'm'));
+      const value = (match?.[1] ?? '')
+        .replace(/\s+#.*$/, '') // inline comment, e.g. `full_name: "X"  # note`
+        .trim()
+        .replace(/^["']|["']$/g, '')
+        .trim();
+      if (!value || value.toLowerCase() === 'jane smith') {
+        const detail = value ? ` (still "${value}")` : ' (missing or empty)';
+        warnings.push(`config/profile.yml may still have example data. Check field: ${field}${detail}`);
         break;
       }
     }

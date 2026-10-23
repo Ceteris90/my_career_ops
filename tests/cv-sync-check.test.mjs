@@ -137,3 +137,61 @@ test('importing the module runs no checks', async () => {
   assert.equal(r.status, 0, describeSpawn(r, r.stderr));
   assert.equal(r.stdout.trim(), 'imported');
 });
+
+// The profile check used to ask whether the file CONTAINED the string
+// `"Jane Smith"`. The shipped template documents optional fields with
+// commented-out examples, including `#   # signature_name: "Jane Smith"`, so a
+// fully filled-in profile that kept the template's comments still warned — and
+// named `full_name`, the first field checked, rather than the comment that
+// matched. Reported as "is my name wrong?"; it was not.
+
+/** Run the validator against a throwaway root holding `profileBody`. */
+function runWithProfile(profileBody) {
+  const dir = mkdtempSync(join(tmpdir(), 'career-ops-sync-check-'));
+  try {
+    mkdirSync(join(dir, 'config'), { recursive: true });
+    writeFileSync(join(dir, 'cv.md'), `# Jane Roe\n\n## Experience\n\n${'Backend engineer. '.repeat(12)}\n`);
+    writeFileSync(join(dir, 'config', 'profile.yml'), profileBody);
+    return runAgainst(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
+  }
+}
+
+test('a commented-out template example is not mistaken for an unedited field', () => {
+  const r = runWithProfile([
+    'candidate:',
+    '  full_name: "Jane Roe"',
+    '  email: "jane@example.com"',
+    '  location: "Lisbon"',
+    '',
+    '#   # signature_name: "Jane Smith"',
+    '',
+  ].join('\n'));
+  assert.doesNotMatch(r.all, /may still have example data/,
+    `a comment tripped the check:\n${r.all.slice(0, 400)}`);
+  assert.equal(r.status, 0);
+});
+
+test('a profile still carrying the template values does warn, naming the field', () => {
+  const r = runWithProfile([
+    'candidate:',
+    '  full_name: "Jane Smith"',
+    '  email: "jane@example.com"',
+    '  location: "Lisbon"',
+    '',
+  ].join('\n'));
+  assert.match(r.all, /Check field: full_name/,
+    `the real unedited-template case was not reported:\n${r.all.slice(0, 400)}`);
+});
+
+test('a missing required field is reported by name', () => {
+  const r = runWithProfile([
+    'candidate:',
+    '  full_name: "Jane Roe"',
+    '  email: "jane@example.com"',
+    '',
+  ].join('\n'));
+  assert.match(r.all, /Check field: location/,
+    `a missing field was not named:\n${r.all.slice(0, 400)}`);
+});
