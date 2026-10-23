@@ -35,3 +35,16 @@ test('a re-applied row with no reply yet counts as still waiting', () => {
   ]);
   assert.equal(velocity.appliedToResponded.censored, 1);
 });
+
+test('a reply logged by hand still ends the first application', () => {
+  const lines = [];
+  for (const [num, replyDay] of [[1, '03'], [2, '04'], [3, '05']]) {
+    lines.push(
+      `${num}\t2026-01-05\tEvaluated\tApplied\tset-status\t`,
+      `${num}\t2026-01-12\tApplied\tResponded\tmanual\t`,
+      `${num}\t2026-06-01\tResponded\tApplied\tset-status\t`,
+      `${num}\t2026-06-${replyDay}\tApplied\tResponded\tset-status\t`,
+    );
+  }
+  assert.equal(velocityOf(lines).appliedToResponded.median, 3);
+});

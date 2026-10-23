@@ -235,8 +235,7 @@ export function computeVelocity(timelines, todayStr) {
           continue;
         }
         if (!start) continue;
-        if (o.to === hop.to) {
-          if (!o.dayMath) continue;
+        if (o.to === hop.to && o.dayMath) {
           const d = daysBetween(start.date, o.date);
           start = null;
           if (viaIntermediate || d === null || d < 0) continue;
