@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,6 +59,32 @@ test('repeated undo walks back one logged change at a time', () => {
     assert.equal(s.status7(), 'Evaluated');
     assert.deepEqual(s.timeline(), []);
   } finally { s.cleanup(); }
+});
+
+test('undo retracts a logged change whose prior status equals its new one', () => {
+  const s = sandbox('Applied', '7\t2026-02-03\tEvaluated\tApplied\tset-status\t\n7\t2026-02-05\tApplied\tApplied\tweb\t\n');
+  try {
+    assert.equal(s.run('--row', '7', '--undo').status, 0);
+    assert.equal(s.status7(), 'Applied');
+    assert.equal(s.log().trimEnd().split('\n').length, 3);
+    assert.equal(s.run('--row', '7', '--undo').status, 0);
+    assert.equal(s.status7(), 'Evaluated');
+    assert.deepEqual(s.timeline(), []);
+  } finally { s.cleanup(); }
+});
+
+test('undo puts the status back when the retraction cannot be logged', { skip: process.getuid?.() === 0 && 'root ignores file modes' }, () => {
+  const s = sandbox('Applied', '7\t2026-02-03\tEvaluated\tApplied\tset-status\t\n');
+  try {
+    chmodSync(join(s.dir, 'data', 'status-log.tsv'), 0o444);
+    const r = s.run('--row', '7', '--undo', '--json');
+    assert.equal(r.status, 1, r.stdout);
+    assert.equal(JSON.parse(r.stdout).code, 'undo-not-logged');
+    assert.equal(s.status7(), 'Applied');
+  } finally {
+    chmodSync(join(s.dir, 'data', 'status-log.tsv'), 0o644);
+    s.cleanup();
+  }
 });
 
 test('undo refuses when the tracker no longer matches the last logged change', () => {
