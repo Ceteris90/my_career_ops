@@ -483,7 +483,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // interstitial needs a moment to clear before the first read.
     if (extraSettleMs > 0) await page.waitForTimeout(extraSettleMs);
 
-    const extractApplyControls = ({ postingId, pageUrl }) => {
+    const extractApplyControls = ({ postingId, postingSegment, pageUrl }) => {
       // Page chrome (nav, header, footer) is skipped because its links are the
       // site's own: Jobs, Careers, Sign in. A link to this posting's own page is
       // not chrome, wherever it sits. Tech in Asia puts its only Apply control,
@@ -497,7 +497,9 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // frame sits in is this page too; its address is passed in, because a
       // frame sandboxed without allow-same-origin cannot read window.top. The
       // id has to be a whole path segment, so posting 12345 does not claim
-      // /jobs/123456/apply.
+      // /jobs/123456/apply or /jobs/job-12345/apply. A posting whose own
+      // segment carries the id with more around it claims that whole segment
+      // too: posting job-12345 claims /jobs/job-12345/apply.
       const linksToPosting = (element) => {
         const href = postingId && element.getAttribute('href');
         if (!href) return false;
@@ -506,7 +508,8 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
           const pageKey = (u) => u.origin + u.pathname.replace(/\/+$/, '');
           const thisPage = [location.href, pageUrl].map((u) => pageKey(new URL(u)));
           if (thisPage.includes(pageKey(target))) return false;
-          return target.pathname.toLowerCase().split('/').includes(postingId);
+          const segments = target.pathname.toLowerCase().split('/');
+          return segments.includes(postingId) || segments.includes(postingSegment);
         } catch {
           return false;
         }
@@ -574,8 +577,11 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // last id in the whole URL, as the redirect guard reads it: on UltiPro,
     // /JobBoard/{board}/OpportunityDetail?opportunityId={posting}, the path's
     // only id is the board's, and every link under the board's path has it.
+    // The segment itself is kept only when the id came from it, so a generic
+    // last segment (/jobs/12345/details) claims nothing.
     const lastSegment = new URL(url).pathname.split('/').filter(Boolean).pop() ?? '';
     const postingId = jobIdToken(lastSegment) ?? jobIdToken(url);
+    const postingSegment = jobIdToken(lastSegment) ? lastSegment.toLowerCase() : null;
 
     // One reading of the page: the top-level document plus every same-origin
     // child frame, so a posting rendered inside a frame and one rendered inline
@@ -583,13 +589,14 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // that detaches or turns cross-origin mid-read is skipped.
     const readPage = async () => {
       const finalUrl = page.url();
+      const walkArgs = { postingId, postingSegment, pageUrl: finalUrl };
       let bodyText = await page.evaluate(() => document.body?.innerText ?? '');
-      let applyControls = await page.evaluate(extractApplyControls, { postingId, pageUrl: finalUrl });
+      let applyControls = await page.evaluate(extractApplyControls, walkArgs);
       for (const frame of childFrames(finalUrl)) {
         try {
           const text = await frame.evaluate(() => document.body?.innerText ?? '');
           if (text && text.trim()) bodyText += '\n' + text;
-          applyControls = applyControls.concat(await frame.evaluate(extractApplyControls, { postingId, pageUrl: finalUrl }));
+          applyControls = applyControls.concat(await frame.evaluate(extractApplyControls, walkArgs));
         } catch {
           // detached or cross-origin mid-read; the rest of the reading still stands
         }

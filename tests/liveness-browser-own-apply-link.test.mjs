@@ -101,7 +101,10 @@ try {
 
     // The id has to be a whole path segment: posting 12345 claims
     // /jobs/12345/apply, not another posting's /jobs/123456/apply, nor a
-    // segment that only contains it.
+    // segment that only contains it. A posting whose own segment carries the
+    // id with more around it, job-12345, claims that whole segment too, and
+    // still nothing longer. A last segment the id did not come from (details)
+    // claims nothing.
     const numericUrl = 'https://www.example.com/jobs/12345';
     const numericOwn = await check(numericUrl, `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`);
     const numericOther = await check(numericUrl, [
@@ -109,19 +112,31 @@ try {
       '<nav><a href="/jobs/job-12345/apply">Apply</a></nav>',
       `<main>${POSTING}</main>`,
     ].join(''));
-    if (numericOwn.result === 'active' && numericOther.result === 'uncertain' && numericOther.code === 'no_apply_control') {
-      pass('a posting id counts only as a whole path segment: its own Apply link reads, a longer id\'s does not');
+    const prefixedUrl = 'https://www.example.com/jobs/job-12345';
+    const prefixedOwn = await check(prefixedUrl, `<header><a href="/jobs/job-12345/apply">Apply</a></header><main>${POSTING}</main>`);
+    const prefixedOther = await check(prefixedUrl, [
+      '<header><a href="/jobs/job-123456/apply">Apply</a></header>',
+      '<nav><a href="/jobs/senior-job-12345/apply">Apply</a></nav>',
+      `<main>${POSTING}</main>`,
+    ].join(''));
+    const generic = await check('https://www.example.com/jobs/12345/details', `<nav><a href="/jobs/67890/details">Apply</a></nav><main>${POSTING}</main>`);
+    if (numericOwn.result === 'active' && prefixedOwn.result === 'active'
+      && [numericOther, prefixedOther, generic].every((r) => r.result === 'uncertain' && r.code === 'no_apply_control')) {
+      pass('a posting id, or the posting URL\'s own segment that carries it, counts only as a whole path segment: its own Apply link reads, a longer one\'s does not');
     } else {
-      fail(`numeric id: own ${JSON.stringify(numericOwn)}, other segments ${JSON.stringify(numericOther)}`);
+      fail(`path segments: own ${JSON.stringify([numericOwn, prefixedOwn])}, other segments ${JSON.stringify([numericOther, prefixedOther, generic])}`);
     }
 
     // The id comes from the URL's last path segment: a number in the query is
-    // not taken for it.
-    const queried = await check(`${POSTING_URL}?campaign=123456`, `<header><a href="/jobs/${ID}/apply">APPLY FOR JOB</a></header><main>${POSTING}</main>`);
-    if (queried.result === 'active' && queried.code === 'apply_control_visible') {
+    // not taken for it, so it claims neither the posting's own link nor
+    // another posting's /jobs/123456/apply.
+    const queriedUrl = `${POSTING_URL}?campaign=123456`;
+    const queried = await check(queriedUrl, `<header><a href="/jobs/${ID}/apply">APPLY FOR JOB</a></header><main>${POSTING}</main>`);
+    const queriedOther = await check(queriedUrl, `<header><a href="/jobs/123456/apply">Apply</a></header><main>${POSTING}</main>`);
+    if (queried.result === 'active' && queried.code === 'apply_control_visible' && queriedOther.result === 'uncertain' && queriedOther.code === 'no_apply_control') {
       pass('a number in the posting URL\'s query is not taken for its id');
     } else {
-      fail(`posting URL with a numeric query value: ${JSON.stringify(queried)}`);
+      fail(`posting URL with a numeric query value: own ${JSON.stringify(queried)}, the query's number ${JSON.stringify(queriedOther)}`);
     }
 
     // A last segment with no id falls back to the whole URL, as the redirect
