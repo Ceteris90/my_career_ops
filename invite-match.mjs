@@ -659,12 +659,18 @@ export function classifyEmail(text) {
 // narrow: "silence stays silence" -- a constraint is reported only when the
 // invite says it. Keys are stable; the tag form `[constraint:<key>]` mirrors
 // the `[process-friction]` convention parsed by process-quality.mjs.
-const DURATION_PATTERN = /\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b(?:half|one|an)\s+hour\b/i;
-// An interval that is not the interview's length ("join 10 minutes early",
-// "reply within 24 hours", "2 hours before") must not count as a stated duration.
-const NON_DURATION_INTERVAL = /\b(?:within|in the next|over the next|by|after)\s+(?:the\s+)?(?:next\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s+(?:early|before|prior|ahead|in advance|notice|later|ago)\b/gi;
+// A duration counts as the interview's length only when the text ties it to the
+// interview: a length verb or noun right before it ("lasts 30 minutes", "plan for
+// 45 minutes", "Duration: 30 minutes"), an adjective form ("a 45-minute interview",
+// "30 minutes long"), or a bracketed length ("(30 minutes)"). Other intervals --
+// "join 10 minutes early", "reply within 24 hours", "starts 30 minutes after the
+// assessment" -- have no such tie, so they never suppress length-not-stated.
+const LENGTH_CONTEXT = /\b(?:last|lasts|lasting|take|takes|taking|run|runs|running|duration|length|scheduled for|set for|plan for|allow|allot|allocate|expect|approximately|about|around|up to|for)\b[^.\n]{0,25}?\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b/i;
+const LENGTH_ADJECTIVE = /\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s*[-–]?\s*(?:long\b|(?:interview|call|conversation|session|meeting|chat|screen|screening|assessment)\b)/i;
+const LENGTH_BRACKETED = /\(\s*\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s*\)/i;
+const LENGTH_NAMED = /\b(?:half|one|an)[-\s]hour\b/i;
 function statesDuration(text) {
-  return DURATION_PATTERN.test(text.replace(NON_DURATION_INTERVAL, ' '));
+  return LENGTH_CONTEXT.test(text) || LENGTH_ADJECTIVE.test(text) || LENGTH_BRACKETED.test(text) || LENGTH_NAMED.test(text);
 }
 
 const NAME = "[\\p{Lu}][\\p{L}'.-]*(?:\\s+[\\p{Lu}][\\p{L}'.-]*){0,3}";

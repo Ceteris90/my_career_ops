@@ -112,3 +112,18 @@ check('length-not-stated: "30 minutes after introductions" is an interview lengt
 check('length-not-stated: "after N minutes" (a wait, not a length) is still not a stated length', () => {
   assert.ok(keys('We would like to invite you to schedule your interview. The link expires after 30 minutes of inactivity.').includes('length-not-stated'));
 });
+
+check('length-not-stated: a start-time offset is not the interview length', () => {
+  const pre = 'We would like to invite you to schedule your interview. ';
+  assert.ok(keys(pre + 'The interview starts 30 minutes after the assessment.').includes('length-not-stated'));
+  assert.ok(!keys(pre + 'It will last 30 minutes after introductions.').includes('length-not-stated'));
+});
+check('length-not-stated: common length phrasings are recognised', () => {
+  const pre = 'We would like to invite you to schedule your interview. ';
+  for (const t of ['Duration: 30 minutes.', 'Interview (30 minutes).', 'This is a one-hour interview.', 'Plan for 45 minutes.', 'The call is 30 minutes long.']) {
+    assert.ok(!keys(pre + t).includes('length-not-stated'), t);
+  }
+  for (const t of ['Please join 10 minutes early.', 'Reply within 24 hours.', 'The link expires after 30 minutes of inactivity.']) {
+    assert.ok(keys(pre + t).includes('length-not-stated'), t);
+  }
+});
