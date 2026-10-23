@@ -38,16 +38,16 @@ try {
   ];
   const calls = [];
   const cache = new Map();
-  const probe = async (origin) => {
-    calls.push(origin);
-    if (origin.includes('branded')) return { html: RMK_PAGE };
-    if (origin.includes('other')) return UNRELATED;
+  const probe = async (url) => {
+    calls.push(url);
+    if (url.includes('branded')) return { html: RMK_PAGE };
+    if (url.includes('other')) return UNRELATED;
     throw new Error('403 captcha');
   };
   const out = await classifyUnknownHostSeeds(seeds, { probe, cache });
   assert.deepEqual([...calls].sort(), [
-    'https://careers.blocked.test', 'https://careers.other.test', 'https://jobs.branded.test',
-  ], 'one probe per distinct unknown host; known vendors are never probed');
+    'https://careers.blocked.test/', 'https://careers.other.test/', 'https://jobs.branded.test/job/Ottawa-Analyst/123',
+  ], 'one probe per distinct unknown host, on the first seed career URL (not the bare origin); known vendors are never probed');
   const sf = out.filter((s) => s.vendor === 'successfactors');
   assert.equal(sf.length, 1, 'two postings on one branded host collapse to one board');
   assert.equal(sf[0].careersUrl, 'https://jobs.branded.test');

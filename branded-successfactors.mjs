@@ -77,9 +77,9 @@ export function detectBrandedSuccessFactors(html, headers = null) {
  * @param {(url: string, opts: object) => Promise<string>} fetchHead
  */
 export function makeHeadProbe(fetchHead, maxBytes = 262144) {
-  return async (origin) => {
+  return async (url) => {
     let headers = null;
-    const html = await fetchHead(origin, {
+    const html = await fetchHead(url, {
       maxBytes,
       onResponse: (response) => { headers = response?.headers ?? null; },
     });
@@ -103,8 +103,10 @@ function safeHostname(url) {
  *
  * @param {Array<{company:string,vendor:string,careersUrl:string,source?:string}>} seeds
  * @param {object} options
- * @param {(origin: string) => Promise<{html?: string, headers?: any}|string|null>} options.probe
- *   Injected fetcher for the host's origin. Throwing, or returning null, means
+ * @param {(url: string) => Promise<{html?: string, headers?: any}|string|null>} options.probe
+ *   Injected fetcher, called once per host with the first seed URL seen on it
+ *   (a real career/posting page, not the bare origin, which may redirect or be
+ *   a generic homepage). Throwing, or returning null, means
  *   "no verdict" and leaves every seed on that host untouched.
  * @param {Map<string, boolean|null>} [options.cache] Per-host verdicts (host to
  *   true/false, null for a failed probe). Pass the same Map across calls to reuse.
@@ -116,22 +118,28 @@ function safeHostname(url) {
 export async function classifyUnknownHostSeeds(seeds, { probe, cache = new Map(), concurrency = 4 } = {}) {
   if (typeof probe !== 'function' || !Array.isArray(seeds)) return seeds;
 
-  const originByHost = new Map();
+  const probeUrlByHost = new Map();
   for (const seed of seeds) {
     if (!isUnknownHostSeed(seed)) continue;
     const host = seed.vendor;
-    if (cache.has(host) || originByHost.has(host)) continue;
-    try { originByHost.set(host, new URL(seed.careersUrl).origin); } catch { /* skip */ }
+    if (cache.has(host) || probeUrlByHost.has(host)) continue;
+    try {
+      const u = new URL(seed.careersUrl);
+      if ((u.protocol === 'https:' || u.protocol === 'http:') && u.hostname.toLowerCase() === host) {
+        u.hash = '';
+        probeUrlByHost.set(host, u.href);
+      }
+    } catch { /* skip */ }
   }
 
-  const pending = [...originByHost.entries()];
+  const pending = [...probeUrlByHost.entries()];
   let next = 0;
   const worker = async () => {
     while (next < pending.length) {
-      const [host, origin] = pending[next++];
+      const [host, probeUrl] = pending[next++];
       let verdict = null;
       try {
-        const res = await probe(origin);
+        const res = await probe(probeUrl);
         if (typeof res === 'string') verdict = detectBrandedSuccessFactors(res);
         else if (res && typeof res === 'object') verdict = detectBrandedSuccessFactors(res.html, res.headers);
       } catch { verdict = null; }
