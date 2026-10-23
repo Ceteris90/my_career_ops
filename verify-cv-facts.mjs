@@ -1376,7 +1376,7 @@ const NEGATION_LEAD_RE = /\b(?:without(?:\s+the)?|lack(?:ing)?(?:\s+the)?|don['\
  * @param {number} index
  * @returns {string}
  */
-function clauseBounds(text, index) {
+function clauseBounds(text, index, { extendCoordinated = true } = {}) {
   const isBoundary = (i) => {
     const c = text[i];
     if (c === '\n') return true;
@@ -1397,7 +1397,7 @@ function clauseBounds(text, index) {
   // stated once governs both halves: "I'd approach the first 90 days by
   // listening, and the first 30 days by shipping". The lookback stops at a
   // SENTENCE end, so it can never reach across "…first 99 months. I would…".
-  if (/^\s*(?:and|or|then|plus)\b/i.test(text.slice(start, end))) {
+  if (extendCoordinated && /^\s*(?:and|or|then|plus)\b/i.test(text.slice(start, end))) {
     let sentenceStart = 0;
     for (let i = start - 1; i >= 0; i--) if (isSentenceEnd(i)) { sentenceStart = i + 1; break; }
     return { start: sentenceStart, end };
@@ -1479,6 +1479,41 @@ function isDisclosedRequirement(clean, match, allMatches) {
   });
 }
 
+// An EMPLOYER FIGURE is a number about the company the letter is addressed to,
+// not about the candidate: "your team ran four regional sessions in July". The
+// candidate asserts nothing about themself, and cv.md can never contain it, so
+// requiring a source for it blocks every cover letter that cites what the
+// employer actually did, which is most of what makes a letter specific.
+//
+// One signal, clause-scoped like the two above: the nearest subject pronoun
+// before the number is second person ("your", "you", "you're") rather than
+// first ("I", "my", "we"). Nearest, not merely present, so the same clause can
+// hold both a third-party figure and a personal claim and each gets the right
+// verdict: "your team ran four sessions and I have three years" exempts the
+// first and still checks the second, and "I ran four sessions for your team"
+// stays a personal claim because "your" comes after the number.
+const SECOND_PERSON_RE = /\b(?:your|yours|you|you['\u2019](?:re|ve|ll|d))\b/gi;
+const FIRST_PERSON_RE = /\b(?:I|I['\u2019](?:m|ve|ll|d)|me|my|mine|myself|we|we['\u2019](?:re|ve|ll|d)|our|ours)\b/gi;
+
+/**
+ * Whether `match` is a number about the addressed employer (second-person
+ * subject nearest before it) rather than a claim about the candidate. See the
+ * SECOND_PERSON_RE / FIRST_PERSON_RE commentary above.
+ *
+ * @param {string} clean
+ * @param {RegExpMatchArray} match
+ * @returns {boolean}
+ */
+function isEmployerFigure(clean, match) {
+  // The plain clause: a clause opened by "and" must not borrow the previous
+  // clause's "your" ("I admire your team, and ran four sessions").
+  const { start } = clauseBounds(clean, match.index, { extendCoordinated: false });
+  const before = clean.slice(start, match.index);
+  const lastIndex = (re) => [...before.matchAll(re)].at(-1)?.index ?? -1;
+  const second = lastIndex(SECOND_PERSON_RE);
+  return second !== -1 && second > lastIndex(FIRST_PERSON_RE);
+}
+
 /**
  * Count-claim matches in `clean`, minus the ones that assert nothing.
  *
@@ -1493,6 +1528,7 @@ function countMatches(clean, { keepPlanHorizons = false } = {}) {
   const allMatches = [...clean.matchAll(COUNT_CLAIM_RE)];
   return allMatches.filter((match) => {
     if (isDisclosedRequirement(clean, match, allMatches)) return false;
+    if (isEmployerFigure(clean, match)) return false;
     if (keepPlanHorizons) return true;
     if (!TIME_NOUNS.has(match[2].toLowerCase())) return true;
     const lead = clean.slice(Math.max(0, match.index - 40), match.index);
