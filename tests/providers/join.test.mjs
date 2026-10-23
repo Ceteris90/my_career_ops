@@ -503,6 +503,14 @@ try {
   }
   if (noCompanyError && /no company page/.test(noCompanyError.message)) pass('join.parseCompanySitemap() throws when <loc> entries hold no company page');
   else fail('join.parseCompanySitemap() should throw when no <loc> is a company page');
+  let noLocError = null;
+  try {
+    parseCompanySitemap('<urlset><url><sm:loc>https://join.com/companies/acme-corp</sm:loc></url></urlset>');
+  } catch (err) {
+    noLocError = err;
+  }
+  if (noLocError && /no company page/.test(noLocError.message)) pass('join.parseCompanySitemap() throws when <url> entries hold no <loc> it can read');
+  else fail('join.parseCompanySitemap() should throw when <url> entries hold no readable <loc>');
 
   // fetch() — a careers_url that fails extractSlug() throws before any request.
   const noRequestCtx = makeCtx(() => { throw new Error('should not be called'); }, {

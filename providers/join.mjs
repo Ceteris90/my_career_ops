@@ -161,8 +161,8 @@ export function extractCompany(nextData) {
  * Company slugs from join.com's company sitemap, in document order, each once.
  * Only `<loc>https://join.com/companies/<slug></loc>` entries count; a deeper
  * path or another host is skipped. An empty `<urlset>` is an empty directory;
- * `<loc>` entries of which none is a company page mean the format changed, and
- * throw, so the caller keeps its last good list.
+ * `<url>` or `<loc>` entries of which none yields a company page mean the
+ * format changed, and throw, so the caller keeps its last good list.
  * @param {unknown} xml
  * @returns {string[]}
  */
@@ -176,7 +176,10 @@ export function parseCompanySitemap(xml) {
     const slug = extractSlug(loc);
     if (slug && new URL(loc).pathname.replace(/\/$/, '') === `/companies/${slug}`) slugs.add(slug);
   }
-  if (locs > 0 && slugs.size === 0) throw new Error(`join: company sitemap has ${locs} <loc> entries but no company page among them`);
+  const urls = [...xml.matchAll(/<url\b/g)].length;
+  if ((urls > 0 || locs > 0) && slugs.size === 0) {
+    throw new Error(`join: company sitemap has ${urls} <url> and ${locs} <loc> entries but no company page among them`);
+  }
   return [...slugs];
 }
 
