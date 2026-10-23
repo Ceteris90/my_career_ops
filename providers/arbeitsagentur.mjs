@@ -30,6 +30,8 @@ import { safeEncodeURIComponent } from './_safe-url.mjs';
 //                               #   'title'  — regex on the job title only (cheap; misses body-level remote)
 //                               #   'off'    — skip the remote pass entirely
 //       remoteMaxPages: 10      # 'filter' mode: max pages to paginate (size each); default 1
+//       angebotsart: [1, 34]    # offer types, one request each: 1 ARBEIT (default), 2 SELBSTAENDIGKEIT,
+//                               #   4 AUSBILDUNG, 34 PRAKTIKUM_TRAINEE (where most Werkstudent/Praktikum ads sit)
 //     enabled: true
 
 // v6. The v4 search and detail endpoints both 404 as of 2026-08-04 (#2494);
@@ -69,7 +71,24 @@ export function parseArbeitsagenturConfig(entry) {
     // Remote-detection mode is config-driven (not hardcoded).
     remoteMatch: ['title', 'filter', 'off'].includes(cfg.remoteMatch) ? cfg.remoteMatch : 'title',
     remoteMaxPages: intInRange(cfg.remoteMaxPages, 1, 1, 20),
+    angebotsart: parseAngebotsart(cfg.angebotsart),
   };
+}
+
+// Jobsuche offer types. Werkstudent and Praktikum postings are mostly listed
+// under 34, so a student search needs [1, 34]; the default stays ARBEIT only.
+const ANGEBOTSART_CODES = new Set(['1', '2', '4', '34']); // ARBEIT, SELBSTAENDIGKEIT, AUSBILDUNG, PRAKTIKUM_TRAINEE
+
+/**
+ * Reads `angebotsart` as one code or a list of codes; unknown codes are
+ * dropped, and an empty result falls back to ['1'].
+ * @param {any} val
+ * @returns {string[]}
+ */
+export function parseAngebotsart(val) {
+  const list = Array.isArray(val) ? val : (val === undefined || val === null ? [] : [val]);
+  const codes = [...new Set(list.map(v => String(v).trim()).filter(v => ANGEBOTSART_CODES.has(v)))];
+  return codes.length ? codes : ['1'];
 }
 
 /**
@@ -155,7 +174,7 @@ export default {
    * @returns {Promise<Array<{title: string, url: string, company: string, location: string}>>}
    */
   async fetch(entry, ctx) {
-    const { keywords, wo, umkreis, days, size, remoteNationwide, remoteMatch, remoteMaxPages } = parseArbeitsagenturConfig(entry);
+    const { keywords, wo, umkreis, days, size, remoteNationwide, remoteMatch, remoteMaxPages, angebotsart } = parseArbeitsagenturConfig(entry);
     if (!keywords.length) {
       throw new Error(`arbeitsagentur: entry "${entry.name || '(unnamed)'}" has no arbeitsagentur.keywords[]`);
     }
@@ -166,7 +185,7 @@ export default {
         was,
         size: String(size),
         page: '1',
-        angebotsart: '1', // 1 = ARBEIT (employment; excludes Ausbildung/Selbständigkeit)
+        angebotsart: angebotsart[0], // default 1 = ARBEIT; callers pass each configured code
         veroeffentlichtseit: String(days),
         ...extra,
       });
@@ -179,6 +198,13 @@ export default {
       return Array.isArray(json && json.ergebnisliste) ? json.ergebnisliste : [];
     };
 
+    /** One request per configured offer type, concatenated. @param {string} was @param {Record<string,string>} [extra] */
+    const fetchAllTypes = async (was, extra = {}) => {
+      const out = [];
+      for (const art of angebotsart) out.push(...await fetchKeyword(was, { ...extra, angebotsart: art }));
+      return out;
+    };
+
     const byRef = new Map();
     const errors = [];
     let succeeded = 0; // keywords whose primary pass completed (i.e. the source answered)
@@ -187,8 +213,8 @@ export default {
       try {
         // Pass A: commutable radius around `wo`, or a single nationwide pass.
         primary = wo
-          ? await fetchKeyword(kw, { wo, umkreis: String(umkreis) })
-          : await fetchKeyword(kw);
+          ? await fetchAllTypes(kw, { wo, umkreis: String(umkreis) })
+          : await fetchAllTypes(kw);
         succeeded++;
       } catch (err) {
         // Recall-first: tolerate a single failed keyword and keep going.
@@ -209,13 +235,15 @@ export default {
             // Server-side home-office filter: collect the candidates. `nv_true` only
             // means "home office is possible", so these are not yet known to be
             // remote — the title check below is what decides.
-            for (let page = 1; page <= remoteMaxPages; page++) {
-              const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page) });
-              wide.push(...res);
-              if (res.length < size) break; // short page → done
+            for (const art of angebotsart) {
+              for (let page = 1; page <= remoteMaxPages; page++) {
+                const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art });
+                wide.push(...res);
+                if (res.length < size) break; // short page → done
+              }
             }
           } else { // 'title'
-            const nationwide = await fetchKeyword(kw);
+            const nationwide = await fetchAllTypes(kw);
             wide = nationwide.filter(j => REMOTE_RE.test(String((j && j.stellenangebotsTitel) || '')));
           }
         } catch (err) {

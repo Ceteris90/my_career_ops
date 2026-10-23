@@ -277,6 +277,30 @@ try {
     fail(`aa.fetch() Pass B failure dropped primary: ${JSON.stringify(passBFail)}`);
   }
 
+  // angebotsart: default ARBEIT only; a list queries each type and merges.
+  const { parseAngebotsart } = arbeitsagenturModule;
+  if (JSON.stringify(parseAngebotsart(undefined)) === '["1"]'
+      && JSON.stringify(parseAngebotsart([1, 34, '34', 99])) === '["1","34"]'
+      && JSON.stringify(parseAngebotsart('bogus')) === '["1"]') {
+    pass('parseAngebotsart() defaults to ["1"], dedupes, and drops unknown codes');
+  } else {
+    fail('parseAngebotsart() did not normalize offer types');
+  }
+  const seenArts = [];
+  const byArt = await aa.fetch(
+    { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', angebotsart: [1, 34] } },
+    { fetchJson: async (url) => {
+        const art = new URL(url).searchParams.get('angebotsart');
+        seenArts.push(art);
+        return art === '34' ? page(v6('P', 'Werkstudent ESG', 'Bochum')) : page(v6('J', 'ESG Analyst', 'Bochum'));
+      } },
+  );
+  if (seenArts.join(',') === '1,34' && byArt.length === 2) {
+    pass('aa.fetch() queries each configured angebotsart and merges the results');
+  } else {
+    fail(`aa.fetch() angebotsart list: arts=${seenArts} jobs=${JSON.stringify(byArt)}`);
+  }
+
 } catch (e) {
   fail(`arbeitsagentur provider tests crashed: ${e.message}`);
 }
