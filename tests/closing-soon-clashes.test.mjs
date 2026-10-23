@@ -174,6 +174,19 @@ test('CLI: a relative --interviews path is resolved from the data root, not the 
   }
 });
 
+test('CLI: an --interviews path that exists but cannot be read (a directory) warns instead of crashing', () => {
+  const box = sandbox();
+  try {
+    const r = run(['--today', '2026-10-17', '--clashes', '--interviews', join(box.dataRoot, 'data')], box);
+    assert.equal(r.status, 0, describeSpawn(r));
+    const out = JSON.parse(r.stdout);
+    assert.deepEqual(out.clashes, []);
+    assert.ok(out.warnings.some(w => /Cannot read interviews file/.test(w)));
+  } finally {
+    cleanup(box);
+  }
+});
+
 test('CLI: flag validation', () => {
   const box = sandbox();
   try {

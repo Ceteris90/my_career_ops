@@ -575,7 +575,11 @@ if (isMainModule(import.meta.url)) {
     const interviewsPath = interviewsOverride ? resolve(dataRoot, interviewsOverride) : interviewsDefault;
     let interviewsMd = '';
     if (existsSync(interviewsPath)) {
-      interviewsMd = readFileSync(interviewsPath, 'utf-8');
+      try {
+        interviewsMd = readFileSync(interviewsPath, 'utf-8');
+      } catch (err) {
+        warnings.push(`Cannot read interviews file at ${interviewsPath} (${err.code || err.message}); no clashes to check.`);
+      }
     } else {
       warnings.push(`No interviews file found at ${interviewsPath}; no clashes to check.`);
     }
