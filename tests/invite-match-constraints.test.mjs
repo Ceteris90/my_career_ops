@@ -96,3 +96,12 @@ check('length-not-stated: a preparation interval is not the interview length', (
 check('length-not-stated: a stated length still counts next to a preparation interval', () => {
   assert.ok(!keys('We would like to invite you to schedule your interview. It lasts 30 minutes. Please join 10 minutes early.').includes('length-not-stated'));
 });
+
+check('length-not-stated: an interview length in the same sentence as "join" still counts', () => {
+  assert.ok(!keys('We would like to invite you to schedule your interview. Join us for a 45-minute interview.').includes('length-not-stated'));
+  assert.ok(!keys('We would like to invite you to schedule your interview. Please join the call; it will take 30 minutes.').includes('length-not-stated'));
+});
+check('length-not-stated: "join N minutes early" with no length is still not-stated', () => {
+  assert.ok(keys('We would like to invite you to schedule your interview. Please join 10 minutes early.').includes('length-not-stated'));
+  assert.ok(keys('We would like to invite you to schedule your interview. Please join at least 15 minutes before the start.').includes('length-not-stated'));
+});

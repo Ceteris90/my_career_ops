@@ -662,7 +662,7 @@ export function classifyEmail(text) {
 const DURATION_PATTERN = /\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b(?:half|one|an)\s+hour\b/i;
 // An interval that is not the interview's length ("join 10 minutes early",
 // "reply within 24 hours", "2 hours before") must not count as a stated duration.
-const NON_DURATION_INTERVAL = /\b(?:within|in the next|over the next|by|after)\s+(?:the\s+)?(?:next\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s+(?:early|before|prior|ahead|in advance|notice|later|ago|after)\b|\b(?:join|arrive|log ?in|dial ?in|connect)\b[^.\n]{0,40}\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b/gi;
+const NON_DURATION_INTERVAL = /\b(?:within|in the next|over the next|by|after)\s+(?:the\s+)?(?:next\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b|\b\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\s+(?:early|before|prior|ahead|in advance|notice|later|ago|after)\b/gi;
 function statesDuration(text) {
   return DURATION_PATTERN.test(text.replace(NON_DURATION_INTERVAL, ' '));
 }
