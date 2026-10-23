@@ -106,3 +106,80 @@ The pass rate is each channel's editorial shape, not noise: @data_science_job 77
 
 **The bar for the next channel proposal**, so it is written down: measure the channel (share of posts naming an employer, share linking a vacancy page, what survives both), name its operator, and expect the provider to drop the rest. A channel below roughly a quarter passing is the channel's editorial choice, and the provider will read it correctly and emit little.
 
+---
+
+## Computrabajo
+
+| | |
+|---|---|
+| **Proposed by** | @configurowebmax (community contributor; no affiliation with the source declared) |
+| **Provider** | `providers/computrabajo.mjs` |
+| **PR** | [#2650](https://github.com/career-ops-hq/career-ops/pull/2650) |
+| **Merged** | pending (this PR) |
+| **Status** | Provider listed; the shipped `job_boards:` entry is `enabled: false`. |
+
+A general job board with one host per Latin American country. Only the Colombian host was measured: one GET of `https://co.computrabajo.com/trabajo-de-sistemas` on 2026-10-23, no key, cookie or session, career-ops' default User-Agent: HTTP 200, 20 posting cards.
+
+**Rule 1 (real listings, identifiable employer, free for candidates).** Employer attribution, measured: 17 of the 20 cards name an employer; 3 show "Importante empresa del sector" (hidden employer), which the provider emits as `?`. Several named employers are staffing agencies rather than the hiring company. Free for candidates: unverified. Whether applying requires an account: unverified; the card markup routes the apply action through a candidate sign-in page (`candidato.co.computrabajo.com/acceso/`), which suggests it does.
+
+**Rule 2 (canonical URL is the employer's).** The listing card carries no employer or ATS URL, only the board's own posting page, so `url` is that page (fragment dropped). Whether the posting page links on to the employer: unverified.
+
+**Rule 3 (complete inventory, no paid placement).** Not met as shipped, flagged for the maintainer: the default "Relevancia" order interleaves paid "Empleo destacado" cards (9 of the 20 measured), and the provider stops at 3 pages / 15 postings by design (the contributor's crawl limit), so paid cards take part of that budget. The provider keeps every card it reads and does no ranking of its own. Pagination (`?p=N`) is unverified.
+
+**Rule 4 (operator declared).** Operator not declared in the PR; unverified.
+
+**Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on a `<country>.computrabajo.com` host only.
+
+**Rule 6 (`robots.txt`).** Unverified: `robots.txt` was not fetched for this review.
+
+---
+
+## ElEmpleo
+
+| | |
+|---|---|
+| **Proposed by** | @configurowebmax (community contributor; no affiliation with the source declared) |
+| **Provider** | `providers/elempleo.mjs` |
+| **PR** | [#2650](https://github.com/career-ops-hq/career-ops/pull/2650) |
+| **Merged** | pending (this PR) |
+| **Status** | Provider listed; the shipped `job_boards:` entry is `enabled: false`. |
+
+A general job board for Colombia. Measured: one GET of `https://www.elempleo.com/co/ofertas-empleo/` on 2026-10-23, no key, cookie or session, career-ops' default User-Agent: HTTP 200, 20 results on page 1 of a reported 21,789.
+
+**Rule 1 (real listings, identifiable employer, free for candidates).** Employer attribution, measured: 13 of the 20 results name an employer; 7 read "Empresa confidencial", which the provider emits as `?`. Several named employers are staffing agencies. Free for candidates and whether applying requires an account: unverified.
+
+**Rule 2 (canonical URL is the employer's).** The result card carries no employer or ATS URL, only the board's own posting page, so `url` is that page. Whether the posting page links on to the employer: unverified.
+
+**Rule 3 (complete inventory, no paid placement).** The page states its own order, `PublishDate_Desc` (newest first), in its request parameters; no promoted field was seen in the result data. The provider reads up to `max_pages` (default 5, 100 postings), not the whole board. Pagination (`?pagina=N`) is unverified: the board renders its pager client-side, so the provider stops on a page with no new ids.
+
+**Rule 4 (operator declared).** Operator not declared in the PR; unverified.
+
+**Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on `www.elempleo.com` / `elempleo.com` only.
+
+**Rule 6 (`robots.txt`).** Unverified: `robots.txt` was not fetched for this review.
+
+---
+
+## Magneto365
+
+| | |
+|---|---|
+| **Proposed by** | @configurowebmax (community contributor; no affiliation with the source declared) |
+| **Provider** | `providers/magneto.mjs` |
+| **PR** | [#2650](https://github.com/career-ops-hq/career-ops/pull/2650) |
+| **Merged** | pending (this PR) |
+| **Status** | Provider listed; the shipped `job_boards:` entry is `enabled: false`. |
+
+A general job board for Colombia. Measured: one GET of `https://www.magneto365.com/co/trabajos/buscar/tecnologia` on 2026-10-23, no key, cookie or session, career-ops' default User-Agent: HTTP 200, 20 job cards, pager links up to page 20.
+
+**Rule 1 (real listings, identifiable employer, free for candidates).** Employer attribution, measured: 11 of the 20 cards name an employer; 5 read "Confidencial" and 4 carry the board's own name ("Magneto empleos"), and the provider emits all 9 as `?`. Free for candidates and whether applying requires an account: unverified.
+
+**Rule 2 (canonical URL is the employer's).** The card carries no employer or ATS URL, only the board's own posting page, so `url` is that page. Whether the posting page links on to the employer: unverified.
+
+**Rule 3 (complete inventory, no paid placement).** The default sort order and whether any card is promoted: unverified. The provider reads up to `max_pages` (default 5), not the whole board. The pagination shape (`?paginator[page]=N`) is the one in the page's own pager links; a page past the first was not fetched.
+
+**Rule 4 (operator declared).** Operator not declared in the PR; unverified.
+
+**Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on `www.magneto365.com` / `magneto365.com` only.
+
+**Rule 6 (`robots.txt`).** Unverified: `robots.txt` was not fetched for this review.

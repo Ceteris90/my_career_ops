@@ -1,14 +1,54 @@
 // @ts-check
 /** @typedef {import('./_types.js').Provider} Provider */
 
-const MAX_PAGES = 3; // Limitado para evitar baneos (usuario solicitó límite estricto)
-const DEFAULT_MAX_JOBS = 15; // 10-15 resultados según lo solicitado
+// Computrabajo provider: a board-wide aggregator with one host per country
+// (co.computrabajo.com, mx.computrabajo.com, ...). Target list: `job_boards:`.
+//
+// There is no public API; the search pages are server-rendered HTML. Wire it in
+// with the search URL you would open in a browser:
+//   - name: Computrabajo Colombia
+//     careers_url: https://co.computrabajo.com/trabajo-de-sistemas
+//
+// Card shape (measured on https://co.computrabajo.com/trabajo-de-sistemas,
+// 2026-10-23: HTTP 200 with career-ops' default User-Agent, 20 cards):
+//   <article class="box_offer ..." data-id="{ID}">
+//     <h2><a class="js-o-link fc_base" href="/ofertas-de-trabajo/...-{ID}#lc=...">TITLE</a></h2>
+//     <p ...><a ... offer-grid-article-company-url>COMPANY</a></p>
+//     <p class="fs16 fc_base mt5"><span class="mr10">CITY, REGION</span></p>
+// Only the Colombian host was measured. Other country hosts share the domain
+// and the markup is assumed to match (unverified).
+//
+// Pagination is `?p=N` (unverified: the listing renders no plain page links).
+// The walk also stops as soon as a page brings no new ids, so a parameter the
+// board ignores (re-serving page 1) ends the walk instead of repeating it.
+//
+// Crawl limits are deliberately tight, as the contributor asked: at most 3
+// pages and 15 postings per entry, with a random 2-5 s pause between pages.
 
 import { decodeEntities } from './_html-entities.mjs';
+import { fetchTextWithRetry, sleep } from './_http.mjs';
+
+const MAX_PAGES = 3; // also the hard cap: a typo cannot turn one entry into a ban-prone crawl
+const DEFAULT_MAX_JOBS = 15;
+const OBSERVED_PAGE_SIZE = 20; // cards per page, measured 2026-10-23
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/** A two-letter country host: co.computrabajo.com, mx.computrabajo.com, ... */
+const HOST_RE = /^[a-z]{2}\.computrabajo\.com$/;
+
+/**
+ * Markers that only a challenge / block page carries. Generic words such as
+ * "cloudflare" or "captcha" also appear in normal pages (CDN assets, a login
+ * form's reCAPTCHA), so they are not used.
+ */
+const CHALLENGE_RE = /<title[^>]*>[^<]*(?:just a moment|attention required|access denied|acceso denegado)|cf-(?:challenge|browser-verification|error-details)|cf-mitigated/i;
+
+/** A posting detail link anywhere in the page: the "this is a listing" signal. */
+const POSTING_HREF_RE = /href="(?:https:\/\/[a-z]{2}\.computrabajo\.com)?\/ofertas-de-trabajo\/[^"]+"/i;
 
 /** @param {string} s */
 function clean(s) {
-  return decodeEntities(s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+  return decodeEntities(String(s).replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
 
 /** Keep user overrides bounded so a typo cannot turn one board into a ban-prone crawl. */
@@ -17,15 +57,61 @@ function boundedPositiveInt(value, fallback, cap) {
   return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, cap) : fallback;
 }
 
-function companyFromCard(html, fallback) {
-  const company = html.match(/class=\x22[^\x22]*(?:fc_base|company|empresa)[^\x22]*\x22[^>]*>([\s\S]*?)<\/(?:a|p|span|div)>/i);
-  return company ? clean(company[1]) : fallback;
+/**
+ * Validate a configured search URL and rebuild it from its parts: https only,
+ * a Computrabajo country host only, port and credentials dropped.
+ * @param {unknown} raw
+ * @returns {URL}
+ */
+export function resolveListUrl(raw) {
+  const u = new URL(String(raw)); // throws on a malformed URL
+  if (u.protocol !== 'https:') throw new Error(`computrabajo: careers_url must be https, got ${u.protocol}`);
+  if (!HOST_RE.test(u.hostname)) throw new Error(`computrabajo: ${u.hostname} is not a Computrabajo country host`);
+  return new URL(`https://${u.hostname}${u.pathname}${u.search}`);
 }
 
-function titleFromCard(html, anchorHtml = '') {
-  const heading = html.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
-  const titleClass = html.match(/class=\x22[^\x22]*tc-it[^\x22]*\x22[^>]*>([^<]+)/i);
-  return clean(heading ? heading[1] : titleClass ? titleClass[1] : anchorHtml);
+/**
+ * Parse the posting cards out of one search page.
+ * @param {string} html
+ * @param {string} origin - e.g. https://co.computrabajo.com
+ * @returns {Array<{id:string,title:string,url:string,company:string,location:string}>}
+ */
+export function parseCards(html, origin) {
+  const out = [];
+  for (const chunk of String(html).split(/<article\b/i).slice(1)) {
+    const card = chunk.split(/<\/article>/i)[0];
+    const openTag = card.slice(0, card.indexOf('>') + 1);
+    if (!/\bbox_offer\b/.test(openTag)) continue;
+
+    const link = card.match(/<a\b[^>]*\bhref="((?:https:\/\/[a-z]{2}\.computrabajo\.com)?\/ofertas-de-trabajo\/[^"#?]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+    if (!link) continue;
+    let url;
+    try {
+      url = new URL(link[1], origin);
+    } catch {
+      continue;
+    }
+    if (!HOST_RE.test(url.hostname)) continue;
+
+    const heading = card.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
+    const title = clean(link[2]) || (heading ? clean(heading[1]) : '');
+    if (!title || title.length < 3) continue;
+
+    const idM = openTag.match(/\bdata-id=['"]([^'"]+)['"]/);
+    const companyM = card.match(/<a\b[^>]*\boffer-grid-article-company-url\b[^>]*>([\s\S]*?)<\/a>/i);
+    const locationM = card.match(/<p\b[^>]*>\s*<span class="mr10">([\s\S]*?)<\/span>/i);
+
+    out.push({
+      id: idM ? idM[1] : url.pathname,
+      title,
+      url: `${url.origin}${url.pathname}`,
+      // Never substitute the board's or the entry's name for a missing
+      // employer (Source Indexing Policy rule 1): '?' is the tracker's marker.
+      company: (companyM && clean(companyM[1])) || '?',
+      location: locationM ? clean(locationM[1]) : '',
+    });
+  }
+  return out;
 }
 
 /** @type {Provider} */
@@ -33,130 +119,92 @@ export default {
   id: 'computrabajo',
 
   detect(entry) {
-    if (entry.provider === 'computrabajo') return { url: entry.api || entry.careers_url };
-    const raw = entry.api || entry.careers_url || '';
-    if (raw.includes('computrabajo.com')) return { url: raw };
-    return null;
+    const raw = entry?.api || entry?.careers_url;
+    if (typeof raw !== 'string' || !raw) return null;
+    try {
+      return { url: resolveListUrl(raw).href };
+    } catch {
+      return null;
+    }
   },
 
   async fetch(entry, ctx) {
-    const listUrl = entry.api || entry.careers_url;
-    if (!listUrl) throw new Error(`computrabajo: no URL provided for ${entry.name}`);
+    const raw = entry.api || entry.careers_url;
+    if (!raw) throw new Error(`computrabajo: no URL provided for ${entry.name}`);
+    // Host allowlist before any request (SSRF guard).
+    const listUrl = resolveListUrl(raw);
 
-    const origin = new URL(listUrl).origin;
-    const maxPages = boundedPositiveInt(entry.max_pages, MAX_PAGES, MAX_PAGES);
+    // verify-portals' health probe sets ctx.maxPages: one page, no retries,
+    // and a fetch rejection propagates unwrapped.
+    const probing = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0;
+    const entryMaxPages = boundedPositiveInt(entry.max_pages, MAX_PAGES, MAX_PAGES);
+    const maxPages = probing ? Math.min(entryMaxPages, ctx.maxPages) : entryMaxPages;
     const maxJobs = boundedPositiveInt(entry.max_jobs, DEFAULT_MAX_JOBS, DEFAULT_MAX_JOBS);
+
     const jobs = [];
     const seen = new Set();
-    
-    // Tiempos de espera aleatorios (random delays de 2 a 5 segundos) solicitados
-    const wait = (ms) => (ctx.sleep ? ctx.sleep(ms) : new Promise((r) => setTimeout(r, ms)));
-    const randomDelay = () => wait(2000 + Math.random() * 3000);
+    /** @type {'complete'|'cap'|'fetch-error'|'challenge'} */
+    let stopReason = 'complete';
 
     for (let page = 1; page <= maxPages; page++) {
-      if (page > 1) await randomDelay();
-      
+      // Random 2-5 s pause between pages, never before the first one.
+      if (page > 1) await sleep(2000 + Math.random() * 3000, ctx);
+
       const pageUrl = new URL(listUrl);
       pageUrl.searchParams.set('p', String(page));
-      
+
       let html;
       try {
-        html = await ctx.fetchText(pageUrl.href, {
-          timeoutMs: 20_000,
+        html = await fetchTextWithRetry(ctx, pageUrl.href, {
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          redirect: 'error',
           headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'es-CO,es;q=0.9,en-US;q=0.8,en;q=0.7',
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
+            Pragma: 'no-cache',
+          },
+        }, probing ? { retries: 0 } : {});
       } catch (err) {
-        if (page === 1) throw err;
-        break; // Stop paginating on error
+        if (probing || page === 1) throw err;
+        console.warn(`[computrabajo] ${entry.name}: page ${page} failed (${(err && err.message) || err}); keeping the ${jobs.length} posting(s) from earlier pages.`);
+        stopReason = 'fetch-error';
+        break;
       }
 
-      // Evitamos bloqueos de IP
-      if (/cloudflare|captcha|access denied/i.test(html)) {
-         console.warn(`[computrabajo] Bloqueo anti-bot detectado en página ${page}. Abortando listado.`);
-         break;
-      }
-
-      // Buscar tarjetas de ofertas
-      // Las vacantes suelen estar en anclas dentro de la lista de artículos
-      const anchors = html.matchAll(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi);
-      let fresh = 0;
-
-      for (const match of anchors) {
-        const href = match[1];
-        const inner = match[2];
-        const cardStart = typeof match.index === 'number' ? html.lastIndexOf('<article', match.index) : -1;
-        const cardEnd = typeof match.index === 'number' ? html.indexOf('</article>', match.index) : -1;
-        const cardHtml = cardStart >= 0 && cardEnd > cardStart ? html.slice(cardStart, cardEnd + 10) : inner;
-
-        // Filtramos para asegurar que es una vacante (Computrabajo usa /ofertas-de-trabajo/ o /trabajo-de-)
-        if (!href.includes('/ofertas-de-trabajo/') && !href.includes('/trabajo-de-')) continue;
-        
-        // Excluir enlaces a evaluaciones de empresa
-        if (href.includes('/evaluaciones/')) continue;
-        
-        let url;
-        try {
-          url = new URL(href, origin).href;
-        } catch {
-          continue;
+      const cards = parseCards(html, listUrl.origin);
+      if (cards.length === 0) {
+        const challenged = CHALLENGE_RE.test(html);
+        if (page === 1) {
+          if (challenged) throw new Error(`computrabajo: anti-bot challenge on ${pageUrl.href}, no postings readable`);
+          if (POSTING_HREF_RE.test(html)) throw new Error(`computrabajo: ${pageUrl.href} links postings but no card parsed (markup change?)`);
+          return []; // a search with no results
         }
+        if (challenged) {
+          console.warn(`[computrabajo] ${entry.name}: anti-bot challenge on page ${page}; keeping the ${jobs.length} posting(s) from earlier pages.`);
+          stopReason = 'challenge';
+        }
+        break;
+      }
 
-        // Deduplicar: las urls de computrabajo a veces tienen parámetros ?busqueda=
-        const urlId = url.split('?')[0];
-        if (seen.has(urlId)) continue;
-        seen.add(urlId);
-
-        // Extraer título limpiando HTML. En computrabajo suele estar en un h1/h2 con class tc-it
-        const titleMatch = inner.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i) || 
-                           inner.match(/<p[^>]*class="[^"]*tc-it[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
-                           
-        const title = titleFromCard(inner, titleMatch ? titleMatch[1] : inner);
-        if (!title || title.length < 3) continue;
-
-        jobs.push({ title, url, company: companyFromCard(cardHtml, entry.name), location: 'Colombia' });
+      let fresh = 0;
+      for (const card of cards) {
+        if (seen.has(card.id)) continue;
+        seen.add(card.id);
         fresh++;
-        if (jobs.length >= maxJobs) break;
+        if (jobs.length >= maxJobs) {
+          stopReason = 'cap';
+          break;
+        }
+        jobs.push({ title: card.title, url: card.url, company: card.company, location: card.location });
       }
-
-      // Fallback a artículos (<article>) si las anclas fallaron (a veces el h1/h2 no está DENTRO de la a, sino al lado)
-      if (fresh === 0) {
-         const articles = html.matchAll(/<article[^>]*>([\s\S]*?)<\/article>/gi);
-         for (const match of articles) {
-            const articleHtml = match[1];
-            const aMatch = articleHtml.match(/<a[^>]*href="([^"]+)"/i);
-            if (!aMatch) continue;
-            
-            const href = aMatch[1];
-            if (!href.includes('/ofertas-de-trabajo/') && !href.includes('/trabajo-de-')) continue;
-            
-            let url;
-            try { url = new URL(href, origin).href; } catch { continue; }
-            
-            const urlId = url.split('?')[0];
-            if (seen.has(urlId)) continue;
-            seen.add(urlId);
-            
-            const titleMatch = articleHtml.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
-            const title = titleMatch ? clean(titleMatch[1]) : '';
-            if (!title) continue;
-
-            const company = companyFromCard(articleHtml, entry.name);
-            
-            jobs.push({ title, url, company, location: 'Colombia' });
-            fresh++;
-            if (jobs.length >= maxJobs) break;
-         }
-      }
-
-      if (fresh === 0 || jobs.length >= maxJobs) break;
+      if (stopReason === 'cap' || fresh === 0 || jobs.length >= maxJobs) break;
+      if (page === maxPages && !probing && cards.length >= OBSERVED_PAGE_SIZE) stopReason = 'cap';
     }
 
-    return jobs.slice(0, maxJobs);
-  }
+    if (stopReason === 'cap') {
+      console.warn(`[computrabajo] ${entry.name}: stopped at the provider's crawl limit (${maxPages} page(s), ${maxJobs} posting(s)); the search has more results. Narrow the search URL to see them.`);
+    }
+    return jobs;
+  },
 };
