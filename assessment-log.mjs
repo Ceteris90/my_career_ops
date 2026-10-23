@@ -194,16 +194,48 @@ export function buildRow(fields, today) {
   if (tail[1] !== '-' && !DELIVERABLES.includes(tail[1])) {
     throw new Error(`--deliverable must be one of ${DELIVERABLES.join(', ')}, got "${tail[1]}"`);
   }
-  if (tail[3] !== '-' && Number.isNaN(Date.parse(tail[3]))) {
+  if (tail[3] !== '-' && !isIsoDate(tail[3]) && !isLocalDateTime(tail[3]) && !isOffsetDateTime(tail[3])) {
     throw new Error(`--submitted-at must be an ISO date or date-time, got "${tail[3]}"`);
   }
   return [...base, kind, ...tail].join('\t');
 }
 
 // --- Take-home deadlines ---
-const OFFSET_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+// Strict calendar and clock validation: Date.parse accepts or silently rolls over
+// values such as 2026-02-30 and offsets like +99:99, so check the fields explicitly.
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const OFFSET_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|([+-])(\d{2}):?(\d{2}))$/;
+const LOCAL_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/;
+
+function validCalendarDate(y, m, d) {
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+function validClock(h, min, s) {
+  return h >= 0 && h <= 23 && min >= 0 && min <= 59 && (s === undefined || (s >= 0 && s <= 59));
+}
+
+/** YYYY-MM-DD that is a real calendar date. */
+export function isIsoDate(v) {
+  const m = typeof v === 'string' ? DATE_RE.exec(v) : null;
+  return !!m && validCalendarDate(+m[1], +m[2], +m[3]);
+}
+
+/** YYYY-MM-DDTHH:MM[:SS] with a real date and clock, no offset. */
+export function isLocalDateTime(v) {
+  const m = typeof v === 'string' ? LOCAL_DATETIME_RE.exec(v) : null;
+  return !!m && validCalendarDate(+m[1], +m[2], +m[3]) && validClock(+m[4], +m[5], m[6] === undefined ? undefined : +m[6]);
+}
+
+/** Date-time with Z or a +/-HH:MM offset (hours 0-14, minutes 0-59). */
 export function isOffsetDateTime(v) {
-  return OFFSET_DATETIME_RE.test(v) && !Number.isNaN(Date.parse(v));
+  const m = typeof v === 'string' ? OFFSET_DATETIME_RE.exec(v) : null;
+  if (!m) return false;
+  if (!validCalendarDate(+m[1], +m[2], +m[3])) return false;
+  if (!validClock(+m[4], +m[5], m[6] === undefined ? undefined : +m[6])) return false;
+  if (m[7] === 'Z') return true;
+  const oh = +m[9], om = +m[10];
+  return oh <= 14 && om <= 59;
 }
 
 export function isValidTimeZone(tz) {
@@ -455,6 +487,9 @@ function openCommand(args) {
   const tzIdx = args.indexOf('--tz');
   let zone;
   try {
+    if (tzIdx >= 0 && (args[tzIdx + 1] === undefined || args[tzIdx + 1].startsWith('--'))) {
+      throw new Error('--tz requires an IANA timezone (e.g. America/Toronto)');
+    }
     zone = resolveTimeZone(tzIdx >= 0 ? args[tzIdx + 1] : undefined);
   } catch (e) {
     console.error(`assessment-log: ${e.message}`);

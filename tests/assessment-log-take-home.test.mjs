@@ -138,3 +138,40 @@ ok('CLI: add take-home, submit appends a row (append-only), open lists then drop
     assert.notEqual(cli('open', '--bogus').status, 0);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// --- review follow-ups (#5736) ---
+ok('strict date validation rejects impossible calendar dates, clocks and offsets', () => {
+  const { isOffsetDateTime, isIsoDate, isLocalDateTime } = mod;
+  assert.equal(isOffsetDateTime('2026-11-02T17:00:00-08:00'), true);
+  assert.equal(isOffsetDateTime('2026-11-02T17:00:00Z'), true);
+  assert.equal(isOffsetDateTime('2026-02-30T17:00:00Z'), false);       // no 30 February
+  assert.equal(isOffsetDateTime('2026-11-02T25:00:00Z'), false);       // no hour 25
+  assert.equal(isOffsetDateTime('2026-11-02T17:61:00Z'), false);       // no minute 61
+  assert.equal(isOffsetDateTime('2026-11-02T17:00:00+99:99'), false);  // no such offset
+  assert.equal(isOffsetDateTime('1'), false);
+  assert.equal(isIsoDate('2026-02-28'), true);
+  assert.equal(isIsoDate('2026-02-30'), false);
+  assert.equal(isIsoDate('2026-13-01'), false);
+  assert.equal(isLocalDateTime('2026-11-02T17:00'), true);
+  assert.equal(isLocalDateTime('2026-11-02T24:00'), false);
+});
+ok('buildRow rejects an invalid --submitted-at but accepts a date, a local date-time and an offset date-time', () => {
+  const base = { kind: 'take-home', company: 'ExampleCorp', platform: 'portal', subject: 'Demo', deadline: '2099-01-01T17:00:00-08:00' };
+  for (const bad of ['2026-02-30', 'tomorrow', '1']) {
+    assert.throws(() => buildRow({ ...base, 'submitted-at': bad }, '2026-10-22'), /submitted-at/, bad);
+  }
+  for (const good of ['2026-11-02', '2026-11-02T17:00', '2026-11-02T17:00:00-08:00']) {
+    assert.doesNotThrow(() => buildRow({ ...base, 'submitted-at': good }, '2026-10-22'), good);
+  }
+});
+ok('open --tz with no value fails instead of falling back silently', () => {
+  const root = mkdtempSync(join(tmpdir(), 'al-tz-missing-'));
+  mkdirSync(join(root, 'data'), { recursive: true });
+  try {
+    const r = spawnSync(NODE, [join(ROOT, 'assessment-log.mjs'), 'open', '--tz'], {
+      cwd: root, encoding: 'utf-8', env: { ...process.env, CAREER_OPS_ROOT: root },
+    });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /--tz requires/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
