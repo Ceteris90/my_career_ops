@@ -163,6 +163,18 @@ try {
   } else {
     fail(`parseHnComment paren company: ${JSON.stringify(parenCompany?.company)}`);
   }
+  const bracketed = parseHnComment('Acme | Engineer | Remote | [https://acme.example.com/jobs/123]', PERMALINK);
+  if (bracketed?.url === 'https://acme.example.com/jobs/123') {
+    pass('parseHnComment trims the closing bracket around a bracketed link');
+  } else {
+    fail(`parseHnComment bracketed url: ${JSON.stringify(bracketed?.url)}`);
+  }
+  const ipv6 = parseHnComment('Acme | Engineer | Remote | http://[::1]/jobs/123', PERMALINK);
+  if (ipv6?.url === 'http://[::1]/jobs/123') {
+    pass('parseHnComment keeps the brackets of an IPv6 host');
+  } else {
+    fail(`parseHnComment ipv6 url: ${JSON.stringify(ipv6?.url)}`);
+  }
 
   // parseHnComment ─ deleted / empty comments return null
   if (parseHnComment('', '') === null && parseHnComment(null, '') === null) {

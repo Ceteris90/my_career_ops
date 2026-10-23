@@ -41,7 +41,12 @@ const URL_RE = /https?:\/\/[^\s<>"')]+/g;
  * @param {string} text
  */
 function extractUrls(text) {
-  return (text.match(URL_RE) || []).map(u => u.replace(/[.,;!?)]+$/, ''));
+  return (text.match(URL_RE) || []).map(u => {
+    const trimmed = u.replace(/[.,;!?)]+$/, '');
+    // A closing bracket with no opening bracket in the URL is text around the
+    // link (`[https://…/jobs/123]`); an IPv6 host keeps both brackets.
+    return trimmed.includes('[') ? trimmed : trimmed.replace(/\]+$/, '');
+  });
 }
 
 // A path segment that names a job listing: /careers, /career, /jobs.
