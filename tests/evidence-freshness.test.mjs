@@ -19,7 +19,8 @@ const USER = 'jane-doe';
 const NOW = new Date(2026, 9, 22, 12, 0, 0);
 
 const roots = [];
-function sandbox({ github = 'https://github.com/jane-doe/', freshness = null, profile = true } = {}) {
+// The check is opt-in, so a sandbox turns it on unless a test says otherwise.
+function sandbox({ github = 'https://github.com/jane-doe/', freshness = { enabled: true }, profile = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'co-evidence-freshness-'));
   roots.push(root);
   mkdirSync(join(root, 'config'), { recursive: true });
@@ -212,11 +213,18 @@ try {
         `${label} -> exit 0, status no-github, not stale, no gh call (${res.json?.reason})`);
     }
 
-    const off = sandbox({ freshness: { enabled: false } });
-    const { runner, calls } = fakeGh(ok(prs(50)));
-    const res = cli(off, runner);
-    check(res.json?.status === 'disabled' && res.json?.stale === false && calls.length === 0,
-      'evidence_freshness.enabled: false -> status disabled, no gh call');
+    for (const [label, freshness] of [
+      ['no evidence_freshness block (the default)', null],
+      ['evidence_freshness without enabled', { max_age_days: 30 }],
+      ['evidence_freshness.enabled: false', { enabled: false }],
+    ]) {
+      const off = sandbox({ freshness });
+      scanFile(off, '2026-09-01');
+      const { runner, calls } = fakeGh(ok(prs(50)));
+      const res = cli(off, runner);
+      check(res.code === 0 && res.json?.status === 'disabled' && res.json?.stale === false && calls.length === 0,
+        `${label} -> opt-in check stays off: status disabled, no gh call`);
+    }
 
     const broken = sandbox({ profile: false });
     writeFileSync(join(broken, 'config', 'profile.yml'), 'candidate: [unclosed\n');
@@ -228,8 +236,11 @@ try {
   // ── 7. Pure helpers ────────────────────────────────────────────────
   {
     const d = readThresholds(null);
-    check(d.thresholds.enabled === true && d.thresholds.minNewMergedPrs === 5 && d.thresholds.maxAgeDays === 30 && d.warnings.length === 0,
-      'no evidence_freshness block -> documented defaults (5 PRs, 30 days)');
+    check(d.thresholds.enabled === false && d.thresholds.minNewMergedPrs === 5 && d.thresholds.maxAgeDays === 30 && d.warnings.length === 0,
+      'no evidence_freshness block -> off, with the documented thresholds (5 PRs, 30 days)');
+    check(readThresholds({ evidence_freshness: { enabled: true } }).thresholds.enabled === true, 'enabled: true turns the check on');
+    const yes = readThresholds({ evidence_freshness: { enabled: 'yes' } });
+    check(yes.thresholds.enabled === false && yes.warnings.length === 1, 'an enabled value that is not a boolean is reported and leaves the check off');
     const typo = readThresholds({ evidence_freshness: { min_new_merged_prs: 0, max_age_days: 'soon' } });
     check(typo.thresholds.minNewMergedPrs === 5 && typo.thresholds.maxAgeDays === 30 && typo.warnings.length === 2,
       'invalid threshold values keep their defaults and are reported');
@@ -313,15 +324,23 @@ try {
     check(at(batch, '### Step 1.6') < at(batch, '### Step 1.7 — GitHub evidence freshness')
       && at(batch, '### Step 1.7 — GitHub evidence freshness') < at(batch, '### Step 2 — Evaluate A-G'),
       'batch runs the check as Step 1.7, before Step 2');
+    const step17 = batch.slice(at(batch, '### Step 1.7'), at(batch, '### Step 2 — Evaluate A-G'));
+    check(/once per batch run, not once per worker/.test(step17) && /Do not run the script yourself/.test(step17)
+      && step17.includes('**Runtime: GitHub evidence freshness**'),
+      'batch workers read the run-wide result from their prompt instead of running the check');
+    const runner = read('batch/batch-runner.sh');
+    check(runner.includes("printf '## Runtime: GitHub evidence freshness\\n\\n'"),
+      'batch-runner.sh appends the section Step 1.7 names');
     check((batch.match(/^evidence_freshness: "\{fresh \| stale \| not_evaluated\}"$/gm) ?? []).length === 2,
       'evidence_freshness appears in both batch Machine Summary examples');
     check(/^- `evidence_freshness` is the Step 1\.7 check/m.test(batch) && /^\*\*GitHub evidence:\*\* \{/m.test(batch),
       'batch documents the key and the stale-only header line');
 
     const documented = read('config/profile.example.yml')
-      .match(/^# evidence_freshness:\n#   enabled: true\n#   min_new_merged_prs: (\d+)\n#   max_age_days: (\d+)$/m);
-    check(documented?.[1] === String(DEFAULTS.minNewMergedPrs) && documented?.[2] === String(DEFAULTS.maxAgeDays),
-      'config/profile.example.yml documents the same defaults the script uses');
+      .match(/^# evidence_freshness:\n#   enabled: (true|false)\n#   min_new_merged_prs: (\d+)\n#   max_age_days: (\d+)$/m);
+    check(documented?.[1] === String(DEFAULTS.enabled) && documented?.[2] === String(DEFAULTS.minNewMergedPrs)
+      && documented?.[3] === String(DEFAULTS.maxAgeDays),
+      'config/profile.example.yml documents the same defaults the script uses (off, 5 PRs, 30 days)');
 
     check(read('update-system.mjs').includes("  'evidence-freshness.mjs',\n"), 'evidence-freshness.mjs is in update-system.mjs SYSTEM_PATHS');
   }

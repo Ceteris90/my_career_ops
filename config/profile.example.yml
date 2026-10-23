@@ -162,17 +162,17 @@ language:
 # github_evidence:
 #   private_allowlist: []            # e.g. ["acme-corp/billing-service"]
 
-# Optional. Thresholds for the stale GitHub evidence check that `oferta`,
-# `auto-pipeline` and batch workers run before Block A
-# (`node evidence-freshness.mjs`). It compares the newest
+# Optional, off by default. The stale GitHub evidence check
+# (`node evidence-freshness.mjs`) that `oferta` and `auto-pipeline` run before
+# Block A, and the batch runner runs once per batch run. It compares the newest
 # output/github-evidence-*.json from `expand` with the PRs you authored and
-# merged since then in repos you do not own, read through your logged-in `gh`.
-# Stale at min_new_merged_prs PRs or once the scan is older than max_age_days;
-# with no scan on record, as soon as there is a merged PR to find. It adds one
-# line to the reply and the report, and never changes a score. Set enabled to
-# false to turn it off.
+# merged since then in repos you do not own, through one `gh search prs` call
+# with your logged-in `gh`. Stale at min_new_merged_prs PRs or once the scan is
+# older than max_age_days; with no scan on record, as soon as there is a merged
+# PR to find. It adds one line to the reply and the report, and never changes a
+# score. Set enabled to true to turn it on.
 # evidence_freshness:
-#   enabled: true
+#   enabled: false
 #   min_new_merged_prs: 5
 #   max_age_days: 30
 

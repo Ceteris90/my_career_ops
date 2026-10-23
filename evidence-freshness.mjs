@@ -9,7 +9,10 @@
  * was, so PRs merged after it were silently missing from the fit and a score
  * could understate it with no warning.
  *
- * Run once per evaluation, before Block A. It reports:
+ * Opt-in: off unless config/profile.yml sets evidence_freshness.enabled: true,
+ * so nobody gets a GitHub call they did not ask for. Interactive evaluations run
+ * it once before Block A; batch-runner.sh runs it once per batch run and hands
+ * the result to every worker. When on, it reports:
  *   - the newest output/github-evidence-*.json and how many days old it is
  *   - how many PRs the user authored and merged since then in repos they do not
  *     own (owning a repo is not authorship, so github-evidence.mjs never counts
@@ -24,7 +27,7 @@
  *
  * Config (config/profile.yml, all optional):
  *   evidence_freshness:
- *     enabled: true            # false turns the check off
+ *     enabled: true            # off unless set to true
  *     min_new_merged_prs: 5    # stale at this many merged PRs since the last scan
  *     max_age_days: 30         # stale when the last scan is older than this
  * With no scan on record, the evidence is stale as soon as the user has one
@@ -51,9 +54,9 @@ const USAGE = `Usage:
 Says whether the newest output/github-evidence-*.json is stale: its age, and
 the PRs you authored and merged since then in repos you do not own (one
 metadata-only gh search through your existing gh auth). Read-only.
-Thresholds: config/profile.yml -> evidence_freshness.`;
+Opt-in: set config/profile.yml -> evidence_freshness.enabled: true.`;
 
-export const DEFAULTS = Object.freeze({ enabled: true, minNewMergedPrs: 5, maxAgeDays: 30 });
+export const DEFAULTS = Object.freeze({ enabled: false, minNewMergedPrs: 5, maxAgeDays: 30 });
 
 /** One search page: the count is exact below this and shown as "100+" at it. */
 export const QUERY_LIMIT = 100;
@@ -63,8 +66,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * `evidence_freshness` from config/profile.yml, with the defaults filled in.
- * A value that is not a whole number of at least 1 keeps its default and is
- * reported, so a typo never switches a rule off.
+ * The check is on only when `enabled` is exactly true. A threshold that is not a
+ * whole number of at least 1 keeps its default and is reported, so a typo never
+ * switches a rule off.
  *
  * @param {object|null} profile - Parsed config/profile.yml.
  * @returns {{thresholds: {enabled: boolean, minNewMergedPrs: number, maxAgeDays: number}, warnings: string[]}}
@@ -78,8 +82,8 @@ export function readThresholds(profile) {
     warnings.push('evidence_freshness is not a map; using the defaults');
     return { thresholds, warnings };
   }
-  if (raw.enabled === false) thresholds.enabled = false;
-  else if (raw.enabled != null && raw.enabled !== true) warnings.push('evidence_freshness.enabled is not true or false; the check stays on');
+  if (raw.enabled === true) thresholds.enabled = true;
+  else if (raw.enabled != null && raw.enabled !== false) warnings.push('evidence_freshness.enabled is not true or false; the check stays off');
   for (const [key, prop] of [['min_new_merged_prs', 'minNewMergedPrs'], ['max_age_days', 'maxAgeDays']]) {
     if (raw[key] == null) continue;
     if (Number.isInteger(raw[key]) && raw[key] >= 1) thresholds[prop] = raw[key];
@@ -284,7 +288,7 @@ export function runCli({
   const read = readThresholds(profile);
   thresholds = read.thresholds;
   for (const w of read.warnings) stderr(`evidence-freshness: ${w}\n`);
-  if (!thresholds.enabled) return emit({ status: 'disabled', reason: 'evidence_freshness.enabled is false in config/profile.yml' });
+  if (!thresholds.enabled) return emit({ status: 'disabled', reason: 'the check is opt-in and evidence_freshness.enabled is not true in config/profile.yml' });
 
   const user = normalizeGithubUser(profile?.candidate?.github);
   if (!user) {
