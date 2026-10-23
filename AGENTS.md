@@ -584,7 +584,7 @@ Headless worker command per CLI:
 
 - Node.js (`.mjs`), Playwright (PDF + scraping), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
 - Output in `output/` (gitignored) · Reports in `reports/` · JDs in `jds/` (referenced as `local:jds/{file}` in pipeline.md) · Batch in `batch/` (gitignored except scripts and prompt)
-- Report numbering: sequential 3-digit zero-padded, max existing + 1
+- Report numbering: sequential 3-digit zero-padded. Claim each number with `node reserve-report-num.mjs` (it prints the number and holds it until `--release`); never compute max existing + 1 yourself (see **Parallel fan-outs** above)
 
 **JD archival is REQUIRED, not optional (#2789).** A report's `**URL:**` header is a live pointer, not an archive — it rots once a posting closes. Every report `oferta`/`pdf` writes MUST carry the JD's verbatim text in a `## Job Description (archived verbatim)` section (the primary mechanism — the report is the one artifact guaranteed to get written and tracked); a `jds/` capture named with `--report=N` is an acceptable alternative for a very long JD or a standalone `jd-skill-gap.mjs` run outside a full evaluation. `check-jd-archive.mjs` validates every `reports/*.md` has one or the other and is wired into `test-all.mjs`.
 - **RULE: After each batch of evaluations, run `node merge-tracker.mjs`** to merge tracker additions and avoid duplications.
@@ -613,7 +613,7 @@ When the user records a `hired` or `accepted` outcome, celebrate FIRST — a lan
 >
 > One optional thing: career-ops keeps a public wall of people who landed jobs with it. If you want yours there, I'll draft it from what we already know (role, weeks, what helped). You'll see the exact text, and nothing leaves this machine unless you submit it yourself on GitHub. Want the draft? If not, I won't bring this one up again.
 
-If they say yes: run `node hired-share.mjs --report N --anonymity <their choice> --story "<their words>" --open` — it prints the exact payload, opens a prefilled GitHub issue, and the user reviews and submits it themselves. Ask their anonymity level explicitly (handle / role-only / count-only); never default to the most exposed. Offer a 2-sentence draft story built only from tracker data, and let them rewrite it. If they say "not now": `node hired-share.mjs --report N --mark later`. If they say no: `--mark never`, and honor it — that hire is never brought up again.
+If they say yes: run `node hired-share.mjs --report N --anonymity <their choice> --story "<their words>" --open` — it prints the exact payload, opens a prefilled GitHub issue, and the user reviews and submits it themselves. Ask their anonymity level explicitly and pass it as `handle`, `role` or `count` (the only values the script accepts: handle and avatar, role and location without a handle, or a count only); never default to the most exposed. Offer a 2-sentence draft story built only from tracker data, and let them rewrite it. If they say "not now": `node hired-share.mjs --report N --mark later`. If they say no: `--mark never`, and honor it — that hire is never brought up again.
 
 **Cadence rules (hard):** one ask per hire, at outcome time. After an update, `node hired-share.mjs --status` may list hires never asked or marked "later" more than 30 days ago — at most ONE gentle mention, then respect the answer. Never remind on a schedule. Never mention the wall at `offer_received`: an offer can still fall through, and the ask belongs to the signed outcome only.
 
