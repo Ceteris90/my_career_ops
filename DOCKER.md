@@ -120,7 +120,8 @@ layer that holds `node_modules`.
 
 **Playwright still complains** — you're running the host's Node, not the
 container's. Always go through `./cops`. That includes a script an AI CLI on
-the host ran for you: run it again with `./cops node <script>`.
+the host ran for you: run the same command with `./cops` in front, arguments
+included, e.g. `./cops node check-liveness.mjs <url>`.
 
 **Permission errors on generated files** — the container runs as root by
 default. If host files end up root-owned, either:
