@@ -16,12 +16,13 @@ import { spawnSync } from 'child_process';
 import { reserveReportNumbers, releaseReportNumbers } from '../reserve-report-num.mjs';
 import { pass, fail, NODE, ROOT } from './helpers.mjs';
 
-// The allocator and the spawned writers honor these ahead of the scratch root.
-// Blanked (every reader treats empty as unset, as helpers.mjs does for
-// CAREER_OPS_TRACKER), so a developer's own overrides can neither feed real
-// follow-ups into the count nor receive a reservation sentinel.
+// The allocator and the spawned writers honor these ahead of the scratch root,
+// so a developer's own overrides could feed real follow-ups into the count or
+// receive a reservation sentinel. Every reader treats empty as unset. The
+// children get them blanked in their own env; peek() passes explicit paths and
+// blanks the one with no option for the duration of the call only, because
+// test-all imports suites in-process and shares process.env with later ones.
 const PATH_OVERRIDES = ['CAREER_OPS_REPORTS_DIR', 'CAREER_OPS_FOLLOWUPS', 'CAREER_OPS_BATCH_STATE'];
-for (const name of PATH_OVERRIDES) process.env[name] = '';
 
 const HEADER = '# Applications Tracker\n\n'
   + '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n'
@@ -44,9 +45,16 @@ async function peek(dir) {
     trackerPath: join(dir, 'data/applications.md'),
     batchStateFile: join(dir, 'batch/batch-state.tsv'),
   };
-  const nums = await reserveReportNumbers(1, opts);
-  await releaseReportNumbers(nums, opts);
-  return nums[0];
+  const saved = process.env.CAREER_OPS_FOLLOWUPS;
+  process.env.CAREER_OPS_FOLLOWUPS = '';
+  try {
+    const nums = await reserveReportNumbers(1, opts);
+    await releaseReportNumbers(nums, opts);
+    return nums[0];
+  } finally {
+    if (saved === undefined) delete process.env.CAREER_OPS_FOLLOWUPS;
+    else process.env.CAREER_OPS_FOLLOWUPS = saved;
+  }
 }
 
 function run(dir, args) {
