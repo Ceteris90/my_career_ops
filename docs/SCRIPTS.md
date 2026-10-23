@@ -1455,6 +1455,7 @@ node set-status.mjs --report N <state> [--note "..."]       # row whose Report c
 node set-status.mjs "Company Name" Applied --role "Role"    # narrow match by role fragment
 node set-status.mjs --row 12 Applied
 node set-status.mjs --report 345 Applied --on 2026-08-01
+node set-status.mjs --row 12 --undo                         # take back the last logged change
 node set-status.mjs --help                                  # usage + the canonical states, exits 0
 ```
 
@@ -1473,6 +1474,10 @@ A bare number or company name is convenient, but becomes ambiguous when multiple
 - `--on <date>`: Specifies an explicit transition date (YYYY-MM-DD) for status logs and notes.
 - `--json`: Formats command output as structured JSON.
 - `--expect-row <hash>` / `--expect-status <state>`: For a caller that showed the row to a person before writing (`reply-watch.mjs`). Under the lock, refuse the write if any cell but Status differs from the reviewed row (`trackerRowIdentity` in `tracker-parse.mjs`), or if the status is no longer the reviewed one and not already `<state>`. Unlike `--expect-tracker`, a write to another row does not trip them.
+
+### Undo a status change
+
+`--undo` takes the place of `<state>`. It reads the row's last surviving change from `status-log.tsv`, writes that change's prior status back to the tracker, and appends a retraction line (`to` = `-`). Every ledger reader then drops the change, so a mis-clicked Applied leaves no trace in `tracker.mjs history` or the funnel. Run it again to step back one more change. It refuses, and writes nothing, when the row has no logged change (`nothing-to-undo`, exit 2), when the tracker no longer shows the status of that change because someone edited it since (`undo-stale`, exit 3), or when the change has no known prior status (`undo-unknown-prior`, exit 1). It does not seed a follow-up or start a JD archive.
 
 `--row` and `--report` are mutually exclusive. Because an explicit selector answers the report-mismatch guard rather than overriding it, `--row` bypasses that guard without needing `--force` (which silences the check while the ambiguity is still real).
 
