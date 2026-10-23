@@ -1,14 +1,13 @@
-import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { pass, fail, NODE, ROOT, rmSync } from './helpers.mjs';
 
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+console.log('\nstats and funnel-velocity summaries while follow-ups are off');
+
 const sandboxes = [];
-after(() => { for (const dir of sandboxes) rmSync(dir, { recursive: true, force: true }); });
 
 function sandbox(followupsEnabled) {
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-followups-off-'));
@@ -29,7 +28,7 @@ function sandbox(followupsEnabled) {
 }
 
 function summary(script, dir) {
-  const run = spawnSync(process.execPath, [join(ROOT, script), '--summary'], {
+  const run = spawnSync(NODE, [join(ROOT, script), '--summary'], {
     encoding: 'utf-8',
     env: { ...process.env, CAREER_OPS_ROOT: dir, CAREER_OPS_PROFILE: '' },
   });
@@ -37,17 +36,25 @@ function summary(script, dir) {
   return run.stdout;
 }
 
-test('funnel-velocity points at followup mode only while follow-ups are on', () => {
+try {
   assert.match(summary('funnel-velocity.mjs', sandbox(true)), /followup mode/);
   const off = summary('funnel-velocity.mjs', sandbox(false));
   assert.doesNotMatch(off, /follow-?up/i);
   assert.match(off, /beyond typical/);
   assert.match(off, /patterns mode/);
-});
+  pass('funnel-velocity points at followup mode only while follow-ups are on');
+} catch (err) {
+  fail(`funnel-velocity summary with follow-ups off: ${err.message}`);
+}
 
-test('stats summary does not count Applied rows without a follow-up while follow-ups are off', () => {
+try {
   assert.match(summary('stats.mjs', sandbox(true)), /Applied apps with none/);
   const off = summary('stats.mjs', sandbox(false));
   assert.doesNotMatch(off, /Applied apps with none/);
   assert.match(off, /Follow-ups: turned off/);
-});
+  pass('stats summary does not count Applied rows without a follow-up while follow-ups are off');
+} catch (err) {
+  fail(`stats summary with follow-ups off: ${err.message}`);
+}
+
+for (const dir of sandboxes) rmSync(dir, { recursive: true, force: true });
