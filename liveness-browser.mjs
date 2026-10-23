@@ -483,7 +483,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // interstitial needs a moment to clear before the first read.
     if (extraSettleMs > 0) await page.waitForTimeout(extraSettleMs);
 
-    const extractApplyControls = (postingId) => {
+    const extractApplyControls = ({ postingId, pageUrl }) => {
       // Page chrome (nav, header, footer) is skipped because its links are the
       // site's own: Jobs, Careers, Sign in. A link to this posting's own page is
       // not chrome, wherever it sits. Tech in Asia puts its only Apply control,
@@ -494,15 +494,17 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // return address (?returnUrl=/jobs/<id>) is still chrome, and so is a
       // link back into this page under another query, fragment or trailing
       // slash, such as a skip link to #main-content. In a frame, the page the
-      // frame sits in is this page too. The id has to be a whole path segment,
-      // so posting 12345 does not claim /jobs/123456/apply.
+      // frame sits in is this page too; its address is passed in, because a
+      // frame sandboxed without allow-same-origin cannot read window.top. The
+      // id has to be a whole path segment, so posting 12345 does not claim
+      // /jobs/123456/apply.
       const linksToPosting = (element) => {
         const href = postingId && element.getAttribute('href');
         if (!href) return false;
         try {
           const target = new URL(href, document.baseURI);
           const pageKey = (u) => u.origin + u.pathname.replace(/\/+$/, '');
-          const thisPage = [location.href, window.top.location.href].map((u) => pageKey(new URL(u)));
+          const thisPage = [location.href, pageUrl].map((u) => pageKey(new URL(u)));
           if (thisPage.includes(pageKey(target))) return false;
           return target.pathname.toLowerCase().split('/').includes(postingId);
         } catch {
@@ -582,12 +584,12 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     const readPage = async () => {
       const finalUrl = page.url();
       let bodyText = await page.evaluate(() => document.body?.innerText ?? '');
-      let applyControls = await page.evaluate(extractApplyControls, postingId);
+      let applyControls = await page.evaluate(extractApplyControls, { postingId, pageUrl: finalUrl });
       for (const frame of childFrames(finalUrl)) {
         try {
           const text = await frame.evaluate(() => document.body?.innerText ?? '');
           if (text && text.trim()) bodyText += '\n' + text;
-          applyControls = applyControls.concat(await frame.evaluate(extractApplyControls, postingId));
+          applyControls = applyControls.concat(await frame.evaluate(extractApplyControls, { postingId, pageUrl: finalUrl }));
         } catch {
           // detached or cross-origin mid-read; the rest of the reading still stands
         }
