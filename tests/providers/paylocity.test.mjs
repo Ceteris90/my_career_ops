@@ -147,6 +147,7 @@ try {
       ['IndeedRemoteType 0 (temporary work from home)', { IsRemote: true, IndeedRemoteType: 0 }, 'Denver, CO, Remote'],
       ['IsRemote without IndeedRemoteType', { IsRemote: true }, 'Denver, CO'],
       ['IsRemote with an unknown IndeedRemoteType', { IsRemote: true, IndeedRemoteType: 7 }, 'Denver, CO'],
+      ['IsRemote with an IndeedRemoteType naming an Object.prototype key', { IsRemote: true, IndeedRemoteType: 'constructor' }, 'Denver, CO'],
       ['IndeedRemoteType without IsRemote', { IsRemote: false, IndeedRemoteType: 2 }, 'Denver, CO'],
       ['a hidden location on a fully remote posting', { IsRemote: true, IndeedRemoteType: 2, ShouldDisplayLocation: false }, 'Remote'],
     ];

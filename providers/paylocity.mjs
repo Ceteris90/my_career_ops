@@ -150,7 +150,10 @@ export function parsePaylocityBoard(html, companyName) {
     const hidden = row.ShouldDisplayLocation === false;
     const name = hidden ? '' : clean(row.LocationName);
     const parts = hidden ? [] : name ? [name] : [clean(place.City), clean(place.State)].filter(Boolean);
-    const workMode = row.IsRemote === true ? REMOTE_TYPE_LABELS[String(row.IndeedRemoteType)] : undefined;
+    const remoteType = String(row.IndeedRemoteType);
+    const workMode = row.IsRemote === true && Object.hasOwn(REMOTE_TYPE_LABELS, remoteType)
+      ? REMOTE_TYPE_LABELS[remoteType]
+      : undefined;
     if (workMode) parts.push(workMode);
 
     /** @type {{title: string, url: string, company: string, location: string, postedAt?: number}} */
