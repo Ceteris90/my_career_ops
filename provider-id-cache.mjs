@@ -3,18 +3,21 @@
 //
 // Providers never touch the disk. scan.mjs and scan-ats-full.mjs open the
 // store, hand each provider its own slice as `ctx.idCache` (get / set /
-// delete), and save once when the run ends. A run that does not open the
+// delete), and save when the run ends (scan-ats-full.mjs also at each
+// checkpoint), never under --dry-run. A run that does not open the
 // store (verify-portals, tests) passes no `ctx.idCache`, and a provider then
 // resolves the value the way it would without a cache.
 //
 // One JSON object per provider, `<dir>/<provider id>.json`. A file is read the
 // first time its provider asks for its slice. save() writes only the slices
-// this run changed: it reads each file again, applies this run's sets and
-// deletes on top, and replaces the file through a temp file + rename, so two
-// runs that overlap keep each other's entries.
+// this run changed: under the same cross-process lock as data/pipeline.md
+// (pipeline-lock.mjs, on the slice's own path) it reads each file again,
+// applies this run's sets and deletes on top, and replaces the file through a
+// temp file + rename, so two runs that overlap keep each other's entries.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { withPipelineLock } from './pipeline-lock.mjs';
 import { renameSyncWithRetry } from './tracker-utils.mjs';
 
 export const PROVIDER_ID_CACHE_DIR = 'data/cache/provider-ids';
@@ -41,7 +44,7 @@ function readSlice(file) {
  * @param {string} dir - Directory holding one `<provider id>.json` per provider.
  * @returns {{
  *   forProvider: (providerId: string) => ({ get: (key: string) => any, set: (key: string, value: any) => void, delete: (key: string) => void } | undefined),
- *   save: () => void,
+ *   save: () => Promise<void>,
  * }}
  */
 export function openProviderIdCache(dir) {
@@ -75,21 +78,33 @@ export function openProviderIdCache(dir) {
       };
     },
 
-    save() {
+    async save() {
       for (const s of slices.values()) {
         if (s.changes.size === 0) continue;
-        const merged = readSlice(s.file);
-        for (const [key, value] of s.changes) {
-          if (value === DELETED) delete merged[key];
-          else merged[key] = value;
-        }
-        // Keys sorted so the file diffs cleanly between runs.
-        const sorted = Object.fromEntries(Object.keys(merged).sort().map((key) => [key, merged[key]]));
-        mkdirSync(path.dirname(s.file), { recursive: true });
-        const tmp = `${s.file}.${process.pid}.tmp`;
-        writeFileSync(tmp, `${JSON.stringify(sorted, null, 2)}\n`, 'utf8');
-        renameSyncWithRetry(tmp, s.file);
+        // Taken from this point on, the changes made while the lock is awaited
+        // stay queued for the next save().
+        const changes = new Map(s.changes);
         s.changes.clear();
+        try {
+          mkdirSync(path.dirname(s.file), { recursive: true });
+          await withPipelineLock(s.file, () => {
+            const merged = readSlice(s.file);
+            for (const [key, value] of changes) {
+              if (value === DELETED) delete merged[key];
+              else merged[key] = value;
+            }
+            // Keys sorted so the file diffs cleanly between runs.
+            const sorted = Object.fromEntries(Object.keys(merged).sort().map((key) => [key, merged[key]]));
+            const tmp = `${s.file}.${process.pid}.tmp`;
+            writeFileSync(tmp, `${JSON.stringify(sorted, null, 2)}\n`, 'utf8');
+            renameSyncWithRetry(tmp, s.file);
+          });
+        } catch (err) {
+          // Queue the unwritten changes again, unless a newer change to the
+          // same key came in meanwhile.
+          for (const [key, value] of changes) if (!s.changes.has(key)) s.changes.set(key, value);
+          throw err;
+        }
       }
     },
   };

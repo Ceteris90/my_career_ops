@@ -248,10 +248,11 @@ function saveDeadBoardsBestEffort(rows) {
 }
 
 // Same rule for the provider id cache: a failed write costs later runs a
-// lookup, never this sweep's matches.
-function saveProviderIdCacheBestEffort(idCaches) {
+// lookup, never this sweep's matches. It never rejects, so a checkpoint can
+// start it without awaiting.
+async function saveProviderIdCacheBestEffort(idCaches) {
   try {
-    idCaches.save();
+    await idCaches.save();
   } catch (err) {
     console.error(`\n⚠ provider id cache write failed (${err.message}) — sweep continues`);
   }
@@ -1658,6 +1659,8 @@ async function main() {
       }
       if (done % CHECKPOINT_EVERY === 0 && !opts.dryRun) {
         saveDeadBoardsBestEffort(deadBoards);
+        // So a sweep that dies later keeps the ids it resolved so far.
+        void saveProviderIdCacheBestEffort(idCaches);
         writeCheckpoint({
           ...checkpointBase(),
           current: { name, resumeAt: startAt + resumeAt, datasetLen: list.length, datasetHash, deferred: deferredIndices() },
@@ -1736,10 +1739,10 @@ async function main() {
     }
     totalErrors += errors;
     totalRetiredBoardsSkipped += deadBoardsSkipped;
-    if (!opts.dryRun) saveDeadBoardsBestEffort(deadBoards);
-    // Saved under --dry-run too: like the dataset cache, it only spares later
-    // runs a lookup and changes no result.
-    saveProviderIdCacheBestEffort(idCaches);
+    if (!opts.dryRun) {
+      saveDeadBoardsBestEffort(deadBoards);
+      await saveProviderIdCacheBestEffort(idCaches);
+    }
     if (resolverOutage) {
       // Deliberately before completedSources/checkpoint: this source did NOT
       // finish, and marking it done would make --resume skip the rest of it.

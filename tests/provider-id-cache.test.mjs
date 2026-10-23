@@ -15,7 +15,7 @@ try {
     const acme = store.forProvider('acme');
     if (acme && acme.get('board-a') === undefined) pass('an empty store returns undefined for an unknown key');
     else fail('an empty store should return undefined');
-    store.save();
+    await store.save();
     if (!existsSync(join(dir, 'acme.json'))) pass('save() writes nothing for a slice this run did not change');
     else fail('save() wrote a file for an unchanged slice');
   }
@@ -30,7 +30,7 @@ try {
     acme.delete('gone');
     if (acme.get('alpha')?.id === 1 && acme.get('gone') === undefined) pass('set() and delete() are visible to get() at once');
     else fail(`in-memory set/delete wrong: ${JSON.stringify([acme.get('alpha'), acme.get('gone')])}`);
-    store.save();
+    await store.save();
     const saved = read('acme');
     if (JSON.stringify(Object.keys(saved)) === '["alpha","zeta"]' && saved.zeta.domain === 'zeta' && saved.alpha.checkedAt === '2026-10-01T00:00:00.000Z') {
       pass('save() writes sorted keys and keeps nested values whole');
@@ -49,21 +49,36 @@ try {
     }
   }
 
-  // Two runs that overlap keep each other's entries.
+  // Two runs that overlap keep each other's entries, also when they save at the same time.
   {
     const first = openProviderIdCache(dir);
     const second = openProviderIdCache(dir);
     first.forProvider('acme').set('beta', { id: 4 });
     second.forProvider('acme').set('gamma', { id: 5 });
     second.forProvider('acme').delete('alpha');
-    first.save();
-    second.save();
+    await Promise.all([first.save(), second.save()]);
     const saved = read('acme');
     if (saved.beta?.id === 4 && saved.gamma?.id === 5 && saved.zeta?.id === 2 && !('alpha' in saved)) {
-      pass('save() merges with the file on disk, so overlapping runs keep both sets of changes');
+      pass('save() merges under a lock, so two runs saving at once keep both sets of changes');
     } else {
       fail(`overlapping runs lost an entry: ${JSON.stringify(saved)}`);
     }
+    if (!existsSync(join(dir, 'acme.json.lock'))) pass('save() releases its lock');
+    else fail('save() left acme.json.lock behind');
+  }
+
+  // A change made while a save is running is kept for the next save.
+  {
+    const store = openProviderIdCache(dir);
+    const acme = store.forProvider('acme');
+    acme.set('delta', { id: 6 });
+    const saving = store.save();
+    acme.set('epsilon', { id: 7 });
+    await saving;
+    await store.save();
+    const saved = read('acme');
+    if (saved.delta?.id === 6 && saved.epsilon?.id === 7) pass('a change made during save() is written by the next save()');
+    else fail(`a change made during save() was lost: ${JSON.stringify(saved)}`);
   }
 
   // A provider id that is not a plain name gets no slice; a corrupt file reads as empty.
@@ -80,7 +95,7 @@ try {
     if (broken.get('x') === undefined) pass('an unreadable cache file reads as an empty slice');
     else fail('an unreadable cache file should read as empty');
     broken.set('x', { id: 1 });
-    store.save();
+    await store.save();
     if (read('broken').x?.id === 1) pass('a slice read from an unreadable file is rewritten as valid JSON');
     else fail('the unreadable file was not replaced');
   }

@@ -132,7 +132,7 @@ try {
     singleJobs[0].company === 'Acme' &&
     singleJobs[0].location === 'Remote'
   ) {
-    pass('join.fetch() maps items to the normalized job shape with a stable /companies/<domain>/<id> URL');
+    pass('join.fetch() maps items to the normalized job shape with a stable /companies/<slug>/<id> URL');
   } else {
     fail(`join.fetch() job shape wrong: ${JSON.stringify(singleJobs)}`);
   }
@@ -174,8 +174,8 @@ try {
   // fetch() — the URL uses the company's own domain from the page, not the careers_url slug.
   const renamedCtx = makeCtx(() => gqlPage([job(1)]), { html: pageHtml({ id: 4242, domain: 'acme-renamed' }) });
   const renamedJobs = await joinProvider.fetch(entry, renamedCtx);
-  if (renamedJobs[0]?.url === 'https://join.com/companies/acme-renamed/1') pass('join.fetch() builds the job URL from company.domain');
-  else fail(`join.fetch() should use company.domain in the job URL, got ${renamedJobs[0]?.url}`);
+  if (renamedJobs[0]?.url === 'https://join.com/companies/acme-corp/1') pass('join.fetch() builds the job URL from the careers_url slug, whatever the page reports as domain');
+  else fail(`join.fetch() should use the slug in the job URL, got ${renamedJobs[0]?.url}`);
 
   // fetch() — an item without an integer id is dropped, not turned into a broken URL.
   const noIdJobs = await joinProvider.fetch(entry, makeCtx(() => gqlPage([job(1), { title: 'No id', city: {} }, job('2')])));
@@ -480,6 +480,17 @@ try {
   }
   if (sitemapError && /urlset/.test(sitemapError.message)) pass('join.parseCompanySitemap() throws on a page that is not a sitemap');
   else fail('join.parseCompanySitemap() should throw when there is no <urlset>');
+  const emptySlugs = parseCompanySitemap('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  if (Array.isArray(emptySlugs) && emptySlugs.length === 0) pass('join.parseCompanySitemap() returns [] for an empty <urlset>');
+  else fail(`join.parseCompanySitemap() empty urlset wrong: ${JSON.stringify(emptySlugs)}`);
+  let noCompanyError = null;
+  try {
+    parseCompanySitemap('<urlset><url><loc>https://join.com/companies/acme-corp/16854145-engineer</loc></url><url><loc>https://example.com/companies/exampleco</loc></url></urlset>');
+  } catch (err) {
+    noCompanyError = err;
+  }
+  if (noCompanyError && /no company page/.test(noCompanyError.message)) pass('join.parseCompanySitemap() throws when <loc> entries hold no company page');
+  else fail('join.parseCompanySitemap() should throw when no <loc> is a company page');
 
   // fetch() — a careers_url that fails extractSlug() throws before any request.
   const noRequestCtx = makeCtx(() => { throw new Error('should not be called'); }, {

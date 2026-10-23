@@ -4640,11 +4640,14 @@ async function main() {
   });
 
   await parallelFetch(tasks, CONCURRENCY, progressTicker(tasks.length));
-  try {
-    idCaches.save();
-  } catch (err) {
-    // Losing the cache costs a lookup on the next scan, not this scan's results.
-    console.warn(`⚠️  could not save the provider id cache: ${err.message}`);
+  // --dry-run leaves no trace, this cache included.
+  if (!dryRun) {
+    try {
+      await idCaches.save();
+    } catch (err) {
+      // Losing the cache costs a lookup on the next scan, not this scan's results.
+      console.warn(`⚠️  could not save the provider id cache: ${err.message}`);
+    }
   }
 
   // 5.5. Optional liveness verification — drop expired and guard-rejected postings
