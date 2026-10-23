@@ -180,8 +180,10 @@ export default {
         }
         jobs.push({ title: card.title, url: card.url, company: card.company, location: card.location });
       }
-      if (stopReason === 'cap' || fresh === 0 || jobs.length >= maxJobs) break;
-      if (page === maxPages && !probing && cards.length >= OBSERVED_PAGE_SIZE) stopReason = 'cap';
+      if (stopReason === 'cap' || fresh === 0) break;
+      // A full page that ends exactly on max_jobs, or the last allowed page, may hide more results.
+      if (!probing && cards.length >= OBSERVED_PAGE_SIZE && (jobs.length >= maxJobs || page === maxPages)) stopReason = 'cap';
+      if (stopReason === 'cap' || jobs.length >= maxJobs) break;
     }
 
     if (stopReason === 'cap') {

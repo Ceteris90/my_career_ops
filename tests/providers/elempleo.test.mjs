@@ -4,7 +4,7 @@
 // its data as entity-encoded JSON in data-ga4-offerdata. Values are fictional.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import provider, { parseCards } from '../../providers/elempleo.mjs';
+import provider, { parseCards, resolveListUrl } from '../../providers/elempleo.mjs';
 
 const BASE = 'https://www.elempleo.com/co/ofertas-empleo/';
 
@@ -63,6 +63,7 @@ test('detect() claims elempleo.com over https only and never throws', () => {
     'https://www.elempleo.com.evil.example/co/',
     'https://notelempleo.com/co/',
     'http://www.elempleo.com/co/ofertas-empleo/',
+    'https://www.elempleo.com@evil.example/co/',
     'nope',
   ]) {
     assert.equal(provider.detect({ careers_url }), null, careers_url);
@@ -70,6 +71,10 @@ test('detect() claims elempleo.com over https only and never throws', () => {
   assert.equal(provider.detect({}), null);
   assert.equal(provider.detect(null), null);
   assert.equal(provider.detect({ careers_url: {} }), null);
+});
+
+test('resolveListUrl drops port and credentials', () => {
+  assert.equal(resolveListUrl('https://u:p@www.elempleo.com:8443/co/ofertas-empleo/?q=1').href, 'https://www.elempleo.com/co/ofertas-empleo/?q=1');
 });
 
 test('fetch() refuses a foreign host before any request', async () => {
@@ -150,4 +155,23 @@ test('health probe: ctx.maxPages 1 makes exactly one request and propagates a re
   const failing = makeCtx({ 1: sentinel }, { maxPages: 1 });
   await assert.rejects(provider.fetch({ name: 'X', careers_url: BASE }, failing.ctx), (err) => err === sentinel);
   assert.equal(failing.calls.length, 1);
+});
+
+test('a full page that ends exactly on max_jobs warns that the search has more results', async () => {
+  const full = (from) => page(...Array.from({ length: 20 }, (_, i) => card(from + i)));
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (msg) => warnings.push(String(msg));
+  try {
+    const jobs = await provider.fetch({ name: 'X', careers_url: BASE, max_jobs: 40 }, makeCtx({ 1: full(1), 2: full(21), 3: full(41) }).ctx);
+    assert.equal(jobs.length, 40);
+    assert.equal(warnings.filter((w) => /the search has more results/.test(w)).length, 1);
+
+    warnings.length = 0;
+    const short = await provider.fetch({ name: 'X', careers_url: BASE, max_jobs: 40 }, makeCtx({ 1: full(1), 2: page(card(21)) }).ctx);
+    assert.equal(short.length, 21);
+    assert.deepEqual(warnings, [], 'a short last page is the end of the search, no warning');
+  } finally {
+    console.warn = warn;
+  }
 });

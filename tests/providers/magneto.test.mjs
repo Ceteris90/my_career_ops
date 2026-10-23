@@ -59,6 +59,7 @@ test('detect() claims magneto365.com over https only and never throws', () => {
     'https://www.magneto365.com.evil.example/co/',
     'https://notmagneto365.com/co/',
     'http://www.magneto365.com/co/trabajos/buscar/tecnologia',
+    'https://www.magneto365.com@evil.example/co/',
     '::',
   ]) {
     assert.equal(provider.detect({ careers_url }), null, careers_url);
@@ -66,6 +67,10 @@ test('detect() claims magneto365.com over https only and never throws', () => {
   assert.equal(provider.detect({}), null);
   assert.equal(provider.detect(null), null);
   assert.equal(provider.detect({ careers_url: ['x'] }), null);
+});
+
+test('resolveListUrl drops port and credentials', () => {
+  assert.equal(resolveListUrl('https://u:p@www.magneto365.com:8443/co/trabajos/buscar/tecnologia?q=1').href, 'https://www.magneto365.com/co/trabajos/buscar/tecnologia?q=1');
 });
 
 test('fetch() refuses a foreign host before any request', async () => {
@@ -145,4 +150,21 @@ test('health probe: ctx.maxPages 1 makes exactly one request and propagates a re
   const failing = makeCtx({ 1: sentinel }, { maxPages: 1 });
   await assert.rejects(provider.fetch({ name: 'X', careers_url: BASE }, failing.ctx), (err) => err === sentinel);
   assert.equal(failing.calls.length, 1);
+});
+
+test('default limits: five full pages of 20 reach max_jobs 100 and warn that the search has more results', async () => {
+  const full = (from) => page(...Array.from({ length: 20 }, (_, i) => card(from + i)));
+  const pages = Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [n, full((n - 1) * 20 + 1)]));
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (msg) => warnings.push(String(msg));
+  try {
+    const { ctx, calls } = makeCtx(pages);
+    const jobs = await provider.fetch({ name: 'X', careers_url: BASE }, ctx);
+    assert.equal(jobs.length, 100);
+    assert.equal(calls.length, 5);
+    assert.equal(warnings.filter((w) => /the search has more results/.test(w)).length, 1);
+  } finally {
+    console.warn = warn;
+  }
 });

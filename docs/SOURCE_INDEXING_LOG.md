@@ -130,7 +130,7 @@ A general job board with one host per Latin American country. Only the Colombian
 
 **Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on a `<country>.computrabajo.com` host only.
 
-**Rule 6 (`robots.txt`).** Unverified: `robots.txt` was not fetched for this review.
+**Rule 6 (`robots.txt`).** Checked on 2026-10-23: one GET of `https://co.computrabajo.com/robots.txt` with career-ops' default User-Agent, HTTP 200, a single `User-agent: *` group. Its `Disallow` lines cover `/ofertas-de-trabajo/` with filter parameters (`*by=`, `*pubdate=`, ...), `/hojas-de-vida/`, `/curriculums/`, `/empresas/` filters, `/Ajax/`, `/_services/` and `/go/`; none covers the search page the provider fetches (`/trabajo-de-sistemas?by=publicationtime&p=N`). A configured search URL under `/ofertas-de-trabajo/` would fall under the `*by=` rule once the provider adds `by=publicationtime`; the shipped entry's path is not under it. Other country hosts: unverified.
 
 ---
 
@@ -150,13 +150,13 @@ A general job board for Colombia. Measured: one GET of `https://www.elempleo.com
 
 **Rule 2 (canonical URL is the employer's).** The result card carries no employer or ATS URL, only the board's own posting page, so `url` is that page. Whether the posting page links on to the employer: unverified.
 
-**Rule 3 (complete inventory, no paid placement).** The page states its own order, `PublishDate_Desc` (newest first), in its request parameters; no promoted field was seen in the result data. The provider reads up to `max_pages` (default 5, 100 postings), not the whole board. Pagination (`?pagina=N`) is unverified: the board renders its pager client-side, so the provider stops on a page with no new ids.
+**Rule 3 (complete inventory, no paid placement).** The page states its own order, `PublishDate_Desc` (newest first), in its request parameters; no promoted field was seen in the result data. The provider reads up to `max_pages` (default 5) and `max_jobs` (default 50), not the whole board. Pagination (`?pagina=N`) is unverified: the board renders its pager client-side, so the provider stops on a page with no new ids.
 
 **Rule 4 (operator declared).** Operator not declared in the PR; unverified.
 
 **Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on `www.elempleo.com` / `elempleo.com` only.
 
-**Rule 6 (`robots.txt`).** Unverified: `robots.txt` was not fetched for this review.
+**Rule 6 (`robots.txt`).** Checked on 2026-10-23: one GET of `https://www.elempleo.com/robots.txt` with career-ops' default User-Agent, HTTP 200. No `Disallow` under `User-agent: *` covers `/co/ofertas-empleo/` or its `?pagina=N` parameter, and no group names career-ops. The file's closing comments, however, state that the content is for personal, non-commercial use and that scraping by automated means is prohibited without ELEMPLEO's prior written permission. That is not a directive the rule reads by itself, so whether it reaches a user's own bounded scan is a maintainer decision on a source proposal; the shipped entry stays `enabled: false` until then.
 
 ---
 
@@ -182,4 +182,4 @@ A general job board for Colombia. Measured: one GET of `https://www.magneto365.c
 
 **Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on `www.magneto365.com` / `magneto365.com` only.
 
-**Rule 6 (`robots.txt`).** Unverified: `robots.txt` was not fetched for this review.
+**Rule 6 (`robots.txt`).** Checked on 2026-10-23: one GET of `https://www.magneto365.com/robots.txt` with career-ops' default User-Agent, HTTP 200. Under `User-agent: *` it allows `/`, disallows `/*?` and `/manager/*`, and allows `/*paginator[page]`. Every URL the provider fetches carries `paginator[page]=N`, which the longer `Allow` covers; a configured search URL with other query parameters still carries it. No group names career-ops.
