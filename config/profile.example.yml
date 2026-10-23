@@ -161,6 +161,9 @@ language:
 # read, never source code, and nothing reaches cv.md without your confirmation.
 # github_evidence:
 #   private_allowlist: []            # e.g. ["acme-corp/billing-service"]
+# The same step lists document file names (docs/ and top-level documents; names
+# only, never their content) for your public repos and allowlisted ones; your
+# other private repos show document counts only.
 
 # Controls which model tier evaluates your offers. Valid values:
 #   economy  -- cheapest/fastest model, no extended thinking. Best for high-volume scanning.
