@@ -57,3 +57,29 @@ check('a reply logged by hand still ends the first application', () => {
   }
   assert.equal(velocityOf(lines).appliedToResponded.median, 3);
 });
+
+check('an Applied logged by hand in between keeps the first Applied date', () => {
+  const lines = [];
+  for (const [num, replyDay] of [[1, '09'], [2, '10'], [3, '11']]) {
+    lines.push(
+      `${num}\t2026-01-05\tEvaluated\tApplied\tset-status\t`,
+      `${num}\t2026-01-06\tApplied\tApplied\tmanual\t`,
+      `${num}\t2026-01-07\tApplied\tApplied\tset-status\t`,
+      `${num}\t2026-01-${replyDay}\tApplied\tResponded\tset-status\t`,
+    );
+  }
+  assert.equal(velocityOf(lines).appliedToResponded.median, 5);
+});
+
+check('a re-application logged by hand is not measured from the first Applied', () => {
+  const lines = [];
+  for (const num of [1, 2, 3]) {
+    lines.push(
+      `${num}\t2026-01-05\tEvaluated\tApplied\tset-status\t`,
+      `${num}\t2026-01-20\tApplied\tRejected\tset-status\t`,
+      `${num}\t2026-06-01\tRejected\tApplied\tmanual\t`,
+      `${num}\t2026-06-03\tApplied\tResponded\tset-status\t`,
+    );
+  }
+  assert.equal(velocityOf(lines).appliedToResponded.n, 0);
+});

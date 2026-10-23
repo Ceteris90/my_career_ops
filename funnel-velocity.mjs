@@ -230,8 +230,8 @@ export function computeVelocity(timelines, todayStr) {
       let left = false;
       let viaIntermediate = false;
       for (const o of timeline) {
-        if (o.to === hop.from && o.dayMath) {
-          if (!start || left) { start = o; left = false; viaIntermediate = false; }
+        if (o.to === hop.from) {
+          if (!start || left) { start = o.dayMath ? o : null; left = false; viaIntermediate = false; }
           continue;
         }
         if (!start) continue;
