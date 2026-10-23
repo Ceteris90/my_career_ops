@@ -444,7 +444,14 @@ node assessment-log.mjs add --company Acme --report 042 --platform eSkill --subj
 node assessment-log.mjs             # JSON
 node assessment-log.mjs --summary   # per-event + per-platform table
 node assessment-log.mjs --self-test
+
+# Take-home / demo-recording assignments (#5733)
+node assessment-log.mjs add --kind take-home --company Acme --platform "candidate portal" --subject "Demo lesson" --deadline 2026-11-02T17:00:00-08:00 --deliverable video --requirements-url https://example.com/guide
+node assessment-log.mjs submit --company Acme --subject "Demo lesson" --submitted-at 2026-11-01T10:00:00-05:00 --proof "on-screen thanks, no email"
+node assessment-log.mjs open [--tz America/Toronto] [--json]
 ```
+
+Take-home rows add optional trailing columns `kind, deadline, deliverable (video|file|link), requirements_url, submitted_at, proof`; older rows parse unchanged as `skills-test`. The deadline must carry the sender's UTC offset (or Z). `submit` appends a new row (the log is never rewritten) and `open` folds rows per company + report# + subject. `open` converts deadlines to `--tz`, else `location.timezone` in `config/profile.yml` when it is an Area/City IANA name, else the machine timezone, and marks deadlines within 48 hours (and overdue ones) when no `submitted_at` is recorded. The tool only records and reminds; it never submits anything.
 
 Log line format (TSV, one per line, `#`-prefixed lines are comments; for `report#`, `threshold%`, and `score%`, `-` or an absent trailing cell = unknown; an empty `stale_note` means no staleness was observed, not unknown):
 
