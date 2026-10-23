@@ -106,6 +106,12 @@ try {
   if (companyRelation('Fabrikam University (East)', 'Fabrikam University (East)') === 'same') pass('identical parenthesised unit is the same');
   else fail('identical unit should be same');
 
+  // 11b. The same unit written in round or square brackets is the same unit.
+  if (companyRelation('Fabrikam University (East)', 'Fabrikam University [East]') === 'same') pass('round and square brackets around the same unit are the same');
+  else fail('(East) vs [East] should be same');
+  if (companyRelation('Fabrikam University [East]', 'Fabrikam University [West]') === 'parent') pass('different square-bracket units are a parent relation');
+  else fail('[East] vs [West] should be parent');
+
   // 12. A lookup with no usable key is rejected, not reported as "no duplicate".
   const rejects = (args) => {
     try { run(args); return false; } catch (e) { return e.status === 1; }

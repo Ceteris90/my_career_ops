@@ -54,9 +54,9 @@ function baseTokens(name) {
   return normalizeTextKey(stripped, ' ').split(' ').filter(Boolean);
 }
 
-/** The parenthesised unit text of a company cell, normalized ("" when there is none). */
+/** The bracketed unit text (round or square, as baseTokens strips both) of a company cell, normalized ("" when there is none). */
 function unitKey(name) {
-  const units = String(name ?? '').match(/\([^)]*\)/g) || [];
+  const units = String(name ?? '').match(/\([^)]*\)|\[[^\]]*\]/g) || [];
   return normalizeTextKey(units.join(' '), ' ');
 }
 
