@@ -33,8 +33,17 @@ const PUBLIC_JOBS_QUERY = `query PublicJobsList($input: PublicJobsQueryInput!) {
       title
       createdAt
       descriptionHtml
+      workplaceType
+      remoteType
+      remoteRegion {
+        name
+      }
       city {
         cityName
+        countryName
+      }
+      country {
+        name
       }
     }
     pageInfo {
@@ -54,12 +63,37 @@ const DEFAULT_MAX_PAGES = 50;
 const MAX_PAGES_CAP = 200;
 
 // The GraphQL endpoint rate-limits across all tenants: about 100 requests in a
-// burst, then every request is refused for a few seconds. The refusal is an
-// HTTP 200 whose body carries a GraphQL error, so `rateLimitAware` below turns
-// it into a 429 for the shared retry. The backoff (2 s, 4 s, 8 s, 10 s) covers
-// the refusal window several times over.
-const RETRY_POLICY = { retries: 4, baseDelayMs: 2_000, maxDelayMs: 10_000 };
+// burst, then every request is refused for a few seconds, and a sustained
+// sweep is held to roughly ten boards a second. The refusal is an HTTP 200
+// whose body carries a GraphQL error with `extensions.code` TOO_MANY_REQUESTS,
+// so `rateLimitAware` below turns it into a 429 for the shared retry. The
+// backoff (2 s, 4 s, 8 s, 16 s, 16 s) outlasts the refusal window even when
+// several boards are waiting on it at once.
+const RETRY_POLICY = { retries: 5, baseDelayMs: 2_000, maxDelayMs: 16_000 };
+const RATE_LIMIT_CODE = 'TOO_MANY_REQUESTS';
+// Fallback for a refusal that arrives without the code.
 const RATE_LIMIT_RE = /too many requests/i;
+
+// How the careers page labels a posting's place, from workplaceType and
+// remoteType: an on-site or hybrid posting shows its city and country, a
+// remote one only the area it is open to. The city of a remote posting is the
+// company's default city, not a requirement, so it is left out.
+/**
+ * @param {any} j - A publicJobs item.
+ * @returns {string}
+ */
+export function formatLocation(j) {
+  const city = typeof j?.city?.cityName === 'string' ? j.city.cityName.trim() : '';
+  const country = [j?.country?.name, j?.city?.countryName].find(v => typeof v === 'string' && v.trim())?.trim() || '';
+  if (j?.workplaceType === 'REMOTE') {
+    const region = typeof j.remoteRegion?.name === 'string' ? j.remoteRegion.name.trim() : '';
+    const area = j.remoteType === 'ANYWHERE' ? 'worldwide' : j.remoteType === 'REGION' ? region : country;
+    return area ? `Remote (${area})` : 'Remote';
+  }
+  const place = [city, country].filter(Boolean).join(', ');
+  if (j?.workplaceType === 'HYBRID') return place ? `${place} (hybrid)` : 'Hybrid';
+  return place;
+}
 
 // NaN-safe ISO → epoch ms; an absent or unparseable date leaves postedAt unset
 // so the age filters treat the posting as undated instead of as epoch zero.
@@ -113,9 +147,10 @@ function rateLimitAware(ctx) {
     ...ctx,
     fetchJson: async (url, opts) => {
       const json = await ctx.fetchJson(url, opts);
-      const message = json?.errors?.[0]?.message;
-      if (typeof message === 'string' && RATE_LIMIT_RE.test(message)) {
-        throw Object.assign(new Error(`join: ${message}`), { status: 429 });
+      const error = json?.errors?.[0];
+      const message = typeof error?.message === 'string' ? error.message : '';
+      if (error?.extensions?.code === RATE_LIMIT_CODE || RATE_LIMIT_RE.test(message)) {
+        throw Object.assign(new Error(`join: ${message || RATE_LIMIT_CODE}`), { status: 429 });
       }
       return json;
     },
@@ -189,17 +224,20 @@ export default {
     // postedAt is `createdAt`, the day the posting was first created. A
     // republished posting keeps it, so a role left open for a year reads as a
     // year old. The list payload carries each posting's full body, so the
-    // description costs no extra request.
+    // description costs no extra request. It is kept whole (no DESCRIPTION_CAP),
+    // like ashby, lever and gem: the description filters read the end of a JD
+    // too, where benefits and visa wording usually sit, and about one join
+    // posting in seven runs past the default cap.
     const jobs = allItems
       .filter(j => Number.isInteger(j?.id))
       .map(j => {
         const postedAt = toEpochMs(j.createdAt);
-        const description = htmlToText(j.descriptionHtml);
+        const description = htmlToText(j.descriptionHtml, { cap: Infinity });
         return {
           title: j.title || '',
           url: `https://join.com/companies/${companySlug}/${j.id}`,
           company: entry.name,
-          location: j.city?.cityName || '',
+          location: formatLocation(j),
           ...(postedAt ? { postedAt } : {}),
           ...(description ? { description } : {}),
         };

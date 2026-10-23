@@ -7,7 +7,7 @@ console.log('\nProvider — join (join.com __NEXT_DATA__ company id + publicJobs
 try {
   const joinModule = await import(pathToFileURL(joinPath(ROOT, 'providers/join.mjs')).href);
   const joinProvider = joinModule.default;
-  const { extractSlug, extractNextData, extractCompany } = joinModule;
+  const { extractSlug, extractNextData, extractCompany, formatLocation } = joinModule;
 
   if (joinProvider.id === 'join') pass('join.id is "join"');
   else fail(`join.id is ${JSON.stringify(joinProvider.id)}`);
@@ -73,7 +73,7 @@ try {
 
   // A GraphQL publicJobs response.
   const gqlPage = (items, pageCount = 1) => ({ data: { publicJobs: { items, pageInfo: { pageCount } } } });
-  const job = (id, title = `Job ${id}`, cityName = 'Berlin') => ({ id, title, city: { cityName } });
+  const job = (id, title = `Job ${id}`, cityName = 'Berlin') => ({ id, title, workplaceType: 'ONSITE', city: { cityName } });
 
   /**
    * A ctx whose fetchText serves the careers page and whose fetchJson answers
@@ -145,6 +145,15 @@ try {
     pass('join.fetch() omits postedAt/description when createdAt is unparseable or the body is empty/absent');
   } else {
     fail(`join.fetch() should omit absent fields: ${JSON.stringify(richJobs.slice(1))}`);
+  }
+
+  // fetch() — a long description is kept whole, so text past the shared 4000-char cap still reaches the filters.
+  const longBody = `<p>${'Lorem ipsum dolor sit amet. '.repeat(250)}</p><p>Visa sponsorship is not available.</p>`;
+  const longJobs = await joinProvider.fetch(entry, makeCtx(() => gqlPage([{ ...job(1), descriptionHtml: longBody }])));
+  if (longJobs[0].description.length > 4000 && longJobs[0].description.endsWith('Visa sponsorship is not available.')) {
+    pass('join.fetch() keeps a description longer than DESCRIPTION_CAP whole');
+  } else {
+    fail(`join.fetch() long description was cut: length=${longJobs[0].description.length}`);
   }
 
   // fetch() — the URL uses the company's own domain from the page, not the careers_url slug.
@@ -250,11 +259,39 @@ try {
   } catch (err) {
     stuckError = err;
   }
-  if (stuckError && /too many requests/i.test(stuckError.message) && stuckCtx.jsonCalls.length === 5) {
-    pass('join.fetch() throws after 5 attempts when the rate limit does not clear');
+  if (stuckError && /too many requests/i.test(stuckError.message) && stuckCtx.jsonCalls.length === 6) {
+    pass('join.fetch() throws after 6 attempts when the rate limit does not clear');
   } else {
     fail(`join.fetch() persistent rate limit wrong: error=${stuckError?.message}, calls=${stuckCtx.jsonCalls.length}`);
   }
+
+  // fetch() — the refusal is recognised by extensions.code even without the usual message.
+  const codeOnly = { errors: [{ message: 'Request refused', extensions: { code: 'TOO_MANY_REQUESTS' } }], data: { publicJobs: null } };
+  const codeCtx = makeCtx((_input, call) => (call === 1 ? codeOnly : gqlPage([job(1)])));
+  const codeJobs = await joinProvider.fetch(entry, codeCtx);
+  if (codeJobs.length === 1 && codeCtx.jsonCalls.length === 2 && codeCtx.sleeps.length === 1) {
+    pass('join.fetch() retries a refusal identified by extensions.code TOO_MANY_REQUESTS');
+  } else {
+    fail(`join.fetch() code-only rate limit wrong: jobs=${codeJobs.length}, calls=${codeCtx.jsonCalls.length}`);
+  }
+
+  // formatLocation — mirrors the careers page labels; a remote posting drops its default city.
+  const loc = (workplaceType, extra = {}) => formatLocation({
+    workplaceType, city: { cityName: 'Berlin', countryName: 'Germany' }, country: { name: 'Germany' }, ...extra,
+  });
+  const locationCases = [
+    ['on-site', loc('ONSITE'), 'Berlin, Germany'],
+    ['hybrid', loc('HYBRID'), 'Berlin, Germany (hybrid)'],
+    ['remote within a country', loc('REMOTE', { remoteType: 'COUNTRY', country: { name: 'India' } }), 'Remote (India)'],
+    ['remote anywhere', loc('REMOTE', { remoteType: 'ANYWHERE' }), 'Remote (worldwide)'],
+    ['remote within a region', loc('REMOTE', { remoteType: 'REGION', remoteRegion: { name: 'European Union' } }), 'Remote (European Union)'],
+    ['remote with no area', formatLocation({ workplaceType: 'REMOTE', remoteType: 'REGION' }), 'Remote'],
+    ['no workplace type', formatLocation({ city: { cityName: 'Vienna' }, country: { name: 'Austria' } }), 'Vienna, Austria'],
+    ['nothing known', formatLocation({}), ''],
+  ];
+  const badLocations = locationCases.filter(([, got, want]) => got !== want);
+  if (badLocations.length === 0) pass('join.formatLocation() labels on-site, hybrid and remote postings like the careers page');
+  else fail(`join.formatLocation() wrong: ${JSON.stringify(badLocations)}`);
 
   // fetch() — failures that must throw instead of reading as an empty board.
   const expectThrow = async (label, run) => {
