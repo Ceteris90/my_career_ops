@@ -4,6 +4,8 @@
  * This executes the real web writer (pipeline.ts) and canonical scan.mjs
  * writers against a disposable data root. The only source substitution is
  * Next's @/lib/career-ops alias, which Node's test runner cannot resolve.
+ * Any referenced sibling writer-result helper is staged unchanged beside the
+ * temporary .mts module to preserve relative ESM imports.
  * No dashboard, ATS network request, LLM, or real user data is involved.
  *
  * Run from web/: node --experimental-strip-types --test tests/lib/explore-posted-at.test.mjs
@@ -76,6 +78,15 @@ test('Explore add preserves a valid posting date in pipeline and scan history', 
     + `  return ${JSON.stringify(scanPath)};\n};`;
   // Node >=22.6.0 supports --experimental-strip-types for .mts files,
   // but node:module.stripTypeScriptTypes() was only added in 22.13.0.
+  // A newer pipeline.ts may import a sibling writer-result helper. Keep its
+  // relative import resolvable when the source is loaded from this temp root.
+  if (/from\s+["']\.\/pipeline-writer-result\.mjs["']/.test(original)) {
+    const helperName = 'pipeline-writer-result.mjs';
+    fs.copyFileSync(
+      path.join(path.dirname(sourcePath), helperName),
+      path.join(tmp, helperName),
+    );
+  }
   const runtimePath = path.join(tmp, 'pipeline-for-test.mts');
   fs.writeFileSync(runtimePath, original.replace(alias, shim), 'utf8');
   const webWriter = await import(pathToFileURL(runtimePath).href);
