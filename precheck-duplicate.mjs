@@ -54,6 +54,12 @@ function baseTokens(name) {
   return normalizeTextKey(stripped, ' ').split(' ').filter(Boolean);
 }
 
+/** The parenthesised unit text of a company cell, normalized ("" when there is none). */
+function unitKey(name) {
+  const units = String(name ?? '').match(/\([^)]*\)/g) || [];
+  return normalizeTextKey(units.join(' '), ' ');
+}
+
 function isPrefix(shorter, longer) {
   return shorter.length > 0 && shorter.length <= longer.length && shorter.every((t, i) => t === longer[i]);
 }
@@ -67,9 +73,12 @@ export function companyRelation(a, b) {
   const ka = normalizeCompany(a);
   const kb = normalizeCompany(b);
   if (!ka || !kb) return null;
-  if (ka === kb || companiesMatchIgnoringCorporateForm(a, b)) return 'same';
   const ta = baseTokens(a);
   const tb = baseTokens(b);
+  // Same base name but different parenthesised units ("Fabrikam University (East)"
+  // vs "(West)") are siblings under one parent, not the same employer unit.
+  if (ta.length >= 2 && ta.join(' ') === tb.join(' ') && unitKey(a) !== unitKey(b)) return 'parent';
+  if (ka === kb || companiesMatchIgnoringCorporateForm(a, b)) return 'same';
   // Two leading tokens minimum: "University of ..." counts, a lone "Acme" does not
   // fold "Acme Robotics" into "Acme Foods".
   const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
@@ -137,6 +146,16 @@ if (isMainModule(import.meta.url)) {
   const json = args.includes('--json');
   if (!input.company && !input.url) {
     console.error('precheck-duplicate: --company (or --url) is required.\n' + USAGE);
+    process.exit(1);
+  }
+  // A lookup needs at least one usable key, otherwise "no match" would be a
+  // false all-clear: a URL that normalizes to nothing ("N/A"), or a company alone.
+  if (input.url && !normalizeUrl(input.url)) {
+    console.error(`precheck-duplicate: --url "${input.url}" is not a usable URL.\n` + USAGE);
+    process.exit(1);
+  }
+  if (!input.title.trim() && !input.req.trim() && !input.url) {
+    console.error('precheck-duplicate: give at least one of --title, --req or --url besides --company.\n' + USAGE);
     process.exit(1);
   }
   const trackerPath = resolveTrackerPath(getCareerOpsRoot());

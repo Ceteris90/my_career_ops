@@ -99,6 +99,21 @@ try {
   const none = run(['--company', 'X', '--title', 'Y'], { CAREER_OPS_TRACKER: join(work, 'missing.md') });
   if (/No tracker found/.test(none)) pass('missing tracker exits 0 with a notice');
   else fail(`missing tracker: ${none}`);
+
+  // 11. Different parenthesised units under one parent are siblings, not the same unit.
+  if (companyRelation('Fabrikam University (East)', 'Fabrikam University (West)') === 'parent') pass('different parenthesised units are a parent relation');
+  else fail('East/West units should be parent, not same');
+  if (companyRelation('Fabrikam University (East)', 'Fabrikam University (East)') === 'same') pass('identical parenthesised unit is the same');
+  else fail('identical unit should be same');
+
+  // 12. A lookup with no usable key is rejected, not reported as "no duplicate".
+  const rejects = (args) => {
+    try { run(args); return false; } catch (e) { return e.status === 1; }
+  };
+  if (rejects(['--company', 'Fabrikam University', '--url', 'N/A'])) pass('an unusable --url is rejected');
+  else fail('--url N/A should exit 1');
+  if (rejects(['--company', 'Fabrikam University'])) pass('company alone is rejected');
+  else fail('company alone should exit 1');
 } catch (e) {
   fail(`precheck-duplicate test crashed: ${(e.stderr || e.message || '').toString().slice(0, 400)}`);
 } finally {

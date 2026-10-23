@@ -383,6 +383,7 @@ const SYSTEM_PATHS = [
   'sync-batch-input.mjs',
   'reconcile-pipeline.mjs',
   'dedup-tracker.mjs',
+  'precheck-duplicate.mjs',
   'add-entry.mjs',
   'github-evidence.mjs',
   'role-matcher.mjs',
