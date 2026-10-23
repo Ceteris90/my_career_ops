@@ -83,3 +83,18 @@ check('a re-application logged by hand is not measured from the first Applied', 
   }
   assert.equal(velocityOf(lines).appliedToResponded.n, 0);
 });
+
+check('two trusted applications on one row both count toward the reply time', () => {
+  const lines = [];
+  for (const [num, firstReply, secondReply] of [[1, '08', '23'], [2, '09', '24'], [3, '10', '25']]) {
+    lines.push(
+      `${num}\t2026-01-05\tEvaluated\tApplied\tset-status\t`,
+      `${num}\t2026-01-${firstReply}\tApplied\tResponded\tset-status\t`,
+      `${num}\t2026-01-20\tResponded\tApplied\tset-status\t`,
+      `${num}\t2026-01-${secondReply}\tApplied\tResponded\tset-status\t`,
+    );
+  }
+  const hop = velocityOf(lines).appliedToResponded;
+  assert.equal(hop.n, 6);
+  assert.equal(hop.median, 4);
+});
