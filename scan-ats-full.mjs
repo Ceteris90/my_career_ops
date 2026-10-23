@@ -55,7 +55,7 @@ import { fileURLToPath } from 'url';
 import { loadYaml } from './lib/yaml-document.mjs';
 import { renameSyncWithRetry } from './tracker-utils.mjs';
 
-import { makeHttpCtx, fetchJson } from './providers/_http.mjs';
+import { makeHttpCtx, fetchJson, fetchTextHead } from './providers/_http.mjs';
 import { withConnectionScope } from './providers/_connection-scope.mjs';
 import { isResolverFailure, dnsPacingStats } from './providers/_dns-cache.mjs';
 import greenhouse from './providers/greenhouse.mjs';
@@ -75,6 +75,7 @@ import { getCareerOpsRoot } from './path-resolver.mjs';
 import { barePrefixDomainKeywords, buildDomainFilter } from './title-keywords.mjs';
 import { KNOWN_ATS_VENDORS } from './ats-vendor.mjs';
 import { loadHistoryAtsSeeds } from './history-ats-seeds.mjs';
+import { classifyUnknownHostSeeds } from './branded-successfactors.mjs';
 import { loadProviders } from './providers/_registry.mjs';
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -363,7 +364,7 @@ export const SOURCES = {
 // ── CLI args ────────────────────────────────────────────────────────
 
 const KNOWN_FLAGS = [
-  '--since', '--limit', '--ats', '--seeds', '--history-seeds', '--dry-run', '--liveness',
+  '--since', '--limit', '--ats', '--seeds', '--history-seeds', '--probe-unknown-hosts', '--dry-run', '--liveness',
   '--verbose', '--md-out', '--json', '--include-undated', '--include-blacklisted',
   '--shuffle', '--resume', '--help', '-h',
 ];
@@ -378,6 +379,7 @@ const USAGE = `Usage:
   node scan-ats-full.mjs --ats greenhouse,workday  # subset of sources
   node scan-ats-full.mjs --history-seeds       # also scan boards from local application history
   node scan-ats-full.mjs --history-seeds --ats successfactors # history-derived boards for this ATS
+  node scan-ats-full.mjs --history-seeds --probe-unknown-hosts # also detect branded SuccessFactors hosts (one GET per unknown host)
   node scan-ats-full.mjs --limit 200          # max companies per ATS (default: all)
   node scan-ats-full.mjs --dry-run            # preview without writing files
   node scan-ats-full.mjs --liveness           # Playwright-verify matches before writing
@@ -457,6 +459,7 @@ export function parseArgs(argv) {
     ats,
     atsExplicit: Boolean(atsArg),
     historySeeds,
+    probeUnknownHosts: args.includes('--probe-unknown-hosts') && historySeeds,
     seeds,
     dryRun: args.includes('--dry-run'),
     liveness: args.includes('--liveness'),
@@ -915,7 +918,9 @@ export async function runHistorySeedScan(seeds, providers, opts, ctx, processJob
     if (!provider) continue;
     const entry = { name: seed.company, careers_url: seed.careersUrl, provider: seed.vendor };
     try {
-      if (provider.detect?.(entry)) scannable.push({ seed, provider, entry });
+      // probeConfirmed: the host was verified as SuccessFactors from its page,
+      // equivalent to an explicit `provider:` in portals.yml (bypasses URL detect).
+      if (seed.probeConfirmed || provider.detect?.(entry)) scannable.push({ seed, provider, entry });
     } catch { /* unroutable history is a skipped seed, not a failed network request */ }
   }
   let errors = 0;
@@ -1181,9 +1186,16 @@ async function main() {
   // User-layer history is an opt-in additive board directory. It fills vendors
   // that have no public community dataset without changing the tracker schema,
   // but an ordinary reverse scan never reads the user's application history.
-  const historySeeds = opts.historySeeds
+  let historySeeds = opts.historySeeds
     ? loadHistoryAtsSeeds({ dataRoot: DATA_ROOT, scanHistoryPath: SCAN_HISTORY_PATH })
     : [];
+  // Opt-in (#5739): one plain GET per distinct unknown host, verdict cached;
+  // a failed probe leaves the hostname label as it was.
+  if (opts.probeUnknownHosts && historySeeds.length) {
+    historySeeds = await classifyUnknownHostSeeds(historySeeds, {
+      probe: async (origin) => ({ html: await fetchTextHead(origin, { maxBytes: 262144 }) }),
+    });
+  }
 
   const atsSummary = opts.ats.length ? `ats: ${opts.ats.join(', ')}` : '';
   const seedsSummary = opts.seeds.length ? `seeds: ${opts.seeds.join(', ')}` : '';

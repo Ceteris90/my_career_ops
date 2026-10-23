@@ -888,7 +888,11 @@ Pass `--history-seeds` to derive board seeds locally from posting URLs already
 in the user's tracker and `data/scan-history.tsv`. A normal run does not read
 either history source. With the flag, known ATS hosts route to the
 matching installed provider; an unknown host remains its hostname rather than
-being discarded. Known vendor labels become scannable automatically if a
+being discarded. Add `--probe-unknown-hosts` to also make one plain GET per
+distinct unknown host (verdict cached, response read capped) and route hosts
+whose page carries SuccessFactors markers (branded RMK/CSB career sites) to the
+`successfactors` provider; a failed or blocked probe leaves the label unchanged,
+and nothing is written back to `portals.yml`. Known vendor labels become scannable automatically if a
 matching provider is added later. This is read-only input: no tracker column or
 apply-time browser capture is required, and history is never uploaded or pooled.
 
