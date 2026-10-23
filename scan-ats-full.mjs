@@ -5,7 +5,7 @@
  *
  * Where scan.mjs scans the companies you track in portals.yml, this script
  * inverts the direction: it walks public directories of companies per ATS
- * (Greenhouse, Lever, Ashby, Workday, iCIMS, BambooHR, Paylocity) and
+ * (Greenhouse, Lever, Ashby, Workday, iCIMS, BambooHR, Paylocity, join.com) and
  * surfaces fresh postings that match your portals.yml `title_filter` /
  * `location_filter` — no manual company curation needed.
  *
@@ -27,7 +27,9 @@
  * curated corpus, so gating it would be redundant.
  *
  * Company directories come from the public job-board-aggregator dataset
- * (github.com/Feashliaa/job-board-aggregator), cached in data/cache/ for 24h.
+ * (github.com/Feashliaa/job-board-aggregator), except join.com's, which is
+ * read from join.com's own company sitemap. Each is cached in data/cache/ for
+ * 24h.
  *
  * Zero LLM tokens — pure HTTP + JSON, same providers/ modules as scan.mjs.
  * Postings without a usable publish date are skipped: a reverse scan is only
@@ -55,7 +57,7 @@ import { fileURLToPath } from 'url';
 import { loadYaml } from './lib/yaml-document.mjs';
 import { renameSyncWithRetry } from './tracker-utils.mjs';
 
-import { makeHttpCtx, fetchJson, fetchTextHead } from './providers/_http.mjs';
+import { makeHttpCtx, fetchJson, fetchText, fetchTextHead } from './providers/_http.mjs';
 import { withConnectionScope, withAbortScope } from './providers/_connection-scope.mjs';
 import { isResolverFailure, dnsPacingStats } from './providers/_dns-cache.mjs';
 import greenhouse from './providers/greenhouse.mjs';
@@ -65,6 +67,8 @@ import workday, { WORKDAY_TRUNCATED_REASON } from './providers/workday.mjs';
 import icims from './providers/icims.mjs';
 import bamboohr from './providers/bamboohr.mjs';
 import paylocity, { boardUrl as paylocityBoardUrl } from './providers/paylocity.mjs';
+import join, { parseCompanySitemap } from './providers/join.mjs';
+import { openProviderIdCache, PROVIDER_ID_CACHE_DIR } from './provider-id-cache.mjs';
 import { decodeEntities } from './providers/_html-entities.mjs';
 import { buildTitleFilter, buildTitleFilterOverrides, buildTitleFilterWithOverrides, buildLocationFilter, buildContentFilter, matchedTitleKeywords, loadSeenUrls, normalizeUrlForDedup, appendToPipeline, appendToScanHistory, findBlacklistEntry, loadBlacklist, parseSinceDays, PORTALS_PATH, PIPELINE_PATH, SCAN_HISTORY_PATH } from './scan.mjs';
 import { localToday } from './lib/local-today.mjs';
@@ -119,6 +123,12 @@ const SINGLE_HOST_CONCURRENCY = 6;
 // 10,252 boards. The provider retries a 429 with backoff; this keeps the sweep
 // from provoking one on nearly every board.
 const PAYLOCITY_CONCURRENCY = 2;
+// join.com's job list endpoint holds every client to about ten boards a second
+// across all tenants and answers faster requests with a rate-limit error,
+// which the provider retries with backoff. In sweeps of the same tenants, more
+// than two workers was no faster and, from four, lost boards whose retries ran
+// out.
+const JOIN_CONCURRENCY = 2;
 // A refusing resolver fails every lookup in milliseconds, so a sweep that
 // keeps going just feeds it (#2229). Stop after this many consecutive
 // resolver-level failures — high enough that a handful of unlucky boards
@@ -234,6 +244,16 @@ function saveDeadBoardsBestEffort(rows) {
   } catch (err) {
     console.error(`\n⚠ dead-board cache write failed (${err.message}) — sweep continues`);
     return false;
+  }
+}
+
+// Same rule for the provider id cache: a failed write costs later runs a
+// lookup, never this sweep's matches.
+function saveProviderIdCacheBestEffort(idCaches) {
+  try {
+    idCaches.save();
+  } catch (err) {
+    console.error(`\n⚠ provider id cache write failed (${err.message}) — sweep continues`);
   }
 }
 
@@ -390,6 +410,19 @@ export const SOURCES = {
     dataset: `${DATASET_BASE}/paylocity_companies_clean.json`,
     toEntry: (row) => paylocityEntry(row),
   },
+  join: {
+    provider: join,
+    // Whole directory behind one host that rate-limits — see JOIN_CONCURRENCY.
+    concurrency: JOIN_CONCURRENCY,
+    singleHost: true,
+    // job-board-aggregator has no join file; join.com publishes its own
+    // company directory, listed under `Sitemap:` in its robots.txt.
+    dataset: 'https://join.com/companies/sitemap.xml',
+    parseDataset: parseCompanySitemap,
+    toEntry: (slug) => SLUG_RE.test(String(slug))
+      ? entryOnHost(String(slug), `https://join.com/companies/${slug}`, h => h === 'join.com')
+      : null,
+  },
 };
 
 // ── CLI args ────────────────────────────────────────────────────────
@@ -511,9 +544,13 @@ export function parseArgs(argv) {
 //   'stale' — network fetch failed; falling back to an expired cache
 //   'empty' — no data at all (no cache, fetch failed/non-array)
 // The status lets callers (and --json) distinguish a degraded scan from an empty one.
-async function loadCompanyList(name, url) {
-  mkdirSync(CACHE_DIR, { recursive: true });
-  const cacheFile = path.join(CACHE_DIR, `${name}.json`);
+//
+// A source with `parseDataset(text) → array` publishes its directory in some
+// other format (join: a sitemap). The text is parsed before it is cached, so
+// the cache file always holds the array, like every other source's.
+export async function loadCompanyList(name, url, parseDataset, { cacheDir = CACHE_DIR, fetchJsonFn = fetchJson, fetchTextFn = fetchText } = {}) {
+  mkdirSync(cacheDir, { recursive: true });
+  const cacheFile = path.join(cacheDir, `${name}.json`);
   if (existsSync(cacheFile)) {
     const ageHours = (Date.now() - statSync(cacheFile).mtimeMs) / 3_600_000;
     if (ageHours < CACHE_TTL_HOURS) {
@@ -521,7 +558,9 @@ async function loadCompanyList(name, url) {
     }
   }
   try {
-    const data = await fetchJson(url, { timeoutMs: 30_000 });
+    const data = typeof parseDataset === 'function'
+      ? parseDataset(await fetchTextFn(url, { timeoutMs: 30_000 }))
+      : await fetchJsonFn(url, { timeoutMs: 30_000 });
     if (Array.isArray(data)) {
       writeFileSync(cacheFile, JSON.stringify(data), 'utf-8');
       return { list: data, status: 'ok' };
@@ -1288,6 +1327,8 @@ async function main() {
     syntheticEntries: true,
     locationHints: config?.location_filter,
   };
+  // Each directory source hands its provider a slice of this store as ctx.idCache.
+  const idCaches = openProviderIdCache(path.join(DATA_ROOT, PROVIDER_ID_CACHE_DIR));
   // The LOCAL calendar day, not the UTC one. This value lands in
   // scan-history.tsv's first_seen, which shouldDedupScanHistoryRow measures the
   // recheck window against using the local day (#3070). Stamping it in UTC put
@@ -1467,7 +1508,7 @@ async function main() {
     // source finished before the checkpoint was written still contributed its
     // companies to the sweep, so it must still count toward the availability /
     // cap figures the final report and --json output show.
-    const { list, status } = await loadCompanyList(name, source.dataset);
+    const { list, status } = await loadCompanyList(name, source.dataset, source.parseDataset);
     datasetStatus[name] = status;
     totalCompaniesAvailable += list.length;
     if (opts.limit < list.length) capHit = true;
@@ -1495,6 +1536,8 @@ async function main() {
     curEntries = entries.length; curDone = 0; curErrors = 0; curDeadSkipped = 0;
     log(`\n⚙  ${name} — ${entriesAll.length} companies${status !== 'ok' ? ` (dataset: ${status})` : ''}${startAt ? ` — resuming at ${startAt}` : ''}`);
 
+    // This source's slice of the provider id cache (provider-id-cache.mjs).
+    const sourceCtx = { ...ctx, idCache: idCaches.forProvider(source.provider.id) };
     let errors = 0;
     let deadBoardsSkipped = 0;
     const deadBoards = loadDeadBoards(DEAD_BOARDS_PATH);
@@ -1539,7 +1582,7 @@ async function main() {
           // wants; where the provider can list a board cheaply, find that out
           // before downloading every posting body.
           if (typeof source.provider.fetchListing === 'function') {
-            const listing = await source.provider.fetchListing(entry, ctx);
+            const listing = await source.provider.fetchListing(entry, sourceCtx);
             if (!listingMayMatch(listing, { cutoff, titleFilter, companySlug: entry.name })) {
               if (!opts.includeUndated) droppedNoDate += undatedInListing(listing, cutoff);
               recordBoardResult(deadBoards, name, deadBoard, 200);
@@ -1547,7 +1590,7 @@ async function main() {
               return;
             }
           }
-          const jobs = await source.provider.fetch(entry, ctx);
+          const jobs = await source.provider.fetch(entry, sourceCtx);
           recordBoardResult(deadBoards, name, deadBoard, 200);
           consecutiveResolverFailures = 0;
           // Queued BEFORE the gate, deliberately: a board the gate cannot yet
@@ -1650,7 +1693,7 @@ async function main() {
         try {
           await boardScope(source, `${name}/${entry.name} (retry)`, COMPANY_TIMEOUT_MS, async (signal) => {
             retrySignal = signal;
-            const jobs = await source.provider.fetch(entry, ctx);
+            const jobs = await source.provider.fetch(entry, sourceCtx);
             recordBoardResult(deadBoards, name, boardKey(entry), 200);
             // Where a board deferred by the parallel sweep is actually decided.
             // A board the sweep already admitted is never gated here, and one
@@ -1694,6 +1737,9 @@ async function main() {
     totalErrors += errors;
     totalRetiredBoardsSkipped += deadBoardsSkipped;
     if (!opts.dryRun) saveDeadBoardsBestEffort(deadBoards);
+    // Saved under --dry-run too: like the dataset cache, it only spares later
+    // runs a lookup and changes no result.
+    saveProviderIdCacheBestEffort(idCaches);
     if (resolverOutage) {
       // Deliberately before completedSources/checkpoint: this source did NOT
       // finish, and marking it done would make --resume skip the rest of it.

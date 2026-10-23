@@ -19,6 +19,17 @@ import { safeEncodeURIComponent } from './_safe-url.mjs';
 //      job list embedded in the HTML is not used: Cloudflare serves the page
 //      from a cache that can be days old, `?page=N` can return a cached copy of
 //      another page, and each page holds only 5 jobs.
+//
+// The company id is assumed not to change, so step 1 is skipped where the id
+// is already known: `entry.company_id` when a directory supplies it, else
+// `ctx.idCache` (see provider-id-cache.mjs) from an earlier scan. A cached id
+// is checked against the careers page again after COMPANY_RECHECK_MS, which
+// is also how a deleted company — one whose old id still answers with an
+// empty job list — surfaces as a dead board, and how a changed id would be
+// picked up.
+//
+// `parseCompanySitemap` reads join.com's own company directory,
+// https://join.com/companies/sitemap.xml, for scan-ats-full.mjs.
 
 const GRAPHQL_URL = 'https://join.com/candidate-api/graphql';
 
@@ -110,6 +121,9 @@ function toEpochMs(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+// How long a cached company id is trusted before the careers page is read again.
+const COMPANY_RECHECK_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** Resolve the page cap: a positive integer `max_pages` on the entry, capped. */
 function resolveMaxPages(entry) {
   const v = entry?.max_pages;
@@ -145,6 +159,67 @@ export function extractCompany(nextData) {
 }
 
 /**
+ * Company slugs from join.com's company sitemap, in document order, each once.
+ * Only `<loc>https://join.com/companies/<slug></loc>` entries count; a deeper
+ * path or another host is skipped.
+ * @param {unknown} xml
+ * @returns {string[]}
+ */
+export function parseCompanySitemap(xml) {
+  if (typeof xml !== 'string') throw new Error('join: company sitemap is not text');
+  if (!/<urlset\b/.test(xml)) throw new Error('join: company sitemap has no <urlset>');
+  const slugs = new Set();
+  for (const [, loc] of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g)) {
+    const slug = extractSlug(loc);
+    if (slug && new URL(loc).pathname.replace(/\/$/, '') === `/companies/${slug}`) slugs.add(slug);
+  }
+  return [...slugs];
+}
+
+/**
+ * The company id for a board (with the page's `domain` when the page was
+ * read): from the entry, from the cache, or from the careers page, in that
+ * order.
+ * @param {any} entry
+ * @param {string} slug
+ * @param {any} ctx
+ * @returns {Promise<{ id: number, domain?: string }>}
+ */
+async function resolveCompany(entry, slug, ctx) {
+  if (Number.isInteger(entry?.company_id) && entry.company_id > 0) return { id: entry.company_id };
+
+  const cache = ctx?.idCache;
+  const cached = cache?.get(slug);
+  const cachedId = Number.isInteger(cached?.id) ? cached.id : null;
+  const checkedAt = Date.parse(cached?.checkedAt ?? '');
+  if (cachedId && Number.isFinite(checkedAt) && Date.now() - checkedAt < COMPANY_RECHECK_MS) return { id: cachedId };
+
+  let html;
+  try {
+    // redirect:'error' prevents SSRF via server-side redirects; the URL is a
+    // fixed https://join.com/... string, so the host is pinned regardless of
+    // the original careers_url.
+    html = await fetchTextWithRetry(ctx, `https://join.com/companies/${slug}`, { redirect: 'error' });
+  } catch (err) {
+    // A company that is gone takes its cache entry with it. Any other failure
+    // of a recheck keeps using the id already known.
+    if (err?.status === 404 || err?.status === 410) {
+      cache?.delete(slug);
+      throw err;
+    }
+    if (cachedId) return { id: cachedId };
+    throw err;
+  }
+  const company = extractCompany(extractNextData(html));
+  if (!company) throw new Error('join: __NEXT_DATA__ not found or has no company id');
+  // Only the id is kept. The page answers only at its own slug (any other
+  // spelling is a redirect, which fetch refuses), so the company's domain is
+  // the slug already in hand.
+  cache?.set(slug, { id: company.id, checkedAt: new Date().toISOString() });
+  return company;
+}
+
+/**
  * A ctx whose fetchJson throws a 429-shaped error when the GraphQL endpoint
  * answers with its rate-limit error, so fetchJsonWithRetry backs off on it.
  * @param {any} ctx
@@ -176,12 +251,7 @@ export default {
     const slug = extractSlug(entry.careers_url);
     if (!slug) throw new Error('join: cannot extract slug from careers_url');
 
-    // redirect:'error' prevents SSRF via server-side redirects; both URLs are
-    // fixed https://join.com/... strings, so the host is pinned regardless of
-    // the original careers_url.
-    const html = await fetchTextWithRetry(ctx, `https://join.com/companies/${slug}`, { redirect: 'error' });
-    const company = extractCompany(extractNextData(html));
-    if (!company) throw new Error('join: __NEXT_DATA__ not found or has no company id');
+    const company = await resolveCompany(entry, slug, ctx);
 
     // Honor a context page cap — verify-portals' liveness probe sets
     // `ctx.maxPages: 1` so it only needs to know a board is live, not its
