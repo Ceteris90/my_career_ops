@@ -380,6 +380,22 @@ try {
     fail(`aa.fetch() probe rejection was swallowed or wrapped: ${caught && caught.message}`);
   }
 
+  // While probing, filter-mode pagination is capped at ctx.maxPages per type.
+  const probePages = [];
+  await aa.fetch(
+    { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', remoteNationwide: true, remoteMatch: 'filter', angebotsart: [1, 34], size: 1, remoteMaxPages: 3 } },
+    { maxPages: 1, sleep: async () => {}, fetchJson: async (url) => {
+        const sp = new URL(url).searchParams;
+        if (sp.has('homeoffice')) probePages.push(`${sp.get('angebotsart')}:${sp.get('page')}`);
+        return page(v6(`X${sp.get('angebotsart')}${sp.get('page') || ''}${sp.has('homeoffice') ? 'h' : ''}`, 'ESG Analyst (Remote)', 'Hamburg'));
+      } },
+  );
+  if (probePages.join(',') === '1:1,34:1') {
+    pass('aa.fetch() caps filter-mode pages at ctx.maxPages while probing');
+  } else {
+    fail(`aa.fetch() probe filter pages not capped: ${probePages}`);
+  }
+
 } catch (e) {
   fail(`arbeitsagentur provider tests crashed: ${e.message}`);
 }

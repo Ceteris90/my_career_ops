@@ -264,11 +264,13 @@ export default {
             // Paced and retried: this walk is up to remoteMaxPages requests per
             // offer type, back to back.
             let requests = 0;
+            // While probing, stay within the probe's page budget per type.
+            const pagesToFetch = probing ? Math.min(remoteMaxPages, Number(ctx.maxPages)) : remoteMaxPages;
             // A type that exhausts its retries keeps the pages it already
             // returned and does not stop the next type.
             for (const art of angebotsart) {
               try {
-                for (let page = 1; page <= remoteMaxPages; page++) {
+                for (let page = 1; page <= pagesToFetch; page++) {
                   if (requests++ > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
                   const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art }, true);
                   wide.push(...res);
