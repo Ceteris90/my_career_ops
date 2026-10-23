@@ -1,20 +1,62 @@
 // @ts-check
 /** @typedef {import('./_types.js').Provider} Provider */
 
-// join.com provider — reads jobs from Next.js __NEXT_DATA__ embedded in HTML.
-// Auto-detects from careers_url matching join.com/companies/<slug>.
-// No API key needed — data is SSR-rendered in the page HTML.
+import { fetchJsonWithRetry, fetchTextWithRetry } from './_http.mjs';
+import { safeEncodeURIComponent } from './_safe-url.mjs';
 
-// Safety cap on pagination — applied regardless of what the page's own
-// __NEXT_DATA__ reports as pagination.pageCount, so a board that grows (or a
-// payload that reports a wrong pageCount) can't drive this into an unbounded
-// fetch loop; nothing wraps the provider call with a timeout of its own.
-// Every known tenant is a single company's careers page, so 50 pages is
-// generous headroom; override with `max_pages` on the portal entry for a
-// tenant that genuinely exceeds it.
+// join.com provider — single-company ATS adapter for `tracked_companies:`.
+// Auto-detects from careers_url matching join.com/companies/<slug>.
+// No API key needed. Two steps:
+//   1. The careers page (https://join.com/companies/<slug>) embeds the company
+//      record in its Next.js __NEXT_DATA__ blob; only `company.id` is read from
+//      it. The blob is `props.pageProps.pageData`, or `initialState` in pages
+//      rendered by the older frontend that Cloudflare can still serve from
+//      cache.
+//   2. The job list comes from the public GraphQL endpoint the careers page
+//      itself calls when the visitor pages through the list
+//      (POST https://join.com/candidate-api/graphql, query `publicJobs`). The
+//      job list embedded in the HTML is not used: Cloudflare serves the page
+//      from a cache that can be days old, `?page=N` can return a cached copy of
+//      another page, and each page holds only 5 jobs.
+
+const GRAPHQL_URL = 'https://join.com/candidate-api/graphql';
+
+// The server caps pageSize at 100: a larger value still returns 100 items and
+// a pageInfo.pageCount computed for 100.
+const PAGE_SIZE = 100;
+
+const PUBLIC_JOBS_QUERY = `query PublicJobsList($input: PublicJobsQueryInput!) {
+  publicJobs(input: $input) {
+    items {
+      id
+      title
+      city {
+        cityName
+      }
+    }
+    pageInfo {
+      pageCount
+    }
+  }
+}`;
+
+// Safety cap on pagination — applied regardless of what the response reports
+// as pageInfo.pageCount, so a board that grows (or a payload that reports a
+// wrong pageCount) can't drive this into an unbounded fetch loop; nothing wraps
+// the provider call with a timeout of its own. At PAGE_SIZE jobs per page, 50
+// pages is far more than any single company's board needs; override with
+// `max_pages` on the portal entry for a tenant that genuinely exceeds it.
 const DEFAULT_MAX_PAGES = 50;
 // Hard ceiling even for an explicit override.
 const MAX_PAGES_CAP = 200;
+
+// The GraphQL endpoint rate-limits across all tenants: about 100 requests in a
+// burst, then every request is refused for a few seconds. The refusal is an
+// HTTP 200 whose body carries a GraphQL error, so `rateLimitAware` below turns
+// it into a 429 for the shared retry. The backoff (2 s, 4 s, 8 s, 10 s) covers
+// the refusal window several times over.
+const RETRY_POLICY = { retries: 4, baseDelayMs: 2_000, maxDelayMs: 10_000 };
+const RATE_LIMIT_RE = /too many requests/i;
 
 /** Resolve the page cap: a positive integer `max_pages` on the entry, capped. */
 function resolveMaxPages(entry) {
@@ -38,6 +80,37 @@ export function extractNextData(html) {
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
+/**
+ * The company record from a careers page's __NEXT_DATA__, in either frontend
+ * shape. Null when neither shape carries a numeric company id.
+ * @param {any} nextData
+ * @returns {{ id: number, domain?: string } | null}
+ */
+export function extractCompany(nextData) {
+  const pageProps = nextData?.props?.pageProps;
+  const company = (pageProps?.pageData ?? pageProps?.initialState)?.company;
+  return Number.isInteger(company?.id) ? company : null;
+}
+
+/**
+ * A ctx whose fetchJson throws a 429-shaped error when the GraphQL endpoint
+ * answers with its rate-limit error, so fetchJsonWithRetry backs off on it.
+ * @param {any} ctx
+ */
+function rateLimitAware(ctx) {
+  return {
+    ...ctx,
+    fetchJson: async (url, opts) => {
+      const json = await ctx.fetchJson(url, opts);
+      const message = json?.errors?.[0]?.message;
+      if (typeof message === 'string' && RATE_LIMIT_RE.test(message)) {
+        throw Object.assign(new Error(`join: ${message}`), { status: 429 });
+      }
+      return json;
+    },
+  };
+}
+
 /** @type {Provider} */
 export default {
   id: 'join',
@@ -50,20 +123,12 @@ export default {
     const slug = extractSlug(entry.careers_url);
     if (!slug) throw new Error('join: cannot extract slug from careers_url');
 
-    const baseUrl = `https://join.com/companies/${slug}`;
-    const allItems = [];
-
-    // redirect:'error' prevents SSRF via server-side redirects; baseUrl is
-    // always reconstructed as https://join.com/... so the host is pinned
-    // regardless of the original careers_url.
-    const firstHtml = await ctx.fetchText(baseUrl, { redirect: 'error' });
-    const firstData = extractNextData(firstHtml);
-    const state = firstData?.props?.pageProps?.initialState;
-    if (!state) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
-
-    const firstJobs = state.jobs?.items;
-    if (!Array.isArray(firstJobs)) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
-    allItems.push(...firstJobs);
+    // redirect:'error' prevents SSRF via server-side redirects; both URLs are
+    // fixed https://join.com/... strings, so the host is pinned regardless of
+    // the original careers_url.
+    const html = await fetchTextWithRetry(ctx, `https://join.com/companies/${slug}`, { redirect: 'error' });
+    const company = extractCompany(extractNextData(html));
+    if (!company) throw new Error('join: __NEXT_DATA__ not found or has no company id');
 
     // Honor a context page cap — verify-portals' liveness probe sets
     // `ctx.maxPages: 1` so it only needs to know a board is live, not its
@@ -73,30 +138,51 @@ export default {
     // what actually truncated the board, not the health-check probe.
     const ctxMaxPages = Number(ctx?.maxPages);
     const ctxCap = ctxMaxPages > 0 ? ctxMaxPages : Infinity;
-    const reportedPageCount = state.jobs?.pagination?.pageCount || 0;
     const maxPages = resolveMaxPages(entry);
-    const pageCount = Math.min(reportedPageCount, maxPages, ctxCap);
-    for (let page = 2; page <= pageCount; page++) {
-      const html = await ctx.fetchText(`${baseUrl}?page=${page}`, { redirect: 'error' });
-      const data = extractNextData(html);
-      const pageState = data?.props?.pageProps?.initialState;
-      if (!pageState) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
-      const pageItems = pageState.jobs?.items;
-      if (!Array.isArray(pageItems)) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
-      allItems.push(...pageItems);
+    const gqlCtx = rateLimitAware(ctx);
+
+    const allItems = [];
+    let reportedPageCount = 1;
+    let page = 1;
+    for (; page <= Math.min(reportedPageCount, maxPages, ctxCap); page++) {
+      const json = /** @type {any} */ (await fetchJsonWithRetry(gqlCtx, GRAPHQL_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          operationName: 'PublicJobsList',
+          query: PUBLIC_JOBS_QUERY,
+          variables: { input: { companyId: company.id, paginationPage: { page, pageSize: PAGE_SIZE }, filters: {} } },
+        }),
+        redirect: 'error',
+      }, RETRY_POLICY));
+      if (Array.isArray(json?.errors) && json.errors.length > 0) {
+        throw new Error(`join: publicJobs failed: ${json.errors[0]?.message || 'unknown GraphQL error'}`);
+      }
+      const items = json?.data?.publicJobs?.items;
+      if (!Array.isArray(items)) throw new Error('join: publicJobs response has no items array');
+      allItems.push(...items);
+      reportedPageCount = Number(json.data.publicJobs.pageInfo?.pageCount) || 0;
     }
-    const truncated = pageCount === maxPages && reportedPageCount > maxPages && ctxCap === Infinity;
+    const fetchedPages = page - 1;
+    const truncated = fetchedPages === maxPages && reportedPageCount > maxPages && ctxCap === Infinity;
     if (truncated) {
       console.error(`⚠️  join: ${entry.name} truncated at max_pages=${maxPages} of ${reportedPageCount} reported pages — raise max_pages on this entry for more`);
     }
 
-    const companySlug = state.company?.domain || slug;
-    const jobs = allItems.map(j => ({
-      title: j.title || '',
-      url: `https://join.com/companies/${companySlug}/jobs/${j.idParam}`,
-      company: entry.name,
-      location: j.city?.cityName || '',
-    }));
+    // The URL carries the job's numeric `id`, the one identifier that stays the
+    // same for the posting's whole life, so it works as the scan's dedup key.
+    // The path the site itself links to is `<idParam>` (`<number>-<title>`),
+    // whose number changes whenever the posting is republished; join.com
+    // redirects `/companies/<domain>/<id>` to the current `<idParam>` page.
+    const companySlug = (typeof company.domain === 'string' && safeEncodeURIComponent(company.domain)) || slug;
+    const jobs = allItems
+      .filter(j => Number.isInteger(j?.id))
+      .map(j => ({
+        title: j.title || '',
+        url: `https://join.com/companies/${companySlug}/${j.id}`,
+        company: entry.name,
+        location: j.city?.cityName || '',
+      }));
     // Tag a cap-truncated board (the workdayTruncated convention) so a caller can tell without reading stderr.
     if (truncated) /** @type {any} */ (jobs).joinTruncated = true;
     return jobs;

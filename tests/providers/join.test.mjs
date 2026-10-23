@@ -1,13 +1,13 @@
-// tests/providers/join.test.mjs — join.com __NEXT_DATA__ SSR parser.
+// tests/providers/join.test.mjs — join.com: company id from __NEXT_DATA__, jobs from the publicJobs GraphQL query.
 import { pass, fail, ROOT } from '../helpers.mjs';
 import { join as joinPath } from 'path';
 import { pathToFileURL } from 'url';
 
-console.log('\nProvider — join (join.com __NEXT_DATA__ SSR parser)');
+console.log('\nProvider — join (join.com __NEXT_DATA__ company id + publicJobs GraphQL)');
 try {
   const joinModule = await import(pathToFileURL(joinPath(ROOT, 'providers/join.mjs')).href);
   const joinProvider = joinModule.default;
-  const { extractSlug, extractNextData } = joinModule;
+  const { extractSlug, extractNextData, extractCompany } = joinModule;
 
   if (joinProvider.id === 'join') pass('join.id is "join"');
   else fail(`join.id is ${JSON.stringify(joinProvider.id)}`);
@@ -33,13 +33,16 @@ try {
   if (joinProvider.detect({ careers_url: 'https://example.com/careers' }) === null) pass('join.detect() returns null for non-join.com URLs');
   else fail('join.detect() should return null for non-join.com URLs');
 
-  // extractNextData — pulls and parses the __NEXT_DATA__ JSON blob.
-  const nextDataHtml = (jobs, pageCount) =>
+  // Careers-page HTML with the company record in either frontend shape.
+  const pageHtml = (company, key = 'pageData') =>
     `<html><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
-      props: { pageProps: { initialState: { company: { domain: 'acme-corp' }, jobs: { items: jobs, pagination: { pageCount } } } } },
+      props: { pageProps: { [key]: { company, jobs: { items: [], pagination: { pageCount: 1 } } } } },
     })}</script></body></html>`;
-  const data = extractNextData(nextDataHtml([{ title: 'X', idParam: '1', city: { cityName: 'Berlin' } }], 1));
-  if (data?.props?.pageProps?.initialState?.jobs?.items?.length === 1) pass('join.extractNextData() parses the embedded __NEXT_DATA__ JSON');
+  const acmeHtml = pageHtml({ id: 4242, domain: 'acme-corp' });
+
+  // extractNextData — pulls and parses the __NEXT_DATA__ JSON blob.
+  const data = extractNextData(acmeHtml);
+  if (data?.props?.pageProps?.pageData?.company?.id === 4242) pass('join.extractNextData() parses the embedded __NEXT_DATA__ JSON');
   else fail(`join.extractNextData() wrong: ${JSON.stringify(data)}`);
   if (extractNextData('<html>no script here</html>') === null) pass('join.extractNextData() returns null when the script tag is absent');
   else fail('join.extractNextData() should return null without a __NEXT_DATA__ script');
@@ -54,88 +57,123 @@ try {
     fail('join.extractNextData() should return null for non-string input');
   }
 
-  // fetch() — single page, maps items to the normalized job shape.
-  const entry = { name: 'Acme', careers_url: 'https://join.com/companies/acme-corp' };
-  let singleCalls = 0;
-  const singleCtx = {
-    fetchText: async () => {
-      singleCalls++;
-      return nextDataHtml([{ title: 'Senior AI Engineer', idParam: 'abc123', city: { cityName: 'Remote' } }], 1);
-    },
+  // extractCompany — reads pageData (current frontend) or initialState (cached older pages).
+  if (extractCompany(extractNextData(acmeHtml))?.id === 4242) pass('join.extractCompany() reads the company from pageProps.pageData');
+  else fail('join.extractCompany() should read pageProps.pageData.company');
+  if (extractCompany(extractNextData(pageHtml({ id: 7, domain: 'old' }, 'initialState')))?.id === 7) {
+    pass('join.extractCompany() reads the company from pageProps.initialState');
+  } else {
+    fail('join.extractCompany() should read pageProps.initialState.company');
+  }
+  if (extractCompany(extractNextData(pageHtml(null))) === null && extractCompany(extractNextData(pageHtml({ id: '4242' }))) === null && extractCompany(null) === null) {
+    pass('join.extractCompany() returns null without an integer company id');
+  } else {
+    fail('join.extractCompany() should return null when the company id is missing or not an integer');
+  }
+
+  // A GraphQL publicJobs response.
+  const gqlPage = (items, pageCount = 1) => ({ data: { publicJobs: { items, pageInfo: { pageCount } } } });
+  const job = (id, title = `Job ${id}`, cityName = 'Berlin') => ({ id, title, city: { cityName } });
+
+  /**
+   * A ctx whose fetchText serves the careers page and whose fetchJson answers
+   * the GraphQL POSTs from `respond(variables, call)`. Records every request.
+   */
+  const makeCtx = (respond, { html = acmeHtml, ...extra } = {}) => {
+    const ctx = {
+      textCalls: [],
+      jsonCalls: [],
+      sleeps: [],
+      fetchText: async (url, opts) => { ctx.textCalls.push({ url, opts }); return html; },
+      fetchJson: async (url, opts) => {
+        const body = JSON.parse(opts.body);
+        ctx.jsonCalls.push({ url, opts, body });
+        return respond(body.variables.input, ctx.jsonCalls.length);
+      },
+      sleep: async (ms) => { ctx.sleeps.push(ms); },
+      ...extra,
+    };
+    return ctx;
   };
+  const entry = { name: 'Acme', careers_url: 'https://join.com/companies/acme-corp' };
+
+  // fetch() — one careers-page request for the company id, then one GraphQL page.
+  const singleCtx = makeCtx(() => gqlPage([job(16751346, 'Senior AI Engineer', 'Remote')]));
   const singleJobs = await joinProvider.fetch(entry, singleCtx);
+  const firstQuery = singleCtx.jsonCalls[0];
   if (
-    singleCalls === 1 &&
+    singleCtx.textCalls.length === 1 &&
+    singleCtx.textCalls[0].url === 'https://join.com/companies/acme-corp' &&
+    singleCtx.jsonCalls.length === 1 &&
+    firstQuery.url === 'https://join.com/candidate-api/graphql' &&
+    firstQuery.opts.method === 'POST' &&
+    firstQuery.body.variables.input.companyId === 4242 &&
+    firstQuery.body.variables.input.paginationPage.page === 1 &&
+    firstQuery.body.variables.input.paginationPage.pageSize === 100
+  ) {
+    pass('join.fetch() reads the company id from the careers page and POSTs publicJobs for it, 100 per page');
+  } else {
+    fail(`join.fetch() request shape wrong: ${JSON.stringify({ text: singleCtx.textCalls, json: singleCtx.jsonCalls.map(c => c.body) })}`);
+  }
+  if (
     singleJobs.length === 1 &&
     singleJobs[0].title === 'Senior AI Engineer' &&
-    singleJobs[0].url === 'https://join.com/companies/acme-corp/jobs/abc123' &&
+    singleJobs[0].url === 'https://join.com/companies/acme-corp/16751346' &&
+    singleJobs[0].company === 'Acme' &&
     singleJobs[0].location === 'Remote'
   ) {
-    pass('join.fetch() maps a single page of items to the normalized job shape');
+    pass('join.fetch() maps items to the normalized job shape with a stable /companies/<domain>/<id> URL');
   } else {
-    fail(`join.fetch() single-page wrong: ${JSON.stringify(singleJobs)} after ${singleCalls} calls`);
+    fail(`join.fetch() job shape wrong: ${JSON.stringify(singleJobs)}`);
   }
 
-  // fetch() — paginates via ?page=N while pageCount > 1.
-  const pages = [nextDataHtml([{ title: 'Job 1', idParam: '1', city: {} }], 2), nextDataHtml([{ title: 'Job 2', idParam: '2', city: {} }], 2)];
-  let pagedCalls = 0;
-  const seenUrls = [];
-  const pagedCtx = {
-    fetchText: async (url) => {
-      seenUrls.push(url);
-      return pages[pagedCalls++];
-    },
-  };
+  // fetch() — the URL uses the company's own domain from the page, not the careers_url slug.
+  const renamedCtx = makeCtx(() => gqlPage([job(1)]), { html: pageHtml({ id: 4242, domain: 'acme-renamed' }) });
+  const renamedJobs = await joinProvider.fetch(entry, renamedCtx);
+  if (renamedJobs[0]?.url === 'https://join.com/companies/acme-renamed/1') pass('join.fetch() builds the job URL from company.domain');
+  else fail(`join.fetch() should use company.domain in the job URL, got ${renamedJobs[0]?.url}`);
+
+  // fetch() — an item without an integer id is dropped, not turned into a broken URL.
+  const noIdJobs = await joinProvider.fetch(entry, makeCtx(() => gqlPage([job(1), { title: 'No id', city: {} }, job('2')])));
+  if (noIdJobs.length === 1 && noIdJobs[0].url.endsWith('/1')) pass('join.fetch() drops items without an integer id');
+  else fail(`join.fetch() should drop items without an integer id, got ${JSON.stringify(noIdJobs)}`);
+
+  // fetch() — paginates while pageInfo.pageCount says there are more pages.
+  const pagedCtx = makeCtx(({ paginationPage }) => gqlPage([job(paginationPage.page)], 3));
   const pagedJobs = await joinProvider.fetch(entry, pagedCtx);
-  if (pagedJobs.length === 2 && pagedCalls === 2 && seenUrls[1] === 'https://join.com/companies/acme-corp?page=2') {
-    pass('join.fetch() paginates via ?page=N while pagination.pageCount > 1');
+  if (pagedJobs.length === 3 && pagedCtx.jsonCalls.map(c => c.body.variables.input.paginationPage.page).join(',') === '1,2,3') {
+    pass('join.fetch() paginates publicJobs up to pageInfo.pageCount');
   } else {
-    fail(`join.fetch() pagination wrong: ${JSON.stringify(seenUrls)}, ${pagedJobs.length} jobs`);
+    fail(`join.fetch() pagination wrong: ${pagedJobs.length} jobs, pages ${pagedCtx.jsonCalls.map(c => c.body.variables.input.paginationPage.page)}`);
   }
 
-  // fetch() — passes redirect:'error' on every request (SSRF hardening).
-  let redirectCalls = [];
-  let redirectPagedCalls = 0;
-  const redirectCtx = {
-    fetchText: async (url, opts) => {
-      redirectCalls.push(opts?.redirect);
-      return pages[redirectPagedCalls++];
-    },
-  };
-  await joinProvider.fetch(entry, redirectCtx);
-  if (redirectCalls.length === 2 && redirectCalls.every((r) => r === 'error')) {
-    pass('join.fetch() passes redirect:"error" on the first request and every paginated request');
+  // fetch() — an empty board (pageCount 0) is one request and an empty list.
+  const emptyCtx = makeCtx(() => gqlPage([], 0));
+  const emptyJobs = await joinProvider.fetch(entry, emptyCtx);
+  if (Array.isArray(emptyJobs) && emptyJobs.length === 0 && emptyCtx.jsonCalls.length === 1) pass('join.fetch() returns [] for an empty board after one request');
+  else fail(`join.fetch() empty board wrong: ${JSON.stringify(emptyJobs)} after ${emptyCtx.jsonCalls.length} calls`);
+
+  // fetch() — passes redirect:'error' on the careers page and every GraphQL request (SSRF hardening).
+  if (pagedCtx.textCalls.every(c => c.opts?.redirect === 'error') && pagedCtx.jsonCalls.every(c => c.opts?.redirect === 'error')) {
+    pass('join.fetch() passes redirect:"error" on the careers page and every GraphQL request');
   } else {
-    fail(`join.fetch() redirect opts wrong: ${JSON.stringify(redirectCalls)}`);
+    fail(`join.fetch() redirect opts wrong: ${JSON.stringify([...pagedCtx.textCalls, ...pagedCtx.jsonCalls].map(c => c.opts?.redirect))}`);
   }
 
   // fetch() — honors ctx.maxPages (verify-portals' liveness probe passes 1)
-  // so a health check never crawls a tenant's full multi-page board.
-  let cappedCalls = 0;
-  const cappedCtx = {
-    maxPages: 1,
-    fetchText: async () => {
-      cappedCalls++;
-      return nextDataHtml([{ title: 'Job 1', idParam: '1', city: {} }], 2);
-    },
-  };
+  // so a health check never walks a tenant's full multi-page board.
+  const cappedCtx = makeCtx(({ paginationPage }) => gqlPage([job(paginationPage.page)], 2), { maxPages: 1 });
   const cappedJobs = await joinProvider.fetch(entry, cappedCtx);
-  if (cappedCalls === 1 && cappedJobs.length === 1) {
-    pass('join.fetch() honors ctx.maxPages and stops after the first page even when pageCount is higher');
+  if (cappedCtx.jsonCalls.length === 1 && cappedJobs.length === 1 && cappedJobs.joinTruncated === undefined) {
+    pass('join.fetch() honors ctx.maxPages and stops after the first page, without a truncation tag');
   } else {
-    fail(`join.fetch() ctx.maxPages wrong: calls=${cappedCalls}, jobs=${cappedJobs.length}`);
+    fail(`join.fetch() ctx.maxPages wrong: calls=${cappedCtx.jsonCalls.length}, jobs=${cappedJobs.length}, tag=${cappedJobs.joinTruncated}`);
   }
 
-  // fetch() — DEFAULT_MAX_PAGES caps pagination even when the page's own
-  // reported pagination.pageCount is far higher, and warns about it. Applies
-  // regardless of ctx.maxPages (unset here), unlike the health-check cap.
-  let bigBoardCalls = 0;
-  const bigBoardCtx = {
-    fetchText: async () => {
-      bigBoardCalls++;
-      return nextDataHtml([{ title: `Job ${bigBoardCalls}`, idParam: String(bigBoardCalls), city: {} }], 9999);
-    },
-  };
+  // fetch() — DEFAULT_MAX_PAGES caps pagination even when the reported
+  // pageInfo.pageCount is far higher, and warns about it. Applies regardless
+  // of ctx.maxPages (unset here), unlike the health-check cap.
+  const bigBoardCtx = makeCtx(({ paginationPage }) => gqlPage([job(paginationPage.page)], 9999));
   const bigBoardWarnings = [];
   const realConsoleError = console.error;
   console.error = (...args) => bigBoardWarnings.push(args.join(' '));
@@ -145,10 +183,10 @@ try {
   } finally {
     console.error = realConsoleError;
   }
-  if (bigBoardCalls === 50 && bigBoardJobs.length === 50) {
-    pass('join.fetch() caps pagination at DEFAULT_MAX_PAGES=50 even when pagination.pageCount reports far more');
+  if (bigBoardCtx.jsonCalls.length === 50 && bigBoardJobs.length === 50) {
+    pass('join.fetch() caps pagination at DEFAULT_MAX_PAGES=50 even when pageInfo.pageCount reports far more');
   } else {
-    fail(`join.fetch() DEFAULT_MAX_PAGES cap wrong: calls=${bigBoardCalls}, jobs=${bigBoardJobs?.length}`);
+    fail(`join.fetch() DEFAULT_MAX_PAGES cap wrong: calls=${bigBoardCtx.jsonCalls.length}, jobs=${bigBoardJobs?.length}`);
   }
   if (bigBoardWarnings.some((w) => w.includes('truncated at max_pages=50'))) {
     pass('join.fetch() warns when DEFAULT_MAX_PAGES truncates the board');
@@ -158,81 +196,77 @@ try {
   if (bigBoardJobs.joinTruncated === true) pass('join.fetch() tags a cap-truncated board joinTruncated');
   else fail(`join cap-truncated board should carry joinTruncated, got ${bigBoardJobs.joinTruncated}`);
 
+  // fetch() — a board that ends exactly at the cap is complete, not truncated.
+  const exactCtx = makeCtx(({ paginationPage }) => gqlPage([job(paginationPage.page)], 3));
+  const exactJobs = await joinProvider.fetch({ ...entry, max_pages: 3 }, exactCtx);
+  if (exactJobs.length === 3 && exactJobs.joinTruncated === undefined) pass('join.fetch() does not tag a board whose pageCount equals the cap');
+  else fail(`join.fetch() exact-cap board wrong: jobs=${exactJobs.length}, tag=${exactJobs.joinTruncated}`);
+
   // fetch() — entry.max_pages overrides the default, clamped at MAX_PAGES_CAP.
-  let overrideCalls = 0;
-  const overrideCtx = {
-    fetchText: async () => {
-      overrideCalls++;
-      return nextDataHtml([{ title: `Job ${overrideCalls}`, idParam: String(overrideCalls), city: {} }], 9999);
-    },
-  };
-  const overrideEntry = { name: 'Acme', careers_url: 'https://join.com/companies/acme-corp', max_pages: 3 };
-  const overrideJobs = await joinProvider.fetch(overrideEntry, overrideCtx);
-  if (overrideCalls === 3 && overrideJobs.length === 3) {
+  const overrideCtx = makeCtx(({ paginationPage }) => gqlPage([job(paginationPage.page)], 9999));
+  const overrideJobs = await joinProvider.fetch({ ...entry, max_pages: 3 }, overrideCtx);
+  if (overrideCtx.jsonCalls.length === 3 && overrideJobs.length === 3) {
     pass('join.fetch() honors entry.max_pages as an override on the default cap');
   } else {
-    fail(`join.fetch() entry.max_pages override wrong: calls=${overrideCalls}, jobs=${overrideJobs?.length}`);
+    fail(`join.fetch() entry.max_pages override wrong: calls=${overrideCtx.jsonCalls.length}, jobs=${overrideJobs?.length}`);
   }
 
-  // fetch() — missing/unexpected __NEXT_DATA__ structure throws instead of
-  // silently returning an empty list (so a scan doesn't mistake a parse
-  // failure for a genuinely empty board).
-  let throwErrored = false;
-  try {
-    await joinProvider.fetch(entry, { fetchText: async () => '<html>no next data</html>' });
-  } catch {
-    throwErrored = true;
+  // fetch() — the publicJobs rate-limit error (an HTTP 200 with a GraphQL
+  // error) is retried with backoff through ctx.sleep.
+  const rateLimited = { errors: [{ message: 'You are doing too many requests to publicJobs' }], data: { publicJobs: null } };
+  const retryCtx = makeCtx((_input, call) => (call <= 2 ? rateLimited : gqlPage([job(1)])));
+  const retryJobs = await joinProvider.fetch(entry, retryCtx);
+  if (retryJobs.length === 1 && retryCtx.jsonCalls.length === 3 && retryCtx.sleeps.length === 2) {
+    pass('join.fetch() retries the publicJobs rate-limit error with backoff and then returns the board');
+  } else {
+    fail(`join.fetch() rate-limit retry wrong: jobs=${retryJobs.length}, calls=${retryCtx.jsonCalls.length}, sleeps=${JSON.stringify(retryCtx.sleeps)}`);
   }
-  if (throwErrored) pass('join.fetch() throws when __NEXT_DATA__ is missing or has an unexpected shape');
-  else fail('join.fetch() should throw on missing/unexpected __NEXT_DATA__');
 
-  // fetch() — a valid first page followed by a broken second page must throw,
-  // not silently treat the second page as empty (that would mask a parse
-  // failure as a genuinely short board).
-  const brokenPagePages = [nextDataHtml([{ title: 'Job 1', idParam: '1', city: {} }], 2), '<html>no next data on page 2</html>'];
-  let brokenPageCalls = 0;
-  const brokenPageCtx = { fetchText: async () => brokenPagePages[brokenPageCalls++] };
-  let brokenPageErrored = false;
+  // fetch() — a rate limit that never clears fails the board after the retries run out.
+  const stuckCtx = makeCtx(() => rateLimited);
+  let stuckError = null;
   try {
-    await joinProvider.fetch(entry, brokenPageCtx);
-  } catch {
-    brokenPageErrored = true;
+    await joinProvider.fetch(entry, stuckCtx);
+  } catch (err) {
+    stuckError = err;
   }
-  if (brokenPageErrored) pass('join.fetch() throws when a paginated (non-first) page has missing/unexpected __NEXT_DATA__');
-  else fail('join.fetch() should throw when a later page has missing/unexpected __NEXT_DATA__, not swallow it as empty');
+  if (stuckError && /too many requests/i.test(stuckError.message) && stuckCtx.jsonCalls.length === 5) {
+    pass('join.fetch() throws after 5 attempts when the rate limit does not clear');
+  } else {
+    fail(`join.fetch() persistent rate limit wrong: error=${stuckError?.message}, calls=${stuckCtx.jsonCalls.length}`);
+  }
 
-  // fetch() — jobs.items present but not an array (first page) must throw,
-  // not silently spread garbage or crash with a raw TypeError.
-  let nonArrayFirstPageErrored = false;
-  try {
-    await joinProvider.fetch(entry, { fetchText: async () => nextDataHtml({ not: 'an array' }, 1) });
-  } catch {
-    nonArrayFirstPageErrored = true;
-  }
-  if (nonArrayFirstPageErrored) pass('join.fetch() throws when the first page\'s jobs.items is not an array');
-  else fail('join.fetch() should throw when the first page\'s jobs.items is not an array');
+  // fetch() — failures that must throw instead of reading as an empty board.
+  const expectThrow = async (label, run) => {
+    let errored = false;
+    try {
+      await run();
+    } catch {
+      errored = true;
+    }
+    if (errored) pass(`join.fetch() throws when ${label}`);
+    else fail(`join.fetch() should throw when ${label}`);
+  };
+  await expectThrow('__NEXT_DATA__ is missing', () => joinProvider.fetch(entry, makeCtx(() => gqlPage([]), { html: '<html>no next data</html>' })));
+  await expectThrow('the page has no company id', () => joinProvider.fetch(entry, makeCtx(() => gqlPage([]), { html: pageHtml(null) })));
+  await expectThrow('publicJobs returns any other GraphQL error', () =>
+    joinProvider.fetch(entry, makeCtx(() => ({ errors: [{ message: 'Server error' }], data: { publicJobs: null } }))));
+  await expectThrow('publicJobs items is not an array on the first page', () => joinProvider.fetch(entry, makeCtx(() => gqlPage({ not: 'an array' }))));
+  await expectThrow('publicJobs items is not an array on a later page', () =>
+    joinProvider.fetch(entry, makeCtx(({ paginationPage }) => (paginationPage.page === 1 ? gqlPage([job(1)], 2) : gqlPage(null, 2)))));
 
-  // fetch() — same check on a later page.
-  const nonArrayPagePages = [nextDataHtml([{ title: 'Job 1', idParam: '1', city: {} }], 2), nextDataHtml({ not: 'an array' }, 2)];
-  let nonArrayPageCalls = 0;
-  let nonArrayPageErrored = false;
+  // fetch() — a careers_url that fails extractSlug() throws before any request.
+  const noRequestCtx = makeCtx(() => { throw new Error('should not be called'); }, {
+    fetchText: async () => { throw new Error('should not be called'); },
+  });
+  let slugError = null;
   try {
-    await joinProvider.fetch(entry, { fetchText: async () => nonArrayPagePages[nonArrayPageCalls++] });
-  } catch {
-    nonArrayPageErrored = true;
+    await joinProvider.fetch({ name: 'Acme', careers_url: 'https://example.com/careers' }, noRequestCtx);
+  } catch (err) {
+    slugError = err;
   }
-  if (nonArrayPageErrored) pass('join.fetch() throws when a paginated (non-first) page\'s jobs.items is not an array');
-  else fail('join.fetch() should throw when a later page\'s jobs.items is not an array');
-
-  // fetch() — careers_url that fails extractSlug() throws before any request.
-  let slugErrored = false;
-  try {
-    await joinProvider.fetch({ name: 'Acme', careers_url: 'https://example.com/careers' }, { fetchText: async () => { throw new Error('should not be called'); } });
-  } catch {
-    slugErrored = true;
-  }
-  if (slugErrored) pass('join.fetch() throws when careers_url is not a join.com URL');
-  else fail('join.fetch() should throw when the slug cannot be extracted');
+  if (slugError && /cannot extract slug/.test(slugError.message)) pass('join.fetch() throws when careers_url is not a join.com URL');
+  else fail(`join.fetch() should throw when the slug cannot be extracted, got ${slugError?.message}`);
 } catch (e) {
   fail(`join provider tests crashed: ${e.message}`);
 }
