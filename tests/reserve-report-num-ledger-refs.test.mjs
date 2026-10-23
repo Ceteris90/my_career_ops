@@ -16,6 +16,13 @@ import { spawnSync } from 'child_process';
 import { reserveReportNumbers, releaseReportNumbers } from '../reserve-report-num.mjs';
 import { pass, fail, NODE, ROOT } from './helpers.mjs';
 
+// The allocator and the spawned writers honor these ahead of the scratch root.
+// Blanked (every reader treats empty as unset, as helpers.mjs does for
+// CAREER_OPS_TRACKER), so a developer's own overrides can neither feed real
+// follow-ups into the count nor receive a reservation sentinel.
+const PATH_OVERRIDES = ['CAREER_OPS_REPORTS_DIR', 'CAREER_OPS_FOLLOWUPS', 'CAREER_OPS_BATCH_STATE'];
+for (const name of PATH_OVERRIDES) process.env[name] = '';
+
 const HEADER = '# Applications Tracker\n\n'
   + '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n'
   + '|---|------|---------|------|-------|--------|-----|--------|-------|\n';
@@ -31,8 +38,14 @@ function scratchRoot(rows, { reports = [], data = {} } = {}) {
 }
 
 async function peek(dir) {
-  const nums = await reserveReportNumbers(1, { rootDir: dir });
-  await releaseReportNumbers(nums, { rootDir: dir });
+  const opts = {
+    rootDir: dir,
+    reportsDir: join(dir, 'reports'),
+    trackerPath: join(dir, 'data/applications.md'),
+    batchStateFile: join(dir, 'batch/batch-state.tsv'),
+  };
+  const nums = await reserveReportNumbers(1, opts);
+  await releaseReportNumbers(nums, opts);
   return nums[0];
 }
 
@@ -40,7 +53,12 @@ function run(dir, args) {
   return spawnSync(NODE, args, {
     cwd: ROOT,
     encoding: 'utf-8',
-    env: { ...process.env, CAREER_OPS_ROOT: dir, CAREER_OPS_TRACKER: '' },
+    env: {
+      ...process.env,
+      ...Object.fromEntries(PATH_OVERRIDES.map(name => [name, ''])),
+      CAREER_OPS_ROOT: dir,
+      CAREER_OPS_TRACKER: '',
+    },
   });
 }
 
@@ -136,6 +154,43 @@ async function check(name, dir, expect) {
   });
   try {
     await check('ledgers that only name live rows leave numbering alone', dir, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// A `#N` in follow-ups prose is not a reference; only the table, the legacy
+// bullet and the next/cleared directives name an application.
+{
+  const dir = scratchRoot([
+    '| 1 | 2026-10-01 | Acme | Backend Engineer | 4.0/5 | Applied | ❌ | [001](reports/001-acme-2026-10-01.md) | |',
+  ], {
+    reports: ['001-acme-2026-10-01.md'],
+    data: {
+      'follow-ups.md': '# Follow-ups\n\n- Review issue #5000 before the next nudge\n- see #4000 for context\n'
+        + '- cleared #3 2026-10-21\n',
+    },
+  });
+  try {
+    await check('prose `#N` in follow-ups is ignored; a cleared directive still counts', dir, 4);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// A ledger that exists but cannot be read fails the reservation instead of
+// counting as empty, which is how its numbers would be handed out again.
+{
+  const dir = scratchRoot([
+    '| 1 | 2026-10-01 | Acme | Backend Engineer | 4.0/5 | Applied | ❌ | [001](reports/001-acme-2026-10-01.md) | |',
+  ], { reports: ['001-acme-2026-10-01.md'] });
+  mkdirSync(join(dir, 'data/contacts.tsv'));
+  try {
+    const got = await peek(dir);
+    fail(`an unreadable ledger was read as empty (reserved ${got})`);
+  } catch (err) {
+    if (err?.code === 'EISDIR') pass('an unreadable ledger fails the reservation instead of reading as empty');
+    else fail(`an unreadable ledger: expected EISDIR, got ${err?.code ?? err?.message}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

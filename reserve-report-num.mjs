@@ -149,10 +149,15 @@ function occupiedFromTracker(trackerPath) {
 // to a new row would give the new application the old one's history, so a
 // number any of them still names stays taken even once its row is gone.
 const LEDGER_NUM_RE = /^\d+$/;
-// Legacy follow-up bullets (`- 2026-10-09 · #12 Acme — note`) and the pin and
-// clear directives (`- next #12 2026-10-20`, `- cleared #12 ...`) name the
-// application with their first `#N`.
-const FOLLOWUP_LINE_NUM_RE = /^-\s.*?#(\d+)/;
+// The three non-table line shapes followup-cadence.mjs reads an application
+// number from: a legacy bullet (`- 2026-10-09 · #12 Acme — note`, BULLET_RE),
+// a pin (`- next #12 2026-10-20`, OVERRIDE_RE) and a clear
+// (`- cleared #12 2026-10-21`, CLEARED_RE). Any other `#N` in the file is
+// prose, not a reference.
+const FOLLOWUP_LINE_NUM_RES = [
+  /^-\s+\d{4}-\d{2}-\d{2}\s+·\s+#(\d+)\s/,
+  /^-\s+(?:next|cleared)\s+#(\d+)\s+\d{4}-\d{2}-\d{2}/i,
+];
 
 function ledgerPathsFor(trackerPath, options = {}) {
   const dataDir = join(options.rootDir || ROOT, 'data');
@@ -166,8 +171,16 @@ function ledgerPathsFor(trackerPath, options = {}) {
   };
 }
 
+// A missing ledger is normal (most installs never write one). Any other read
+// failure propagates: treating an unreadable ledger as empty is exactly how a
+// number it names would be handed out again.
 function readLines(path) {
-  return existsSync(path) ? readFileSync(path, 'utf-8').split(/\r?\n/) : [];
+  try {
+    return readFileSync(path, 'utf-8').split(/\r?\n/);
+  } catch (err) {
+    if (err?.code === 'ENOENT') return [];
+    throw err;
+  }
 }
 
 function addLedgerNum(occupied, cell) {
@@ -193,8 +206,10 @@ function occupiedFromLedgers(trackerPath, options) {
       if (LEDGER_NUM_RE.test(String(parts[1] ?? '').trim())) addLedgerNum(occupied, parts[2]);
       continue;
     }
-    const m = line.match(FOLLOWUP_LINE_NUM_RE);
-    if (m) addLedgerNum(occupied, m[1]);
+    for (const re of FOLLOWUP_LINE_NUM_RES) {
+      const m = line.match(re);
+      if (m) { addLedgerNum(occupied, m[1]); break; }
+    }
   }
   return occupied;
 }
