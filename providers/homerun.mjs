@@ -180,6 +180,9 @@ function httpsUrl(value) {
   }
 }
 
+// An ISO date-time that states its zone (Z or an offset).
+const ISO_WITH_ZONE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+
 /**
  * Entry `<updated>` is `YYYY-MM-DD HH:MM:SS` with no offset. Read as UTC: the
  * feed-level `<updated>` (ISO, `+00:00`) equals the newest entry's value.
@@ -188,6 +191,9 @@ function httpsUrl(value) {
 function toEpochMs(value) {
   if (!value) return undefined;
   const naive = value.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/);
+  // Anything else must carry Z or an offset: Date.parse reads an offset-less
+  // ISO date-time as local time, and V8 accepts loose strings like "Foo 12".
+  if (!naive && !ISO_WITH_ZONE_RE.test(value)) return undefined;
   const parsed = Date.parse(naive ? `${naive[1]}T${naive[2]}Z` : value);
   return Number.isNaN(parsed) ? undefined : parsed;
 }

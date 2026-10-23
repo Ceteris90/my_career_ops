@@ -158,6 +158,15 @@ try {
     fail(`support=${JSON.stringify(support)}`);
   }
 
+  // <updated> without Z or an offset (other than the feed's naive form) is local
+  // time to Date.parse, so it is omitted rather than read in the host timezone.
+  const [offsetless] = parseHomerunFeed(FEED.replace('not a date', '2026-10-21T07:43:57'), 'Acme Inc').slice(1);
+  if (offsetless && !('postedAt' in offsetless)) pass('an offset-less ISO <updated> is omitted, not read as local time');
+  else fail(`offset-less ISO postedAt=${offsetless?.postedAt}`);
+  const [zoned] = parseHomerunFeed(FEED.replace('not a date', '2026-10-21T07:43:57+00:00'), 'Acme Inc').slice(1);
+  if (zoned?.postedAt === Date.UTC(2026, 9, 21, 7, 43, 57)) pass('an ISO <updated> with an offset is read');
+  else fail(`zoned ISO postedAt=${zoned?.postedAt}`);
+
   const authorCompany = parseHomerunFeed(FEED);
   if (authorCompany[0]?.company === 'Acme') pass('company falls back to the entry <author><name>');
   else fail(`fallback company=${JSON.stringify(authorCompany[0]?.company)}`);
