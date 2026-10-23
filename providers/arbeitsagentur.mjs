@@ -2,6 +2,7 @@
 /** @typedef {import('./_types.js').Provider} Provider */
 
 import { safeEncodeURIComponent } from './_safe-url.mjs';
+import { fetchJsonWithRetry, sleep } from './_http.mjs';
 
 // Arbeitsagentur (Bundesagentur für Arbeit) provider — hits the public Jobsuche
 // REST API (the same endpoint arbeitsagentur.de uses), so it lives in-process
@@ -41,7 +42,8 @@ import { safeEncodeURIComponent } from './_safe-url.mjs';
 const API_URL = 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v6/jobs';
 const API_KEY = 'jobboerse-jobsuche'; // public client key the arbeitsagentur.de UI uses
 const DETAIL_BASE = 'https://www.arbeitsagentur.de/jobsuche/jobdetail/';
-const REMOTE_RE = /(remote|homeoffice|home[-\s]?office|ortsunabh|deutschlandweit|bundesweit|100\s*%|full[-\s]?remote|fully remote)/i;
+const INTER_PAGE_DELAY_MS = 200; // between filter-mode page requests
+const REMOTE_RE =/(remote|homeoffice|home[-\s]?office|ortsunabh|deutschlandweit|bundesweit|100\s*%|full[-\s]?remote|fully remote)/i;
 
 // Clamp a runtime integer into [min, max], falling back to `def` for NaN, so a
 // stray portals.yml value can't produce empty (size=0) or pathological queries.
@@ -179,8 +181,8 @@ export default {
       throw new Error(`arbeitsagentur: entry "${entry.name || '(unnamed)'}" has no arbeitsagentur.keywords[]`);
     }
 
-    /** @param {string} was @param {Record<string,string>} [extra] */
-    const fetchKeyword = async (was, extra = {}) => {
+    /** @param {string} was @param {Record<string,string>} [extra] @param {boolean} [retry] */
+    const fetchKeyword = async (was, extra = {}, retry = false) => {
       const params = new URLSearchParams({
         was,
         size: String(size),
@@ -190,22 +192,40 @@ export default {
         ...extra,
       });
       // redirect:'error' prevents SSRF via server-side redirects.
-      const json = await ctx.fetchJson(`${API_URL}?${params.toString()}`, {
+      const url = `${API_URL}?${params.toString()}`;
+      const opts = {
         headers: { 'X-API-Key': API_KEY, accept: 'application/json' },
         redirect: 'error',
         timeoutMs: 12_000,
-      });
+      };
+      const json = retry ? await fetchJsonWithRetry(ctx, url, opts) : await ctx.fetchJson(url, opts);
       return Array.isArray(json && json.ergebnisliste) ? json.ergebnisliste : [];
     };
 
-    /** One request per configured offer type, concatenated. @param {string} was @param {Record<string,string>} [extra] */
-    const fetchAllTypes = async (was, extra = {}) => {
+    /**
+     * One request per configured offer type, concatenated. A failed type does
+     * not discard the others; it throws only when every type failed.
+     * @param {string} was @param {Record<string,string>} [extra] @param {string} label
+     */
+    const fetchAllTypes = async (was, extra, label) => {
       const out = [];
-      for (const art of angebotsart) out.push(...await fetchKeyword(was, { ...extra, angebotsart: art }));
+      let firstErr = null;
+      let ok = 0;
+      for (const art of angebotsart) {
+        try {
+          out.push(...await fetchKeyword(was, { ...extra, angebotsart: art }));
+          ok++;
+        } catch (err) {
+          firstErr = firstErr || err;
+          if (angebotsart.length > 1) errors.push(`"${was}"${label} angebotsart=${art}: ${(err && err.message) || err}`);
+        }
+      }
+      if (!ok && firstErr) throw firstErr;
       return out;
     };
 
     const byRef = new Map();
+    /** @type {string[]} */
     const errors = [];
     let succeeded = 0; // keywords whose primary pass completed (i.e. the source answered)
     for (const kw of keywords) {
@@ -213,8 +233,8 @@ export default {
       try {
         // Pass A: commutable radius around `wo`, or a single nationwide pass.
         primary = wo
-          ? await fetchAllTypes(kw, { wo, umkreis: String(umkreis) })
-          : await fetchAllTypes(kw);
+          ? await fetchAllTypes(kw, { wo, umkreis: String(umkreis) }, '')
+          : await fetchAllTypes(kw, {}, '');
         succeeded++;
       } catch (err) {
         // Recall-first: tolerate a single failed keyword and keep going.
@@ -235,15 +255,19 @@ export default {
             // Server-side home-office filter: collect the candidates. `nv_true` only
             // means "home office is possible", so these are not yet known to be
             // remote — the title check below is what decides.
+            // Paced and retried: this walk is up to remoteMaxPages requests per
+            // offer type, back to back.
+            let requests = 0;
             for (const art of angebotsart) {
               for (let page = 1; page <= remoteMaxPages; page++) {
-                const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art });
+                if (requests++ > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
+                const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art }, true);
                 wide.push(...res);
                 if (res.length < size) break; // short page → done
               }
             }
           } else { // 'title'
-            const nationwide = await fetchAllTypes(kw);
+            const nationwide = await fetchAllTypes(kw, {}, ' (remote pass)');
             wide = nationwide.filter(j => REMOTE_RE.test(String((j && j.stellenangebotsTitel) || '')));
           }
         } catch (err) {

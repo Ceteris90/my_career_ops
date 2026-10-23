@@ -289,7 +289,8 @@ try {
   const seenArts = [];
   const byArt = await aa.fetch(
     { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', angebotsart: [1, 34] } },
-    { fetchJson: async (url) => {
+    { fetchJson: async (url, opts) => {
+        if (opts?.redirect !== 'error') throw new Error(`redirect must be 'error', got ${opts?.redirect}`);
         const art = new URL(url).searchParams.get('angebotsart');
         seenArts.push(art);
         return art === '34' ? page(v6('P', 'Werkstudent ESG', 'Bochum')) : page(v6('J', 'ESG Analyst', 'Bochum'));
@@ -299,6 +300,46 @@ try {
     pass('aa.fetch() queries each configured angebotsart and merges the results');
   } else {
     fail(`aa.fetch() angebotsart list: arts=${seenArts} jobs=${JSON.stringify(byArt)}`);
+  }
+
+  // One offer type failing must not discard the other type's results.
+  const oneTypeFailed = await aa.fetch(
+    { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', angebotsart: [1, 34] } },
+    { fetchJson: async (url) => {
+        if (new URL(url).searchParams.get('angebotsart') === '34') throw new Error('HTTP 404');
+        return page(v6('J', 'ESG Analyst', 'Bochum'));
+      } },
+  );
+  if (oneTypeFailed.length === 1 && oneTypeFailed[0].url.endsWith('J')) {
+    pass('aa.fetch() keeps a successful offer type when another type fails');
+  } else {
+    fail(`aa.fetch() partial angebotsart failure: ${JSON.stringify(oneTypeFailed)}`);
+  }
+
+  // Filter-mode pages are paced across offer types and retried on 429.
+  const sleeps = [];
+  const filterArts = [];
+  let tripped = false;
+  const paced = await aa.fetch(
+    { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', remoteNationwide: true, remoteMatch: 'filter', angebotsart: [1, 34], size: 1, remoteMaxPages: 2 } },
+    {
+      sleep: async (ms) => { sleeps.push(ms); },
+      fetchJson: async (url) => {
+        const sp = new URL(url).searchParams;
+        if (!sp.has('homeoffice')) return page();
+        if (!tripped && sp.get('angebotsart') === '34') {
+          tripped = true;
+          throw Object.assign(new Error('HTTP 429'), { status: 429 });
+        }
+        filterArts.push(`${sp.get('angebotsart')}:${sp.get('page')}`);
+        return page(v6(`R${sp.get('angebotsart')}${sp.get('page')}`, 'ESG Analyst (Remote)', 'Hamburg'));
+      },
+    },
+  );
+  if (tripped && filterArts.join(',') === '1:1,1:2,34:1,34:2' && paced.length === 4 && sleeps.length >= 3) {
+    pass('aa.fetch() remoteMatch:filter paces pages across offer types and retries a 429');
+  } else {
+    fail(`aa.fetch() filter pacing/retry: pages=${filterArts} sleeps=${JSON.stringify(sleeps)} jobs=${paced.length}`);
   }
 
 } catch (e) {
