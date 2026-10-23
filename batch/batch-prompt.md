@@ -190,7 +190,7 @@ Run this once, after Step 1.6 and before Step 2. It never stops the worker.
 node evidence-freshness.mjs
 ```
 
-It is read-only, always exits 0, and prints JSON with `status`, `stale`, `reason` and a one-line `notice`: how old the newest `output/github-evidence-*.json` from `expand` is, and how many PRs the candidate authored and merged since then in repos they do not own (one metadata-only `gh search prs` call through the existing `gh auth`; it is not a WebSearch query). This worker is unattended, so ask nothing, never run `expand` or `github-evidence.mjs`, and never change the score or decision because of it. Record it in the report instead: Machine Summary `evidence_freshness`, and, only when `stale` is true, the header line `**GitHub evidence:** {notice}` in `language.output`. If the script cannot run, record `not_evaluated` and continue.
+It is read-only, always exits 0, and prints JSON with `status`, `stale`, `reason` and a one-line `notice`: how old the newest `output/github-evidence-*.json` from `expand` is, and how many PRs the candidate authored and merged since then in repos they do not own (one metadata-only `gh search prs` call through the existing `gh auth`; it is not a WebSearch query). This worker is unattended, so ask nothing, never run `expand` or `github-evidence.mjs`, and never change the score or decision because of it. Record it in the report instead: Machine Summary `evidence_freshness`, and, only when `stale` is true, the header line `**GitHub evidence:** {notice}` with the notice (printed in English) translated into `language.output`. If the script cannot run, record `not_evaluated` and continue.
 
 ### Step 2 — Evaluate A-G
 
@@ -632,7 +632,7 @@ Report header:
 **URL:** {{URL}}
 **PDF:** {output/cv-candidate-{{REPORT_NUM}}-{company-slug}-{{DATE}}.pdf if score >= resolved auto_pdf_score_threshold, otherwise a localized equivalent of `not generated — run /career-ops pdf {company-slug} to create on demand` in `language.output`}
 **Batch ID:** {{ID}}
-**GitHub evidence:** {the Step 1.7 `notice`; this line only when it reported stale}
+**GitHub evidence:** {the Step 1.7 `notice`, translated into `language.output`; this line only when it reported stale}
 
 {the `## Verdict (lead)` sentence, copied verbatim}
 
