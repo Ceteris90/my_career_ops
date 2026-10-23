@@ -35,7 +35,7 @@ async function personalizationGeneric(): Promise<string[] | null> {
 
 export const runtime = "nodejs"; // child_process (spawn) requires the Node runtime
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 120;
 
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -96,8 +96,6 @@ export async function POST(req: Request) {
   // (remember → /api/memory, setStatus → /api/status), never the CLI editing
   // files directly. Scope its tools so it can advise (read) but not blind-write.
   const isClaude = cliId === "claude";
-  const isKimi = cliId === "kimi";
-  const isCodex = cliId === "codex";
   // allowedTools must be COMMA-separated; disallowedTools is the hard guardrail
   // so the advisor can read (and WebFetch) but never blind-writes or shells out.
   const args = isClaude
@@ -120,7 +118,7 @@ export async function POST(req: Request) {
         "--disallowedTools",
         ADVISOR_SCOPE.disallowed,
       ]
-    : prepareAssistantArgs(cliId, spec.args(prompt));
+    : spec.args(prompt);
 
   // The advisor reads and fetches but must never write — the same intent the
   // Claude branch spells as Read,WebFetch,Glob,Grep with Bash/Write/Edit denied.
@@ -150,16 +148,13 @@ export async function POST(req: Request) {
     start(controller) {
       let buf = "";
       let emitted = false;
-      let timedOut = false;
-      let stderr = "";
       killer = setTimeout(() => {
-        timedOut = true;
         try {
           child.kill("SIGTERM");
         } catch {
           /* ignore */
         }
-      }, 240_000);
+      }, 90_000);
       const safeClose = () => {
         if (!closed) {
           closed = true;
@@ -196,28 +191,6 @@ export async function POST(req: Request) {
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
-        if (isCodex) {
-          buf += d.toString();
-          let nl: number;
-          while ((nl = buf.indexOf("\n")) !== -1) {
-            const line = buf.slice(0, nl).trim();
-            buf = buf.slice(nl + 1);
-            const text = line ? parseCodexStreamLine(line) : null;
-            if (text) emit(text);
-          }
-          return;
-        }
-        if (isKimi) {
-          buf += d.toString();
-          let nl: number;
-          while ((nl = buf.indexOf("\n")) !== -1) {
-            const line = buf.slice(0, nl).trim();
-            buf = buf.slice(nl + 1);
-            const event = line ? parseKimiStreamLine(line) : null;
-            if (event?.text) emit(event.text);
-          }
-          return;
-        }
         if (!isClaude) {
           emit(d.toString());
           return;
@@ -242,8 +215,6 @@ export async function POST(req: Request) {
       });
       child.stderr.on("data", (d: Buffer) => {
         const s = d.toString();
-        stderr = (stderr + s).slice(-4_000);
-        if (isKimi || isCodex) return; // normal progress and warnings are written here
         if (/error|not found|denied|fatal/i.test(s)) {
           safeEnqueue(`\n[${spec.name}] ${s.trim()}\n`);
         }
@@ -252,19 +223,9 @@ export async function POST(req: Request) {
         safeEnqueue(`\n[error launching ${spec.name}: ${e.message}]`);
         safeClose();
       });
-      child.on("close", (code) => {
-        if (isCodex && buf.trim()) {
-          const text = parseCodexStreamLine(buf.trim());
-          if (text) emit(text);
-          buf = "";
-        }
-        if (isKimi && buf.trim()) {
-          const event = parseKimiStreamLine(buf.trim());
-          if (event?.text) emit(event.text);
-          buf = "";
-        }
+      child.on("close", () => {
         if (!emitted) {
-          safeEnqueue(`_(${noOutputMessage({ cliName: spec.name, timedOut, code, stderr })})_`);
+          safeEnqueue("_(no output — is the CLI authenticated?)_");
         }
         safeClose();
       });

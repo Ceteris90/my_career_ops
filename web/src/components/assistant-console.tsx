@@ -35,6 +35,7 @@ type Part =
 type Msg = { role: "user" | "assistant"; parts: Part[] };
 type RequestFeedback = { id: number; phase: "working" | "ready" | "error"; announce: boolean };
 
+const CONFIG_KEY = "career-ops:config";
 const CHAT_KEY = "career-ops:chat";
 const SIZE_KEY = "career-ops:assistant-size";
 
@@ -280,20 +281,15 @@ export function AssistantConsole() {
   useEffect(() => {
     function read() {
       try {
-        setCliId(readConfiguredCli(localStorage.getItem(CONFIG_KEY)));
+        const raw = localStorage.getItem(CONFIG_KEY);
+        setCliId(raw ? JSON.parse(raw).cliId || null : null);
       } catch {
         setCliId(null);
       }
     }
     read();
     window.addEventListener("storage", read);
-    window.addEventListener(CONFIG_CHANGED_EVENT, read);
-    window.addEventListener("focus", read);
-    return () => {
-      window.removeEventListener("storage", read);
-      window.removeEventListener(CONFIG_CHANGED_EVENT, read);
-      window.removeEventListener("focus", read);
-    };
+    return () => window.removeEventListener("storage", read);
   }, []);
 
   async function chatRequest(url: string, init?: RequestInit) {

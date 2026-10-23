@@ -34,16 +34,10 @@ function listFrom(v: unknown): string[] {
 export { serializePortals } from "./portals-serialize.mjs";
 import { serializePortals } from "./portals-serialize.mjs";
 
-
-
 /** Write the ephemeral filter file to a temp path; caller cleans it up. */
 export function writeTempPortals(f: FilterLists): string {
   const file = path.join(os.tmpdir(), `career-ops-explore-${randomUUID()}.yml`);
-  let base = "";
-  try {
-    base = fs.readFileSync(path.join(careerOpsRoot(), "portals.yml"), "utf8");
-  } catch {}
-  fs.writeFileSync(file, serializePortals(f, base), "utf8");
+  fs.writeFileSync(file, serializePortals(f), "utf8");
   return file;
 }
 
