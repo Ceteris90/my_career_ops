@@ -149,7 +149,7 @@ try {
     let out;
     const { errors } = await captureConsoleErrors(async () => { out = await wpjm.fetch(ENTRY, ctx); });
     const text = errors.join('\n');
-    if (calls.length === 20 && out.wpJobManagerTruncated === 'cap' && /raise max_pages/.test(text)) {
+    if (calls.length === 20 && out.wpJobManagerTruncated === true && /raise max_pages/.test(text)) {
       pass('stops at its own DEFAULT_MAX_PAGES on an endless board and warns to raise max_pages');
     } else fail(`calls=${calls.length} truncated=${out?.wpJobManagerTruncated} stderr=${text}`);
 
@@ -192,7 +192,7 @@ try {
     let out;
     const { errors } = await captureConsoleErrors(async () => { out = await wpjm.fetch(ENTRY, ctx); });
     const text = errors.join('\n');
-    if (out.length === 100 && out.wpJobManagerTruncated === 'fetch-error' && calls.length > 2
+    if (out.length === 100 && out.wpJobManagerTruncated === true && calls.length > 2
       && /stopped at page 2/.test(text) && !/raise max_pages/.test(text)) {
       pass('a page-2 failure after retry keeps page 1, warns, and does not blame max_pages');
     } else fail(`jobs=${out?.length} truncated=${out?.wpJobManagerTruncated} calls=${calls.length} stderr=${text}`);
@@ -201,7 +201,7 @@ try {
   {
     const { ctx } = makeCtx([fullPage(1), '<html><body>Error establishing a database connection</body></html>']);
     const r = await captureConsoleErrors(async () => wpjm.fetch(ENTRY, ctx));
-    if (r.result.length === 100 && r.result.wpJobManagerTruncated === 'fetch-error' && /an HTML page/.test(r.errors.join('\n'))) {
+    if (r.result.length === 100 && r.result.wpJobManagerTruncated === true && /an HTML page/.test(r.errors.join('\n'))) {
       pass('a later page that is not RSS keeps the earlier pages and warns');
     } else fail(`jobs=${r.result?.length} stderr=${r.errors.join('|')}`);
   }

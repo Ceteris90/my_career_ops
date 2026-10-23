@@ -188,7 +188,7 @@ export default {
       stopReason = 'cap';
       console.error(`⚠️  wp-job-manager: ${entry.name} truncated at max_pages=${maxPages} (${jobs.length} jobs) — raise max_pages on this entry for more`);
     }
-    if (stopReason !== 'complete') /** @type {any} */ (jobs).wpJobManagerTruncated = stopReason;
+    if (stopReason !== 'complete') /** @type {any} */ (jobs).wpJobManagerTruncated = true;
 
     return jobs;
   },
