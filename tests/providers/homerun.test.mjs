@@ -184,6 +184,14 @@ try {
     else fail(`salary ${JSON.stringify(text)} = ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
   }
 
+  // Raw </entry> inside CDATA must not end the entry early and lose its fields.
+  const [inner] = parseHomerunFeed(FEED.replace('<p>Build', '</entry><p>Build'), 'Acme Inc');
+  if (inner?.title === 'R&D Engineer' && inner.location === 'Amsterdam' && inner.salary?.max === 70000 && inner.postedAt !== undefined) {
+    pass('a raw </entry> inside CDATA does not cut the entry short');
+  } else {
+    fail(`CDATA </entry> entry=${JSON.stringify(inner)}`);
+  }
+
   // ── empty vs broken ──
   const empty = parseHomerunFeed(EMPTY_FEED, 'Acme');
   if (Array.isArray(empty) && empty.length === 0) pass('a <feed> with no <entry> is an empty board → []');
@@ -195,6 +203,9 @@ try {
     ['a JSON error', '{"error":true,"message":"Company not found","code":404}'],
     ['a non-string', null],
     ['entries that all fail to parse', '<feed><entry><title>X</title></entry><entry><link href="https://a.example/"/></entry></feed>'],
+    ['a feed truncated before </feed>', EMPTY_FEED.replace('</feed>', '')],
+    ['a feed truncated mid-entry', FEED.slice(0, FEED.indexOf('<title type="text">Support Specialist'))],
+    ['a </feed> only inside CDATA', FEED.replace(/<\/feed>$/, '').replace('<p>Build', '</feed><p>Build')],
   ]) {
     let threw = null;
     try { parseHomerunFeed(body, 'Acme'); } catch (err) { threw = err; }

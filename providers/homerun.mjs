@@ -225,17 +225,25 @@ export function parseHomerunSalary(text) {
  * @returns {import('./_types.js').Job[]}
  */
 export function parseHomerunFeed(xml, companyName) {
-  if (typeof xml !== 'string' || !/<feed\b/i.test(xml)) {
-    const got = typeof xml === 'string' ? `${xml.length} chars, no <feed>` : typeof xml;
-    throw new Error(`homerun: unexpected response — expected an Atom <feed>, got: ${got}`);
+  if (typeof xml !== 'string') {
+    throw new Error(`homerun: unexpected response — expected an Atom <feed>, got: ${typeof xml}`);
+  }
+  // Mask CDATA across the whole document so raw markup inside a description
+  // (an `</entry>`, a `</feed>`) can't end an entry or the feed early.
+  const { masked: doc, parts } = maskCdata(xml);
+  if (!/<feed\b/i.test(doc)) {
+    throw new Error(`homerun: unexpected response — expected an Atom <feed>, got: ${xml.length} chars, no <feed>`);
+  }
+  // A truncated body would otherwise pass as a short or empty board.
+  if (!/<\/feed\s*>/i.test(doc)) {
+    throw new Error(`homerun: truncated response — <feed> has no closing </feed> (${xml.length} chars)`);
   }
   const configured = typeof companyName === 'string' ? companyName.trim() : '';
-  const blocks = xml.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/gi) || [];
+  const blocks = doc.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/gi) || [];
   /** @type {import('./_types.js').Job[]} */
   const jobs = [];
 
-  for (const block of blocks) {
-    const { masked, parts } = maskCdata(block);
+  for (const masked of blocks) {
     const title = tagText(masked, parts, 'title');
     const url = httpsUrl(linkHref(masked));
     if (!title || !url) continue;
