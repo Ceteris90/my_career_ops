@@ -1,18 +1,27 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { computeVelocity, foldObservations, parseStatusLog } from '../funnel-velocity.mjs';
 import { loadCanonicalStates } from '../tracker-utils.mjs';
+import { pass, fail, ROOT } from './helpers.mjs';
 
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+console.log('\nfunnel-velocity hop math for re-applied rows');
+
 const STATES = loadCanonicalStates(join(ROOT, 'templates/states.yml'));
 const velocityOf = (lines) => computeVelocity(
   foldObservations(parseStatusLog(lines.join('\n'), STATES).observations),
   '2026-10-22',
 );
 
-test('a re-application is measured from its own Applied date', () => {
+function check(name, fn) {
+  try {
+    fn();
+    pass(name);
+  } catch (err) {
+    fail(`${name}: ${err.message}`);
+  }
+}
+
+check('a re-application is measured from its own Applied date', () => {
   const lines = [];
   for (const [num, replyDay] of [[1, '03'], [2, '04'], [3, '05']]) {
     lines.push(
@@ -27,7 +36,7 @@ test('a re-application is measured from its own Applied date', () => {
   assert.equal(velocity.appliedToRejected.median, 15);
 });
 
-test('a re-applied row with no reply yet counts as still waiting', () => {
+check('a re-applied row with no reply yet counts as still waiting', () => {
   const velocity = velocityOf([
     '1\t2026-01-05\tEvaluated\tApplied\tset-status\t',
     '1\t2026-01-20\tApplied\tRejected\tset-status\t',
@@ -36,7 +45,7 @@ test('a re-applied row with no reply yet counts as still waiting', () => {
   assert.equal(velocity.appliedToResponded.censored, 1);
 });
 
-test('a reply logged by hand still ends the first application', () => {
+check('a reply logged by hand still ends the first application', () => {
   const lines = [];
   for (const [num, replyDay] of [[1, '03'], [2, '04'], [3, '05']]) {
     lines.push(
