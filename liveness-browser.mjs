@@ -40,6 +40,13 @@ const FRAME_CONTENT_POLL_MS = 500;
 // commits, and the next goto cancels it.
 const FAILED_NAVIGATION_COMMIT_MS = 2_000;
 
+// The query parameters that carry a posting's own id, from the providers that
+// put it there: UltiPro's opportunityId, SchoolSpring's and Deutsche Bahn's
+// jobId, Tencent's postId, AppliTrack's AppliTrackJobId, Meituan's jobUnionId,
+// and gh_jid on a careers page that embeds Greenhouse. Any other query value,
+// such as a campaign or tracking number, is not the posting's id.
+const POSTING_ID_PARAMS = new Set(['opportunityid', 'jobid', 'postid', 'applitrackjobid', 'jobunionid', 'gh_jid']);
+
 // BambooHR's client bundle can throw during first paint — a failed
 // /globals/locale request followed by an uncaught TypeError reading
 // `hasPasskey` on null — which halts the SPA on its bare loading spinner for
@@ -574,13 +581,19 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
 
     // The id in the posting URL's last path segment, so a number in its query
     // (?campaign=123456) is not taken for it. When that segment has none, the
-    // last id in the whole URL, as the redirect guard reads it: on UltiPro,
+    // id in a query parameter that names the posting, and only then the last
+    // id in the path: on UltiPro,
     // /JobBoard/{board}/OpportunityDetail?opportunityId={posting}, the path's
     // only id is the board's, and every link under the board's path has it.
     // The segment itself is kept only when the id came from it, so a generic
     // last segment (/jobs/12345/details) claims nothing.
-    const lastSegment = new URL(url).pathname.split('/').filter(Boolean).pop() ?? '';
-    const postingId = jobIdToken(lastSegment) ?? jobIdToken(url);
+    const postingUrl = new URL(url);
+    const lastSegment = postingUrl.pathname.split('/').filter(Boolean).pop() ?? '';
+    const queryId = [...postingUrl.searchParams]
+      .filter(([name]) => POSTING_ID_PARAMS.has(name.toLowerCase()))
+      .map(([, value]) => jobIdToken(value))
+      .find(Boolean);
+    const postingId = jobIdToken(lastSegment) ?? queryId ?? jobIdToken(postingUrl.pathname);
     const postingSegment = jobIdToken(lastSegment) ? lastSegment.toLowerCase() : null;
 
     // One reading of the page: the top-level document plus every same-origin

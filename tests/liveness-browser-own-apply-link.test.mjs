@@ -139,16 +139,23 @@ try {
       fail(`posting URL with a numeric query value: own ${JSON.stringify(queried)}, the query's number ${JSON.stringify(queriedOther)}`);
     }
 
-    // A last segment with no id falls back to the whole URL, as the redirect
-    // guard reads it. On UltiPro's posting URL the path's UUID is the board's,
-    // so a link under the board's path stays chrome.
+    // A last segment with no id falls back to a query parameter that names the
+    // posting, then to the path. On UltiPro's posting URL the path's UUID is
+    // the board's, so a link under the board's path stays chrome. Any other
+    // query value, a campaign number here, is not the posting's id: the path's
+    // id is.
     const BOARD = '7fde8f3e-7920-4d9d-8394-87bd44cc2330';
     const boardUrl = `https://www.example.com/T/JobBoard/${BOARD}/OpportunityDetail?opportunityId=${ID}`;
     const board = await check(boardUrl, `<header><a href="/T/JobBoard/${BOARD}/Search">Apply</a></header><main>${POSTING}</main>`);
-    if (board.result === 'uncertain' && board.code === 'no_apply_control') {
-      pass('a link under the board\'s path stays chrome when the posting\'s id is in the query (UltiPro)');
+    const campaignUrl = 'https://www.example.com/jobs/12345/details?campaign=67890';
+    const campaignOwn = await check(campaignUrl, `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`);
+    const campaignOther = await check(campaignUrl, `<header><a href="/jobs/67890/apply">Apply</a></header><main>${POSTING}</main>`);
+    if (board.result === 'uncertain' && board.code === 'no_apply_control'
+      && campaignOwn.result === 'active' && campaignOwn.code === 'apply_control_visible'
+      && campaignOther.result === 'uncertain' && campaignOther.code === 'no_apply_control') {
+      pass('with no id in the last segment, the id comes from a query parameter that names the posting (UltiPro), then the path, never another query value');
     } else {
-      fail(`board link on a URL whose posting id is in the query: ${JSON.stringify(board)}`);
+      fail(`id outside the last segment: board link ${JSON.stringify(board)}, own link with a campaign number in the query ${JSON.stringify(campaignOwn)}, the campaign number's ${JSON.stringify(campaignOther)}`);
     }
 
     // With no id in the posting URL, nothing tells the posting's own link from
