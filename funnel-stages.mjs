@@ -10,15 +10,16 @@ export function funnelStageRank(status) {
 }
 
 /** Parse {num}\t{date}\t{from}\t{to} observations, ignoring torn rows.
- * A `to` of `-` retracts the row's latest observation, as foldObservations() in
- * funnel-velocity.mjs reads it. The next line's `from` restates the retracted
+ * A `correction` row replaces the latest observation of the same stage, and a
+ * `to` of `-` retracts the row's latest observation, as foldObservations() in
+ * funnel-velocity.mjs reads them. The next line's `from` restates the retracted
  * stage, so it proves nothing either.
  */
 export function parseStatusLogStages(content) {
   const byNum = new Map();
   const retracted = new Map();
   for (const line of String(content ?? '').replace(/\r/g, '').split('\n')) {
-    const [rawNum, date, from, to] = line.split('\t').map(s => s.trim());
+    const [rawNum, date, from, to, source] = line.split('\t').map(s => s.trim());
     if (!/^\d+$/.test(rawNum || '') || !date || !from || !to) continue;
     const num = Number(rawNum);
     if (!byNum.has(num)) byNum.set(num, []);
@@ -30,7 +31,10 @@ export function parseStatusLogStages(content) {
     }
     const stale = retracted.get(num);
     retracted.delete(num);
-    observations.push({ num, from: from.toUpperCase() === stale?.toUpperCase() ? '-' : from, to });
+    const observation = { num, from: from.toUpperCase() === stale?.toUpperCase() ? '-' : from, to };
+    const corrected = source === 'correction' ? observations.map(o => o.to).lastIndexOf(to) : -1;
+    if (corrected === -1) observations.push(observation);
+    else observations[corrected] = observation;
   }
   return [...byNum.values()].flat();
 }

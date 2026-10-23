@@ -54,3 +54,13 @@ test('the revert after a retraction proves nothing when it spells the stage in a
   ].join('\n'));
   assert.deepEqual([...recoverFunnelStages(new Map([[1, 'Applied']]), ledger)], [[1, 1]]);
 });
+
+test('a retraction after a date correction removes the corrected stage', () => {
+  const ledger = parseStatusLogStages([
+    '1\t2026-10-01\tEvaluated\tApplied\tset-status\t',
+    '1\t2026-10-05\tApplied\tInterview\tset-status\t',
+    '1\t2026-10-04\tApplied\tInterview\tcorrection\twrong day',
+    '1\t2026-10-06\t-\t-\tmanual\tnever happened',
+  ].join('\n'));
+  assert.deepEqual([...recoverFunnelStages(new Map([[1, 'Applied']]), ledger)], [[1, 1]]);
+});
