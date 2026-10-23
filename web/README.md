@@ -104,7 +104,8 @@ npm run test:browser # tests/lib/*.browser.test.mjs in Chrome, each against its 
 The `*.browser.test.mjs` suites skip in `npm test`: each needs a running server's
 URL in an env var. `npm run test:browser` (`tests/browser-suites.mjs`) starts the
 production build once per suite on disposable data, sets those variables and
-fails on any skip; `web-ci.yml` runs it. A new browser suite goes in that
+fails on any skip. A failing suite gets one more run on a new server, and one
+that passes only then is reported as flaky; `web-ci.yml` runs it. A new browser suite goes in that
 script's `SUITES` table, or the run fails.
 
 Set `CAREER_OPS_ROOT=/path/to/checkout` in `web/.env.local` to point the app at

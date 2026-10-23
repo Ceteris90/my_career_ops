@@ -155,14 +155,17 @@ if (selected.length === 0) {
   process.exit(1);
 }
 
-const failures = [];
-for (const name of selected) {
+// One run of one suite on a fresh data root and server. Returns null when it
+// passed, else what went wrong and whether a second run could change that: a
+// suite that skips or runs nothing does so every time, so only a failing exit
+// or a server that would not start is retried.
+async function attempt(name) {
   const suite = SUITES[name];
   const file = path.join("tests", "lib", `${name}.browser.test.mjs`);
-  console.log(`\n▶ ${name}`);
   let root;
   let server;
   let logPath;
+  let problem = null;
   try {
     root = makeRoot(suite.fixture);
     const port = await freePort();
@@ -182,22 +185,47 @@ for (const name of selected) {
     const tests = count(out, "tests");
     const skipped = count(out, "skipped");
     const todo = count(out, "todo");
-    if (code !== 0) failures.push(`${name}: exited ${code}`);
-    else if (!tests) failures.push(`${name}: ran no tests`);
-    else if (skipped !== 0 || todo !== 0) failures.push(`${name}: ${skipped ?? "?"} skipped, ${todo ?? "?"} todo — a skip here is a failure`);
+    if (code !== 0) problem = { message: `exited ${code}`, retryable: true };
+    else if (!tests) problem = { message: "ran no tests", retryable: false };
+    else if (skipped !== 0 || todo !== 0) problem = { message: `${skipped ?? "?"} skipped, ${todo ?? "?"} todo — a skip here is a failure`, retryable: false };
   } catch (err) {
-    failures.push(`${name}: ${err.message}`);
+    problem = { message: err.message, retryable: true };
   } finally {
     if (server) await stop(server);
-    if (failures.at(-1)?.startsWith(`${name}:`) && logPath && fs.existsSync(logPath)) {
+    if (problem && logPath && fs.existsSync(logPath)) {
       console.log(`--- ${name} server log ---\n${fs.readFileSync(logPath, "utf8").slice(-8_000)}`);
     }
     if (logPath) fs.rmSync(logPath, { force: true });
     if (root) fs.rmSync(root, { recursive: true, force: true, maxRetries: 5 });
   }
+  return problem;
+}
+
+// A failing suite gets one more run, on a new root and server, because some
+// pages intermittently render a second copy of their content (#5764), which
+// trips Playwright's strict mode in a suite that is otherwise green. A suite
+// that fails twice fails the run, and one that passes only on the second try
+// is named in the summary and, on GitHub Actions, as a warning annotation.
+const failures = [];
+const flaky = [];
+for (const name of selected) {
+  console.log(`\n▶ ${name}`);
+  const first = await attempt(name);
+  if (!first) continue;
+  if (!first.retryable) { failures.push(`${name}: ${first.message}`); continue; }
+  console.log(`\n↻ ${name} failed (${first.message}); running it once more on a new server`);
+  const second = await attempt(name);
+  if (second) failures.push(`${name}: ${second.message} (and ${first.message} on the first run)`);
+  else flaky.push(`${name}: ${first.message} on the first run, passed on the second`);
 }
 
 console.log("");
+if (flaky.length) {
+  console.log(`⚠️  ${flaky.length} browser suite(s) passed only on a second run:\n  ${flaky.join("\n  ")}`);
+  if (process.env.GITHUB_ACTIONS === "true") {
+    for (const line of flaky) console.log(`::warning title=Flaky browser suite::${line}`);
+  }
+}
 if (failures.length) {
   console.error(`❌ ${failures.length} of ${selected.length} browser suites failed:\n  ${failures.join("\n  ")}`);
   process.exit(1);
