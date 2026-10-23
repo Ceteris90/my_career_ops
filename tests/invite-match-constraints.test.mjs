@@ -105,3 +105,10 @@ check('length-not-stated: "join N minutes early" with no length is still not-sta
   assert.ok(keys('We would like to invite you to schedule your interview. Please join 10 minutes early.').includes('length-not-stated'));
   assert.ok(keys('We would like to invite you to schedule your interview. Please join at least 15 minutes before the start.').includes('length-not-stated'));
 });
+
+check('length-not-stated: "30 minutes after introductions" is an interview length', () => {
+  assert.ok(!keys('We would like to invite you to schedule your interview. It will last 30 minutes after introductions.').includes('length-not-stated'));
+});
+check('length-not-stated: "after N minutes" (a wait, not a length) is still not a stated length', () => {
+  assert.ok(keys('We would like to invite you to schedule your interview. The link expires after 30 minutes of inactivity.').includes('length-not-stated'));
+});
