@@ -134,31 +134,9 @@ A general job board with one host per Latin American country. Only the Colombian
 
 ---
 
-## ElEmpleo
+## ElEmpleo (not listed)
 
-| | |
-|---|---|
-| **Proposed by** | @configurowebmax (community contributor; no affiliation with the source declared) |
-| **Provider** | `providers/elempleo.mjs` |
-| **PR** | [#2650](https://github.com/career-ops-hq/career-ops/pull/2650) |
-| **Merged** | pending (this PR) |
-| **Status** | Provider listed; the shipped `job_boards:` entry is `enabled: false`. |
-
-A general job board for Colombia. Measured: one GET of `https://www.elempleo.com/co/ofertas-empleo/` on 2026-10-23, no key, cookie or session, career-ops' default User-Agent: HTTP 200, 20 results on page 1 of a reported 21,789.
-
-**Rule 1 (real listings, identifiable employer, free for candidates).** Employer attribution, measured: 13 of the 20 results name an employer; 7 read "Empresa confidencial", which the provider emits as `?`. Several named employers are staffing agencies. Free for candidates and whether applying requires an account: unverified.
-
-**Rule 2 (canonical URL is the employer's).** The result card carries no employer or ATS URL, only the board's own posting page, so `url` is that page. Whether the posting page links on to the employer: unverified.
-
-**Rule 3 (complete inventory, no paid placement).** The page states its own order, `PublishDate_Desc` (newest first), in its request parameters; no promoted field was seen in the result data. The provider reads up to `max_pages` (default 5) and `max_jobs` (default 50), not the whole board. Pagination (`?pagina=N`) is unverified: the board renders its pager client-side, so the provider stops on a page with no new ids.
-
-**Rule 4 (operator declared).** Operator not declared in the PR; unverified.
-
-**Rule 5 (aggregation stays in core).** Verified in code: the provider reads one search URL per entry, on `www.elempleo.com` / `elempleo.com` only.
-
-**Rule 6 (`robots.txt`).** Checked on 2026-10-23: one GET of `https://www.elempleo.com/robots.txt` with career-ops' default User-Agent, HTTP 200. No `Disallow` under `User-agent: *` covers `/co/ofertas-empleo/` or its `?pagina=N` parameter, and no group names career-ops. The file's closing comments, however, state that the content is for personal, non-commercial use and that scraping by automated means is prohibited without ELEMPLEO's prior written permission. That is not a directive the rule reads by itself, so whether it reaches a user's own bounded scan is a maintainer decision on a source proposal; the shipped entry stays `enabled: false` until then.
-
----
+Proposed in [#2650](https://github.com/career-ops-hq/career-ops/pull/2650) together with Computrabajo and Magneto365, and taken out of it on 2026-10-23. The comments in `https://www.elempleo.com/robots.txt` (read 2026-10-23) say that extracting or scraping its content by automated means is prohibited without ELEMPLEO's prior written permission. A provider reads the board by automated means, so it is not listed. The provider code stays in the history of #2650 (`providers/elempleo.mjs` at e40e148) in case ELEMPLEO gives that permission.
 
 ## Magneto365
 

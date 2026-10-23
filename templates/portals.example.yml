@@ -1239,7 +1239,6 @@ search_queries:
 #   adp-workforcenow  workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=...&ccId=...
 #   zoho-recruit    <tenant>.zohorecruit.com  (any path; the board is always read from /jobs/Careers)
 #   computrabajo    <country>.computrabajo.com/<search path>  (LatAm board; e.g. co.computrabajo.com/trabajo-de-sistemas)
-#   elempleo        www.elempleo.com/co/<search path>         (Colombia board; e.g. /co/ofertas-empleo/)
 #   magneto         www.magneto365.com/co/<search path>       (Colombia board; e.g. /co/trabajos/buscar/tecnologia)
 #
 # When the public careers URL is a branded custom domain (e.g.
@@ -1665,12 +1664,6 @@ search_queries:
 #   max_pages: 3                          # optional; default 3 is also the cap (crawl kept tight)
 #   max_jobs: 15                          # optional; default 15 is also the cap
 #   enabled: true                         # random 2-5s pause between pages
-#
-# - name: Example ElEmpleo Co             # Colombia general board
-#   careers_url: https://www.elempleo.com/co/ofertas-empleo/  # auto-detected; any search URL
-#   max_pages: 5                          # optional page cap (20 jobs/page, default 5, max 20)
-#   max_jobs: 50                          # optional (default 50, max 500)
-#   enabled: true                         # random 1-2.5s pause between pages
 #
 # - name: Example Magneto365 Co           # Colombia general board
 #   careers_url: https://www.magneto365.com/co/trabajos/buscar/tecnologia  # auto-detected; any search URL
@@ -3513,7 +3506,7 @@ job_boards:
     enabled: false
     notes: "Official Python Software Foundation job board (public RSS feed)"
 
-  # ── Latin America general boards (Computrabajo, ElEmpleo, Magneto365) ──
+  # ── Latin America general boards (Computrabajo, Magneto365) ──
   # Server-rendered search pages, zero-auth, auto-detected from careers_url.
   # Point careers_url at the search you would run in a browser; the search
   # path is the only filter these boards offer. Measured 2026-10-23 (one GET
@@ -3523,11 +3516,6 @@ job_boards:
     careers_url: https://co.computrabajo.com/trabajo-de-sistemas
     enabled: false
     notes: "Colombia; other <country>.computrabajo.com hosts are detected but unmeasured. Crawl capped at 3 pages / 15 postings per entry; narrow the search URL."
-
-  - name: ElEmpleo
-    careers_url: https://www.elempleo.com/co/ofertas-empleo/
-    enabled: false
-    notes: "Colombia. All categories, newest first; narrow it with the board's own search URL."
 
   - name: Magneto365 Tecnologia
     careers_url: https://www.magneto365.com/co/trabajos/buscar/tecnologia

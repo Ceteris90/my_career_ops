@@ -154,7 +154,10 @@ export default {
       // Newest first (the board's own "Fecha" sort). Employers can pay Computrabajo to
       // feature a posting ("Empleo destacado"), and those cards are interleaved in every
       // sort order; a `by=` the user put in their URL wins.
-      if (!pageUrl.searchParams.has('by')) pageUrl.searchParams.set('by', 'publicationtime');
+      // robots.txt disallows `/ofertas-de-trabajo/*by=`, so no sort is added there.
+      if (!pageUrl.searchParams.has('by') && !pageUrl.pathname.startsWith('/ofertas-de-trabajo/')) {
+        pageUrl.searchParams.set('by', 'publicationtime');
+      }
       pageUrl.searchParams.set('p', String(page));
 
       let html;

@@ -210,3 +210,9 @@ test('computrabajo keeps a sort order the user put in the URL', async () => {
   await provider.fetch({ name: 'Computrabajo Colombia', careers_url: `${BASE}?by=salary` }, ctx);
   assert.equal(new URL(calls[0].url).searchParams.get('by'), 'salary');
 });
+
+test('computrabajo adds no sort under /ofertas-de-trabajo/, which robots.txt keeps free of by=', async () => {
+  const { ctx, calls } = makeCtx({ 1: page(card('R1')) });
+  await provider.fetch({ name: 'Computrabajo Colombia', careers_url: 'https://co.computrabajo.com/ofertas-de-trabajo/?q=python' }, ctx);
+  assert.equal(new URL(calls[0].url).searchParams.has('by'), false);
+});
