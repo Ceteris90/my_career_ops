@@ -23,8 +23,18 @@ try {
   } else {
     fail('join.extractSlug() should reject spoofed hosts');
   }
-  if (extractSlug('not a url') === null && extractSlug(undefined) === null) pass('join.extractSlug() returns null for invalid/missing input');
-  else fail('join.extractSlug() should return null for invalid/missing input');
+  if (extractSlug('not a url') === null && extractSlug(undefined) === null && extractSlug(null) === null && extractSlug(42) === null) {
+    pass('join.extractSlug() returns null for invalid/missing input');
+  } else {
+    fail('join.extractSlug() should return null for invalid/missing input');
+  }
+  if (extractSlug('http://join.com/companies/acme-corp') === null && joinProvider.detect({ careers_url: 'http://join.com/companies/acme-corp' }) === null) {
+    pass('join.detect() returns null for a non-HTTPS join.com URL');
+  } else {
+    fail('join.detect() should return null for a non-HTTPS join.com URL');
+  }
+  if (joinProvider.detect({}) === null && joinProvider.detect({ careers_url: null }) === null) pass('join.detect() returns null when careers_url is missing');
+  else fail('join.detect() should return null when careers_url is missing');
 
   // detect() — auto-detects from a valid join.com careers_url.
   const hit = joinProvider.detect({ careers_url: 'https://join.com/companies/acme-corp' });
@@ -129,7 +139,7 @@ try {
 
   // fetch() — postedAt from createdAt, description from descriptionHtml as plain text.
   const richCtx = makeCtx(() => gqlPage([
-    { ...job(1), createdAt: '2025-03-11T09:30:00.000Z', descriptionHtml: '<p>Build <strong>Rust</strong> services &amp; tools.</p><ul><li>Visa sponsorship</li></ul>' },
+    { ...job(1), createdAt: '2025-03-11T09:30:00.000Z', descriptionHtml: '<p>Build <strong>Rust</strong> services &amp; tools.</p><ul><li>Visa sponsorship</li></ul>', language: { iso6391: 'en' } },
     { ...job(2), createdAt: 'not a date', descriptionHtml: '' },
     job(3),
   ]));
@@ -145,6 +155,11 @@ try {
     pass('join.fetch() omits postedAt/description when createdAt is unparseable or the body is empty/absent');
   } else {
     fail(`join.fetch() should omit absent fields: ${JSON.stringify(richJobs.slice(1))}`);
+  }
+  if (/\blanguage\s*\{\s*iso6391\s*\}/.test(richQuery) && richJobs[0].language === 'en' && !('language' in richJobs[1])) {
+    pass('join.fetch() sets language from language.iso6391 and omits it when absent');
+  } else {
+    fail(`join.fetch() language wrong: ${JSON.stringify(richJobs.map(j => j.language))}`);
   }
 
   // fetch() — a long description is kept whole, so text past the shared 4000-char cap still reaches the filters.
@@ -167,6 +182,13 @@ try {
   if (noIdJobs.length === 1 && noIdJobs[0].url.endsWith('/1')) pass('join.fetch() drops items without an integer id');
   else fail(`join.fetch() should drop items without an integer id, got ${JSON.stringify(noIdJobs)}`);
 
+  // fetch() — a row without a usable title is dropped; a padded title is trimmed.
+  const titleJobs = await joinProvider.fetch(entry, makeCtx(() => gqlPage([
+    job(1, '  Senior Engineer  '), { ...job(2), title: '   ' }, { ...job(3), title: undefined }, { ...job(4), title: 42 },
+  ])));
+  if (titleJobs.length === 1 && titleJobs[0].title === 'Senior Engineer') pass('join.fetch() drops rows with a missing or blank title and trims the rest');
+  else fail(`join.fetch() title handling wrong: ${JSON.stringify(titleJobs.map(j => j.title))}`);
+
   // fetch() — paginates while pageInfo.pageCount says there are more pages.
   const pagedCtx = makeCtx(({ paginationPage }) => gqlPage([job(paginationPage.page)], 3));
   const pagedJobs = await joinProvider.fetch(entry, pagedCtx);
@@ -175,6 +197,10 @@ try {
   } else {
     fail(`join.fetch() pagination wrong: ${pagedJobs.length} jobs, pages ${pagedCtx.jsonCalls.map(c => c.body.variables.input.paginationPage.page)}`);
   }
+  if (pagedCtx.sleeps.join(',') === '250,250') pass('join.fetch() waits 250 ms through ctx.sleep before each page after the first');
+  else fail(`join.fetch() inter-page delay wrong: ${JSON.stringify(pagedCtx.sleeps)}`);
+  if (singleCtx.sleeps.length === 0) pass('join.fetch() does not wait before the first page');
+  else fail(`join.fetch() should not wait before the first page: ${JSON.stringify(singleCtx.sleeps)}`);
 
   // fetch() — an empty board (pageCount 0) is one request and an empty list.
   const emptyCtx = makeCtx(() => gqlPage([], 0));
@@ -292,6 +318,41 @@ try {
   const badLocations = locationCases.filter(([, got, want]) => got !== want);
   if (badLocations.length === 0) pass('join.formatLocation() labels on-site, hybrid and remote postings like the careers page');
   else fail(`join.formatLocation() wrong: ${JSON.stringify(badLocations)}`);
+
+  // fetch() — a later page that fails after every retry fails the board, and
+  // the "raise max_pages" warning stays silent (it is for the page cap only).
+  const brokenPage2Ctx = makeCtx(({ paginationPage }) => {
+    if (paginationPage.page === 1) return gqlPage([job(1)], 3);
+    throw Object.assign(new Error('HTTP 503'), { status: 503 });
+  });
+  const page2Warnings = [];
+  const consoleErrorBefore = console.error;
+  console.error = (...args) => page2Warnings.push(args.join(' '));
+  let page2Error = null;
+  try {
+    await joinProvider.fetch(entry, brokenPage2Ctx);
+  } catch (err) {
+    page2Error = err;
+  } finally {
+    console.error = consoleErrorBefore;
+  }
+  if (page2Error?.status === 503 && brokenPage2Ctx.jsonCalls.length === 7 && !page2Warnings.some(w => w.includes('max_pages'))) {
+    pass('join.fetch() fails the board when page 2 still fails after the retries, without the max_pages warning');
+  } else {
+    fail(`join.fetch() page-2 failure wrong: error=${page2Error?.message}, calls=${brokenPage2Ctx.jsonCalls.length}, warnings=${JSON.stringify(page2Warnings)}`);
+  }
+
+  // fetch() — under the health probe a ctx.fetch* rejection propagates unwrapped.
+  const probeRejection = new Error('probe budget reached');
+  const probeCtx = makeCtx(() => { throw probeRejection; }, { maxPages: 1 });
+  let probeError = null;
+  try {
+    await joinProvider.fetch(entry, probeCtx);
+  } catch (err) {
+    probeError = err;
+  }
+  if (probeError === probeRejection) pass('join.fetch() propagates a ctx.fetchJson rejection unwrapped while ctx.maxPages is set');
+  else fail(`join.fetch() should rethrow the probe rejection itself, got ${probeError?.message}`);
 
   // fetch() — failures that must throw instead of reading as an empty board.
   const expectThrow = async (label, run) => {

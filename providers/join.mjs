@@ -1,7 +1,7 @@
 // @ts-check
 /** @typedef {import('./_types.js').Provider} Provider */
 
-import { fetchJsonWithRetry, fetchTextWithRetry } from './_http.mjs';
+import { fetchJsonWithRetry, fetchTextWithRetry, sleep } from './_http.mjs';
 import { htmlToText } from './_html-to-text.mjs';
 import { safeEncodeURIComponent } from './_safe-url.mjs';
 
@@ -33,6 +33,9 @@ const PUBLIC_JOBS_QUERY = `query PublicJobsList($input: PublicJobsQueryInput!) {
       title
       createdAt
       descriptionHtml
+      language {
+        iso6391
+      }
       workplaceType
       remoteType
       remoteRegion {
@@ -70,6 +73,10 @@ const MAX_PAGES_CAP = 200;
 // backoff (2 s, 4 s, 8 s, 16 s, 16 s) outlasts the refusal window even when
 // several boards are waiting on it at once.
 const RETRY_POLICY = { retries: 5, baseDelayMs: 2_000, maxDelayMs: 16_000 };
+// Spacing between the pages of one board. Few boards have more than one page
+// of PAGE_SIZE jobs; the delay keeps the walk of a big one from adding a burst
+// on top of the cross-tenant limit above.
+const INTER_PAGE_DELAY_MS = 250;
 const RATE_LIMIT_CODE = 'TOO_MANY_REQUESTS';
 // Fallback for a refusal that arrives without the code.
 const RATE_LIMIT_RE = /too many requests/i;
@@ -113,7 +120,7 @@ function resolveMaxPages(entry) {
 export function extractSlug(url) {
   let parsed;
   try { parsed = new URL(url || ''); } catch { return null; }
-  if (parsed.hostname.toLowerCase() !== 'join.com') return null;
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'join.com') return null;
   const match = parsed.pathname.match(/^\/companies\/([^/?#]+)/);
   return match?.[1] || null;
 }
@@ -187,10 +194,14 @@ export default {
     const maxPages = resolveMaxPages(entry);
     const gqlCtx = rateLimitAware(ctx);
 
+    // A page that still fails after the retries fails the whole board: a
+    // partial list would read as postings that closed. The truncation warning
+    // and tag below are only for the page cap.
     const allItems = [];
     let reportedPageCount = 1;
     let page = 1;
     for (; page <= Math.min(reportedPageCount, maxPages, ctxCap); page++) {
+      if (page > 1) await sleep(INTER_PAGE_DELAY_MS, ctx);
       const json = /** @type {any} */ (await fetchJsonWithRetry(gqlCtx, GRAPHQL_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -227,19 +238,24 @@ export default {
     // description costs no extra request. It is kept whole (no DESCRIPTION_CAP),
     // like ashby, lever and gem: the description filters read the end of a JD
     // too, where benefits and visa wording usually sit, and about one join
-    // posting in seven runs past the default cap.
+    // posting in seven runs past the default cap. `language` is the posting
+    // text's ISO 639-1 code.
+    // A row without an integer id or a title is malformed: it is dropped and
+    // the rest of the board stands.
     const jobs = allItems
-      .filter(j => Number.isInteger(j?.id))
+      .filter(j => Number.isInteger(j?.id) && typeof j.title === 'string' && j.title.trim())
       .map(j => {
         const postedAt = toEpochMs(j.createdAt);
         const description = htmlToText(j.descriptionHtml, { cap: Infinity });
+        const language = typeof j.language?.iso6391 === 'string' ? j.language.iso6391.trim() : '';
         return {
-          title: j.title || '',
+          title: j.title.trim(),
           url: `https://join.com/companies/${companySlug}/${j.id}`,
           company: entry.name,
           location: formatLocation(j),
           ...(postedAt ? { postedAt } : {}),
           ...(description ? { description } : {}),
+          ...(language ? { language } : {}),
         };
       });
     // Tag a cap-truncated board (the workdayTruncated convention) so a caller can tell without reading stderr.

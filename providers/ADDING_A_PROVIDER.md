@@ -325,9 +325,9 @@ surface instead of reading as `0` jobs forever. Three outcomes:
   well-formed payload is the empty-board case → `[]`. Reference:
   `parseEmbedAppData` in `providers/ashby.mjs` — a missing
   `window.__appData` or a non-array `jobPostings` throws, an empty
-  `jobPostings` is an empty board. A **regex scraper** has no array container to
-  type-check, so it keys the same split off a listing signal that only a
-  populated board carries: posting-shaped links (an `href` to a
+  `jobPostings` is an empty board. A **regex scraper** has no array
+  container to type-check, so it keys the same split off a listing signal
+  that only a populated board carries: posting-shaped links (an `href` to a
   detail-page path) present in the HTML but zero cards parsed ⇒ a markup
   change → `throw`; neither the links nor the cards present ⇒ a genuinely
   empty board → `[]`. Reference: `providers/itviec.mjs`
@@ -694,10 +694,10 @@ went through them. Must cover:
   documented envelope → a descriptive throw. Assert both branches — for a
   scraper that means a fixture whose card selector / embedded blob matches
   nothing throws, while a well-formed page carrying an empty list still
-  returns `[]` (`join.mjs`). For a regex scraper with no container to
-  type-check, the throwing fixture must carry the listing signal (a
-  detail-page href in the HTML) with zero rows parsed, and the `[]` fixture
-  must carry neither (`itviec.mjs`).
+  returns `[]` (`ashby.mjs`'s embed source). For a regex scraper with no
+  container to type-check, the throwing fixture must carry the listing
+  signal (a detail-page href in the HTML) with zero rows parsed, and the
+  `[]` fixture must carry neither (`itviec.mjs`).
 - Pagination (if any): the provider's own `DEFAULT_MAX_PAGES` stops it even
   when the source reports more pages; `ctx.maxPages` stops it earlier. For a
   provider that fans out over several query/category passes behind one shared
