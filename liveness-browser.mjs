@@ -586,7 +586,10 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // reached through a redirect (/jobs/senior-engineer to /jobs/12345) is
     // matched by the address it landed on. A page whose address lost the
     // requested URL's id reads as off the posting whatever its controls (the
-    // redirect guard). The id in the last path segment, so a number in the
+    // redirect guard), and one whose own id is another posting's claims
+    // nothing in the chrome: /jobs/12345 that lands on
+    // /jobs/67890?returnUrl=/jobs/12345 passes the guard, but the page is
+    // posting 67890. The id in the last path segment, so a number in the
     // query (?campaign=123456) is not taken for it. When that segment has
     // none, the id in a query parameter that names the posting, and only then
     // the last id in the path: on UltiPro,
@@ -606,6 +609,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
         postingSegment: jobIdToken(lastSegment) ? lastSegment.toLowerCase() : null,
       };
     };
+    const requested = postingIdentity(url);
 
     // One reading of the page: the top-level document plus every same-origin
     // child frame, so a posting rendered inside a frame and one rendered inline
@@ -613,7 +617,9 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // that detaches or turns cross-origin mid-read is skipped.
     const readPage = async () => {
       const finalUrl = page.url();
-      const walkArgs = { ...postingIdentity(finalUrl), pageUrl: finalUrl };
+      const landed = postingIdentity(finalUrl);
+      const anotherPosting = requested.postingId && landed.postingId !== requested.postingId;
+      const walkArgs = { ...(anotherPosting ? { postingId: null, postingSegment: null } : landed), pageUrl: finalUrl };
       let bodyText = await page.evaluate(() => document.body?.innerText ?? '');
       let applyControls = await page.evaluate(extractApplyControls, walkArgs);
       for (const frame of childFrames(finalUrl)) {

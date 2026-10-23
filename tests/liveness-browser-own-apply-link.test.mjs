@@ -163,21 +163,33 @@ try {
     }
 
     // The id comes from the address the page landed on, so a posting reached
-    // through a redirect reads the Apply link to that address. A redirect that
-    // loses the requested URL's id still reads as off the posting.
+    // through a redirect reads the Apply link to that address, also when the
+    // redirect only adds a slug to the requested id. A redirect to another
+    // posting claims nothing: one that loses the requested URL's id reads as
+    // off the posting, and one that keeps it only in a return address finds
+    // no Apply control in the chrome.
     const LANDED = 'https://www.example.com/jobs/12345';
     const refresh = (to) => `<meta http-equiv="refresh" content="0; url=${to}">`;
     const moved = await check('https://www.example.com/jobs/senior-engineer', refresh(LANDED), {
       [LANDED]: `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`,
     });
-    const elsewhere = await check(LANDED, refresh('https://www.example.com/jobs/67890'), {
-      'https://www.example.com/jobs/67890': `<header><a href="/jobs/67890/apply">Apply</a></header><main>${POSTING}</main>`,
+    const slugged = `${LANDED}-data-engineer`;
+    const canonical = await check(LANDED, refresh(slugged), {
+      [slugged]: `<header><a href="/jobs/12345-data-engineer/apply">Apply</a></header><main>${POSTING}</main>`,
     });
+    const another = `<header><a href="/jobs/67890/apply">Apply</a></header><main>${POSTING}</main>`;
+    const elsewhere = await check(LANDED, refresh('https://www.example.com/jobs/67890'), {
+      'https://www.example.com/jobs/67890': another,
+    });
+    const returning = 'https://www.example.com/jobs/67890?returnUrl=/jobs/12345';
+    const returned = await check(LANDED, refresh(returning), { [returning]: another });
     if (moved.result === 'active' && moved.code === 'apply_control_visible'
-      && elsewhere.result === 'uncertain' && elsewhere.code === 'redirected_off_posting') {
-      pass('a posting reached through a redirect reads the Apply link to the address it landed on, and a redirect off the posting still reads uncertain');
+      && canonical.result === 'active' && canonical.code === 'apply_control_visible'
+      && elsewhere.result === 'uncertain' && elsewhere.code === 'redirected_off_posting'
+      && returned.result === 'uncertain' && returned.code === 'no_apply_control') {
+      pass('a posting reached through a redirect reads the Apply link to the address it landed on, and a redirect to another posting claims nothing');
     } else {
-      fail(`redirects: to the posting ${JSON.stringify(moved)}, off it ${JSON.stringify(elsewhere)}`);
+      fail(`redirects: to the posting ${JSON.stringify(moved)}, to its slug ${JSON.stringify(canonical)}, off it ${JSON.stringify(elsewhere)}, to another posting that keeps the id in a return address ${JSON.stringify(returned)}`);
     }
 
     // With no id in the posting URL, nothing tells the posting's own link from
