@@ -109,6 +109,25 @@ try {
     fail(`join.fetch() redirect opts wrong: ${JSON.stringify(redirectCalls)}`);
   }
 
+  // fetch() — newer join.com pages carry the same state under pageProps.pageData.
+  const pageDataHtml = (jobs, pageCount) =>
+    `<html><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+      props: { pageProps: { pageData: { company: { domain: 'acme-corp' }, jobs: { items: jobs, pagination: { pageCount } } } } },
+    })}</script></body></html>`;
+  const pdPages = [pageDataHtml([{ title: 'Job A', idParam: 'a', city: { cityName: 'Berlin' } }], 2), pageDataHtml([{ title: 'Job B', idParam: 'b', city: {} }], 2)];
+  let pdCalls = 0;
+  const pdJobs = await joinProvider.fetch(entry, { fetchText: async () => pdPages[pdCalls++] });
+  if (
+    pdCalls === 2 &&
+    pdJobs.length === 2 &&
+    pdJobs[0].url === 'https://join.com/companies/acme-corp/jobs/a' &&
+    pdJobs[0].location === 'Berlin'
+  ) {
+    pass('join.fetch() reads the newer pageProps.pageData shape, including pagination');
+  } else {
+    fail(`join.fetch() pageData shape wrong: ${JSON.stringify(pdJobs)} after ${pdCalls} calls`);
+  }
+
   // fetch() — honors ctx.maxPages (verify-portals' liveness probe passes 1)
   // so a health check never crawls a tenant's full multi-page board.
   let cappedCalls = 0;

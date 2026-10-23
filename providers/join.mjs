@@ -38,6 +38,14 @@ export function extractNextData(html) {
   try { return JSON.parse(match[1]); } catch { return null; }
 }
 
+// join.com serves two page shapes: the older `pageProps.initialState` and a
+// newer `pageProps.pageData`, rolled out per company. Both carry the same
+// `jobs.items` / `jobs.pagination` / `company` fields.
+export function extractState(data) {
+  const pageProps = data?.props?.pageProps;
+  return pageProps?.initialState ?? pageProps?.pageData ?? null;
+}
+
 /** @type {Provider} */
 export default {
   id: 'join',
@@ -58,7 +66,7 @@ export default {
     // regardless of the original careers_url.
     const firstHtml = await ctx.fetchText(baseUrl, { redirect: 'error' });
     const firstData = extractNextData(firstHtml);
-    const state = firstData?.props?.pageProps?.initialState;
+    const state = extractState(firstData);
     if (!state) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
 
     const firstJobs = state.jobs?.items;
@@ -79,7 +87,7 @@ export default {
     for (let page = 2; page <= pageCount; page++) {
       const html = await ctx.fetchText(`${baseUrl}?page=${page}`, { redirect: 'error' });
       const data = extractNextData(html);
-      const pageState = data?.props?.pageProps?.initialState;
+      const pageState = extractState(data);
       if (!pageState) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
       const pageItems = pageState.jobs?.items;
       if (!Array.isArray(pageItems)) throw new Error('join: __NEXT_DATA__ not found or unexpected structure');
