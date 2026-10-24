@@ -11,10 +11,12 @@ const original = '| 1 | 2026-06-01 | Acme | Backend Engineer | 4/5 | Applied | -
 
 // One review is a chain of cold Node starts: reply-watch up to its prompt,
 // then, after the answer, set-status and `tracker.mjs sync`, each run by
-// reply-watch with execFileSync. On a Windows runner shared by four suites a
-// flat 15s for all three ran out in a different case each time. Each phase
-// gets the per-script budget run() uses, and a timeout names the phase it was
-// in, so a slow start and a stuck write are told apart.
+// reply-watch with execFileSync. A case normally takes about a second on the
+// Windows runner, but a flat 15s for the whole chain has run out there, in a
+// different case each time: an occasional stall, not the usual pace. Each
+// phase gets the per-script budget run() uses, which rides out a short stall,
+// and a timeout names the phase it was in, with the child's output, so the
+// next stall shows where it happens.
 const PHASE_BUDGET_MS = DEFAULT_SCRIPT_TIMEOUT_MS;
 
 async function review(change, expectsConflict = true) {
