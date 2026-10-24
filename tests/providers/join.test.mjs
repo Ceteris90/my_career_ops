@@ -495,6 +495,20 @@ try {
   const emptySlugs = parseCompanySitemap('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
   if (Array.isArray(emptySlugs) && emptySlugs.length === 0) pass('join.parseCompanySitemap() returns [] for an empty <urlset>');
   else fail(`join.parseCompanySitemap() empty urlset wrong: ${JSON.stringify(emptySlugs)}`);
+  const selfClosingSlugs = parseCompanySitemap('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>');
+  if (Array.isArray(selfClosingSlugs) && selfClosingSlugs.length === 0) pass('join.parseCompanySitemap() returns [] for a self-closing <urlset/>');
+  else fail(`join.parseCompanySitemap() self-closing urlset wrong: ${JSON.stringify(selfClosingSlugs)}`);
+  let truncatedError = null;
+  try {
+    parseCompanySitemap('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://join.com/companies/acme-corp</loc></url><url><loc>https://join.com/compa');
+  } catch (err) {
+    truncatedError = err;
+  }
+  if (truncatedError && /complete <urlset>/.test(truncatedError.message)) pass('join.parseCompanySitemap() throws on a sitemap cut short before </urlset>');
+  else fail('join.parseCompanySitemap() should throw when </urlset> is missing');
+  const encodedSlugs = parseCompanySitemap('<urlset><url><loc>https://join.com/companies/m&amp;s-consulting</loc></url></urlset>');
+  if (JSON.stringify(encodedSlugs) === '["m&s-consulting"]') pass('join.parseCompanySitemap() decodes XML entities in <loc>');
+  else fail(`join.parseCompanySitemap() entity decoding wrong: ${JSON.stringify(encodedSlugs)}`);
   let noCompanyError = null;
   try {
     parseCompanySitemap('<urlset><url><loc>https://join.com/companies/acme-corp/16854145-engineer</loc></url><url><loc>https://example.com/companies/exampleco</loc></url></urlset>');

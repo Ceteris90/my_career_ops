@@ -3,6 +3,7 @@
 
 import { fetchJsonWithRetry, fetchTextWithRetry, sleep } from './_http.mjs';
 import { htmlToText } from './_html-to-text.mjs';
+import { decodeEntities } from './_html-entities.mjs';
 
 // join.com provider — single-company ATS adapter for `tracked_companies:`.
 // Auto-detects from careers_url matching join.com/companies/<slug>.
@@ -160,19 +161,25 @@ export function extractCompany(nextData) {
 /**
  * Company slugs from join.com's company sitemap, in document order, each once.
  * Only `<loc>https://join.com/companies/<slug></loc>` entries count; a deeper
- * path or another host is skipped. An empty `<urlset>` is an empty directory;
- * `<url>` or `<loc>` entries of which none yields a company page mean the
- * format changed, and throw, so the caller keeps its last good list.
+ * path or another host is skipped, and XML entities in `<loc>` are decoded.
+ * An empty `<urlset>` is an empty directory. A sitemap without a complete
+ * `<urlset>` element, or with `<url>` or `<loc>` entries of which none yields
+ * a company page, throws, so the caller keeps its last good list.
  * @param {unknown} xml
  * @returns {string[]}
  */
 export function parseCompanySitemap(xml) {
   if (typeof xml !== 'string') throw new Error('join: company sitemap is not text');
-  if (!/<urlset\b/.test(xml)) throw new Error('join: company sitemap has no <urlset>');
+  // The root element must be complete: a download cut short still opens
+  // <urlset> and would pass for a shorter directory.
+  if (!/<urlset\b[^>]*\/>|<urlset\b[^>]*>[\s\S]*<\/urlset\s*>/.test(xml)) {
+    throw new Error('join: company sitemap has no complete <urlset> element');
+  }
   const slugs = new Set();
   let locs = 0;
-  for (const [, loc] of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g)) {
+  for (const [, raw] of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/g)) {
     locs++;
+    const loc = decodeEntities(raw);
     const slug = extractSlug(loc);
     if (slug && new URL(loc).pathname.replace(/\/$/, '') === `/companies/${slug}`) slugs.add(slug);
   }
