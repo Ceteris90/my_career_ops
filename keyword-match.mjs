@@ -372,7 +372,7 @@ export function extractKeywords(reportText) {
     if (marker) {
       // The closer is looked up rather than tracked forward, so a fence the
       // report never closes cannot swallow every section after it: with no
-      // closer the opener stays an ordinary line and the section still ends at
+      // closer the opener is skipped and the section still ends at
       // the next heading, as it did before.
       const close = indexOfFenceClose(lines, i, marker[1], !FENCE_RE.test(lines[i]));
       if (close > i) {
