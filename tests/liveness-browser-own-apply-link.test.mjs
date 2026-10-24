@@ -101,9 +101,10 @@ try {
       fail(`Apply links in a frame's chrome (plain, sandboxed): to the posting ${JSON.stringify(framed)}, back into the frame or the page around it ${JSON.stringify(framedBack)}`);
     }
 
-    // The id has to be a whole path segment: posting 12345 claims
-    // /jobs/12345/apply, not another posting's /jobs/123456/apply, nor a
-    // segment that only contains it. A posting whose own segment carries the
+    // The id has to be the link's own, its last path segment that carries one,
+    // whole: posting 12345 claims /jobs/12345/apply, not another posting's
+    // /jobs/123456/apply, nor a segment that only contains it, nor
+    // /jobs/12345/related/67890/apply, whose own posting is 67890. A posting whose own segment carries the
     // id with more around it, job-12345, claims that whole segment too, and
     // still nothing longer. A last segment the id did not come from (details)
     // claims nothing.
@@ -112,6 +113,7 @@ try {
     const numericOther = await check(numericUrl, [
       '<header><a href="/jobs/123456/apply">Apply</a></header>',
       '<nav><a href="/jobs/job-12345/apply">Apply</a></nav>',
+      '<footer><a href="/jobs/12345/related/67890/apply">Apply</a></footer>',
       `<main>${POSTING}</main>`,
     ].join(''));
     const prefixedUrl = 'https://www.example.com/jobs/job-12345';

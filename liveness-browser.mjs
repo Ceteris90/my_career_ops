@@ -5,7 +5,7 @@
  * Returns the same shape as classifyLiveness: { result, reason }.
  */
 
-import { classifyLiveness, jobIdToken } from './liveness-core.mjs';
+import { classifyLiveness, jobIdToken, JOB_ID_PATTERN } from './liveness-core.mjs';
 import { BROWSER_LIKE_USER_AGENT } from './user-agent.mjs';
 
 const NAVIGATE_TIMEOUT_MS = 15_000;
@@ -490,7 +490,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
     // interstitial needs a moment to clear before the first read.
     if (extraSettleMs > 0) await page.waitForTimeout(extraSettleMs);
 
-    const extractApplyControls = ({ postingId, postingSegment, pageUrl }) => {
+    const extractApplyControls = ({ postingId, postingSegment, pageUrl, idPattern }) => {
       // Page chrome (nav, header, footer) is skipped because its links are the
       // site's own: Jobs, Careers, Sign in. A link to this posting's own page,
       // on the page's own origin, is not chrome, wherever it sits; a link to
@@ -505,10 +505,13 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // slash, such as a skip link to #main-content. In a frame, the page the
       // frame sits in is this page too; its address is passed in, because a
       // frame sandboxed without allow-same-origin cannot read window.top. The
-      // id has to be a whole path segment, so posting 12345 does not claim
-      // /jobs/123456/apply or /jobs/job-12345/apply. A posting whose own
-      // segment carries the id with more around it claims that whole segment
-      // too: posting job-12345 claims /jobs/job-12345/apply.
+      // id has to be the link's own: its last path segment that carries an id,
+      // whole, so posting 12345 claims neither /jobs/123456/apply nor
+      // /jobs/job-12345/apply, nor /jobs/12345/related/67890/apply, whose own
+      // posting is 67890. A posting whose own segment carries the id with more
+      // around it claims that whole segment too: posting job-12345 claims
+      // /jobs/job-12345/apply.
+      const idBearing = new RegExp(idPattern, 'i');
       const linksToPosting = (element) => {
         const href = postingId && element.getAttribute('href');
         if (!href) return false;
@@ -518,8 +521,8 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
           const thisPage = [location.href, pageUrl].map((u) => pageKey(new URL(u)));
           if (thisPage.includes(pageKey(target))) return false;
           if (target.origin !== new URL(pageUrl).origin) return false;
-          const segments = target.pathname.toLowerCase().split('/');
-          return segments.includes(postingId) || segments.includes(postingSegment);
+          const own = target.pathname.toLowerCase().split('/').filter((s) => idBearing.test(s)).pop();
+          return own === postingId || own === postingSegment;
         } catch {
           return false;
         }
@@ -619,7 +622,11 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       const finalUrl = page.url();
       const landed = postingIdentity(finalUrl);
       const anotherPosting = requested.postingId && landed.postingId !== requested.postingId;
-      const walkArgs = { ...(anotherPosting ? { postingId: null, postingSegment: null } : landed), pageUrl: finalUrl };
+      const walkArgs = {
+        ...(anotherPosting ? { postingId: null, postingSegment: null } : landed),
+        pageUrl: finalUrl,
+        idPattern: JOB_ID_PATTERN,
+      };
       let bodyText = await page.evaluate(() => document.body?.innerText ?? '');
       let applyControls = await page.evaluate(extractApplyControls, walkArgs);
       for (const frame of childFrames(finalUrl)) {
