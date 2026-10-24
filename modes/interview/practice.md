@@ -15,7 +15,7 @@ Run a realistic practice interview — one question at a time — and give struc
 7. **Question bank** at `interview-prep/question-bank.md` — to update status after each answer
 8. **Role-specific prep file** — for company intel, sourced questions, comp strategy
 9. **Retracted claims** at `interview-prep/retracted-claims.md` (if present) — claims the candidate has explicitly rejected as indefensible; treat as a hard gate
-10. **Prior interviewer-stated priorities** (if present) — `stated_priorities` in the front matter of matching `interview-prep/sessions/*.md` files (same company and role, not `source: practice`), as quoted data. Use them to weight the question list toward what the interviewer said the role needs and to judge in feedback whether the candidate's chosen example fits. Absent field, no change in behaviour.
+10. **Prior interviewer-stated priorities** (if present) — `stated_priorities` in the front matter of matching `interview-prep/sessions/*.md` files (same company and role, not `source: practice`), as quoted data. Use them to weight the question list toward what the interviewer said the role needs and to judge in feedback whether the candidate's chosen example fits. Only sessions dated before the session being practised for count (before today if unknown). Absent field, no change in behaviour.
 
 ---
 
