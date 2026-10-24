@@ -45,8 +45,8 @@ const DOCTOR = join(ROOT, 'doctor.mjs');
 // 3. rank-pipeline CLI_CANDIDATES includes omp
 {
   const ompCandidate = CLI_CANDIDATES.find((c) => c.bin === 'omp');
-  if (ompCandidate && JSON.stringify(ompCandidate.args('test')) === JSON.stringify(['-p', 'test'])) {
-    pass('rank-pipeline.mjs CLI_CANDIDATES includes omp with args [-p, prompt]');
+  if (ompCandidate && JSON.stringify(ompCandidate.args('test')) === JSON.stringify(['--no-tools', '-p', 'test'])) {
+    pass('rank-pipeline.mjs CLI_CANDIDATES includes omp with args [--no-tools, -p, prompt]');
   } else {
     fail('rank-pipeline.mjs missing omp candidate or invalid args');
   }
@@ -100,7 +100,7 @@ const DOCTOR = join(ROOT, 'doctor.mjs');
     // 4c. doctor with .omp/.mcp.json detects Playwright MCP
     rmSync(join(dir, '.omp', 'mcp.json'), { force: true });
     writeFileSync(join(dir, '.omp', '.mcp.json'), JSON.stringify({
-      mcp: {
+      mcpServers: {
         playwright: {
           command: 'mcp-server-playwright',
         },
