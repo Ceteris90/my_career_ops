@@ -113,6 +113,10 @@ check('a fenced keyword block is content, and its delimiters are not keywords', 
   // "python" and create a false ATS hit when the CV mentions Python.
   const unclosedLang = '## Keywords extracted\n\n```python\nSQL, Tableau\n\n## Verdict\n\nstrong fit\n';
   assert.deepEqual(extractKeywords(unclosedLang), ['SQL', 'Tableau']);
+
+  // A same-line fenced wrapper without a bullet is content, not a fence opener.
+  const sameLineWrapped = '## Keywords extracted\n\n```CI/CD```\n\n## Next\n';
+  assert.deepEqual(extractKeywords(sameLineWrapped), ['CI/CD']);
 });
 
 check('a thematic break inside a fenced list is skipped too', () => {

@@ -370,6 +370,11 @@ export function extractKeywords(reportText) {
     // is an indented code block, whose closer is indented as well.
     const marker = FENCE_RE.exec(line);
     if (marker) {
+      if (/^`{3,}.+`{3,}$/.test(line)) {
+        collect(line);
+        continue;
+      }
+
       // The closer is looked up rather than tracked forward, so a fence the
       // report never closes cannot swallow every section after it: with no
       // closer the opener is skipped and the section still ends at
