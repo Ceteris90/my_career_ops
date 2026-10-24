@@ -107,9 +107,17 @@ function main() {
       const requiredFields = ['full_name', 'email', 'location'];
       for (const field of requiredFields) {
         const raw = candidate[field];
-        const value = raw == null ? '' : String(raw).trim();
+        // Only a string is a usable value for these three fields. Coercing with
+        // String() made `full_name: {first: Jane}` pass as "[object Object]" and
+        // a bare `email: 12345` pass as "12345" — an invalid field the check was
+        // meant to catch, accepted without a warning.
+        const value = typeof raw === 'string' ? raw.trim() : '';
         if (!value || value.toLowerCase() === 'jane smith') {
-          const detail = value ? ` (still "${value}")` : ' (missing or empty)';
+          const detail = value
+            ? ` (still "${value}")`
+            : raw == null
+              ? ' (missing or empty)'
+              : ' (not a text value)';
           warnings.push(`config/profile.yml may still have example data. Check field: ${field}${detail}`);
           break;
         }

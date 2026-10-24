@@ -201,3 +201,31 @@ test('a missing required field is reported by name', () => {
   assert.match(r.all, /Check field: location/,
     `a missing field was not named:\n${r.all.slice(0, 400)}`);
 });
+
+// A required field holding a YAML mapping used to pass: String({first: 'Jane'})
+// is "[object Object]", which is non-empty and not the template name. Same for a
+// bare number. Both are unusable values for these fields, so both must warn.
+test('a non-string required field is rejected, not stringified', () => {
+  const mapping = runWithProfile([
+    'candidate:',
+    '  full_name: {first: Jane}',
+    '  email: "jane@example.com"',
+    '  location: "Lisbon"',
+    '',
+  ].join('\n'));
+  assert.match(mapping.all, /Check field: full_name/,
+    `a mapping was accepted as a name:\n${mapping.all.slice(0, 400)}`);
+  assert.match(mapping.all, /not a text value/,
+    `the reason did not say the value is not text:\n${mapping.all.slice(0, 400)}`);
+  assert.doesNotMatch(mapping.all, /\[object Object\]/, 'the mapping was stringified');
+
+  const numeric = runWithProfile([
+    'candidate:',
+    '  full_name: "Jane Roe"',
+    '  email: 12345',
+    '  location: "Lisbon"',
+    '',
+  ].join('\n'));
+  assert.match(numeric.all, /Check field: email/,
+    `a number was accepted as an email:\n${numeric.all.slice(0, 400)}`);
+});
