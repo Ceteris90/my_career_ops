@@ -173,8 +173,11 @@ export const SINKHOLE_ADDRESSES = new Set(['0.0.0.0', '::']);
  * @returns {Error}
  */
 export function blockedAddressError(hostname, address, addresses = [address]) {
+  // Only the private addresses decide, as for liveness-browser.mjs's
+  // dns_sinkhole code: a filter that rewrites A records and passes AAAA
+  // through answers 0.0.0.0 alongside a public address. A literal 0.0.0.0 in
+  // a URL is not a filter's answer, so only a name gets the hint.
   const blocked = addresses.filter((a) => isBlockedAddress(a));
-  // A literal 0.0.0.0 in a URL is not a filter's answer, so only a name gets the hint.
   const sinkholed = hostname !== address && blocked.length > 0
     && blocked.every((a) => SINKHOLE_ADDRESSES.has(String(a).toLowerCase()));
   const hint = sinkholed
