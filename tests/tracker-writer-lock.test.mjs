@@ -400,6 +400,19 @@ writerCase({
 });
 
 writerCase({
+  name: 'close-stale',
+  script: 'close-stale.mjs',
+  args: ['--confirm', '--today', '2026-10-24'],
+  content: trackerTable([
+    '| 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ❌ | [1](reports/001-acme.md) | seed |',
+  ]),
+  verify: content => content.includes('| Discarded |') && content.includes('no response (auto-closed 2026-10-24, 60d)'),
+  // The row committed while the writer waited is old and Applied too, so it is closed
+  // as well: what must survive is the row itself, not its Applied status.
+  verifyConcurrent: after => after.includes('ConcurrentCo') && after.includes('preserve me'),
+});
+
+writerCase({
   name: 'tracker-delete',
   script: 'tracker.mjs',
   args: ['delete', '--num', '1'],

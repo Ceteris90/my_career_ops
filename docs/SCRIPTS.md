@@ -47,6 +47,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
 | `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
 | `npm run closing-soon` | `closing-soon.mjs` | List tracker rows whose Notes (or matching `jds/` capture) carry a closing date within N days, plus separate `overdue` and `unparsed` groups (read-only) |
+| `npm run close-stale` | `close-stale.mjs` | Close long-silent `Applied` rows in bulk (dry run by default; `--confirm` writes through the locked tracker path, tags the note and logs each transition) |
 | `npm run reeval-candidates` | `reeval-candidates.mjs` | List `Evaluated` tracker rows whose last evaluation predates the latest change to `cv.md`, `article-digest.md`, `config/profile.yml` or `modes/_profile.md` (read-only) |
 | `npm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
 | `npm run jd-archive` | `check-jd-archive.mjs` | Validate every `reports/*.md` has an archived JD (embedded section or `jds/` capture) — flags `missing-jd-archive` |
@@ -442,13 +443,13 @@ node funnel-velocity.mjs --self-test
 node funnel-velocity.mjs --benchmarks path/to/benchmarks.yml
 ```
 
-Ledger line format (TSV, appended by `set-status.mjs` and, for a status a kept duplicate takes over, `dedup-tracker.mjs`; `#`-prefixed lines are comments):
+Ledger line format (TSV, appended by `set-status.mjs`, for a status a kept duplicate takes over, `dedup-tracker.mjs`, and for a bulk close of silent rows, `close-stale.mjs`; `#`-prefixed lines are comments):
 
 ```text
 {tracker#}\t{YYYY-MM-DD}\t{from}\t{to}\t{source}\t{note}
 ```
 
-`from` may be `-` (unknown prior state); `to` = `-` retracts the row's latest observation; a later `correction`-source line with the same (tracker#, to) replaces the earlier observation's date. Sources are the closed set `VALID_SOURCES` in `funnel-velocity.mjs`. `backfill`, `manual` and `dedup-tracker` are counted but kept out of day-math, because they record a transition found after the fact rather than observed when it happened.
+`from` may be `-` (unknown prior state); `to` = `-` retracts the row's latest observation; a later `correction`-source line with the same (tracker#, to) replaces the earlier observation's date. Sources are the closed set `VALID_SOURCES` in `funnel-velocity.mjs`. `backfill`, `manual`, `dedup-tracker` and `close-stale` are counted but kept out of day-math, because they record a transition found after the fact rather than observed when it happened.
 
 **Exit codes:** `0` always (missing tracker/ledger produce an explanatory empty result), `1` self-test or benchmarks-load failure.
 
@@ -730,6 +731,40 @@ node closing-soon.mjs --tracker path/to/applications.md --jds path/to/jds
 ```
 
 **Exit codes:** `0` on a report (a missing tracker yields an empty result with a warning), `1` unrecognized flag, `2` invalid `--today` / `--within` / `--status` value.
+
+---
+
+## close-stale
+
+Closes long-silent `Applied` rows in bulk. `set-status.mjs` and `outcome.mjs <selector> no_response` act on one row at a time, so a long search ends up with hundreds of rows that still read as "in flight" to the funnel, the follow-up cadence and the dashboard. This applies the existing `no_response` -> `Discarded` convention (`modes/outcome.md`) to every row that has gone quiet. Zero-LLM, no network, no schema change.
+
+**Dry run by default**: nothing is written without `--confirm`.
+
+A row is a candidate when its status resolves to `Applied` (aliases such as `Sent` count) and it is **older than** `--days` (default 60; a row exactly N days old is kept). Age runs from the latest of the Date column, an `Applied YYYY-MM-DD` date in Notes and the day `status-log.tsv` recorded the move to Applied. A candidate is **skipped**, with its reason reported, when something later suggests an answer may still come:
+
+| Reason | Meaning |
+|--------|---------|
+| `active-interview` | the company has an entry in `data/active-interviews.md` (company match only, so a role-title mismatch never closes an application you are interviewing for) |
+| `status-log` | `data/status-log.tsv` holds a transition after Applied |
+| `open-follow-up` | `data/follow-ups.md` has a follow-up logged for this row within the last `--days` days, or an uncleared `next #N` pin dated today or later (the pin `followup-seed.mjs` writes at apply time is long past on a stale row and does not count) |
+| `previously-auto-closed` | the note tag or a `close-stale` ledger line is already present: a row you reopened stays open |
+| `duplicate-num` | two rows share the tracker # (#1704), so the ledger cannot say which one a transition belongs to |
+
+Every other state (Evaluated, Responded, Assessment, Interview, Offer, Hired, Rejected, Discarded, SKIP) is never touched.
+
+`--confirm` rewrites the candidates inside one tracker transaction (the lock and atomic replace `dedup-tracker.mjs` uses): Status becomes `--status` (default `Discarded`; any canonical state except `Applied`, aliases accepted), the fixed tag `no response (auto-closed YYYY-MM-DD, Nd)` is appended to Notes so these rows can be told apart from real rejections and found again if a reply arrives, and one `source=close-stale` line per row is appended to `data/status-log.tsv`. To reopen a row that did get a reply, use `set-status.mjs`. Re-running changes nothing.
+
+```bash
+node close-stale.mjs                       # dry run, JSON (metadata, candidates, skipped)
+node close-stale.mjs --summary             # dry run, counts + a sample
+node close-stale.mjs --days 45 --status Discarded
+node close-stale.mjs --confirm             # write
+node close-stale.mjs --today 2026-10-17    # deterministic runs/tests
+```
+
+Paths follow `CAREER_OPS_ROOT` / `CAREER_OPS_DATA_DIR` / `CAREER_OPS_TRACKER`. Dates are compared as `YYYY-MM-DD` strings at UTC midnight, so the result does not depend on the host timezone.
+
+**Exit codes:** `0` on a report, `1` unrecognized flag, `2` invalid `--days` / `--today` / `--status` value or a tracker with no Notes column, `4` tracker lock timeout (nothing written).
 
 ---
 
