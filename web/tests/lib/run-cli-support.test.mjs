@@ -527,6 +527,16 @@ test("replacing a reservation with a report counts as persistence", () => {
   assert.equal(hasNewCompletedReport(before, ["020-existing.md", "021-new-company.md"]), true);
 });
 
+test("overlapping runs can attribute another run's report to themselves", () => {
+  const before = ["020-existing.md", "021-RESERVED.md", "022-RESERVED.md"];
+  const after = ["020-existing.md", "022-run-b.md", "021-run-a.md"];
+
+  assert.deepEqual(
+    [newCompletedReportNum(before, after), newCompletedReportNum(before, after)],
+    [21, 22],
+  );
+});
+
 test("reservation churn alone does not count as persistence", () => {
   const before = ["020-existing.md", "021-RESERVED.md"];
   assert.equal(hasNewCompletedReport(before, ["020-existing.md", "022-RESERVED.md"]), false);
