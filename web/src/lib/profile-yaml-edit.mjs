@@ -31,25 +31,29 @@ function isBlankOrComment(line) {
 
 /**
  * The trailing `# comment` of a `key: value` line, with its leading space.
- * A `#` inside a quoted value is not a comment; a mistake here still cannot
- * reach the file, because the result is verified by parsing it.
+ * A `#` inside a quoted scalar, including one inside a flow list such as
+ * `["Role #1"]`, is not a comment. A quote opens a scalar only at the start of
+ * a token, so the apostrophe in a plain `O'Brien` does not.
  * @param {string} value
  */
 function trailingComment(value) {
-  let from = 0;
-  const open = value.trimStart()[0];
-  if (open === '"' || open === "'") {
-    const start = value.indexOf(open);
-    let end = start + 1;
-    while (end < value.length) {
-      if (open === '"' && value[end] === "\\") end += 2;
-      else if (value[end] === open && open === "'" && value[end + 1] === "'") end += 2;
-      else if (value[end] === open) break;
-      else end++;
+  let quote = "";
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    const prev = i === 0 ? " " : value[i - 1];
+    if (quote) {
+      if (quote === '"' && c === "\\") i++;
+      else if (c === quote && quote === "'" && value[i + 1] === "'") i++;
+      else if (c === quote) quote = "";
+    } else if ((c === '"' || c === "'") && /[\s[{,]/.test(prev)) {
+      quote = c;
+    } else if (c === "#" && /\s/.test(prev)) {
+      let start = i;
+      while (start > 0 && /\s/.test(value[start - 1])) start--;
+      return value.slice(start);
     }
-    from = end + 1;
   }
-  return /\s+#.*$/.exec(value.slice(from))?.[0] ?? "";
+  return "";
 }
 
 /**
@@ -73,8 +77,10 @@ function findSection(lines, section) {
 }
 
 /**
- * The block-list items under the key at `at`: comment lines between them are
- * kept, and returned so they can stay ahead of the new items.
+ * The block-list items under the key at `at`. Comment lines between them, and
+ * the trailing comment of an item line (`- "Old" # note`, which has no new
+ * item to stay on), are returned as comment lines to keep ahead of the new
+ * items.
  * @param {string[]} lines
  * @param {number} at
  * @param {number} end
@@ -87,7 +93,11 @@ function listItems(lines, at, end, indent) {
     if (/^\s*- /.test(lines[i]) && indentOf(lines[i]).length >= indent.length) last = i;
     else break;
   }
-  const kept = lines.slice(at + 1, last + 1).filter((line) => line.trim().startsWith("#"));
+  const kept = lines.slice(at + 1, last + 1).flatMap((line) => {
+    if (line.trim().startsWith("#")) return [line];
+    const comment = /^\s*- /.test(line) ? trailingComment(line.replace(/^\s*-/, "")).trim() : "";
+    return comment ? [`${indentOf(line)}${comment}`] : [];
+  });
   const itemIndent = lines.slice(at + 1, last + 1).find((line) => /^\s*- /.test(line));
   return { last, kept, itemIndent: itemIndent ? indentOf(itemIndent) : `${indent}  ` };
 }

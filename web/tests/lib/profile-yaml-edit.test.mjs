@@ -71,6 +71,21 @@ test("an empty section header gets its keys under it", () => {
   assert.equal(edit(source, { candidate: { full_name: "A" } }), "candidate:\n  full_name: \"A\"\n# note\nother: 1\n");
 });
 
+test("a # inside a quoted inline-list value is not taken for the trailing comment", () => {
+  const source = 'target_roles:\n  primary: ["Role #1", \'Role #2\'] # user note\n';
+  assert.equal(edit(source, { target_roles: { primary: ["New"] } }), 'target_roles:\n  primary: ["New"] # user note\n');
+});
+
+test("a plain scalar's apostrophe does not open a quote", () => {
+  const source = "candidate:\n  full_name: O'Brien # keep me\n";
+  assert.equal(edit(source, { candidate: { full_name: "New" } }), 'candidate:\n  full_name: "New" # keep me\n');
+});
+
+test("a replaced list item's trailing comment is kept as a comment line ahead of the new items", () => {
+  const source = 'target_roles:\n  primary:\n    - "Old" # user note\n    - "Role #2"\n';
+  assert.equal(edit(source, { target_roles: { primary: ["New"] } }), 'target_roles:\n  primary:\n    # user note\n    - "New"\n');
+});
+
 test("block list items are replaced, with comments between them kept ahead of the new items", () => {
   const source = "target_roles:\n  primary:\n    - \"Old One\"\n    # a note\n    - \"Old Two\"\n  # after the list\n  archetypes: []\n";
   const out = edit(source, { target_roles: { primary: ["New One", "New Two"] } });
