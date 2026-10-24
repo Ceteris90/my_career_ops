@@ -420,6 +420,8 @@
 # At least 1 positive must match AND 0 negatives must match (case-insensitive).
 #
 # skip_tiers: [intern, entry]  # optional: skip listings by seniority tier (note: unrecognized/plain titles fall back to 'mid')
+#   A tracked_companies / job_boards entry can set its own skip_tiers, which replaces this list for
+#   that entry; skip_tiers: [] turns the tier filter off for it.
 
 title_filter:
   # A `positive` entry is matched case-insensitively as a substring — except a
