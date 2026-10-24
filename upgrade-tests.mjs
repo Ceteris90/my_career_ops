@@ -854,14 +854,30 @@ function localEdit() {
 }
 
 /** The local-edit leg against a target whose `if (updateForce)` is inverted:
- *  the plain apply then overwrites the local fix, and the leg MUST go red. */
+ *  the plain apply then overwrites the local fix, the forced apply keeps it,
+ *  and exactly those four assertions MUST fail. Any other failure (setup, the
+ *  backup, the rest of the update, a user file) is not the flip being caught,
+ *  so it turns the canary red instead of passing for it. */
+const LOCAL_EDIT_CANARY_FAILURES = [
+  'apply keeps the local fix byte-identical',
+  'apply says it kept the local version',
+  `apply --force replaces the local fix with the target's ${LOCAL_EDIT_FILE}`,
+  'apply --force says it overwrote',
+];
+
 function localEditCanary() {
   const failures = localEditLeg({ invertForce: true });
-  if (failures.some((f) => f === 'apply keeps the local fix byte-identical')) {
-    console.log('CANARY GREEN: the local-edit leg caught the inverted --force branch');
+  const expected = new Set(LOCAL_EDIT_CANARY_FAILURES);
+  const missing = LOCAL_EDIT_CANARY_FAILURES.filter((f) => !failures.includes(f));
+  const unexpected = failures.filter((f) => !expected.has(f));
+  if (missing.length === 0 && unexpected.length === 0 && failures.length === expected.size) {
+    console.log('CANARY GREEN: the local-edit leg caught the inverted --force branch, and failed nothing else');
     process.exit(0);
   }
-  console.error(`CANARY RED: the local-edit leg did not catch the inverted --force branch (failures: ${failures.length ? failures.join('; ') : 'none'}) — do not trust that leg`);
+  console.error('CANARY RED: the local-edit leg did not fail exactly as the inverted --force branch should — do not trust that leg');
+  if (missing.length) console.error(`  expected to fail but passed: ${missing.join('; ')}`);
+  if (unexpected.length) console.error(`  failed but not expected to: ${unexpected.join('; ')}`);
+  if (failures.length !== new Set(failures).size) console.error(`  an assertion failed more than once: ${failures.join('; ')}`);
   process.exit(1);
 }
 
