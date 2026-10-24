@@ -15,6 +15,7 @@ Given a job description and interview date/time, build a structured, time-blocke
 7. **Story bank** at `interview-prep/story-bank.md` — existing STAR+R stories (their figures follow the provenance rule under Rules)
 8. **Question bank** at `interview-prep/question-bank.md` — existing gaps (if file exists)
 9. **Prior stated compensation** — if the tracker# is known, run `node salary-gap.mjs --stated-for <tracker#>` (zero tokens). Any prior `stated` observation is a number the candidate already committed to, in an earlier round, to a specific interviewer — feed it into Step 4's quick-reference so the candidate stays consistent instead of accidentally renegotiating.
+10. **Invite constraints** (if an invite was matched) — the `[constraint:*]` tags from `node invite-match.mjs` (the `constraints` array of `analyzeInvite()`); read them as given, never invent one. The `no-ai` tag drives the AI-tools reminder under Rules.
 
 ---
 

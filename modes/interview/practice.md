@@ -15,6 +15,7 @@ Run a realistic practice interview — one question at a time — and give struc
 7. **Question bank** at `interview-prep/question-bank.md` — to update status after each answer
 8. **Role-specific prep file** — for company intel, sourced questions, comp strategy
 9. **Retracted claims** at `interview-prep/retracted-claims.md` (if present) — claims the candidate has explicitly rejected as indefensible; treat as a hard gate
+10. **Invite constraints** (if an invite was matched) — the `[constraint:*]` tags from `node invite-match.mjs` (the `constraints` array of `analyzeInvite()`); read them as given, never invent one. The `no-ai` tag drives the AI-tools reminder under Rules.
 
 ---
 
