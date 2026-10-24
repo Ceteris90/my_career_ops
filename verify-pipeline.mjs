@@ -556,7 +556,9 @@ if (syncResult) {
 
   for (const m of tier1Mismatches) {
     warn(`Sync drift (auto-resolvable): ${m.company} — ${m.role}: applications.md="${m.applicationsStatus}" vs active-interviews.md="${m.activeInterviewsStatus}" -> suggest "${m.suggestedStatus}" in ${m.staleIn} (run node tracker-sync-check.mjs for details)`,
-         "run node tracker-sync-check.mjs for details; apply the suggested status to the stale file with node set-status.mjs <report#|company> <State>");
+         m.staleIn === 'applications.md'
+           ? "applications.md is the stale file: apply the suggested status with node set-status.mjs <report#|company> <State>; node tracker-sync-check.mjs shows details"
+           : "active-interviews.md is the stale file: edit its status cell by hand (set-status.mjs does not write that file); node tracker-sync-check.mjs shows details");
   }
   for (const m of tier2Mismatches) {
     warn(`Sync drift (needs human review): ${m.company} — ${m.role}: applications.md="${m.applicationsStatus}" (${m.applicationsLastModified || 'no blame info'}) vs active-interviews.md="${m.activeInterviewsStatus}" (${m.activeInterviewsLastModified || 'no blame info'})`,

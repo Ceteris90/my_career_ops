@@ -21,51 +21,67 @@ console.log('\nverify-pipeline — fix hints under every error and warning (#579
 
 // --- 1. Static: every call site passes a hint --------------------------------
 const SRC = readFileSync(join(ROOT, 'verify-pipeline.mjs'), 'utf-8');
-const isCode = codeMask(SRC);
-
-// Number of top-level arguments of the call whose "(" is at `open`. Only code
-// characters count (strings, template text and comments are masked out), so a
-// comma or paren inside a message cannot confuse the count; the code inside a
-// ${...} substitution is balanced and is skipped by depth.
-function argCount(open) {
-  let depth = 0;
-  let args = 1;
-  let sawContent = false;
-  for (let i = open; i < SRC.length; i++) {
-    const ch = SRC[i];
-    if (!isCode[i]) { if (depth === 1) sawContent = true; continue; }
-    if (ch === '(' || ch === '[' || ch === '{') { depth++; if (depth > 1) sawContent = true; continue; }
-    if (ch === ')' || ch === ']' || ch === '}') {
-      depth--;
-      if (depth === 0) return sawContent ? args : 0;
-      continue;
+// Scans `src` for error()/warn() calls. Only code characters count (strings,
+// template text and comments are masked out by codeMask), so a comma or paren
+// inside a message cannot confuse the argument split; code inside a ${...}
+// substitution is balanced and is skipped by depth. `hinted` is true only when
+// a second argument exists AND is not an empty/whitespace-only string literal:
+// printHint silently drops those, so error('x', '') must not satisfy the check.
+function scanCallSites(src) {
+  const isCode = codeMask(src);
+  const sites = [];
+  for (const m of src.matchAll(/\b(error|warn)\(/g)) {
+    const at = m.index;
+    if (!isCode[at]) continue;                                               // comment or string
+    if (/function\s+$/.test(src.slice(Math.max(0, at - 12), at))) continue; // the declaration
+    const open = at + m[0].length - 1;
+    let depth = 0;
+    let secondStart = -1;
+    let secondEnd = -1;
+    for (let i = open; i < src.length; i++) {
+      const ch = src[i];
+      if (!isCode[i]) continue;
+      if (ch === '(' || ch === '[' || ch === '{') { depth++; continue; }
+      if (ch === ')' || ch === ']' || ch === '}') {
+        depth--;
+        if (depth === 0) { if (secondStart >= 0 && secondEnd < 0) secondEnd = i; break; }
+        continue;
+      }
+      if (depth === 1 && ch === ',') {
+        if (secondStart < 0) secondStart = i + 1;
+        else if (secondEnd < 0) secondEnd = i;
+      }
     }
-    if (depth === 1 && ch === ',') args++;
-    else if (depth === 1 && !/\s/.test(ch)) sawContent = true;
+    const second = secondStart >= 0 ? src.slice(secondStart, secondEnd).trim() : '';
+    const hinted = second !== '' && !/^(['"`])\s*\1$/.test(second);
+    sites.push({ kind: m[1], line: src.slice(0, at).split('\n').length, hinted });
   }
-  return -1;
+  return sites;
 }
 
-const sites = [];
-for (const m of SRC.matchAll(/\b(error|warn)\(/g)) {
-  const at = m.index;
-  if (!isCode[at]) continue;                              // inside a comment or string
-  if (/function\s+$/.test(SRC.slice(Math.max(0, at - 12), at))) continue; // the declaration
-  const line = SRC.slice(0, at).split('\n').length;
-  sites.push({ kind: m[1], line, args: argCount(at + m[0].length - 1) });
-}
-
+const sites = scanCallSites(SRC);
 if (sites.filter(s => s.kind === 'error').length >= 10 && sites.filter(s => s.kind === 'warn').length >= 10) {
   pass(`found ${sites.length} error()/warn() call sites to check`);
 } else {
   fail(`call-site scan found too few sites (${sites.length}) — the scanner is broken`);
 }
-const unhinted = sites.filter(s => s.args < 2);
+const unhinted = sites.filter(s => !s.hinted);
 if (unhinted.length === 0) {
-  pass('every error()/warn() call site passes a hint');
+  pass('every error()/warn() call site passes a non-empty hint');
 } else {
   fail(`call site(s) without a hint: ${unhinted.map(s => `${s.kind}() at verify-pipeline.mjs:${s.line}`).join(', ')}`);
 }
+
+// Negative fixtures: the scanner must reject missing and empty/blank hints.
+const negVerdicts = scanCallSites([
+  "error('no hint');",
+  "error('empty', '');",
+  'warn(`blank`, `  `);',
+  "warn('ok', 'run node x.mjs');",
+  "error(`t ${f(1, 2)}`, 'run it');",
+].join('\n')).map(x => x.hinted).join(',');
+if (negVerdicts === 'false,false,false,true,true') pass('scanner rejects a missing or empty/blank hint and accepts a real one');
+else fail(`scanner verdicts wrong for negative fixtures: ${negVerdicts}`);
 
 // --- 2. Runtime ---------------------------------------------------------------
 const tmp = mkdtempSync(join(tmpdir(), 'co-vp-hints-'));
@@ -137,6 +153,47 @@ try {
     pass('a different kind of finding gets its own hint');
   } else {
     fail('Invalid-score error has no hint');
+  }
+
+  // Sync drift hints depend on WHICH file is stale: set-status.mjs only writes
+  // applications.md, so it must not be offered for active-interviews.md.
+  const root = join(tmp, 'sync-root');
+  mkdirSync(join(root, 'data'), { recursive: true });
+  const syncTracker = join(root, 'data', 'applications.md');
+  writeFileSync(syncTracker,
+    '# Applications Tracker\n\n' +
+    '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n' +
+    '|---|------|---------|------|-------|--------|-----|--------|-------|\n' +
+    row(1, '4.0/5', 'Applied', '—').replace('Co1 | Role 1', 'Alpha | Engineer') +
+    row(2, '4.0/5', 'Rejected', '—').replace('Co2 | Role 2', 'Beta | Analyst'));
+  writeFileSync(join(root, 'data', 'active-interviews.md'),
+    '| Company | Role | Date | Status | Notes |\n' +
+    '|---------|------|------|--------|-------|\n' +
+    '| Alpha | Engineer | 2026-01-02 | Scheduled | x |\n' +
+    '| Beta | Analyst | 2026-01-03 | Scheduled | x |\n');
+  let syncOut = '';
+  try {
+    syncOut = execFileSync(NODE, [join(ROOT, 'verify-pipeline.mjs')], {
+      cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 60_000,
+      env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_TRACKER: syncTracker, CAREER_OPS_REPORTS: reports },
+    });
+  } catch (err) { syncOut = typeof err.stdout === 'string' ? err.stdout : ''; }
+  const syncLines = syncOut.split('\n');
+  const hintAfter = (prefix) => {
+    const i = syncLines.findIndex(l => l.includes(prefix));
+    return i >= 0 ? (syncLines[i + 1] || '') : null;
+  };
+  const alphaHint = hintAfter('Sync drift (auto-resolvable): Alpha');
+  const betaHint = hintAfter('Sync drift (auto-resolvable): Beta');
+  if (alphaHint && /applications\.md is the stale file/.test(alphaHint) && /set-status\.mjs/.test(alphaHint)) {
+    pass('sync drift with applications.md stale points to set-status.mjs');
+  } else {
+    fail(`wrong hint when applications.md is stale: ${alphaHint}`);
+  }
+  if (betaHint && /active-interviews\.md is the stale file/.test(betaHint) && /by hand/.test(betaHint) && !/node set-status\.mjs/.test(betaHint)) {
+    pass('sync drift with active-interviews.md stale says to edit by hand, not set-status.mjs');
+  } else {
+    fail(`wrong hint when active-interviews.md is stale: ${betaHint}`);
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
