@@ -14,11 +14,10 @@ import { readFileSync, existsSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-import * as yaml from 'js-yaml';
-
 import { getCareerOpsRoot, getProfilePath, hasProfileOverride } from './path-resolver.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { loadYaml } from './lib/yaml-document.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -94,11 +93,13 @@ function main() {
     // regex was not enough either: it was not scoped to `candidate` (an
     // unrelated top-level `location:` mapping satisfied the check), and its
     // `\s*` could consume the newline after an empty `full_name:` and capture
-    // the next key, hiding the missing value. Parse with js-yaml (already a
-    // declared dependency) so only a real `candidate[field]` scalar counts.
+    // the next key, hiding the missing value. Parse the document with loadYaml
+    // (lib/yaml-document.mjs, the shared entry point: it returns null for an
+    // empty or comment-only file instead of throwing) so only a real
+    // `candidate[field]` string counts.
     let candidate;
     try {
-      candidate = yaml.load(profileContent)?.candidate ?? {};
+      candidate = loadYaml(profileContent)?.candidate ?? {};
     } catch (err) {
       candidate = null;
       warnings.push(`config/profile.yml could not be parsed as YAML: ${err.message.split('\n')[0]}`);

@@ -229,3 +229,19 @@ test('a non-string required field is rejected, not stringified', () => {
   assert.match(numeric.all, /Check field: email/,
     `a number was accepted as an email:\n${numeric.all.slice(0, 400)}`);
 });
+
+// A profile holding only the template's comments is an empty config, not a
+// parse error (js-yaml 5 throws on it; loadYaml returns null). It must warn
+// about the missing field, not about unparseable YAML.
+test('a comment-only profile warns about the missing field, not a parse error', () => {
+  const r = runWithProfile([
+    '# Career-Ops Profile Configuration',
+    '# candidate:',
+    '#   full_name: "Jane Smith"',
+    '',
+  ].join('\n'));
+  assert.match(r.all, /Check field: full_name/,
+    `a comment-only profile did not warn about the field:\n${r.all.slice(0, 400)}`);
+  assert.doesNotMatch(r.all, /could not be parsed/,
+    `an empty document was reported as malformed:\n${r.all.slice(0, 400)}`);
+});
