@@ -52,6 +52,7 @@ async function review(change, expectsConflict = true) {
         stdout += data;
         if (changed || !stdout.includes('Apply recommended status updates')) return;
         changed = true;
+        arm('changing the tracker as the second writer');
         try {
           // A second authorized writer changes the row while the human prompt is open.
           const transaction = await openTrackerTransaction(tracker);
