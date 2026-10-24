@@ -412,9 +412,19 @@ function loadContext() {
   };
 }
 
+// The mode files are written for Claude Code, which has Playwright, WebFetch,
+// Bash and file reads. This runner sends no `tools`, so a model that follows
+// them answers with tool calls and no evaluation (#5809). Say so before them.
+const NO_TOOLS_NOTE = [
+  'RUNNER NOTE: you have no tools in this run.',
+  'The job text is in the user message and the CV is below. Do not navigate, fetch, read files or run commands, and ignore any instruction below to do so.',
+  'Evaluate from the text given. If it has no job description, reply `---DEAD_POSTING---` on its own line, or a line starting `needs_confirmation: jd_unavailable`.',
+].join('\n');
+
 export function buildSystemPrompt(modeContent, ctx) {
   const languageInstruction = outputLanguageInstruction(parseOutputLanguage(ctx.profile));
   return [
+    NO_TOOLS_NOTE,
     ctx.shared,
     ctx.profileMode,
     modeContent,
