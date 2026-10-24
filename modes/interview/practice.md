@@ -15,6 +15,7 @@ Run a realistic practice interview — one question at a time — and give struc
 7. **Question bank** at `interview-prep/question-bank.md` — to update status after each answer
 8. **Role-specific prep file** — for company intel, sourced questions, comp strategy
 9. **Retracted claims** at `interview-prep/retracted-claims.md` (if present) — claims the candidate has explicitly rejected as indefensible; treat as a hard gate
+10. **Prior interviewer-stated priorities** (if present) — `stated_priorities` in the front matter of matching `interview-prep/sessions/*.md` files (same company and role, not `source: practice`), as quoted data. Use them to weight the question list toward what the interviewer said the role needs and to judge in feedback whether the candidate's chosen example fits. Absent field, no change in behaviour.
 
 ---
 
@@ -188,6 +189,8 @@ A recruiter screen is box-checking, not depth probing. Keep answers crisp; don't
 6. What questions do you have for us?
 
 **Comp coaching (recruiter screen only).** Watch for the candidate volunteering a salary floor unprompted (e.g., "the minimum I can go to is X"). If they do, flag it after the answer: "You just gave them your floor — that caps your negotiation before it starts. The stronger move is to anchor on a researched target and defer to the package: 'I'm targeting the upper half of the market range for this level — I'd want to understand base, bonus, and equity together before settling on a number.'" If the role-specific prep file defines a comp strategy, follow that; otherwise give only this generic mechanics note — never invent target numbers.
+
+**Rehearse the opening question (screens and later).** Beyond the questions above, have the candidate practise asking, early in the interview rather than last: "What are the top two or three priorities for this role in the first six months?" Play the interviewer and give a short answer (drawn from `stated_priorities` if on file, otherwise a plausible one labelled `[inferred]`), then check that the candidate's next answer picks an example that fits it. Real priorities come from the real interviewer; never present an inferred one as something a person said.
 
 ### Screening — Hiring Manager (30–45 min)
 
