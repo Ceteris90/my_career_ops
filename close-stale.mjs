@@ -401,11 +401,10 @@ if (isMainModule(import.meta.url)) {
       } catch (err) {
         fail(`Cannot acquire the tracker lock: ${err.message}`, err?.code === 'LOCK_TIMEOUT' ? 4 : 2);
       }
-      content = tx.read();
-    } else {
-      content = readFileSync(trackerPath, 'utf-8');
     }
     try {
+      // Read inside the try so a read failure still releases the lock.
+      content = confirm ? tx.read() : readFileSync(trackerPath, 'utf-8');
       // Signals are read INSIDE the lock window on --confirm, so a status-log
       // line a concurrent set-status appends cannot be missed.
       const ctx = loadContext({ dataRoot, trackerPath, today, days, states });

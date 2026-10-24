@@ -313,3 +313,22 @@ test('classifyRows is pure: the same input classifies the same way', () => {
   assert.deepEqual(a.candidates, b.candidates);
   assert.equal(a.appliedRows, 1);
 });
+
+test('a tracker that cannot be read fails cleanly and releases the lock', async () => {
+  const fx = makeRoot([row(1, OLD, 'Old Co', 'Applied')]);
+  try {
+    // Replace the tracker file with a directory: it exists, but reading it fails.
+    rmSync(fx.tracker);
+    mkdirSync(fx.tracker);
+    const r = run(fx.root, ['--confirm'], { CAREER_OPS_TRACKER_LOCK_TIMEOUT_MS: '500' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.equal(existsSync(fx.log), false);
+    const tx = await openTrackerTransaction(fx.tracker, { timeoutMs: 500 });
+    tx.close();
+    const dry = run(fx.root);
+    assert.equal(dry.status, 2, 'a dry-run read error is reported, not a stack trace');
+    assert.doesNotMatch(dry.stderr, /at .*node:internal/);
+  } finally {
+    fx.cleanup();
+  }
+});

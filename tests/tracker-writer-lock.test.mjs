@@ -122,6 +122,7 @@ async function runWhileLocked({
   verifyOutput,
   mutateWhileLocked,
   beforeMutationOutput = null,
+  isolateDataRoot = false,
 }) {
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-writer-lock-'));
   const tracker = join(dir, 'applications.md');
@@ -147,6 +148,10 @@ async function runWhileLocked({
     CAREER_OPS_TRACKER_DB: db,
     CAREER_OPS_TRACKER_LOCK: lockDir,
     CAREER_OPS_TRACKER_LOCK_RETRY_MS: '20',
+    // Opt-in for writers that also read sibling data files (active-interviews,
+    // follow-ups): point the data root at the fixture dir so a developer's real
+    // data can never change the outcome.
+    ...(isolateDataRoot ? { CAREER_OPS_ROOT: dir, CAREER_OPS_DATA_DIR: '', CAREER_OPS_FOLLOWUPS: '' } : {}),
   };
   const launchWriter = (timeoutMs, markerPath = null) => {
     let stdout = '';
@@ -402,6 +407,7 @@ writerCase({
 writerCase({
   name: 'close-stale',
   script: 'close-stale.mjs',
+  isolateDataRoot: true,
   args: ['--confirm', '--today', '2026-10-24'],
   content: trackerTable([
     '| 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ❌ | [1](reports/001-acme.md) | seed |',
