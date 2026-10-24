@@ -317,9 +317,12 @@ const NOUN_SYNONYMS = new Map([
 const MAGNITUDE_ALT = String.raw`(?:\s?(?:thousand|million|billion)\b|\s?[kKmMbB](?![\p{L}]))`;
 const SIMPLE_CLAIM_PATTERNS = [
   /\b\d+(?:\.\d+)?[^\S\n]?(?:%|(?:percent|per\s?cent|pct)\b)/gi,
-  new RegExp(String.raw`(?<![\w$€£])[$€£]\s?\d[\d,.]*(?:\s?(?:thousand|million|billion)\b|\s?[kKmMbB])?`, 'gu'),
-  new RegExp(String.raw`(?:\b(?:USD|EUR|GBP)|\bUS\$)\s?\d[\d,.]*${MAGNITUDE_ALT}?`, 'gu'),
-  new RegExp(String.raw`\b\d[\d,.]*${MAGNITUDE_ALT}?\s?-?\s?(?:(?:USD|EUR|GBP)\b|(?:[Dd]ollars?|[Ee]uros?)\b)`, 'gu'),
+  // An amount ends in a digit (`\d(?:[\d,.]*\d)?`): a bare `[\d,.]*` also took
+  // the sentence's closing period, so "… to $97.35." became the claim
+  // "$97.35." and failed against a source that writes "$97.35 per share".
+  new RegExp(String.raw`(?<![\w$€£])[$€£]\s?\d(?:[\d,.]*\d)?(?:\s?(?:thousand|million|billion)\b|\s?[kKmMbB])?`, 'gu'),
+  new RegExp(String.raw`(?:\b(?:USD|EUR|GBP)|\bUS\$)\s?\d(?:[\d,.]*\d)?${MAGNITUDE_ALT}?`, 'gu'),
+  new RegExp(String.raw`\b\d(?:[\d,.]*\d)?${MAGNITUDE_ALT}?\s?-?\s?(?:(?:USD|EUR|GBP)\b|(?:[Dd]ollars?|[Ee]uros?)\b)`, 'gu'),
   /\b\d+(?:\.\d+)?\s?x\b/gi,
   /\b\d+(?:\.\d+)?\s?-?\s?fold\b/gi,
 ];
@@ -2383,6 +2386,10 @@ function runSelfTest() {
   equal('new training noun', auditClaims('Drove 900,000 enrollments', source).invented, ['900000 enrollments']);
   equal('truthful currency', auditClaims('Managed a $550K budget', source).invented, []);
   equal('inflated currency', auditClaims('Managed a $900K budget', source).invented, ['$900k']);
+  equal('a sentence-final period is not part of a currency amount',
+    auditClaims('Valued shares from $18.39 to $97.35.', 'a range from $18.39 to $97.35 per share').invented, []);
+  equal('an inflated amount before a period is still caught',
+    auditClaims('Valued shares at $99.35.', 'a range from $18.39 to $97.35 per share').invented, ['$99.35']);
   equal('truthful multiplier', auditClaims('Partners earned 2x more', source).invented, []);
   equal('noun synonym', auditClaims('Authored 80 articles', source).invented, []);
   equal('ordinary year is ignored', auditClaims('Joined the team in 2013', source).invented, []);
