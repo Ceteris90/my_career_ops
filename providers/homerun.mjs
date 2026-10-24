@@ -216,9 +216,9 @@ export function parseHomerunSalary(text) {
  * Parse a Homerun Atom jobs feed. Exported for unit tests.
  *
  * Throws when the body is not an Atom `<feed>`, or when it carries `<entry>`
- * elements none of which parse (a format change, not an empty board). A feed
- * with no `<entry>` is an empty board → []. A single entry missing its title
- * or an https link is dropped.
+ * elements none of which parse (a format change, not an empty board) or not
+ * all of which are closed. A feed with no `<entry>` is an empty board → [].
+ * A single entry missing its title or an https link is dropped.
  *
  * @param {unknown} xml
  * @param {unknown} [companyName] - the portals.yml entry name; falls back to the entry's <author><name>
@@ -240,6 +240,12 @@ export function parseHomerunFeed(xml, companyName) {
   }
   const configured = typeof companyName === 'string' ? companyName.trim() : '';
   const blocks = doc.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/gi) || [];
+  // An unclosed <entry> matches no block (or merges into the next one), which
+  // would read as an empty or shorter board.
+  const opened = (doc.match(/<entry\b/gi) || []).length;
+  if (opened !== blocks.length) {
+    throw new Error(`homerun: malformed feed — ${opened} <entry> tags but ${blocks.length} closed entries`);
+  }
   /** @type {import('./_types.js').Job[]} */
   const jobs = [];
 

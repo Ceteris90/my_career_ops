@@ -205,6 +205,8 @@ try {
     ['entries that all fail to parse', '<feed><entry><title>X</title></entry><entry><link href="https://a.example/"/></entry></feed>'],
     ['a feed truncated before </feed>', EMPTY_FEED.replace('</feed>', '')],
     ['a feed truncated mid-entry', FEED.slice(0, FEED.indexOf('<title type="text">Support Specialist'))],
+    ['an unclosed <entry> in an otherwise closed feed', '<feed><entry><title>X</title></feed>'],
+    ['an unclosed <entry> before a complete one', FEED.replace('<entry>', '<entry><title>Orphan</title>\n  <entry>')],
     ['a </feed> only inside CDATA', FEED.replace(/<\/feed>$/, '').replace('<p>Build', '</feed><p>Build')],
   ]) {
     let threw = null;
