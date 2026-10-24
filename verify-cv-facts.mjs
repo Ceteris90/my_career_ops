@@ -184,7 +184,8 @@ const METRIC_NOUNS = [
   // says "45 employees". Nouns French spells like English (clients, sites,
   // services, audits, ...) were already read. Time nouns (ans, années, mois)
   // stay out for the reason the German block gives.
-  'collaborateurs', 'collaboratrices', 'salariés', 'employés',
+  'collaborateurs', 'collaboratrices', 'salariés', 'salariées', 'employés',
+  'employées',
   'personnes', 'utilisateurs', 'utilisatrices', 'ingénieurs', 'ingénieures',
   'développeurs', 'développeuses', 'techniciens', 'techniciennes',
   'opérateurs', 'opératrices', 'équipes', 'stagiaires', 'apprentis',
@@ -323,7 +324,9 @@ const NOUN_SYNONYMS = new Map([
   ['collaborateurs', 'employees'],
   ['collaboratrices', 'employees'],
   ['salariés', 'employees'],
+  ['salariées', 'employees'],
   ['employés', 'employees'],
+  ['employées', 'employees'],
   ['personnes', 'people'],
   ['utilisateurs', 'users'],
   ['utilisatrices', 'users'],

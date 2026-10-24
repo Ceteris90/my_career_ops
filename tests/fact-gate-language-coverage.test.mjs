@@ -170,6 +170,9 @@ test('French counts are read by the lexicon, so an inflation blocks', () => {
   assert.notEqual(r.coverage?.reason, 'no-count-claims-recognized');
 
   assert.deepEqual([...verifyFacts('Piloté 12 sous-traitants.', BARE).invented], ['12 contractors']);
+  // Feminine employee forms fold to the same noun as the masculine ones.
+  assert.deepEqual([...verifyFacts('Encadré 12 salariées.', BARE).invented], ['12 employees']);
+  assert.deepEqual([...verifyFacts('Encadré 7 employées.', BARE).invented], ['7 employees']);
   assert.deepEqual([...verifyFacts('Déployé chez 120 utilisatrices dans 5 pays.', BARE).invented].sort(),
     ['120 users', '5 countries']);
   // PDF-extracted text often carries decomposed accents (e + U+0301).
