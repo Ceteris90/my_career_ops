@@ -671,7 +671,7 @@ const LENGTH_BRACKETED = /\(\s*\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours
 const LENGTH_NAMED = /\b(?:half|one|an)[-\s]hour\b/i;
 function statesDuration(text) {
   // "The interview will be 30 minutes": an interview noun + copula + duration.
-  const copula = /\b(?:interview|call|conversation|session|meeting|chat|screen|screening|assessment)\s+(?:will\s+be|would\s+be|should\s+be|is|runs?)\s+(?:about\s+|around\s+|approximately\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b/i;
+  const copula = /\b(?:interview|call|conversation|session|meeting|chat|screen|screening|assessment)\s+(?:will\s+be|would\s+be|should\s+be|is|runs?)\s+(?:about\s+|around\s+|approximately\s+)?\d+(?:\.\d+)?\s*[-–]?\s*(?:minutes?|mins?|hours?|hrs?)\b(?!\s+(?:after|before|late|early|earlier|later|from|ago|away|behind|ahead|past|prior)\b)/i;
   return LENGTH_CONTEXT.test(text) || LENGTH_ADJECTIVE.test(text) || LENGTH_BRACKETED.test(text) || LENGTH_NAMED.test(text) || copula.test(text);
 }
 
@@ -687,7 +687,7 @@ const CONSTRAINT_DETECTORS = [
   { key: 'no-ai', test: t => /\b(?:ai|artificial intelligence|chatgpt|copilot|generative)\b[^.\n]{0,120}\b(?:not (?:be )?(?:permitted|allowed)|(?<!\bnot\s)(?<!n't\s)(?<!\bno longer\s)(?:prohibited|forbidden)|not be used)\b/i.test(t)
       || /\b(?:not (?:be )?(?:permitted|allowed)|prohibited|forbidden|may not use|do not use|must not use)\b[^.\n]{0,80}\b(?:ai|artificial intelligence|chatgpt|copilot)\b/i.test(t) },
   { key: 'recorded', test: t => /\b(?:will|may) be (?:audio[- ]?|video[- ]?)?recorded\b|\bwe (?:will|may) record\b|\bthis (?:interview|call|session|meeting) is (?:being )?recorded\b/i.test(t) },
-  { key: 'no-recording', test: t => /\b(?:recording|recordings)\b[^.\n]{0,60}\b(?:not (?:be )?(?:permitted|allowed)|prohibited)\b|\b(?:do not|don't|may not|must not) (?:record|screenshot)\b|\bno recording\b/i.test(t) },
+  { key: 'no-recording', test: t => /\b(?:recording|recordings)\b[^.\n]{0,60}\b(?:not (?:be )?(?:permitted|allowed)|prohibited)\b|\b(?:do not|don't|may not|must not) (?:record|screenshot)\b|\bno recording\b|\b(?:will not|won't|is not|isn't|are not|aren't|not) (?:be )?(?:being )?(?:audio[- ]?|video[- ]?)?recorded\b/i.test(t) },
   { key: 'camera-required', test: t => /\bcamera\b[^.\n]{0,40}\b(?:(?<!\bnot\s)(?<!n't\s)(?<!\bno longer\s)(?:required|mandatory)|must be on|on throughout)\b|\b(?:required|must|please) (?:to )?(?:have|keep|turn on|enable)\b[^.\n]{0,30}\b(?:camera|video on)\b|\bvideo (?:must be|required)\b/i.test(t) },
   { key: 'test-link', test: t => /\b(?:test|check|try)\b[^.\n]{0,40}\b(?:link|connection|audio|video|setup)\b[^.\n]{0,40}\b(?:before(?:hand)?|ahead of|in advance|prior to)\b/i.test(t) },
   { key: 'id-required', test: t => /\b(?:photo |government[- ]issued |valid )?(?:id|identification)\b[^.\n]{0,40}\b(?:(?<!\bnot\s)(?<!n't\s)(?<!\bno longer\s)required|must|will be (?:checked|verified|requested))\b|\b(?:bring|have|present|show)\b[^.\n]{0,40}\b(?:photo id|government[- ]issued id|identification)\b/i.test(t) },

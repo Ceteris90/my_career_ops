@@ -127,3 +127,16 @@ check('length-not-stated: common length phrasings are recognised', () => {
     assert.ok(keys(pre + t).includes('length-not-stated'), t);
   }
 });
+
+check('length-not-stated: schedule offsets and status continuations are not the interview length', () => {
+  const pre = 'We would like to invite you to schedule your interview. ';
+  for (const t of ['The interview will be 30 minutes after the assessment.', 'The interview will be 30 minutes late.', 'The call is 15 minutes before the panel.', 'The session will be 2 hours from now.']) {
+    assert.ok(keys(pre + t).includes('length-not-stated'), t);
+  }
+});
+check('no-recording: passive negated forms are detected', () => {
+  for (const t of ['The interview will not be recorded.', 'The interview is not recorded.', 'This call is not being recorded.']) {
+    assert.ok(keys(`${base} ${t}`).includes('no-recording'), t);
+  }
+  assert.ok(!keys(`${base} The interview will be recorded for note-taking.`).includes('no-recording'));
+});
