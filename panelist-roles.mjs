@@ -41,11 +41,12 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, isAbsolute, join } from 'path';
 import { fileURLToPath } from 'url';
 import { loadYaml } from './lib/yaml-document.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { unfoldLines, parseContentLine, unescapeText } from './ics-interview.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -63,6 +64,7 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function compileKeyword(raw) {
   const whole = raw.startsWith('=');
   const word = (whole ? raw.slice(1) : raw).trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!word) throw new Error(`keyword "${raw}" has no text`);
   // Word START boundary; `=kw` also needs a word END boundary.
   const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(word).replace(/ /g, '\\s+')}${whole ? '(?![\\p{L}\\p{N}])' : ''}`, 'u');
   return { raw, re };
@@ -77,7 +79,7 @@ export function validateTable(doc) {
     throw new Error('`fallback` needs id, label and focus');
   }
   if (!Array.isArray(doc.roles) || doc.roles.length === 0) throw new Error('`roles` must be a non-empty list');
-  const seen = new Set();
+  const seen = new Set([fb.id]); // a role id equal to the fallback id would be read as "no match"
   const roles = doc.roles.map((r, i) => {
     if (!r || !str(r.id) || !str(r.label) || !str(r.focus)) throw new Error(`roles[${i}] needs id, label and focus`);
     if (seen.has(r.id)) throw new Error(`roles[${i}]: duplicate id "${r.id}"`);
@@ -203,8 +205,11 @@ export function extractPanelists(text, table) {
       const nameEnd = m.index + m[1].length;
       if (!name) { nameRe.lastIndex = m.index + 1; continue; }
       // Where the trimmed name really starts, after any dropped greeting words.
-      const start = m.index + m[1].lastIndexOf(name.split(' ')[0]);
-      if (!CONTEXT_OK.test(line.slice(0, start))) { nameRe.lastIndex = nameEnd; continue; }
+      const dropped = Math.max(0, m[1].trim().split(/\s+/).length - name.split(' ').length);
+      let offset = 0;
+      for (let i = 0; i < dropped; i += 1) offset += /^\s*\S+\s*/.exec(m[1].slice(offset))[0].length;
+      const start = m.index + offset;
+      if (!CONTEXT_OK.test(line.slice(0, start).replace(/(?:\b(?:hi|hello|hey|dear|thanks|thank you)\b[\s,]*)+$/i, ''))) { nameRe.lastIndex = nameEnd; continue; }
       const rest = line.slice(nameEnd);
       const dash = /^\s+[-\u2013\u2014|]\s+/.exec(rest);
       const comma = dash ? null : /^,\s+/.exec(rest);
@@ -362,6 +367,18 @@ function printSummary(r) {
   console.log('');
 }
 
+/**
+ * An explicit --table: absolute paths as given; a relative path is read from
+ * the working directory, else from the data root (CAREER_OPS_ROOT), so the
+ * documented `config/panelist-roles.yml` works from anywhere. Never implicit:
+ * only a path the caller named is looked up.
+ */
+function resolveTablePath(p) {
+  if (isAbsolute(p) || existsSync(p)) return p;
+  const underRoot = join(getCareerOpsRoot(), p);
+  return existsSync(underRoot) ? underRoot : p;
+}
+
 function main() {
   const args = process.argv.slice(2);
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS, requireOperand: true });
@@ -369,7 +386,7 @@ function main() {
   let table;
   const tablePath = flagValue(args, '--table');
   try {
-    table = loadTable(tablePath ?? DEFAULT_TABLE);
+    table = loadTable(tablePath === undefined ? DEFAULT_TABLE : resolveTablePath(tablePath));
   } catch (e) {
     console.error(`panelist-roles: cannot use role table${tablePath ? ` ${tablePath}` : ''}: ${e.message}`);
     process.exit(2);

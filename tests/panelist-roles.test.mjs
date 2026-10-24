@@ -9,7 +9,7 @@
 import { execFileSync, spawnSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { analyzePanel, classifyTitle, loadTable, trimTitle, validateTable } from '../panelist-roles.mjs';
 import { pass, fail } from './helpers.mjs';
@@ -66,6 +66,12 @@ const brief = (r) => r.panelists.map((p) => [p.name, p.title, p.role]);
     ['Jordan Lee', 'Team Lead, Platform', 'peer-team-lead'],
   ]);
 }
+
+// 2b. A first name that is a prefix of a later word keeps its title (offset regression)
+for (const [n, title] of [['Al Alvarez', 'Privacy Officer'], ['Ed Edwards', 'Recruiter'], ['Sam Samuels', 'Software Engineer']]) {
+  eq(`prefix name: ${n}`, brief(analyzePanel(`Meeting with ${n} - ${title}`, table)).map((x) => x.slice(0, 2)), [[n, title]]);
+}
+eq('prefix name after a dropped greeting', brief(analyzePanel('Hello Al Alvarez - Privacy Officer', table)).map((x) => x.slice(0, 2)), [['Al Alvarez', 'Privacy Officer']]);
 
 // 3. A title that itself contains commas stays whole, and its inner words are not a second panelist
 {
@@ -152,6 +158,10 @@ eq('trimTitle: balanced parentheses kept', trimTitle('Director (Privacy)'), 'Dir
   let msg = '';
   try { validateTable({ fallback: { id: 'unknown', label: 'U', focus: 'f' }, roles: [{ id: 'a', label: 'A', focus: 'f', keywords: [] }] }); } catch (e) { msg = e.message; }
   eq('table: empty keywords rejected', /keywords/.test(msg), true);
+  const tryTable = (doc) => { try { validateTable(doc); return ''; } catch (e) { return e.message; } };
+  const fb = { id: 'unknown', label: 'U', focus: 'f' };
+  eq('table: bare "=" keyword rejected', /no text/.test(tryTable({ fallback: fb, roles: [{ id: 'a', label: 'A', focus: 'f', keywords: ['='] }] })), true);
+  eq('table: role id equal to fallback id rejected', /duplicate/.test(tryTable({ fallback: fb, roles: [{ id: 'unknown', label: 'A', focus: 'f', keywords: ['x'] }] })), true);
   const custom = validateTable({
     fallback: { id: 'other', label: 'Other', focus: 'generic' },
     roles: [{ id: 'chef', label: 'Chef', focus: 'taste', keywords: ['chef'] }],
@@ -193,7 +203,14 @@ eq('trimTitle: balanced parentheses kept', trimTitle('Director (Privacy)'), 'Dir
     const mine = JSON.parse(run([f, '--table', goodTable]).stdout);
     eq('cli: --table classification', mine.panelists[0].role, 'sec');
 
-    eq('cli: nothing written next to the input', readdirSync(dir).sort().filter((x) => !['bad.yml', 'mine.yml'].includes(x)), before);
+    // relative --table falls back to the data root (CAREER_OPS_ROOT) when not in the cwd
+    const root = join(dir, 'root');
+    mkdirSync(join(root, 'config'), { recursive: true });
+    copyFileSync(goodTable, join(root, 'config', 'panelist-roles.yml'));
+    const viaRoot = spawnSync(process.execPath, [SCRIPT, f, '--table', 'config/panelist-roles.yml'], { encoding: 'utf-8', cwd: dir, env: { ...process.env, CAREER_OPS_ROOT: root } });
+    eq('cli: relative --table resolved under CAREER_OPS_ROOT', JSON.parse(viaRoot.stdout).panelists[0].role, 'sec');
+
+    eq('cli: nothing written next to the input', readdirSync(dir).sort().filter((x) => !['bad.yml', 'mine.yml', 'root'].includes(x)), before);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -204,5 +221,5 @@ eq('trimTitle: balanced parentheses kept', trimTitle('Director (Privacy)'), 'Dir
   const src = readFileSync(SCRIPT, 'utf-8').split('\n').filter((l) => !/^\s*(\*|\/\/)/.test(l)).join('\n');
   eq('source: no network or process spawning', /\b(fetch|https?\.request|XMLHttpRequest|child_process|net\.connect)\b|from 'https?'/.test(src), false);
   eq('source: no file writes', /\b(writeFile|writeFileSync|appendFile|appendFileSync|mkdirSync|renameSync|createWriteStream)\b/.test(src), false);
-  eq('source: no tracker or data-root access', /applications\.md|path-resolver|getDataRoot|data\//.test(src), false);
+  eq('source: no tracker or data-root access', /applications\.md|resolveTrackerPath|rawTrackerPath|data\//.test(src), false);
 }
