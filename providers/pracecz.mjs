@@ -174,7 +174,7 @@ export default {
     const maxPages = probing ? Math.min(configured, ctx.maxPages) : configured;
 
     /** @type {Map<string, Job>} */
-    const byUrl = new Map();
+    const byId = new Map();
     const errors = [];
 
     for (const keyword of keywords) {
@@ -200,7 +200,8 @@ export default {
           const job = normalizeItem(item);
           if (!job) continue;
           rows++;
-          if (!byUrl.has(job.url)) byUrl.set(job.url, job);
+          const id = String(item.metadata.advertId);
+          if (!byId.has(id)) byId.set(id, job);
         }
         if (page === 1 && totalItems > 0 && !rows) {
           throw new Error(`pracecz: "${keyword}" reports ${totalItems} offers but none parsed — page markup changed?`);
@@ -224,6 +225,6 @@ export default {
       console.error(`⚠️  pracecz: "${keyword}" page 1 failed (${message}) — keyword skipped`);
     }
 
-    return [...byUrl.values()];
+    return [...byId.values()];
   },
 };

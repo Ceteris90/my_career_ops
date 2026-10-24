@@ -299,6 +299,13 @@ try {
   }
 
   {
+    const branded = item({ extended: { careerPage: { url: 'https://acme.jobs.cz/pd/1' } } });
+    const fetched = await pracecz.fetch({ provider: 'pracecz', name: 'Acme', pracecz: { keywords: ['a', 'b'] } }, stub((url) => page([url.includes('q=a') ? branded : item()])).ctx);
+    if (fetched.length === 1) pass('pracecz.fetch() dedups one advertId seen under two URLs');
+    else fail(`pracecz.fetch() returned ${fetched.length} rows for one advertId under two URLs`);
+  }
+
+  {
     let message = '';
     try {
       await pracecz.fetch({ provider: 'pracecz', name: 'Acme', pracecz: { keywords: ['x'] } }, stub(() => page([item({ advert: advert({ title: undefined }) })], 5)).ctx);
