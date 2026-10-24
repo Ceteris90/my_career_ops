@@ -33,13 +33,16 @@ function isBlankOrComment(line) {
  * The trailing `# comment` of a `key: value` line, with its leading space.
  * A `#` inside a quoted scalar, including one inside a flow list such as
  * `["Role #1"]`, is not a comment. A quote opens a scalar only where a scalar
- * starts: at the start of the value, or after `[ { , :` inside a flow list or
- * mapping. The quotes in a plain `O'Brien` or `John "Jack` open nothing.
+ * starts: at the start of the value, or inside a flow list or mapping after
+ * `[ { ,` or a mapping `:` (one followed by a space, a flow indicator or the
+ * end, or one right after a quoted key). The quotes in a plain `O'Brien`,
+ * `John "Jack` or flow `[a:"b]` open nothing.
  * @param {string} value
  */
 function trailingComment(value) {
   const flow = /^\s*[[{]/.test(value);
   let quote = "";
+  let closedAt = -1;
   let scalarStart = true;
   for (let i = 0; i < value.length; i++) {
     const c = value[i];
@@ -47,14 +50,15 @@ function trailingComment(value) {
     if (quote) {
       if (quote === '"' && c === "\\") i++;
       else if (c === quote && quote === "'" && value[i + 1] === "'") i++;
-      else if (c === quote) quote = "";
+      else if (c === quote) [quote, closedAt] = ["", i];
     } else if (/\s/.test(c)) {
       continue;
     } else if ((c === '"' || c === "'") && scalarStart) {
       quote = c;
       scalarStart = false;
     } else if (c !== "#" || !/\s/.test(prev)) {
-      scalarStart = flow && /[[{,:]/.test(c);
+      const mappingColon = c === ":" && (closedAt === i - 1 || /^$|[\s,[\]{}]/.test(value[i + 1] ?? ""));
+      scalarStart = flow && (/[[{,]/.test(c) || mappingColon);
     } else {
       let start = i;
       while (start > 0 && /\s/.test(value[start - 1])) start--;

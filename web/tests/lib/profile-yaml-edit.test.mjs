@@ -88,6 +88,13 @@ test("a quote after a flow-mapping colon still opens a quoted scalar", () => {
   assert.equal(edit(source, { candidate: { location: "Elsewhere" } }), 'candidate:\n  location: "Elsewhere" # keep me\n');
 });
 
+test("only a mapping colon starts a scalar inside a flow list", () => {
+  for (const flow of ['[a:"b]', '["a":"b #1"]', "[a: 'b #1']", '[{a: "b #1"}]']) {
+    const source = `target_roles:\n  primary: ${flow} # keep\n`;
+    assert.equal(edit(source, { target_roles: { primary: ["New"] } }), 'target_roles:\n  primary: ["New"] # keep\n', flow);
+  }
+});
+
 test("a replaced list item's trailing comment is kept as a comment line ahead of the new items", () => {
   const source = 'target_roles:\n  primary:\n    - "Old" # user note\n    - "Role #2"\n';
   assert.equal(edit(source, { target_roles: { primary: ["New"] } }), 'target_roles:\n  primary:\n    # user note\n    - "New"\n');
