@@ -368,7 +368,7 @@ try {
   try {
     await aa.fetch(
       { name: 'AA', arbeitsagentur: { keywords: ['ESG', 'CSRD'], wo: 'Bochum', angebotsart: [1, 34] } },
-      { maxPages: 1, fetchJson: async (url) => {
+      { maxPages: 2, fetchJson: async (url) => {
           if (new URL(url).searchParams.get('angebotsart') === '34') throw sentinel;
           return page(v6('J', 'ESG Analyst', 'Bochum'));
         } },
@@ -380,20 +380,19 @@ try {
     fail(`aa.fetch() probe rejection was swallowed or wrapped: ${caught && caught.message}`);
   }
 
-  // While probing, filter-mode pagination is capped at ctx.maxPages per type.
-  const probePages = [];
+  // While probing, ctx.maxPages caps list requests across the whole walk.
+  let probeRequests = 0;
   await aa.fetch(
-    { name: 'AA', arbeitsagentur: { keywords: ['ESG'], wo: 'Bochum', remoteNationwide: true, remoteMatch: 'filter', angebotsart: [1, 34], size: 1, remoteMaxPages: 3 } },
-    { maxPages: 1, sleep: async () => {}, fetchJson: async (url) => {
-        const sp = new URL(url).searchParams;
-        if (sp.has('homeoffice')) probePages.push(`${sp.get('angebotsart')}:${sp.get('page')}`);
-        return page(v6(`X${sp.get('angebotsart')}${sp.get('page') || ''}${sp.has('homeoffice') ? 'h' : ''}`, 'ESG Analyst (Remote)', 'Hamburg'));
+    { name: 'AA', arbeitsagentur: { keywords: ['ESG', 'CSRD'], wo: 'Bochum', remoteNationwide: true, remoteMatch: 'filter', angebotsart: [1, 34], size: 1, remoteMaxPages: 3 } },
+    { maxPages: 1, sleep: async () => {}, fetchJson: async () => {
+        probeRequests++;
+        return page(v6(`X${probeRequests}`, 'ESG Analyst (Remote)', 'Hamburg'));
       } },
   );
-  if (probePages.join(',') === '1:1,34:1') {
-    pass('aa.fetch() caps filter-mode pages at ctx.maxPages while probing');
+  if (probeRequests === 1) {
+    pass('aa.fetch() makes exactly one list request at ctx.maxPages: 1');
   } else {
-    fail(`aa.fetch() probe filter pages not capped: ${probePages}`);
+    fail(`aa.fetch() probe made ${probeRequests} list requests at ctx.maxPages: 1`);
   }
 
 } catch (e) {

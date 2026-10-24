@@ -184,9 +184,15 @@ export default {
     // probing, a ctx.fetch* rejection (its budget sentinel included) must
     // propagate unwrapped instead of being swallowed by a recall-first catch.
     const probing = Number(ctx?.maxPages) > 0;
+    // The probe's page budget covers every list request in the walk (all
+    // keywords, offer types and passes), not one allowance per type.
+    const probeBudget = probing ? Number(ctx.maxPages) : Infinity;
+    let listRequests = 0;
 
     /** @param {string} was @param {Record<string,string>} [extra] @param {boolean} [retry] */
     const fetchKeyword = async (was, extra = {}, retry = false) => {
+      if (listRequests >= probeBudget) return [];
+      listRequests++;
       const params = new URLSearchParams({
         was,
         size: String(size),
@@ -264,13 +270,11 @@ export default {
             // Paced and retried: this walk is up to remoteMaxPages requests per
             // offer type, back to back.
             let requests = 0;
-            // While probing, stay within the probe's page budget per type.
-            const pagesToFetch = probing ? Math.min(remoteMaxPages, Number(ctx.maxPages)) : remoteMaxPages;
             // A type that exhausts its retries keeps the pages it already
             // returned and does not stop the next type.
             for (const art of angebotsart) {
               try {
-                for (let page = 1; page <= pagesToFetch; page++) {
+                for (let page = 1; page <= remoteMaxPages && listRequests < probeBudget; page++) {
                   if (requests++ > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
                   const res = await fetchKeyword(kw, { homeoffice: 'nv_true', page: String(page), angebotsart: art }, true);
                   wide.push(...res);
