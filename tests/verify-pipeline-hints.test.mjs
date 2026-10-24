@@ -30,7 +30,7 @@ const SRC = readFileSync(join(ROOT, 'verify-pipeline.mjs'), 'utf-8');
 function scanCallSites(src) {
   const isCode = codeMask(src);
   const sites = [];
-  for (const m of src.matchAll(/\b(error|warn)\(/g)) {
+  for (const m of src.matchAll(/\b(error|warn)\s*\(/g)) {
     const at = m.index;
     if (!isCode[at]) continue;                                               // comment or string
     if (/function\s+$/.test(src.slice(Math.max(0, at - 12), at))) continue; // the declaration
@@ -75,12 +75,13 @@ if (unhinted.length === 0) {
 // Negative fixtures: the scanner must reject missing and empty/blank hints.
 const negVerdicts = scanCallSites([
   "error('no hint');",
+  "warn ('spaced, no hint');",
   "error('empty', '');",
   'warn(`blank`, `  `);',
   "warn('ok', 'run node x.mjs');",
   "error(`t ${f(1, 2)}`, 'run it');",
 ].join('\n')).map(x => x.hinted).join(',');
-if (negVerdicts === 'false,false,false,true,true') pass('scanner rejects a missing or empty/blank hint and accepts a real one');
+if (negVerdicts === 'false,false,false,false,true,true') pass('scanner rejects a missing or empty/blank hint and accepts a real one');
 else fail(`scanner verdicts wrong for negative fixtures: ${negVerdicts}`);
 
 // --- 2. Runtime ---------------------------------------------------------------
