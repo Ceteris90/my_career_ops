@@ -76,9 +76,16 @@ test("a # inside a quoted inline-list value is not taken for the trailing commen
   assert.equal(edit(source, { target_roles: { primary: ["New"] } }), 'target_roles:\n  primary: ["New"] # user note\n');
 });
 
-test("a plain scalar's apostrophe does not open a quote", () => {
-  const source = "candidate:\n  full_name: O'Brien # keep me\n";
-  assert.equal(edit(source, { candidate: { full_name: "New" } }), 'candidate:\n  full_name: "New" # keep me\n');
+test("a quote inside a plain scalar does not open a quoted scalar", () => {
+  for (const name of ["O'Brien", 'John "Jack', "Jo 'Jack"]) {
+    const source = `candidate:\n  full_name: ${name} # keep me\n`;
+    assert.equal(edit(source, { candidate: { full_name: "New" } }), 'candidate:\n  full_name: "New" # keep me\n', name);
+  }
+});
+
+test("a quote after a flow-mapping colon still opens a quoted scalar", () => {
+  const source = 'candidate:\n  location: {city: "Room #4"} # keep me\n';
+  assert.equal(edit(source, { candidate: { location: "Elsewhere" } }), 'candidate:\n  location: "Elsewhere" # keep me\n');
 });
 
 test("a replaced list item's trailing comment is kept as a comment line ahead of the new items", () => {

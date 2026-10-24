@@ -32,12 +32,15 @@ function isBlankOrComment(line) {
 /**
  * The trailing `# comment` of a `key: value` line, with its leading space.
  * A `#` inside a quoted scalar, including one inside a flow list such as
- * `["Role #1"]`, is not a comment. A quote opens a scalar only at the start of
- * a token, so the apostrophe in a plain `O'Brien` does not.
+ * `["Role #1"]`, is not a comment. A quote opens a scalar only where a scalar
+ * starts: at the start of the value, or after `[ { , :` inside a flow list or
+ * mapping. The quotes in a plain `O'Brien` or `John "Jack` open nothing.
  * @param {string} value
  */
 function trailingComment(value) {
+  const flow = /^\s*[[{]/.test(value);
   let quote = "";
+  let scalarStart = true;
   for (let i = 0; i < value.length; i++) {
     const c = value[i];
     const prev = i === 0 ? " " : value[i - 1];
@@ -45,9 +48,14 @@ function trailingComment(value) {
       if (quote === '"' && c === "\\") i++;
       else if (c === quote && quote === "'" && value[i + 1] === "'") i++;
       else if (c === quote) quote = "";
-    } else if ((c === '"' || c === "'") && /[\s[{,]/.test(prev)) {
+    } else if (/\s/.test(c)) {
+      continue;
+    } else if ((c === '"' || c === "'") && scalarStart) {
       quote = c;
-    } else if (c === "#" && /\s/.test(prev)) {
+      scalarStart = false;
+    } else if (c !== "#" || !/\s/.test(prev)) {
+      scalarStart = flow && /[[{,:]/.test(c);
+    } else {
       let start = i;
       while (start > 0 && /\s/.test(value[start - 1])) start--;
       return value.slice(start);
