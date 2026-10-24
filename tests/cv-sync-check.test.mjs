@@ -30,11 +30,17 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /** Run the validator against a throwaway DATA root, leaving the repo alone. */
 function runAgainst(dataRoot) {
+  // Keep the validator off the developer's exported profile override: with
+  // CAREER_OPS_PROFILE set in the parent shell, the child validator would read
+  // that file instead of the fixture's config/profile.yml, and the profile
+  // assertions would pass or fail on the developer's own data.
+  const env = { ...process.env, CAREER_OPS_ROOT: dataRoot };
+  delete env.CAREER_OPS_PROFILE;
   const r = spawnSync(process.execPath, [join(ROOT, 'cv-sync-check.mjs')], {
     cwd: ROOT,
     encoding: 'utf-8',
     timeout: 30_000,
-    env: { ...process.env, CAREER_OPS_ROOT: dataRoot },
+    env,
   });
   assert.equal(r.error, undefined, `spawn failed: ${r.error?.message}`);
   return { ...r, all: `${r.stdout ?? ''}${r.stderr ?? ''}` };
