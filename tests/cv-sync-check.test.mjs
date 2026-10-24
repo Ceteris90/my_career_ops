@@ -230,6 +230,24 @@ test('a non-string required field is rejected, not stringified', () => {
     `a number was accepted as an email:\n${numeric.all.slice(0, 400)}`);
 });
 
+// An empty or whitespace-only string is a text value with no content, so the
+// warning must say "missing or empty" rather than "not a text value".
+test('an empty or blank string is reported as missing, not as a wrong type', () => {
+  for (const blank of ['""', '"   "']) {
+    const r = runWithProfile([
+      'candidate:',
+      `  full_name: ${blank}`,
+      '  email: "jane@example.com"',
+      '  location: "Lisbon"',
+      '',
+    ].join('\n'));
+    assert.match(r.all, /Check field: full_name \(missing or empty\)/,
+      `full_name: ${blank} was not reported as empty:\n${r.all.slice(0, 400)}`);
+    assert.doesNotMatch(r.all, /not a text value/,
+      `full_name: ${blank} was reported as a wrong type:\n${r.all.slice(0, 400)}`);
+  }
+});
+
 // A profile holding only the template's comments is an empty config, not a
 // parse error (js-yaml 5 throws on it; loadYaml returns null). It must warn
 // about the missing field, not about unparseable YAML.

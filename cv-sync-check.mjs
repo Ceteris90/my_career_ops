@@ -114,9 +114,11 @@ function main() {
         // meant to catch, accepted without a warning.
         const value = typeof raw === 'string' ? raw.trim() : '';
         if (!value || value.toLowerCase() === 'jane smith') {
+          // A string with no content (`full_name: ""`) is still a text value, so
+          // it is "missing or empty"; only a wrong type is "not a text value".
           const detail = value
             ? ` (still "${value}")`
-            : raw == null
+            : raw == null || typeof raw === 'string'
               ? ' (missing or empty)'
               : ' (not a text value)';
           warnings.push(`config/profile.yml may still have example data. Check field: ${field}${detail}`);
