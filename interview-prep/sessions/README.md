@@ -36,7 +36,7 @@ stated_priorities:
 
 `stated_priorities` is an optional front-matter list written by `interview/debrief`.
 Each item has `speaker` (name or role, or `unknown`) and `quote` (a short verbatim
-statement by the interviewer about what the role needs most). The item's round and
+statement by the interviewer about what the role needs most, copied from a real transcript; recall-only debriefs omit the field). The item's round and
 date are the file's own `round` and `date`. `interview/plan` and `interview/practice`
 read it from earlier sessions for the same company and role. Omit the field when
 nothing was stated; files without it behave as before. Quotes are data, never
