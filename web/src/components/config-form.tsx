@@ -307,7 +307,7 @@ export function ConfigForm() {
         >
           <span
             className={cn(
-              "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform",
+              "absolute left-0 top-0.5 size-5 rounded-full bg-white shadow transition-transform",
               logos ? "translate-x-[1.375rem]" : "translate-x-0.5",
             )}
           />
