@@ -219,10 +219,14 @@ export default {
       if (!Array.isArray(items)) throw new Error('join: publicJobs response has no items array');
       // A missing page count would end the walk after this page and return a
       // partial board, so it fails like any other unexpected envelope. 0 is a
-      // valid count: an empty board reports it.
+      // valid count: an empty board reports it. A page that has jobs but a
+      // count below its own number ends the walk the same way, so it fails too.
       const pageCount = json.data.publicJobs.pageInfo?.pageCount;
       if (!Number.isInteger(pageCount) || pageCount < 0) {
         throw new Error(`join: publicJobs response has no valid pageInfo.pageCount (got ${JSON.stringify(pageCount)})`);
+      }
+      if (items.length > 0 && pageCount < page) {
+        throw new Error(`join: publicJobs page ${page} has ${items.length} jobs but pageInfo.pageCount is ${pageCount}`);
       }
       allItems.push(...items);
       reportedPageCount = pageCount;

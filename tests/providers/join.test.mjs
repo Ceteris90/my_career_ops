@@ -380,6 +380,12 @@ try {
     joinProvider.fetch(entry, makeCtx(({ paginationPage }) => (paginationPage.page === 1
       ? gqlPage([job(1)], 2)
       : { data: { publicJobs: { items: [job(2)], pageInfo: {} } } }))));
+  await expectThrow('a page with jobs reports pageInfo.pageCount 0', () =>
+    joinProvider.fetch(entry, makeCtx(() => gqlPage([job(1)], 0))));
+  await expectThrow('a later page with jobs reports a pageCount below its own number', () =>
+    joinProvider.fetch(entry, makeCtx(({ paginationPage }) => (paginationPage.page === 1
+      ? gqlPage([job(1)], 2)
+      : gqlPage([job(2)], 1)))));
 
   // fetch() — a careers_url that fails extractSlug() throws before any request.
   const noRequestCtx = makeCtx(() => { throw new Error('should not be called'); }, {
