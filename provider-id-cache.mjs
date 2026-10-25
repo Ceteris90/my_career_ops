@@ -79,6 +79,9 @@ export function openProviderIdCache(dir) {
     },
 
     async save() {
+      // A slice that fails to write does not stop the others; the first error
+      // is thrown once every changed slice has been tried.
+      let firstError = null;
       for (const s of slices.values()) {
         if (s.changes.size === 0) continue;
         // Taken from this point on, the changes made while the lock is awaited
@@ -103,9 +106,10 @@ export function openProviderIdCache(dir) {
           // Queue the unwritten changes again, unless a newer change to the
           // same key came in meanwhile.
           for (const [key, value] of changes) if (!s.changes.has(key)) s.changes.set(key, value);
-          throw err;
+          firstError ??= err;
         }
       }
+      if (firstError) throw firstError;
     },
   };
 }

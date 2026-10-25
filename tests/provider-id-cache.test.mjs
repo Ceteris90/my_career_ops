@@ -99,6 +99,28 @@ try {
     if (read('broken').x?.id === 1) pass('a slice read from an unreadable file is rewritten as valid JSON');
     else fail('the unreadable file was not replaced');
   }
+
+  // A slice that cannot be written does not stop the others: they are saved,
+  // the failed slice keeps its changes for the next save(), and the error is thrown.
+  {
+    mkdirSync(join(dir, 'blocked.json'), { recursive: true });
+    const store = openProviderIdCache(dir);
+    store.forProvider('blocked').set('k', { id: 1 });
+    store.forProvider('after').set('k', { id: 2 });
+    let error = null;
+    try {
+      await store.save();
+    } catch (err) {
+      error = err;
+    }
+    const after = existsSync(join(dir, 'after.json')) ? read('after') : null;
+    if (error && after?.k?.id === 2) pass('save() writes the other slices when one fails, then throws');
+    else fail(`save() with one failing slice: error=${error?.message}, after=${JSON.stringify(after)}`);
+    rmSync(join(dir, 'blocked.json'), { recursive: true, force: true });
+    await store.save();
+    if (read('blocked').k?.id === 1) pass('the failed slice keeps its changes for the next save()');
+    else fail('the failed slice lost its changes');
+  }
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
