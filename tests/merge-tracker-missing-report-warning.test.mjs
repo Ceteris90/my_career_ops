@@ -8,7 +8,6 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const CODE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HEADER = [
@@ -46,7 +45,7 @@ const WARN = /report link "[^"]*" does not resolve/;
 test('missing report: row is merged unchanged and a warning names it', withRoot((root) => {
   addTsv(root, '[1](reports/001-acme-widgets-2026-07-15.md)');
   const r = run(root);
-  assert.equal(r.status, 0, describeSpawn(r));
+  assert.equal(r.status, 0, r.out);
   assert.match(r.out, WARN);
   assert.match(r.out, /Acme Widgets/);
   assert.match(r.out, /001-acme-widgets-2026-07-15\.md/);
@@ -58,7 +57,7 @@ test('present report under an external data root (cwd = code root): no warning',
   writeFileSync(join(root, 'reports', '001-acme-widgets-2026-07-15.md'), '# Eval\n**URL:** N/A\n');
   addTsv(root, '[1](reports/001-acme-widgets-2026-07-15.md)');
   const r = run(root);
-  assert.equal(r.status, 0, describeSpawn(r));
+  assert.equal(r.status, 0, r.out);
   assert.doesNotMatch(r.out, WARN);
   assert.doesNotMatch(r.out, /not on disk/);
 }));
@@ -67,7 +66,7 @@ test('no-report sentinels do not warn', withRoot((root) => {
   for (const cell of ['—', 'N/A', '-', '']) {
     addTsv(root, cell);
     const r = run(root);
-    assert.equal(r.status, 0, describeSpawn(r));
+    assert.equal(r.status, 0, r.out);
     assert.doesNotMatch(r.out, WARN, `sentinel ${cell}`);
     assert.doesNotMatch(r.out, /not on disk/, `sentinel ${cell}`);
   }
@@ -79,7 +78,7 @@ test('a ../../ link that only resolves after leading ../ are stripped still warn
   writeFileSync(join(root, 'stray.md'), '# not a report\n');
   addTsv(root, '[1](../../stray.md)');
   const r = run(root);
-  assert.equal(r.status, 0, describeSpawn(r));
+  assert.equal(r.status, 0, r.out);
   assert.match(r.out, WARN);
   assert.match(r.out, /\.\.\/\.\.\/stray\.md/);
 }));
@@ -88,7 +87,7 @@ test('a link to a directory is not a report: merge-tracker warns and verify-pipe
   // reports/ exists as a directory under the data root; an existence-only check would accept it.
   addTsv(root, '[1](reports/)');
   const merged = run(root);
-  assert.equal(merged.status, 0, describeSpawn(merged));
+  assert.equal(merged.status, 0, merged.out);
   assert.match(merged.out, WARN);
 
   const env = { ...process.env, CAREER_OPS_ROOT: root };
@@ -102,7 +101,7 @@ test('--dry-run reports the warning and writes nothing', withRoot((root) => {
   addTsv(root, '[1](reports/001-acme-widgets-2026-07-15.md)');
   const before = tracker(root);
   const r = run(root, ['--dry-run']);
-  assert.equal(r.status, 0, describeSpawn(r));
+  assert.equal(r.status, 0, r.out);
   assert.match(r.out, WARN);
   assert.equal(tracker(root), before, 'tracker untouched');
   assert.ok(existsSync(join(root, 'batch', 'tracker-additions', '001-acme-widgets.tsv')), 'TSV not archived');
@@ -122,7 +121,7 @@ test('a symlinked tracker FILE: a link that resolves from the link\'s own folder
   writeFileSync(join(root, 'reports', '001-acme-widgets-2026-07-15.md'), '# Eval\n**URL:** N/A\n');
   addTsv(root, '[1](../reports/001-acme-widgets-2026-07-15.md)');
   const r = run(root);
-  assert.equal(r.status, 0, describeSpawn(r));
+  assert.equal(r.status, 0, r.out);
   assert.doesNotMatch(r.out, WARN);
   assert.doesNotMatch(r.out, /not on disk/);
   assert.match(readFileSync(real, 'utf-8'), /Acme Widgets/, 'the row was merged into the real file');
