@@ -64,6 +64,8 @@ Application answers を生成する前に、form が意図した active job を�
 
 ## Step 3 -- Detect changes in the role
 
+この step は、form がまだ report の posting である間だけ適用する：同じ employer かつ同じ posting（`modes/apply.md` → Step 5 → **Posting identity**）。title は判定に含めない。company に一致する report が複数ある場合は、まず URL か req ID がこの posting と一致する report を選び、はっきりしなければ候補者に確認する。別の employer、または同じ employer の別 posting は role の変更ではない：report の回答をそれに adapt しない。新しい posting として evaluate する（auto-pipeline、専用の report）か、どの report にも保存せずに回答を draft する。
+
 画面上の role が evaluation 済みの role と異なる場合：
 - **Notify the candidate:** "The role has changed from [X] to [Y]. Do you want me to re-evaluate or adapt the responses to the new title?"
 - **If adapt:** Candidate が mismatch を明示的に accept した後に限り、re-evaluate せず新しい role に responses を adjust
@@ -139,6 +141,8 @@ Notes:
 ```
 
 ## Step 8 -- Post-apply (optional)
+
+何かを保存する前に、form がまだ report の posting であることを確認する（`modes/apply.md` → Step 8 → **Write only to the report of this posting**）。同じ employer かつ同じ posting → 以下の step はこの report に対して行う。新しい title への adapt や re-evaluation の後も同じ。別の employer または別 posting → この report には決して書かない：新しい posting 用に書かれた report を使う。なければ status を設定せず、回答も保存せず、application がまだ tracking されていないことを候補者に伝える。
 
 候補者が application を submitted したと確認した場合：
 1. 正規 CLI で status を "Applied" に update: `node set-status.mjs --report <report#> Applied`（`applications.md` のテーブルを手動編集しない）
