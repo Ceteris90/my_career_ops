@@ -155,13 +155,16 @@ export function parsePageChunk(json, { pageId, viewId, origin, companyName }) {
       throw new Error(`notion: database block ${dbBlock.id} has no collection_id / view_ids / space_id`);
     }
     const view = unwrapRecord(json.recordMap.collection_view?.[chosenView]);
+    // Without the view record its saved filter is unknown, and querying
+    // unfiltered would surface the rows the board hides.
+    if (!view) throw new Error(`notion: view ${chosenView} of database ${dbBlock.id} is not in the response — cannot apply its filter`);
     return { jobs: [], collection: { collectionId, viewId: chosenView, spaceId, view }, missing: 0 };
   }
 
   if (root.type !== 'page') throw new Error(`notion: page ${pageId} is a "${root.type}" block, not a page or database`);
-  // Walk the page in reading order: child pages, pages linked inline from a
-  // text block, and both inside layout blocks (columns, toggles), but never
-  // into a posting itself.
+  // Walk the page in reading order: child pages, "link to page" (`alias`)
+  // blocks, pages linked inline from a text block, and all of them inside
+  // layout blocks (columns, toggles), but never into a posting itself.
   const jobs = [];
   const seen = new Set();
   let missing = 0;
@@ -178,6 +181,7 @@ export function parsePageChunk(json, { pageId, viewId, origin, companyName }) {
       const block = unwrapRecord(rec);
       if (!block || block.alive === false) continue;
       if (block.type === 'page') { addPage(block); continue; }
+      if (block.type === 'alias') { addPage(unwrapRecord(blocks[block.format?.alias_pointer?.id])); continue; }
       for (const id2 of mentionedPageIds(block.properties?.title)) addPage(unwrapRecord(blocks[id2]));
       if (depth < MAX_LAYOUT_DEPTH && Array.isArray(block.content)) walk(block.content, depth + 1);
     }

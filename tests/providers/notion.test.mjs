@@ -195,9 +195,18 @@ try {
   const inline = pageChunk();
   inline.recordMap.block[PAGE].value.value.content = [id(9), id(20)];
   inline.recordMap.block[id(20)] = rec({ id: id(20), type: 'collection_view', space_id: SPACE, collection_id: COLL, view_ids: [VIEW1] });
+  inline.recordMap.collection_view = dbChunk().recordMap.collection_view;
   const inlineParsed = parsePageChunk(inline, { pageId: PAGE, viewId: null, origin: ORIGIN, companyName: 'Acme' });
   if (inlineParsed.collection?.collectionId === COLL && inlineParsed.collection.viewId === VIEW1) pass('parsePageChunk finds an inline database on the page');
   else fail(`parsePageChunk inline database: ${JSON.stringify(inlineParsed)}`);
+
+  // A "link to page" block resolves to its target page.
+  const linked = pageChunk();
+  linked.recordMap.block[PAGE].value.value.content = [id(30)];
+  linked.recordMap.block[id(30)] = rec({ id: id(30), type: 'alias', format: { alias_pointer: { id: id(7), spaceId: SPACE } } });
+  const linkedParsed = parsePageChunk(linked, { pageId: PAGE, viewId: null, origin: ORIGIN, companyName: 'Acme' });
+  if (linkedParsed.jobs.map((j) => j.title).join(' | ') === 'Rust Engineer') pass('parsePageChunk follows a "link to page" (alias) block to its target');
+  else fail(`parsePageChunk alias block: ${JSON.stringify(linkedParsed.jobs)}`);
 
   // Empty vs broken.
   const emptyPage = pageChunk();
@@ -216,6 +225,7 @@ try {
     ['page id absent', () => parsePageChunk({ recordMap: { block: {} } }, { pageId: PAGE, viewId: null, origin: ORIGIN, companyName: 'Acme' })],
     ['root is a text block', () => parsePageChunk({ recordMap: { block: { [PAGE]: rec({ id: PAGE, type: 'text' }) } } }, { pageId: PAGE, viewId: null, origin: ORIGIN, companyName: 'Acme' })],
     ['database without view_ids', () => parsePageChunk({ recordMap: { block: { [PAGE]: rec({ id: PAGE, type: 'collection_view_page', space_id: SPACE, collection_id: COLL }) } } }, { pageId: PAGE, viewId: null, origin: ORIGIN, companyName: 'Acme' })],
+    ['database view record absent', () => { const c = dbChunk(); delete c.recordMap.collection_view; return parsePageChunk(c, { pageId: PAGE, viewId: null, origin: ORIGIN, companyName: 'Acme' }); }],
     ['queryCollection {}', () => parseCollectionRows({}, { collectionId: COLL, origin: ORIGIN, companyName: 'Acme' })],
     ['queryCollection blockIds null', () => parseCollectionRows({ result: { reducerResults: { collection_group_results: { blockIds: null } } } }, { collectionId: COLL, origin: ORIGIN, companyName: 'Acme' })],
   ];
@@ -223,7 +233,7 @@ try {
   for (const [label, run] of broken) {
     try { run(); notThrown.push(label); } catch (e) { if (!/^notion: /.test(e.message)) notThrown.push(`${label} (${e.message})`); }
   }
-  if (notThrown.length === 0) pass('a missing envelope, an absent page and an unknown root type throw a descriptive notion: error');
+  if (notThrown.length === 0) pass('a missing envelope, an absent page or view record and an unknown root type throw a descriptive notion: error');
   else fail(`should throw: ${notThrown.join('; ')}`);
 
   // Allowlist guard: a careers_url that is not a notion.site page throws before any request.
