@@ -502,7 +502,9 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // the path counts, so a sign-in link that carries the posting in its
       // return address (?returnUrl=/jobs/<id>) is still chrome, and so is a
       // link back into this page under another query, fragment or trailing
-      // slash, such as a skip link to #main-content. In a frame, the page the
+      // slash, such as a skip link to #main-content. A sign-in or sign-up page
+      // is chrome even under the posting's own path (/jobs/<id>/login): it is
+      // the site's sign-in, not the posting. In a frame, the page the
       // frame sits in is this page too; its address is passed in, because a
       // frame sandboxed without allow-same-origin cannot read window.top. The
       // id has to be the link's own: its last path segment that carries an id,
@@ -512,6 +514,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
       // around it claims that whole segment too: posting job-12345 claims
       // /jobs/job-12345/apply.
       const idBearing = new RegExp(idPattern, 'i');
+      const signIn = /^(?:log-?in|sign[-_]?(?:in|up)|register)(?:\.\w+)?$/;
       const linksToPosting = (element) => {
         const href = postingId && element.getAttribute('href');
         if (!href) return false;
@@ -521,7 +524,9 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0, timeoutRe
           const thisPage = [location.href, pageUrl].map((u) => pageKey(new URL(u)));
           if (thisPage.includes(pageKey(target))) return false;
           if (target.origin !== new URL(pageUrl).origin) return false;
-          const own = target.pathname.toLowerCase().split('/').filter((s) => idBearing.test(s)).pop();
+          const segments = target.pathname.toLowerCase().split('/');
+          if (segments.some((s) => signIn.test(s))) return false;
+          const own = segments.filter((s) => idBearing.test(s)).pop();
           return own === postingId || own === postingSegment;
         } catch {
           return false;

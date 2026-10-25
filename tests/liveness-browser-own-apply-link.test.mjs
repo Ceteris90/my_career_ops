@@ -57,17 +57,20 @@ try {
     }
 
     // The site's own links stay chrome: its jobs page, another posting, a sign-in
-    // link carrying this posting only in its return address, the footer, and
-    // links back into this page under another fragment, query or trailing
-    // slash. So does a link to another site with this posting's id in its
-    // path. A link to this posting is still read only where it is visible.
+    // link carrying this posting only in its return address (at /account, not
+    // a sign-in segment, so only reading the path keeps it out), a sign-in page
+    // under the posting's own path, the footer, and links back into this page
+    // under another fragment, query or trailing slash. So does a link to
+    // another site with this posting's id in its path. A link to this posting
+    // is still read only where it is visible.
     const chrome = await check(POSTING_URL, [
       `<nav><a href="${POSTING_URL}#apply">Skip to apply</a></nav>`,
       `<nav><a href="${POSTING_URL}?utm_source=header#apply">Skip to apply</a></nav>`,
       `<header><a href="${POSTING_URL}/">Apply</a></header>`,
       '<header><a href="/jobs">Apply</a></header>',
       `<nav><a href="/jobs/${OTHER_ID}/apply">Apply</a></nav>`,
-      `<header><a href="/login?returnUrl=%2Fjobs%2F${ID}">Sign in to apply</a></header>`,
+      `<header><a href="/account?returnUrl=%2Fjobs%2F${ID}">Sign in to apply</a></header>`,
+      `<header><a href="/jobs/${ID}/login">Sign in to apply</a></header>`,
       `<header><a href="https://jobs.example.org/jobs/${ID}/apply">Apply</a></header>`,
       '<footer><a href="/careers/apply">Apply now</a></footer>',
       `<header aria-hidden="true"><a href="/jobs/${ID}/apply">Apply</a></header>`,
@@ -104,10 +107,11 @@ try {
     // The id has to be the link's own, its last path segment that carries one,
     // whole: posting 12345 claims /jobs/12345/apply, not another posting's
     // /jobs/123456/apply, nor a segment that only contains it, nor
-    // /jobs/12345/related/67890/apply, whose own posting is 67890. A posting whose own segment carries the
-    // id with more around it, job-12345, claims that whole segment too, and
-    // still nothing longer. A last segment the id did not come from (details)
-    // claims nothing.
+    // /jobs/12345/related/67890/apply, whose own posting is 67890. A posting
+    // whose own segment carries the id with more around it, job-12345, claims
+    // that whole segment too, and still nothing longer; registered-nurse-12345
+    // is a posting, not a sign-up page. A last segment the id did not come
+    // from (details) claims nothing.
     const numericUrl = 'https://www.example.com/jobs/12345';
     const numericOwn = await check(numericUrl, `<header><a href="/jobs/12345/apply">Apply</a></header><main>${POSTING}</main>`);
     const numericOther = await check(numericUrl, [
@@ -123,12 +127,14 @@ try {
       '<nav><a href="/jobs/senior-job-12345/apply">Apply</a></nav>',
       `<main>${POSTING}</main>`,
     ].join(''));
+    const sluggedUrl = 'https://www.example.com/jobs/registered-nurse-12345';
+    const sluggedOwn = await check(sluggedUrl, `<header><a href="/jobs/registered-nurse-12345/apply">Apply</a></header><main>${POSTING}</main>`);
     const generic = await check('https://www.example.com/jobs/12345/details', `<nav><a href="/jobs/67890/details">Apply</a></nav><main>${POSTING}</main>`);
-    if (numericOwn.result === 'active' && prefixedOwn.result === 'active'
+    if (numericOwn.result === 'active' && prefixedOwn.result === 'active' && sluggedOwn.result === 'active'
       && [numericOther, prefixedOther, generic].every((r) => r.result === 'uncertain' && r.code === 'no_apply_control')) {
       pass('a posting id, or the posting URL\'s own segment that carries it, counts only as a whole path segment: its own Apply link reads, a longer one\'s does not');
     } else {
-      fail(`path segments: own ${JSON.stringify([numericOwn, prefixedOwn])}, other segments ${JSON.stringify([numericOther, prefixedOther, generic])}`);
+      fail(`path segments: own ${JSON.stringify([numericOwn, prefixedOwn, sluggedOwn])}, other segments ${JSON.stringify([numericOther, prefixedOther, generic])}`);
     }
 
     // The id comes from the URL's last path segment: a number in the query is
