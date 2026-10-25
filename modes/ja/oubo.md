@@ -16,7 +16,7 @@
 2. IDENTIFY    → Extract company + role from the page
 3. SEARCH      → Match against existing reports in reports/
 4. LOAD        → Read full report + Section H / `## Application Answers` (if they exist)
-5. PREFLIGHT   → Confirm posting liveness + company/role match before drafting
+5. PREFLIGHT   → Confirm posting liveness + that the form is the report's posting before drafting
 6. ANALYZE     → Identify ALL visible form questions
 7. GENERATE    → For each question, generate a personalized response
 8. PRESENT     → Show formatted responses for copy-paste
@@ -35,13 +35,19 @@ Application answers を生成する前に、form が意図した active job を�
 2. URL がある場合、Playwright で liveness を確認する：
    - active posting evidence: title/role + job description または form fields + submit/apply path
    - closed posting evidence: expired/closed/no longer accepting applications、JD がなく nav/footer だけ、generic careers/search への hard redirect、404/410
-3. Visible company and role を matched report と比較する。
-4. Company または title が materially changed している場合、drafting 前に stop して聞く：
-   "The form appears to be for [visible company] -- [visible role], but the matched report is [report company] -- [report role]. Do you want me to re-evaluate, adapt with this mismatch, or stop?"
-5. Posting が closed に見える場合、candidate が known reason で明示的に override しない限り、final copy の生成を拒否する。
-6. Candidate が questions だけ、または screenshot だけを貼ったため liveness を確認できない場合、その limitation を明示し、drafting 前に company、role、active posting の確認を求める。
+3. Visible company と posting を matched report と比較する（下の **Posting identity** を参照）。
+4. Identity が成り立たない場合、matched report は別の application のもの。drafting 前に stop して聞く：
+   "The form appears to be for [visible company] -- [visible role], which is not the posting in the matched report, [report company] -- [report role]. Do you want me to evaluate this posting as a new one, draft answers without saving them to a report, or stop?"
+   - **Evaluate as new**：visible posting に auto-pipeline を実行する。専用の report と tracker row が書かれるので、その report で続ける。
+   - **Draft without saving**：matched report とその tailored CV は使わず、visible posting、`cv.md`、candidate の profile だけから draft する。Step 8 で `## Application Answers` は書かず、Step 9 で status も設定しない。この application に属する report がないため。
+   - matched report の回答をこの posting に adapt しない：別の posting 向けに draft されたもので、そこに保存するとその report の application の記録を上書きする。
+5. Identity が成り立ち title だけが変わった場合は、Step 3 で決める（新しい title に adapt するか re-evaluate するか）。
+6. Posting が closed に見える場合、candidate が known reason で明示的に override しない限り、final copy の生成を拒否する。
+7. Candidate が questions だけ、または screenshot だけを貼ったため liveness を確認できない場合、その limitation を明示し、drafting 前に company、role、active posting の確認を求める。
 
 この preflight が解決するまで Step 6 に進まない。
+
+**Posting identity (#5854).** 定義は `modes/apply.md` → Step 5 → **Posting identity** に従う：同じ employer（候補者が subsidiary、brand、rename、その client 向けの agency posting だと確認した場合も含む）かつ同じ posting（URL または req ID）。Application form の host が report の `**URL:**` と違うだけでは match は崩れない。別の req ID、または同じ employer の別 posting なら崩れる。Title は identity に含めない。Posting が evaluation 後に retitle されても同じ application で、回答はその report に属する。
 
 **Applying to several roles in one sitting?** この preflight は目の前の単一 form を確認する。Multi-role session の前、特に `--verify` なしの scan で追加された未確認の entries がある場合は、`pipeline` mode の **Liveness sweep** を先に実行する（`node check-liveness.mjs --file <urls>`）。これにより `data/pipeline.md` から dead postings がまとめて落ち、expired role の tab を開かずに済む。
 

@@ -72,7 +72,7 @@ This is a reminder, not a gate — surface it and continue drafting immediately;
 4. If the identity does not hold, the matched report belongs to a different application. Stop before drafting and ask:
    "The form appears to be for [visible company] — [visible role], which is not the posting in the matched report, [report company] — [report role]. Do you want me to evaluate this posting as a new one, draft answers without saving them to a report, or stop?"
    - **Evaluate as new**: run the auto-pipeline for the visible posting. It writes its own report and tracker row; continue with that report.
-   - **Draft without saving**: draft as usual, but Step 8 writes no `## Application Answers` and Step 9 sets no status, because no report belongs to this application.
+   - **Draft without saving**: set the matched report and its tailored CV aside before drafting, and draft from the visible posting, `cv.md` and the candidate's profile only. The report's blocks, its Section H and its tailored CV were written for another posting. Step 8 writes no `## Application Answers` and Step 9 sets no status, because no report belongs to this application.
    - Never adapt the matched report's answers into it: they were drafted for another posting, and saving them there would overwrite the record of the application that report is for.
 5. If the identity holds but the title changed, Step 3 decides: adapt the answers to the new title or re-evaluate.
 6. If the posting appears closed, refuse to generate final copy unless the candidate explicitly overrides with a known reason.
@@ -169,7 +169,7 @@ Before drafting answers, read the matched report's Block G fixed-term finding an
 
 1. Extract company name and role title from the page
 2. Search `reports/` under every root printed by `node apply-scope.mjs root` (this checkout, plus the configured data root when set) by company name (case-insensitive grep). Do not search only the checkout when the data root holds the reports.
-3. If there is a match → load the full report. If more than one report matches the company, narrow the matches by role and by the posting URL or req ID against each report's `**URL:**`. If more than one is still possible, ask the candidate which report belongs to this form before loading any of them: Step 8 writes into the report loaded here.
+3. If there is a match → load the full report. If more than one report matches the company, first compare the posting URL or req ID with each report's `**URL:**`. A report whose posting matches is the one, even if its stored role differs: the posting may have been retitled, and Step 3 handles that. Use the role only to narrow reports that the URL or req ID could not decide. If more than one is still possible, ask the candidate which report belongs to this form before loading any of them: Step 8 writes into the report loaded here.
 4. If there is a `## Application Answers` section → recover it through the strict reader, never by re-reading the rendered markdown as prose:
 
    ```bash

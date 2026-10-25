@@ -55,7 +55,7 @@ Trước khi tạo bất kỳ câu trả lời nào, xác minh form vẫn trỏ 
 4. Nếu danh tính không khớp, báo cáo khớp thuộc về một đơn ứng tuyển khác. Dừng trước khi soạn và hỏi:
    "Form có vẻ dành cho [công ty hiển thị] — [vai trò hiển thị], không phải tin trong báo cáo khớp, [công ty báo cáo] — [vai trò báo cáo]. Bạn muốn tôi đánh giá tin này như một tin mới, soạn câu trả lời mà không lưu vào báo cáo nào, hay dừng?"
    - **Đánh giá như tin mới**: chạy auto-pipeline cho tin hiển thị. Nó ghi báo cáo và dòng tracker riêng; tiếp tục với báo cáo đó.
-   - **Soạn mà không lưu**: soạn như thường, nhưng Bước 8 không ghi `## Application Answers` và Bước 9 không đặt trạng thái nào, vì không có báo cáo nào thuộc về đơn này.
+   - **Soạn mà không lưu**: gác báo cáo khớp và CV đã điều chỉnh của nó sang một bên trước khi soạn, và chỉ soạn từ tin hiển thị, `cv.md` và hồ sơ của ứng viên. Các block, Block H và CV đã điều chỉnh của báo cáo đó được viết cho tin khác. Bước 8 không ghi `## Application Answers` và Bước 9 không đặt trạng thái nào, vì không có báo cáo nào thuộc về đơn này.
    - Không bao giờ điều chỉnh câu trả lời của báo cáo khớp cho tin này: chúng được soạn cho tin khác, và lưu vào đó sẽ ghi đè hồ sơ của đơn mà báo cáo đó thuộc về.
 5. Nếu danh tính khớp nhưng chức danh đổi, Bước 3 quyết định: điều chỉnh câu trả lời theo chức danh mới hay đánh giá lại.
 6. Nếu tin có vẻ đã đóng, từ chối tạo bản cuối trừ khi ứng viên bỏ qua tường minh với lý do đã biết.
@@ -101,7 +101,7 @@ Chức danh không thuộc danh tính. Tin được đổi tên sau khi đánh g
 
 1. Trích tên công ty và chức danh từ trang
 2. Tìm trong `reports/` theo tên công ty (grep không phân biệt hoa thường)
-3. Nếu khớp → nạp báo cáo đầy đủ. Nếu nhiều báo cáo khớp công ty, thu hẹp theo vai trò và theo URL hoặc req ID của tin so với `**URL:**` của từng báo cáo. Nếu vẫn còn nhiều hơn một, hỏi ứng viên báo cáo nào thuộc về form này trước khi nạp: Bước 8 ghi vào báo cáo được nạp ở đây.
+3. Nếu khớp → nạp báo cáo đầy đủ. Nếu nhiều báo cáo khớp công ty, trước hết so URL hoặc req ID của tin với `**URL:**` của từng báo cáo. Báo cáo có tin khớp là báo cáo đúng, kể cả khi vai trò đã lưu khác: tin có thể đã được đổi tên, và Bước 3 xử lý việc đó. Chỉ dùng vai trò để thu hẹp các báo cáo mà URL hoặc req ID không phân định được. Nếu vẫn còn nhiều hơn một, hỏi ứng viên báo cáo nào thuộc về form này trước khi nạp: Bước 8 ghi vào báo cáo được nạp ở đây.
 4. Nếu có mục `## Application Answers` → khôi phục bằng bộ đọc nghiêm ngặt, không bao giờ bằng cách đọc lại markdown đã render như văn xuôi:
 
    ```bash

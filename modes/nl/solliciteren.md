@@ -37,8 +37,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## Stap 2 -- Identificeer en laad de context
 
 1. Haal de bedrijfsnaam en functietitel uit de pagina
-2. Zoek in `reports/` met een genormaliseerde combinatie van bedrijfsnaam en functietitel (zonder onderscheid tussen hoofdletters en kleine letters of leestekens)
-3. Bevestig de match aan de hand van de vacature-URL wanneer die beschikbaar is. Als er daarna meerdere rapporten mogelijk blijven, vraag de kandidaat welk rapport bij het formulier hoort voordat je iets laadt
+2. Zoek in `reports/` op de genormaliseerde bedrijfsnaam (zonder onderscheid tussen hoofdletters en kleine letters of leestekens). Zoek niet op de functietitel: een vacature kan na de evaluatie zijn hernoemd, en Stap 3 handelt dat af
+3. Bevestig de match aan de hand van de vacature-URL of het requisition-ID wanneer die beschikbaar zijn. Een rapport met dezelfde vacature is het juiste, ook als de opgeslagen titel afwijkt. Gebruik de functietitel alleen om rapporten te beperken die URL of requisition-ID niet konden onderscheiden. Als er daarna meerdere rapporten mogelijk blijven, vraag de kandidaat welk rapport bij het formulier hoort voordat je iets laadt
 4. Indien precies één gevalideerde match -> laad het volledige rapport
 5. Als `## Application Answers` aanwezig is -> laad de verzonden antwoorden als basis; anders, als blok H aanwezig is, de eerdere conceptantwoorden. Zijn beide er, dan gaat `## Application Answers` voor
 6. Alleen indien er GEEN gevalideerde match is -> waarschuw de kandidaat en stel een snelle auto-pipeline voor

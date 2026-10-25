@@ -61,6 +61,22 @@ ok('apply.md no longer offers to adapt answers onto a different posting', () => 
   assert.match(preflight, /Draft without saving/);
 });
 
+ok('apply.md drafts an unsaved answer set without the other posting\'s report', () => {
+  // The matched report, its Section H and its tailored CV were written for a
+  // different posting, so a draft for the visible one must not lean on them.
+  const draft = step(apply, '## Step 5 — Preflight gate').split('\n').find(l => l.includes('**Draft without saving**'));
+  assert.match(draft, /matched report and its tailored CV aside/);
+});
+
+ok('apply.md Step 2 picks among a company\'s reports by posting before role', () => {
+  // A retitled posting's report carries the old role. Narrowing by role first
+  // dropped the one report whose URL matched, and Step 3 never saw it.
+  const search = step(apply, '## Step 2 — Identify and search for context');
+  assert.match(search, /first compare the posting URL or req ID/);
+  assert.match(search, /even if its stored role differs/);
+  assert.match(search, /Use the role only to narrow/);
+});
+
 ok('apply.md Step 3 leaves a different employer or posting to Step 5', () => {
   const roleChange = step(apply, '## Step 3 — Detect changes in the role');
   assert.ok(roleChange.includes(IDENTITY), 'Step 3 does not point at the posting identity');
@@ -103,6 +119,11 @@ ok('the localized apply modes are found', () => {
 for (const file of localized) {
   const lines = read(file).split('\n');
 
+  ok(`${file}: the preflight offers no adaptation onto a different posting`, () => {
+    // modes/ja and modes/vi carry the canonical preflight, prompt included.
+    assert.ok(!lines.some(l => /adapt with this mismatch/.test(l)), 'still offers "adapt with this mismatch"');
+  });
+
   ok(`${file}: the role-change step points at the posting identity`, () => {
     const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));
     assert.ok(roleChange.includes(IDENTITY), `the role-change step does not mention "${IDENTITY}"`);
@@ -129,4 +150,13 @@ ok('modes/nl/solliciteren.md keeps no exact-title guard of its own', () => {
   const nl = read('modes/nl/solliciteren.md');
   assert.ok(!/exact overeenkomen/.test(nl), 'still requires an exact company-and-role match');
   assert.ok(!/niet in het oude rapport op/.test(nl), 'still refuses to save adapted answers to the report');
+});
+
+ok('modes/nl/solliciteren.md finds the report by employer, not by title', () => {
+  // Searching on company + title missed a retitled posting's report before the
+  // URL check could find it, and the auto-pipeline then made a duplicate.
+  const nl = read('modes/nl/solliciteren.md');
+  assert.ok(!/combinatie van bedrijfsnaam en functietitel/.test(nl), 'still searches reports by company and title together');
+  assert.match(nl, /vacature-URL of het requisition-ID/);
+  assert.match(nl, /functietitel alleen om rapporten te beperken/);
 });
