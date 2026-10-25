@@ -269,6 +269,27 @@ const fullRows = (start, n) => Array.from({ length: n }, (_, i) => row(start + i
   else fail('clearcompany.fetch() fetch-error board not tagged');
 }
 
+// fetch() — a later page that answers 200 with a broken envelope keeps
+// earlier pages too, the same as a failed request; on page 1 it throws.
+{
+  let calls = 0;
+  const { result: jobs, errors } = await captureConsoleErrors(() => cc.fetch({ name: 'Acme', careers_url: API }, {
+    sleep: async () => {},
+    fetchJson: async () => (++calls === 1 ? page(fullRows(1, 100), 250) : { error: 'maintenance' }),
+  }));
+  if (jobs.length === 100 && calls === 2) pass('clearcompany.fetch() keeps page 1 when page 2 has a malformed envelope');
+  else fail(`clearcompany.fetch() malformed later page: ${jobs.length} jobs, ${calls} calls`);
+  if (jobs.clearcompanyTruncated === true && errors.some((w) => /truncated at page 2 \(100 of 250 jobs\): .*expected results\[\]/.test(w))) {
+    pass('clearcompany.fetch() warns and tags a board cut short by a malformed later page');
+  } else fail(`clearcompany.fetch() malformed later page warnings: ${JSON.stringify(errors)}`);
+  let threw = false;
+  try {
+    await cc.fetch({ name: 'Acme', careers_url: API }, { sleep: async () => {}, fetchJson: async () => ({ error: 'maintenance' }) });
+  } catch { threw = true; }
+  if (threw) pass('clearcompany.fetch() throws when the first page has a malformed envelope');
+  else fail('clearcompany.fetch() swallowed a malformed first page');
+}
+
 // fetch() — a first-page failure throws (dead tenant is not an empty board).
 {
   let threw = false;

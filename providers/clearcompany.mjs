@@ -196,9 +196,11 @@ export default {
     for (; page < pagesToFetch; page++) {
       if (page > 0) await sleep(PAGE_DELAY_MS, ctx);
       const url = `${apiUrl}?pageIndex=${page}&pageSize=${PAGE_SIZE}`;
-      let json;
+      let parsed;
       try {
-        json = await fetchJsonWithRetry(ctx, url, { redirect: 'error' });
+        // Parsed inside the try, so a later page that answers 200 with a
+        // broken envelope keeps the pages already read, like a failed request.
+        parsed = parseClearCompanyPage(await fetchJsonWithRetry(ctx, url, { redirect: 'error' }), entry.name);
       } catch (err) {
         // First page, or any page during a probe: propagate unwrapped, so a
         // dead tenant reads as broken and ProbePageBudgetReached survives.
@@ -207,7 +209,6 @@ export default {
         stopReason = 'fetch-error';
         break;
       }
-      const parsed = parseClearCompanyPage(json, entry.name);
       if (total === null) total = parsed.total;
       lastRawCount = parsed.rawCount;
       seenRaw += parsed.rawCount;
