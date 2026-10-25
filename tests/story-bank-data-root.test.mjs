@@ -172,7 +172,7 @@ function offRootBases(src) {
 
 /** Code lines that resolve story-bank.md or cv.md somewhere other than the data root. */
 function offDataRootPaths(src) {
-  const bases = offRootBases(src).map((n) => n.replace(/[.$()]/g, '\\$&')).join('|');
+  const bases = offRootBases(src).map((n) => n.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('|');
   const ONTO_BASE = new RegExp(`(?:^|[^\\w$.])(?:path\\.)?(?:join|resolve)\\(\\s*(?:${bases})\\s*,`);
   const CWD_RESOLVE = /(?:^|[^\w$.])(?:path\.)?resolve\(\s*['"`](?:\.\/)?(?:interview-prep|cv\.md)/;
   const BARE_LITERAL = /=\s*['"`](?:\.\/)?(?:interview-prep|cv\.md)/;
