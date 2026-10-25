@@ -25,14 +25,14 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
      node --input-type=module -e '
      import { readFileSync } from "node:fs";
      import { spawnSync } from "node:child_process";
-     const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+     const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
      const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
      if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
      const args = ["archive-posting.mjs", p.url];
      if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
      if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report must be a report number"); args.push("--report=" + p.report); }
      process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-     ' <file.json>
+     ' {json-file}
      ```
    - `existing` — already a named skill in cv.md's Skills section, safe to lead with
    - `supportedByResume` — not a named skill yet, but cv.md's prose already demonstrates it; legitimate candidates for the Skills section in the user's own words (Step 13's competency grid draws from here first)
@@ -110,13 +110,13 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
     node --input-type=module -e '
     import { readFileSync } from "node:fs";
     import { spawnSync } from "node:child_process";
-    const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+    const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
     const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
     if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
     const args = ["keyword-match.mjs", p.report];
     if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
     process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-    ' <file.json>
+    ' {json-file}
     ```
 23. Report: PDF path, number of pages, keyword coverage % and whether its keywords came from the report or the archived JD (when Step 22 ran), the ATS variant's HTML path and any lint findings the user left open (when Step 21a ran), and any skill gaps from Step 4 still unaddressed
 

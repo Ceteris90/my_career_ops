@@ -105,6 +105,22 @@ for (const rel of scannedFiles()) {
       pass(`${rel} carries the canonical ${script} command`);
     }
   }
+  // The archive command sits under the JD-archival rule (#2789) that tells the
+  // agent to run it, not somewhere above it where "the command below" points elsewhere.
+  if (MUST_CARRY['archive-posting.mjs'].includes(rel)) {
+    const rule = text.indexOf('#2789');
+    const block = text.indexOf('"archive-posting.mjs", p.url');
+    if (rule !== -1 && block > rule) pass(`${rel}: archive command follows the JD-archival rule`);
+    else fail(`${rel}: archive command is not placed after the JD-archival rule (#2789)`);
+  }
+}
+
+// check-jd-archive.mjs resolves only the English pointer sentence, so every
+// evaluation mode that runs the archive command must instruct exactly that one.
+const POINTER = 'See jds/{filename} for the full archive (archive-posting.mjs --report={num}).';
+for (const rel of ['modes/oferta.md', ...LOCALIZED_ARCHIVE.map(f => `modes/${f}`)]) {
+  if (read(rel).includes(POINTER)) pass(`${rel} instructs the canonical archive pointer sentence`);
+  else fail(`${rel} does not instruct the canonical pointer sentence "${POINTER}"`);
 }
 
 // ── 3. Behaviour ─────────────────────────────────────────────────────────────
@@ -125,11 +141,13 @@ if (!['posix', 'git-bash', 'path'].includes(bashSource())) {
       ].join('\n'));
     }
     const env = { ...process.env, PATH: `${dirname(NODE)}${delimiter}${process.env.PATH ?? ''}` };
-    const runCommand = (script, values) => {
+    // The documented form passes the JSON file's path as an argument; `< file` on stdin also works.
+    const runCommand = (script, values, { stdin = false } = {}) => {
       const argvFile = join(dir, `argv-${script}.json`);
       rmSync(argvFile, { force: true });
       writeFileSync(join(dir, 'args.json'), JSON.stringify(values));
-      const r = spawnSync(bash, ['-c', canonical[script].replace('<file.json>', 'args.json')], { cwd: dir, env, encoding: 'utf8' });
+      const command = canonical[script].replace('{json-file}', stdin ? '< args.json' : 'args.json');
+      const r = spawnSync(bash, ['-c', command], { cwd: dir, env, encoding: 'utf8' });
       const argv = existsSync(argvFile) ? JSON.parse(readFileSync(argvFile, 'utf8')) : null;
       return { status: r.status, stderr: r.stderr, argv };
     };
@@ -141,6 +159,13 @@ if (!['posix', 'git-bash', 'path'].includes(bashSource())) {
       pass('archive command passes a URL with spaces, &, quotes, $(), backticks, ; and | as one argument, unevaluated');
     } else {
       fail(`archive command mangled or evaluated the URL: status ${r.status}, argv ${JSON.stringify(r.argv)}, pwned ${pwned()}, stderr ${r.stderr}`);
+    }
+
+    r = runCommand('archive-posting.mjs', { url: hostileUrl, company: 'acme-co', report: '042' }, { stdin: true });
+    if (r.status === 0 && JSON.stringify(r.argv) === JSON.stringify([hostileUrl, '--company=acme-co', '--report=042']) && !pwned()) {
+      pass('archive command reads the same JSON redirected to stdin');
+    } else {
+      fail(`archive command with the JSON on stdin: status ${r.status}, argv ${JSON.stringify(r.argv)}, stderr ${r.stderr}`);
     }
 
     r = runCommand('archive-posting.mjs', { url: 'https://jobs.example.test/1' });
@@ -175,6 +200,13 @@ if (!['posix', 'git-bash', 'path'].includes(bashSource())) {
       pass('keyword command passes the report and a hostile --cv path as single arguments, unevaluated');
     } else {
       fail(`keyword command mangled or evaluated its paths: status ${r.status}, argv ${JSON.stringify(r.argv)}, pwned ${pwned()}, stderr ${r.stderr}`);
+    }
+
+    r = runCommand('keyword-match.mjs', { report, cv: hostileCv }, { stdin: true });
+    if (r.status === 0 && JSON.stringify(r.argv) === JSON.stringify([report, '--cv', hostileCv]) && !pwned()) {
+      pass('keyword command reads the same JSON redirected to stdin');
+    } else {
+      fail(`keyword command with the JSON on stdin: status ${r.status}, argv ${JSON.stringify(r.argv)}, stderr ${r.stderr}`);
     }
 
     const badKeyword = [

@@ -761,14 +761,14 @@ Importance измеряет, насколько требование весом�
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
 if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
 const args = ["archive-posting.mjs", p.url];
 if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
 if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report must be a report number"); args.push("--report=" + p.report); }
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-' <file.json>
+' {json-file}
 ```
 
 **Machine Summary (обязательно):** каждый отчёт несёт YAML-фенс `## Machine Summary` сразу после шапки — та же схема, те же имена полей и те же правила, что у блока «Machine Summary» в `batch/batch-prompt.md` (не дублировать схему здесь; источник правды — тот файл). В неё входит `advertised_comp`: собственная зарплатная цифра вакансии **дословно** (например, `"80-90k EUR"`) или `null`, когда вакансия не называет ничего — никогда не оценка, никогда не подмена рыночными данными. Этот ключ питает наблюдение о заявленной зарплате, которое читает `node salary-gap.mjs`. Также входят `risk_summary` — блок Risk Summary, отзеркаленный как карта (схема и значения перечислений в `batch/batch-prompt.md`), — и `requirement_importance`: таблица Блока B, отзеркаленная строка за строкой, с типом свидетельства, уровнем важности и совпадением каждой строки (`[]`, когда вакансия не даёт пригодного списка требований). Потолок для `inferred` из гейта Блока B держится и в YAML: `importance` никогда не бывает `critical` или `high`, когда `evidence: inferred`.

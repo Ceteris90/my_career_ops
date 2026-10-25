@@ -769,20 +769,20 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 
 Not every JD source is a scannable ATS API or even a URL — some only ever exist as a pasted screenshot from a company on a custom/uncommon ATS with no API surface. Whatever posting-date text is visible on the source — `Posted 3 days ago`, an explicit date, etc. — transcribe it as the first line of the archived section regardless of source format (URL, pasted text, or screenshot): `Posted: {date or relative string as shown}`, or `Posted: not visible in source` when genuinely absent. Never substitute the report file's own filesystem mtime/creation time for this — it's fragile (overwritten by later edits, reset by sync-tool/git operations) and conceptually wrong (it records when the candidate processed the JD, not when the employer posted it).
 
-**Command arguments (#5853):** never type a posting URL, a company slug or a report path into a command line, not even inside quotes. URLs routinely carry `&`, `'`, `$`, `;` or spaces, and a shell reads those as syntax. Write the values to a JSON file with your file tool, as AGENTS.md does for scan-history rows, then run the fixed command, which reads the file, checks each value, and starts the script with every value as its own argument and no shell in between. It prints the script's output unchanged and exits with the script's exit code. A value that fails its check stops the run before the script starts: fix the value (re-derive the slug as step 1 describes), never the check. For the archive capture the file is `{"url": "…", "company": "{company-slug}", "report": "{num}"}`; leave out `company` and `report` only for a capture with no report:
+**Command arguments (#5853):** never type a posting URL, a company slug or a report path into a command line, not even inside quotes. URLs routinely carry `&`, `'`, `$`, `;` or spaces, and a shell reads those as syntax. Write the values to a JSON file with your file tool, as AGENTS.md does for scan-history rows, then run the fixed command with that file's path in place of `{json-file}` (redirecting the file to its stdin, `< file.json`, works too). The command reads the file, checks each value, and starts the script with every value as its own argument and no shell in between. It prints the script's output unchanged and exits with the script's exit code. A value that fails its check stops the run before the script starts: fix the value (re-derive the slug as step 1 describes), never the check. For the archive capture the file is `{"url": "…", "company": "{company-slug}", "report": "{num}"}`; leave out `company` and `report` only for a capture with no report:
 
 ```bash
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
 if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
 const args = ["archive-posting.mjs", p.url];
 if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
 if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report must be a report number"); args.push("--report=" + p.report); }
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-' <file.json>
+' {json-file}
 ```
 
 ### 1b. Embed ATS keyword coverage
@@ -793,13 +793,13 @@ After saving the report, run the coverage check and paste its `## Keyword Covera
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
 if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
 const args = ["keyword-match.mjs", p.report];
 if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-' <file.json>
+' {json-file}
 ```
 
 By default this scans the base `cv.md` — read it as a **pre-tailoring gap list** (which JD keywords to weave in while tailoring), not a verdict on the document you will send; the output labels what it scanned. To verify the final tailored CV, pass `--cv` (the `pdf` mode does this against the generated HTML).

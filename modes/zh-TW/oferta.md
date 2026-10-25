@@ -317,14 +317,14 @@
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
 if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
 const args = ["archive-posting.mjs", p.url];
 if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
 if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report must be a report number"); args.push("--report=" + p.report); }
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-' <file.json>
+' {json-file}
 ```
 
 ### 2. 登錄到 Tracker 紀錄簿

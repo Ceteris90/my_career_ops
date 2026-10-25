@@ -741,14 +741,14 @@
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
 if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
 const args = ["archive-posting.mjs", p.url];
 if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
 if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report must be a report number"); args.push("--report=" + p.report); }
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-' <file.json>
+' {json-file}
 ```
 
 Не кожне джерело JD є сканованим ATS API або навіть URL — деякі існують лише як вставлений скріншот від компанії на кастомному/непоширеному ATS без API поверхні. Який би текст дати публікації не був видимим на джерелі — `Posted 3 days ago`, явна дата тощо — транскрибуйте його як перший рядок архівованої секції незалежно від формату джерела (URL, вставлений текст або скріншот): `Posted: {дата або відносний рядок, як показано}`, або `Posted: not visible in source`, коли справді відсутній. Ніколи не підставляйте власний filesystem mtime/creation time файлу звіту замість цього — це крихко (перезаписується пізнішими редагуваннями, скидається операціями sync-tool/git) і концептуально неправильно (це записує, коли кандидат обробив JD, а не коли роботодавець її опублікував).
@@ -761,13 +761,13 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-const p = JSON.parse(readFileSync(process.argv[1], "utf8"));
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
 if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
 const args = ["keyword-match.mjs", p.report];
 if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
-' <file.json>
+' {json-file}
 ```
 
 Типово це сканує базовий `cv.md` — читайте це як **список прогалин до кастомізації** (які ключові слова JD вплести під час кастомізації), а не вердикт про документ, який ви надішлете; вивід позначає, що було проскановано. Щоб перевірити фінальний кастомізований CV, передайте `--cv` (режим `pdf` робить це проти згенерованого HTML).
