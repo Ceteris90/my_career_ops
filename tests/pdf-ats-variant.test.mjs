@@ -17,6 +17,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PDF_MODE = readFileSync(join(ROOT, 'modes', 'pdf.md'), 'utf-8').replace(/\r\n/g, '\n');
@@ -127,7 +128,7 @@ test('the optional ATS PDF is rendered without --report', () => {
 test('the documented commands produce a gated ATS variant with competencies under Skills', () => {
   const { dir, styledJson, steps, cleanup } = runDocumentedStep(PAYLOAD);
   try {
-    for (const s of steps) assert.equal(s.status, 0, `${s.raw} exited ${s.status}\n${s.stderr}`);
+    for (const s of steps) assert.equal(s.status, 0, describeSpawn(s, `${s.raw} exited ${s.status}\n`));
     const html = join(dir, 'output', 'cv-jane-smith-acme-ats.html');
     assert.ok(existsSync(html), 'output/cv-{candidate}-{company}-ats.html must be written');
     const text = readFileSync(html, 'utf-8');
@@ -144,7 +145,7 @@ test('the documented commands produce a gated ATS variant with competencies unde
 test('with a report number, every path carries it before the company', () => {
   const { dir, steps, cleanup } = runDocumentedStep(PAYLOAD, '042');
   try {
-    for (const s of steps) assert.equal(s.status, 0, `${s.raw} exited ${s.status}\n${s.stderr}`);
+    for (const s of steps) assert.equal(s.status, 0, describeSpawn(s, `${s.raw} exited ${s.status}\n`));
     assert.ok(existsSync(join(dir, 'output', 'cv-jane-smith-042-acme-ats.html')),
       'output/cv-{candidate}-{report}-{company}-ats.html must be written');
     assert.ok(existsSync(join(dir, 'cv-jane-smith-042-acme-ats.json')),
@@ -162,7 +163,7 @@ test('the ATS gate catches a claim the styled HTML fix never carried back to the
   const { steps, cleanup } = runDocumentedStep(drifted);
   try {
     const gate = steps.find((s) => s.raw.startsWith('node verify-cv-facts.mjs'));
-    assert.notEqual(gate.status, 0, 'the fact gate must fail the ATS variant on an unsourced metric');
+    assert.notEqual(gate.status, 0, describeSpawn(gate, 'the fact gate must fail the ATS variant on an unsourced metric'));
   } finally {
     cleanup();
   }
@@ -173,8 +174,7 @@ test('the documented commands still work when the scratch directory name contain
   const { dir, steps, cleanup } = runDocumentedStep(PAYLOAD, '', 'pdf ats variant ');
   try {
     assert.match(dir, / /, 'fixture directory must contain a space');
-    for (const s of steps) assert.equal(s.status, 0, `${s.raw} exited ${s.status}
-${s.stderr}`);
+    for (const s of steps) assert.equal(s.status, 0, describeSpawn(s, `${s.raw} exited ${s.status}`));
     assert.ok(existsSync(join(dir, 'output', 'cv-jane-smith-acme-ats.html')),
       'output/cv-{candidate}-{company}-ats.html must be written under a spaced directory');
   } finally {
