@@ -148,6 +148,15 @@ function extractReportNum(reportStr) {
  * exists because they never mean the same application), so a bare number match
  * only counts when the rows also carry the same exact role title.
  *
+ * Two present-and-different report numbers rule identity out, whatever the
+ * tracker numbers say. Without that, the colliding-number artifact above
+ * reached the number+title rule: `#7 … Applied [12]` and `#7 … Evaluated
+ * [40]` became one identity, skipped the advanced-status guard, and the
+ * Applied row (its report link, PDF flag and date) was deleted, with "Applied"
+ * stamped onto the other posting's row. The same pair with distinct tracker
+ * numbers was kept with a warning. Ruled out here, it now reaches that same
+ * guard. A row with no report link still falls back to the number+title rule.
+ *
  * @param {object} a - First parsed applications.md row.
  * @param {object} b - Second parsed applications.md row.
  * @returns {boolean} True when both rows represent the same report identity.
@@ -156,6 +165,7 @@ function sameReportIdentity(a, b) {
   const reportA = extractReportNum(a.report);
   const reportB = extractReportNum(b.report);
   if (reportA !== null && reportA === reportB) return true;
+  if (reportA !== null && reportB !== null) return false;
   return a.num === b.num && normalizeRole(a.role) === normalizeRole(b.role);
 }
 
