@@ -13,7 +13,7 @@ Mode interaktif untuk saat kandidat mengisi formulir lamaran di browser Playwrig
 1. DETEKSI      -> Buka lowongan di browser Playwright proyek ini
 2. IDENTIFIKASI -> Ekstrak perusahaan + role dari halaman
 3. CARI         -> Cocokkan dengan report yang ada di reports/
-4. MUAT         -> Baca report lengkap + Blok H (jika ada)
+4. MUAT         -> Baca report lengkap + `## Application Answers` dan Blok H (jika ada)
 5. BANDINGKAN   -> Apakah role di layar cocok dengan yang dievaluasi? Jika berubah -> beri peringatan
 6. ANALISIS     -> Identifikasi SEMUA pertanyaan yang terlihat di formulir
 7. HASILKAN     -> Untuk tiap pertanyaan, hasilkan jawaban yang dipersonalisasi
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Ekstrak nama perusahaan dan jabatan dari halaman
 2. Cari di `reports/` berdasarkan nama perusahaan (Grep case-insensitive)
 3. Jika cocok -> muat report lengkap
-4. Jika ada Blok H -> muat draft jawaban sebelumnya sebagai dasar
+4. Jika ada `## Application Answers` -> muat jawaban yang sudah dikirim sebagai dasar; jika tidak, dan ada Blok H, draft jawaban sebelumnya. Jika keduanya ada, `## Application Answers` didahulukan
 5. Jika TIDAK cocok -> beri peringatan kepada kandidat dan tawarkan auto-pipeline cepat
 
 ## Langkah 3 -- Deteksi perubahan role
@@ -62,7 +62,7 @@ Identifikasi SEMUA pertanyaan yang terlihat:
 - Kolom unggah (CV, cover letter PDF, referensi)
 
 Klasifikasikan tiap pertanyaan:
-- **Sudah dijawab di Blok H** -> pakai kembali jawaban yang ada
+- **Sudah dijawab di `## Application Answers` atau Blok H** -> pakai kembali jawaban yang ada
 - **Pertanyaan baru** -> hasilkan jawaban dari report + `cv.md`
 
 ## Langkah 5 -- Hasilkan jawaban
@@ -70,7 +70,7 @@ Klasifikasikan tiap pertanyaan:
 Untuk tiap pertanyaan, susun jawaban mengikuti skema ini:
 
 1. **Konteks report**: Gunakan proof point dari blok B, story STAR dari blok F
-2. **Blok H sebelumnya**: Jika ada draft, jadikan dasar lalu perhalus
+2. **`## Application Answers` / Blok H sebelumnya**: Jika ada jawaban terkirim atau draft (jawaban terkirim lebih dulu), jadikan dasar lalu perhalus
 3. **Nada "Saya memilih Anda"**: kerangka yang sama seperti di auto-pipeline -- percaya diri, tidak memohon
 4. **Spesifisitas**: kutip sesuatu yang konkret dari lowongan yang terlihat di layar
 5. **Proof point career-ops**: sertakan di "Informasi tambahan" jika ada kolom semacam itu

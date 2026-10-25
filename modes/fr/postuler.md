@@ -13,7 +13,7 @@ Mode interactif pour le moment ou le candidat remplit un formulaire de candidatu
 1. DETECTER     -> Ouvrir l'offre dans le navigateur Playwright de ce projet
 2. IDENTIFIER   -> Extraire entreprise + role depuis la page
 3. RECHERCHER   -> Matcher avec les reports existants dans reports/
-4. CHARGER      -> Lire le report complet + Bloc H (si existant)
+4. CHARGER      -> Lire le report complet + `## Application Answers` et Bloc H (si existants)
 5. COMPARER     -> Le role a l'ecran correspond-il a celui evalue ? Si changement -> alerter
 6. ANALYSER     -> Identifier TOUTES les questions visibles du formulaire
 7. GENERER      -> Pour chaque question, generer une reponse personnalisee
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Extraire le nom de l'entreprise et le titre du poste depuis la page
 2. Chercher dans `reports/` par nom d'entreprise (Grep case-insensitive)
 3. Si match -> charger le report complet
-4. Si Bloc H present -> charger les brouillons de reponses precedents comme base
+4. Si `## Application Answers` est present -> charger les reponses envoyees comme base ; sinon, si le Bloc H est present, les brouillons precedents. Si les deux existent, `## Application Answers` prime
 5. Si PAS de match -> alerter le candidat et proposer un auto-pipeline rapide
 
 ## Etape 3 -- Detecter les changements de role
@@ -62,7 +62,7 @@ Identifier TOUTES les questions visibles :
 - Champs d'upload (CV, lettre de motivation PDF, references)
 
 Classifier chaque question :
-- **Deja repondue dans le Bloc H** -> reprendre la reponse existante
+- **Deja repondue dans `## Application Answers` ou le Bloc H** -> reprendre la reponse existante
 - **Nouvelle question** -> generer la reponse depuis le report + `cv.md`
 
 ## Etape 5 -- Generer les reponses
@@ -70,7 +70,7 @@ Classifier chaque question :
 Pour chaque question, construire la reponse selon ce schema :
 
 1. **Contexte du report** : Utiliser les proof points du bloc B, les stories STAR du bloc F
-2. **Bloc H precedent** : Si un brouillon existe, le prendre comme base et affiner
+2. **`## Application Answers` / Bloc H precedents** : Si une reponse envoyee ou un brouillon existe (reponse envoyee d'abord), le prendre comme base et affiner
 3. **Ton "Je vous choisis"** : meme framework que dans l'auto-pipeline -- confiant, pas suppliant
 4. **Specificite** : citer quelque chose de concret de l'offre visible a l'ecran
 5. **career-ops proof point** : inclure dans "Informations complementaires" si un tel champ existe

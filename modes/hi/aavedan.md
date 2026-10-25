@@ -13,7 +13,7 @@ Interactive mode जब candidate इस प्रोजेक्ट के Play
 1. DETECT     -> Is project ke Playwright browser mein posting kholen
 2. IDENTIFY   -> Page से company + role extract करें
 3. SEARCH     -> reports/ में existing reports से match करें
-4. LOAD       -> पूरा report + Block H (यदि मौजूद हो) पढ़ें
+4. LOAD       -> पूरा report + `## Application Answers` और Block H (यदि मौजूद हों) पढ़ें
 5. COMPARE    -> Screen का role evaluated role से match करता है? Change हो तो alert करें
 6. ANALYZE    -> Form के सभी visible questions identify करें
 7. GENERATE   -> हर question के लिए personalized response generate करें
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Page से company name और job title extract करें
 2. Company name से `reports/` में search करें (Grep case-insensitive)
 3. Match मिले → पूरा report load करें
-4. Block H मौजूद हो → previous draft responses को base के रूप में load करें
+4. `## Application Answers` मौजूद हो → submit किए गए responses को base के रूप में load करें; नहीं तो Block H मौजूद हो तो previous draft responses। दोनों हों तो `## Application Answers` पहले
 5. Match नहीं मिला → candidate को alert करें और quick auto-pipeline का सुझाव दें
 
 ## Step 3 -- Role Changes Detect करें
@@ -62,7 +62,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 - Upload fields (CV, cover letter PDF, references)
 
 हर question classify करें:
-- **Block H में already answered** → existing response reuse करें
+- **`## Application Answers` या Block H में already answered** → existing response reuse करें
 - **नया question** → report + `cv.md` से response generate करें
 
 ## Step 5 -- Responses Generate करें
@@ -70,7 +70,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 हर question के लिए इस schema से response बनाएं:
 
 1. **Report context**: Block B के proof points, Block F की STAR stories use करें
-2. **Previous Block H**: यदि draft मौजूद हो, उसे base लें और refine करें
+2. **Previous `## Application Answers` / Block H**: यदि submitted response या draft मौजूद हो (submitted पहले), उसे base लें और refine करें
 3. **"I choose you" tone**: Auto-pipeline जैसा framework — confident, गिड़गिड़ाहट नहीं
 4. **Specificity**: Screen पर visible offer से कुछ concrete cite करें
 5. **Career-ops proof point**: "Additional information" जैसा field हो तो include करें

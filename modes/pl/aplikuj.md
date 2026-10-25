@@ -13,7 +13,7 @@ Tryb interaktywny na moment, gdy kandydat wypełnia formularz aplikacyjny w prze
 1. WYKRYJ       -> Otwórz ogłoszenie w przeglądarce Playwright tego projektu
 2. ZIDENTYFIKUJ -> Wyciągnij firmę + rolę ze strony
 3. WYSZUKAJ     -> Dopasuj do istniejących reportów w reports/
-4. ZAŁADUJ      -> Przeczytaj pełny report + Blok H (jeśli istnieje)
+4. ZAŁADUJ      -> Przeczytaj pełny report + `## Application Answers` i Blok H (jeśli istnieją)
 5. PORÓWNAJ     -> Czy rola na ekranie odpowiada ocenionej? Jeśli zmiana -> ostrzeż
 6. PRZEANALIZUJ -> Zidentyfikuj WSZYSTKIE widoczne pytania formularza
 7. WYGENERUJ    -> Dla każdego pytania wygeneruj spersonalizowaną odpowiedź
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Wyciągnij nazwę firmy i tytuł stanowiska ze strony
 2. Wyszukaj w `reports/` po nazwie firmy (Grep case-insensitive)
 3. Jeśli dopasowanie -> załaduj pełny report
-4. Jeśli Blok H obecny -> załaduj poprzednie szkice odpowiedzi jako bazę
+4. Jeśli `## Application Answers` istnieje -> załaduj wysłane odpowiedzi jako bazę; w przeciwnym razie, jeśli jest Blok H, poprzednie szkice. Gdy są oba, pierwszeństwo ma `## Application Answers`
 5. Jeśli BRAK dopasowania -> ostrzeż kandydata i zaproponuj szybki auto-pipeline
 
 ## Krok 3 -- Wykryj zmiany roli
@@ -62,7 +62,7 @@ Zidentyfikuj WSZYSTKIE widoczne pytania:
 - Pola upload (CV, list motywacyjny PDF, referencje)
 
 Sklasyfikuj każde pytanie:
-- **Już odpowiedziane w Bloku H** -> wykorzystaj istniejącą odpowiedź
+- **Już odpowiedziane w `## Application Answers` lub w Bloku H** -> wykorzystaj istniejącą odpowiedź
 - **Nowe pytanie** -> wygeneruj odpowiedź z reportu + `cv.md`
 
 ## Krok 5 -- Wygeneruj odpowiedzi
@@ -70,7 +70,7 @@ Sklasyfikuj każde pytanie:
 Dla każdego pytania zbuduj odpowiedź według tego schematu:
 
 1. **Kontekst z reportu**: Użyj proof points z bloku B, historii STAR z bloku F
-2. **Poprzedni Blok H**: Jeśli szkic istnieje, weź go jako bazę i dopracuj
+2. **Poprzednie `## Application Answers` / Blok H**: Jeśli istnieje wysłana odpowiedź lub szkic (najpierw wysłana odpowiedź), weź go jako bazę i dopracuj
 3. **Ton "To ja wybieram Was"**: ten sam framework co w auto-pipeline -- pewny siebie, nie błagalny
 4. **Konkretność**: zacytuj coś konkretnego z oferty widocznej na ekranie
 5. **career-ops proof point**: dołącz w "Informacje dodatkowe", jeśli takie pole istnieje

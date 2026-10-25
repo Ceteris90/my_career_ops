@@ -13,7 +13,7 @@
 1. DETECT      -> 이 프로젝트의 Playwright 브라우저에서 공고 열기
 2. IDENTIFY    -> 페이지에서 회사 + 역할 추출
 3. SEARCH      -> reports/ 안의 기존 report와 매칭
-4. LOAD        -> 전체 report + 블록 H(있다면) 읽기
+4. LOAD        -> 전체 report + `## Application Answers`와 블록 H(있다면) 읽기
 5. COMPARE     -> 화면의 역할이 평가한 역할과 같은지 확인. 바뀌었다면 알림
 6. ANALYZE     -> 화면에 보이는 모든 지원서 질문 식별
 7. GENERATE    -> 각 질문에 대해 개인화 답변 생성
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. 페이지에서 회사명과 역할명을 추출합니다.
 2. `reports/`에서 회사명으로 검색합니다 (case-insensitive grep).
 3. 매칭되는 report가 있으면 전체 report를 불러옵니다.
-4. 블록 H가 있으면 이전 답변 초안을 base로 불러옵니다.
+4. `## Application Answers`가 있으면 제출한 답변을 base로 불러옵니다. 없고 블록 H가 있으면 이전 답변 초안을 불러옵니다. 둘 다 있으면 `## Application Answers`를 우선합니다.
 5. 매칭되는 report가 없으면 후보자에게 알리고 빠른 auto-pipeline 실행을 제안합니다.
 
 ## Step 3 -- 역할 변경 감지
@@ -62,7 +62,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 - 업로드 필드 (CV, 커버레터 PDF, 추천인 등)
 
 각 질문을 분류합니다.
-- **이미 블록 H에서 답변한 질문** -> 기존 답변을 가져와 조정
+- **이미 `## Application Answers` 또는 블록 H에서 답변한 질문** -> 기존 답변을 가져와 조정
 - **새 질문** -> report + `cv.md`를 바탕으로 답변 생성
 
 ## Step 5 -- 답변 생성
@@ -70,7 +70,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 각 질문에 대해 다음 구조로 답변을 만듭니다.
 
 1. **Report context**: 블록 B의 proof point와 블록 F의 STAR story 사용
-2. **이전 블록 H**: 기존 초안이 있으면 base로 가져와 다듬기
+2. **이전 `## Application Answers` / 블록 H**: 제출한 답변이나 기존 초안이 있으면(제출한 답변 우선) base로 가져와 다듬기
 3. **"제가 귀사를 선택합니다" 톤**: auto-pipeline과 같은 framework 사용 -- 자신감 있게, 애원하지 않게
 4. **구체성**: 화면에 보이는 공고 내용 중 구체적인 요소 언급
 5. **career-ops proof point**: "추가 정보" 같은 필드가 있으면 포함

@@ -13,7 +13,7 @@ Interaktiver Modus für den Moment, in dem der Kandidat ein Bewerbungsformular i
 1. ERKENNEN     → Stellenanzeige in der Playwright-Sitzung dieses Projekts öffnen
 2. IDENTIFIZIEREN → Firma + Rolle aus der Seite extrahieren
 3. SUCHEN       → mit bestehenden Reports unter reports/ abgleichen
-4. LADEN        → vollständigen Report lesen + Block H (falls vorhanden)
+4. LADEN        → vollständigen Report lesen + `## Application Answers` und Block H (falls vorhanden)
 5. VERGLEICHEN  → Stimmt die Rolle auf dem Bildschirm mit der bewerteten überein? Wenn sie sich geändert hat → warnen
 6. ANALYSIEREN  → ALLE sichtbaren Fragen des Formulars identifizieren
 7. ERZEUGEN     → Für jede Frage eine passgenaue Antwort generieren
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Firmennamen und Rollentitel von der Seite extrahieren
 2. In `reports/` per Grep (case-insensitive) nach dem Firmennamen suchen
 3. Bei Treffer → vollständigen Report laden
-4. Wenn Block H vorhanden ist → die früheren Draft-Antworten als Basis laden
+4. Wenn `## Application Answers` vorhanden ist → die abgeschickten Antworten als Basis laden; sonst, wenn Block H vorhanden ist, die früheren Draft-Antworten. Gibt es beide, hat `## Application Answers` Vorrang
 5. Wenn KEIN Treffer → den Kandidaten warnen und eine schnelle Auto-Pipeline anbieten
 
 ## Schritt 3 — Änderungen an der Rolle erkennen
@@ -62,7 +62,7 @@ ALLE sichtbaren Fragen identifizieren:
 - Upload-Felder (Lebenslauf, Anschreiben als PDF, Zeugnisse)
 
 Jede Frage klassifizieren:
-- **Bereits in Block H beantwortet** → bestehende Antwort übernehmen
+- **Bereits in `## Application Answers` oder Block H beantwortet** → bestehende Antwort übernehmen
 - **Neue Frage** → Antwort aus dem Report + `cv.md` generieren
 
 ## Schritt 5 — Antworten erzeugen
@@ -70,7 +70,7 @@ Jede Frage klassifizieren:
 Für jede Frage die Antwort nach folgendem Schema bauen:
 
 1. **Kontext aus dem Report**: Proof Points aus Block B, STAR-Stories aus Block F nutzen
-2. **Vorheriger Block H**: Wenn ein Draft existiert, als Basis nehmen und nachschärfen
+2. **Vorherige `## Application Answers` / Block H**: Wenn eine abgeschickte Antwort oder ein Draft existiert (abgeschickte Antwort zuerst), als Basis nehmen und nachschärfen
 3. **Ton "Ich entscheide mich für euch"**: gleiches Framework wie in der Auto-Pipeline — selbstbewusst, nicht bittend
 4. **Spezifität**: etwas Konkretes aus der sichtbaren Stellenanzeige zitieren
 5. **career-ops Proof Point**: in "Zusätzliche Informationen" einbauen, falls ein solches Feld existiert

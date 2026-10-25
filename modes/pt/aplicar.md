@@ -13,7 +13,7 @@ Modo interativo para quando o candidato está preenchendo um formulário de cand
 1. DETECTAR    → Abrir a vaga no navegador Playwright deste projeto
 2. IDENTIFICAR → Extrair empresa + vaga da página
 3. BUSCAR      → Match contra reports existentes em reports/
-4. CARREGAR    → Ler report completo + Bloco H (se existir)
+4. CARREGAR    → Ler report completo + `## Application Answers` e Bloco H (se existirem)
 5. COMPARAR    → A vaga na tela coincide com a avaliada? Se mudou → avisar
 6. ANALISAR    → Identificar TODAS as perguntas visíveis do formulário
 7. GERAR       → Para cada pergunta, gerar resposta personalizada
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Extrair nome da empresa e título da vaga da página
 2. Buscar em `reports/` pelo nome da empresa (Grep case-insensitive)
 3. Se houver match → carregar o report completo
-4. Se houver Bloco H → carregar os rascunhos de respostas anteriores como base
+4. Se houver `## Application Answers` → carregar as respostas enviadas como base; senão, se houver Bloco H, os rascunhos anteriores. Se existirem os dois, `## Application Answers` tem prioridade
 5. Se NÃO houver match → avisar e oferecer executar auto-pipeline rápida
 
 ## Passo 3 -- Detectar mudanças na vaga
@@ -62,7 +62,7 @@ Identificar TODAS as perguntas visíveis:
 - Campos de upload (currículo, carta de apresentação em PDF)
 
 Classificar cada pergunta:
-- **Já respondida no Bloco H** → adaptar a resposta existente
+- **Já respondida em `## Application Answers` ou no Bloco H** → adaptar a resposta existente
 - **Pergunta nova** → gerar resposta a partir do report + `cv.md`
 
 ## Passo 5 -- Gerar respostas
@@ -70,7 +70,7 @@ Classificar cada pergunta:
 Para cada pergunta, gerar a resposta seguindo:
 
 1. **Contexto do report**: Usar proof points do Bloco B, histórias STAR do Bloco F
-2. **Bloco H anterior**: Se existe um rascunho, usar como base e refinar
+2. **`## Application Answers` / Bloco H anteriores**: Se existe uma resposta enviada ou um rascunho (resposta enviada primeiro), usar como base e refinar
 3. **Tom "Estou escolhendo vocês"**: Mesmo framework da auto-pipeline — confiante, não suplicante
 4. **Especificidade**: Referenciar algo concreto do JD visível na tela
 5. **career-ops proof point**: Incluir em "Informações adicionais" se houver campo para isso

@@ -13,7 +13,7 @@ Modalità interattiva per quando il candidato compila un modulo di candidatura (
 1. RILEVARE      -> Leggere la scheda attiva del browser (screenshot/URL/titolo)
 2. IDENTIFICARE  -> Estrarre azienda + ruolo dalla pagina
 3. CERCARE       -> Trovare corrispondenze con i report esistenti in reports/
-4. CARICARE      -> Leggere il report completo + Blocco H (se esiste)
+4. CARICARE      -> Leggere il report completo + `## Application Answers` e Blocco H (se esistono)
 5. CONFRONTARE   -> Il ruolo a schermo corrisponde a quello valutato? Se cambia -> avvisare
 6. ANALIZZARE    -> Identificare TUTTE le domande visibili nel modulo
 7. GENERARE      -> Per ogni domanda, generare una risposta personalizzata
@@ -34,7 +34,7 @@ Modalità interattiva per quando il candidato compila un modulo di candidatura (
 1. Estrarre il nome dell'azienda e il titolo del ruolo dalla pagina.
 2. Cercare in `reports/` per nome azienda (Grep case-insensitive).
 3. Se c'è corrispondenza -> caricare il report completo.
-4. Se il Blocco H è presente -> usare le bozze precedenti come base di partenza.
+4. Se `## Application Answers` è presente -> usare le risposte inviate come base; altrimenti, se il Blocco H è presente, le bozze precedenti. Se esistono entrambi, prevale `## Application Answers`.
 5. Se NON c'è corrispondenza -> avvisare il candidato e proporre un auto-pipeline rapido.
 
 ## Fase 3 -- Rilevare variazioni nel ruolo
@@ -57,7 +57,7 @@ Identificare tutte le domande visibili a schermo:
 - Campi di upload (CV, lettera di presentazione PDF, referenze)
 
 Classificare ogni domanda:
-- **Già nel Blocco H:** riprendere la risposta esistente
+- **Già in `## Application Answers` o nel Blocco H:** riprendere la risposta esistente
 - **Nuova domanda:** generare la risposta partendo dal report e da `cv.md`
 
 ## Fase 5 -- Generare le risposte
@@ -65,7 +65,7 @@ Classificare ogni domanda:
 Per ogni domanda, costruire la risposta seguendo questo schema:
 
 1. **Contesto del report:** usare i proof point del Blocco B e le storie STAR del Blocco F.
-2. **Blocco H precedente:** se esiste una bozza, usarla come base e affinarla.
+2. **`## Application Answers` / Blocco H precedenti:** se esiste una risposta inviata o una bozza (prima la risposta inviata), usarla come base e affinarla.
 3. **Tono "Vi scelgo":** sicuro e professionale, non implorante né puramente descrittivo.
 4. **Specificità:** citare qualcosa di concreto dell'annuncio visibile a schermo.
 5. **career-ops proof point:** includerlo nel campo "Informazioni aggiuntive" se presente nel modulo.

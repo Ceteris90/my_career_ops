@@ -13,7 +13,7 @@ Interaktiv mode til det øjeblik, hvor kandidaten udfylder en ansøgningsformula
 1. DETEKTÉR     -> Åbn opslaget i dette projekts Playwright-browser
 2. IDENTIFICÉR  -> Udtræk virksomhed + rolle fra siden
 3. SØG          -> Match mod eksisterende reports i reports/
-4. INDLÆS       -> Læs den fulde report + Blok H (hvis den findes)
+4. INDLÆS       -> Læs den fulde report + `## Application Answers` og Blok H (hvis de findes)
 5. SAMMENLIGN   -> Svarer rollen på skærmen til den evaluerede? Hvis ændret -> advar
 6. ANALYSÉR     -> Identificér ALLE synlige spørgsmål i formularen
 7. GENERÉR      -> Generér et personaliseret svar til hvert spørgsmål
@@ -39,7 +39,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 1. Udtræk virksomhedens navn og stillingstitlen fra siden
 2. Søg i `reports/` efter virksomhedsnavn (Grep case-insensitive)
 3. Hvis match -> indlæs den fulde report
-4. Hvis Blok H findes -> indlæs de tidligere svar-udkast som grundlag
+4. Hvis `## Application Answers` findes -> indlæs de svar, der blev sendt, som grundlag; ellers, hvis Blok H findes, de tidligere svar-udkast. Findes begge, går `## Application Answers` forud
 5. Hvis INTET match -> advar kandidaten og foreslå en hurtig auto-pipeline
 
 ## Trin 3 -- Detektér rolleændringer
@@ -62,7 +62,7 @@ Identificér ALLE synlige spørgsmål:
 - Upload-felter (CV, følgebrev som PDF, referencer)
 
 Klassificér hvert spørgsmål:
-- **Allerede besvaret i Blok H** -> genbrug det eksisterende svar
+- **Allerede besvaret i `## Application Answers` eller Blok H** -> genbrug det eksisterende svar
 - **Nyt spørgsmål** -> generér svaret fra report + `cv.md`
 
 ## Trin 5 -- Generér svarene
@@ -70,7 +70,7 @@ Klassificér hvert spørgsmål:
 For hvert spørgsmål, byg svaret efter dette skema:
 
 1. **Kontekst fra report**: Brug proof points fra blok B, STAR-stories fra blok F
-2. **Tidligere Blok H**: Hvis et udkast findes, så brug det som grundlag og finpuds
+2. **Tidligere `## Application Answers` / Blok H**: Hvis et sendt svar eller et udkast findes (sendt svar først), så brug det som grundlag og finpuds
 3. **Tonen "Jeg vælger jer"**: samme framework som i auto-pipeline -- selvsikker, ikke bønfaldende
 4. **Specificitet**: citér noget konkret fra opslaget, der er synligt på skærmen
 5. **career-ops proof point**: inkludér i "Yderligere oplysninger", hvis et sådant felt findes

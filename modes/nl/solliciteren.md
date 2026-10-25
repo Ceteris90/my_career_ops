@@ -13,7 +13,7 @@ Interactieve modus voor wanneer de kandidaat een sollicitatieformulier invult in
 1. DETECTEREN     -> Open de vacature in de Playwright-browser van dit project
 2. IDENTIFICEREN  -> Haal bedrijf en functie uit de pagina
 3. ZOEKEN         -> Zoek een match in de bestaande rapporten in reports/
-4. LADEN          -> Lees het volledige rapport en blok H (indien aanwezig)
+4. LADEN          -> Lees het volledige rapport, `## Application Answers` en blok H (indien aanwezig)
 5. VERGELIJKEN    -> Komt de functie overeen met de evaluatie? Waarschuw bij wijzigingen
 6. ANALYSEREN     -> Identificeer ALLE zichtbare vragen in het formulier
 7. GENEREREN      -> Genereer voor elke vraag een persoonlijk antwoord
@@ -40,7 +40,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 2. Zoek in `reports/` met een genormaliseerde combinatie van bedrijfsnaam en functietitel (zonder onderscheid tussen hoofdletters en kleine letters of leestekens)
 3. Bevestig de match aan de hand van de vacature-URL wanneer die beschikbaar is. Als er daarna meerdere rapporten mogelijk blijven, vraag de kandidaat welk rapport bij het formulier hoort voordat je iets laadt
 4. Indien precies één gevalideerde match -> laad het volledige rapport
-5. Als Blok H aanwezig is -> laad eerdere conceptantwoorden als basis
+5. Als `## Application Answers` aanwezig is -> laad de verzonden antwoorden als basis; anders, als blok H aanwezig is, de eerdere conceptantwoorden. Zijn beide er, dan gaat `## Application Answers` voor
 6. Alleen indien er GEEN gevalideerde match is -> waarschuw de kandidaat en stel een snelle auto-pipeline voor
 
 ## Stap 3 -- Detecteer rolwijzigingen
@@ -61,7 +61,7 @@ Identificeer ALLE zichtbare vragen:
 - Upload velden (CV, pdf-sollicitatiebrief, referenties)
 
 Classificeer elke vraag:
-- **Al beantwoord in Blok H** -> herhaal het bestaande antwoord
+- **Al beantwoord in `## Application Answers` of blok H** -> herhaal het bestaande antwoord
 - **Nieuwe vraag** -> genereer het antwoord uit het rapport + `cv.md`
 
 ## Stap 5 -- Genereer de antwoorden
@@ -71,7 +71,7 @@ Classificeer elke vraag:
 Construeer voor elke vraag het antwoord volgens dit diagram:
 
 1. **Context van het rapport**: Gebruik de proof points uit blok B, de STAR-verhalen uit blok F
-2. **Vorig blok H**: Als er een concept bestaat, neem dit dan als basis en verfijn het
+2. **Vorige `## Application Answers` / blok H**: Als er een verzonden antwoord of een concept bestaat (verzonden antwoord eerst), neem dit dan als basis en verfijn het
 3. **“Ik kies jou”-toon**: hetzelfde raamwerk als in de automatische pipeline: zelfverzekerd, niet smekend
 4. **Specificiteit**: citeer iets concreets uit de zichtbare vacaturetekst of uit het gevalideerde rapport. Als geen van beide de benodigde informatie bevat, vraag dan eerst om de vacaturetekst; verzin nooit details
 5. **career-ops proof point**: vermeld dit in 'Aanvullende informatie' als dat veld bestaat, maar alleen wanneer het afkomstig is uit het gevalideerde rapport, `cv.md`, `config/profile.yml` of de huidige conversatie. Laat de kandidaat het bevestigen voordat je het presenteert en gebruik geen onbewezen claims of metrics
