@@ -119,10 +119,12 @@ function heading(line) {
     || (match[1].startsWith(name) && /^[ \t]/.test(match[1].slice(name.length)))) ?? null;
 }
 
+const isReportTemplate = lines => lines.some(line => heading(line) === 'A)');
+
 function reportTemplates(text) {
   return fenceParts(withoutComments(text)).blocks
     .map(body => fenceParts(body).visible)
-    .filter(lines => lines.some(line => heading(line) === 'A)'));
+    .filter(isReportTemplate);
 }
 
 /** Missing or malformed parts of the single fenced report-format template.
@@ -156,7 +158,9 @@ export function structuralGaps(text) {
 
 /** Missing parts of the ATS keyword-coverage contract (modes/oferta.md step 1b).
  * The heading stays English in every locale, and the step's command names a
- * real report path, unlike the template's `<report>` placeholder.
+ * real report path, unlike the template's `<report>` placeholder. The step may
+ * sit in prose or in its own fence (modes/oferta.md uses a bash fence), but not
+ * in the report template, which is report output rather than an instruction.
  * @param {string} text Mode documentation.
  * @returns {string[]} Empty when the template and the step are both present.
  */
@@ -167,6 +171,8 @@ export function keywordCoverageGaps(text) {
   const count = templates[0].filter(line => /^ {0,3}##[ \t]+Keyword Coverage[ \t]*$/.test(line)).length;
   if (count === 0) gaps.push('## Keyword Coverage');
   else if (count > 1) gaps.push('duplicate ## Keyword Coverage');
-  if (!withoutComments(text).includes('keyword-match.mjs reports/')) gaps.push('keyword-match.mjs step');
+  const { blocks, visible } = fenceParts(withoutComments(text));
+  const instructions = [...visible, ...blocks.filter(body => !isReportTemplate(fenceParts(body).visible))];
+  if (!instructions.join('\n').includes('keyword-match.mjs reports/')) gaps.push('keyword-match.mjs step');
   return gaps;
 }

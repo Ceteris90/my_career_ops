@@ -82,6 +82,11 @@ test('keyword coverage: the template placeholder, prose and comments cannot stan
   const block = '## Keyword Coverage\n(from `node keyword-match.mjs <report>`)\n';
   assert.deepEqual(keywordCoverageGaps(mode(REPORT + block) + step), []);
   assert.deepEqual(keywordCoverageGaps(mode(REPORT + block)), ['keyword-match.mjs step']);
+  // The report template is output, so a command written only there is no step.
+  assert.deepEqual(keywordCoverageGaps(mode(REPORT + block + step)), ['keyword-match.mjs step']);
+  // The step may have its own fence, as modes/oferta.md's bash block does.
+  assert.deepEqual(keywordCoverageGaps(
+    `${mode(REPORT + block)}\n\`\`\`bash\nnode keyword-match.mjs reports/{###}-{slug}-{date}.md\n\`\`\`\n`), []);
   assert.deepEqual(keywordCoverageGaps(mode(REPORT) + step), ['## Keyword Coverage']);
   assert.deepEqual(keywordCoverageGaps(`${mode(REPORT)}\n${block}${step}`), ['## Keyword Coverage']);
   assert.deepEqual(keywordCoverageGaps(mode(REPORT + block + block) + step), ['duplicate ## Keyword Coverage']);
