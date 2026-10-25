@@ -149,7 +149,7 @@ function codeRootNames(src) {
 
 /** Lines that join or resolve a user-layer path onto a code-root name. */
 function userLayerJoins(src) {
-  const names = [...codeRootNames(src)].map((n) => n.replace(/[.$]/g, '\\$&')).join('|');
+  const names = [...codeRootNames(src)].map((n) => n.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('|');
   const USER_LAYER = new RegExp(
     `(?:^|[^\\w$.])(?:path\\.)?(?:join|resolve)\\(\\s*(?:${names})\\s*,\\s*['"\`](?:data|interview-prep|reports|output|jds|documents)[/'"\`]`,
   );
