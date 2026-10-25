@@ -151,7 +151,8 @@ export default {
     /** @type {any[]} */
     const jobs = [];
     const seen = new Set();
-    // complete | cap | fetch-error — drives the warning and the marker below.
+    // complete | cap | fetch-error | no-progress — drives the warning and the
+    // marker below.
     let stopReason = 'complete';
     let lastRawCount = 0;
     let page = 1;
@@ -174,10 +175,19 @@ export default {
       lastRawCount = rawCount;
       // New posts shift WordPress paging, so a posting can repeat on the
       // next page; keep the first.
+      const before = jobs.length;
       for (const job of pageJobs) {
         if (seen.has(job.url)) continue;
         seen.add(job.url);
         jobs.push(job);
+      }
+      // A full later page with nothing new means the board (or a cache in
+      // front of it) ignores `paged` and serves page 1 again. Walking on would
+      // repeat it up to max_pages and then blame the cap.
+      if (page > 1 && rawCount >= PAGE_SIZE && jobs.length === before) {
+        console.error(`⚠️  wp-job-manager: ${entry.name} page ${page} repeated earlier pages, so the board may ignore paged= (${jobs.length} jobs kept)`);
+        stopReason = 'no-progress';
+        break;
       }
       // Stop on the feed's own item count, not on what survived parsing.
       if (rawCount < PAGE_SIZE) break;

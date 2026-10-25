@@ -144,6 +144,18 @@ try {
   }
 
   {
+    // A board (or a cache in front of it) that ignores paged= serves page 1 forever.
+    const { ctx, calls } = makeCtx(Array.from({ length: 30 }, () => fullPage(1)));
+    let out;
+    const { errors } = await captureConsoleErrors(async () => { out = await wpjm.fetch(ENTRY, ctx); });
+    const text = errors.join('\n');
+    if (calls.length === 2 && out.length === 100 && out.wpJobManagerTruncated === true
+      && /ignore paged=/.test(text) && !/raise max_pages/.test(text)) {
+      pass('a full page with nothing new stops the walk and warns the board may ignore paged=');
+    } else fail(`calls=${calls.length} jobs=${out?.length} truncated=${out?.wpJobManagerTruncated} stderr=${text}`);
+  }
+
+  {
     const pages = Array.from({ length: 30 }, (_, i) => fullPage(1 + i * 100));
     const { ctx, calls } = makeCtx(pages);
     let out;
