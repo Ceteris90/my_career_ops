@@ -39,7 +39,7 @@ function holder(lockDir, { nested = false } = {}) {
     }
     await new Promise((resolve) => process.stdin.once('data', resolve));
     console.log('DONE ' + Date.now());
-    process.exit(0);
+    process.stdin.destroy(); // the only handle left, so the child ends here
   `;
   const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
     env: { ...process.env, CAREER_OPS_TEST_QUEUE: '', CAREER_OPS_TEST_QUEUE_LOCK: lockDir },
