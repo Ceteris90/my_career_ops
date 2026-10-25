@@ -25,7 +25,7 @@ const LOCALES = [
   { file: 'modes/fr/offre.md', score: '**Score:** {X/5}', decision: '**Décision:** {Postuler | Envisager | Chercher d\'abord | Passer}', lede: '{la phrase postuler ou non, copiée telle quelle}', apply: 'Postuler' },
   { file: 'modes/hi/naukri.md', score: '**Score:** {X/5}', decision: '**निर्णय:** {आवेदन करें | विचार करें | पहले जाँचें | छोड़ें}', lede: '{आवेदन वाला वाक्य, ज्यों का त्यों}', apply: 'आवेदन करें' },
   { file: 'modes/id/lowongan.md', score: '**Score:** {X/5}', decision: '**Keputusan:** {Lamar | Pertimbangkan | Teliti dulu | Lewati}', lede: '{kalimat lamar atau tidak, disalin apa adanya}', apply: 'Lamar' },
-  { file: 'modes/it/annuncio.md', score: '**Punteggio:** {X/5}', decision: '**Decisione:** {Candidarsi | Valutare | Approfondire prima | Scartare}', lede: '{la frase candidarsi o no, copiata parola per parola}', apply: 'Candidarsi' },
+  { file: 'modes/it/annuncio.md', score: '**Score:** {X/5}', decision: '**Decisione:** {Candidarsi | Valutare | Approfondire prima | Scartare}', lede: '{la frase candidarsi o no, copiata parola per parola}', apply: 'Candidarsi' },
   { file: 'modes/ja/kyujin.md', score: '**Score:** {X/5}', decision: '**決定:** {応募する | 検討する | 先に調べる | 見送る}', lede: '{`## 判定 (lead)` の一文をそのまま写す}', apply: '応募する' },
   { file: 'modes/ko/gonggo.md', score: '**Score:** {X/5}', decision: '**결정:** {지원 | 검토 | 먼저 조사 | 건너뛰기}', lede: '{지원 여부를 한 문장으로, 그대로 복사}', apply: '지원' },
   { file: 'modes/nl/vacature.md', score: '**Score:** {X/5}', decision: '**Beslissing:** {Solliciteren | Overwegen | Eerst onderzoeken | Overslaan}', lede: '{de zin over wel of niet solliciteren, woordelijk gekopieerd}', apply: 'Solliciteren' },
