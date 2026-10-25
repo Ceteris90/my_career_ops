@@ -29,13 +29,23 @@ function holder(lockDir, holdMs, { env = {} } = {}) {
     env: { ...process.env, CAREER_OPS_TEST_QUEUE: '', CAREER_OPS_TEST_QUEUE_LOCK: lockDir, ...env },
   });
   let out = '';
-  child.stdout.on('data', (d) => { out += d; });
+  let markHeld;
+  const held = new Promise((resolve, reject) => {
+    markHeld = resolve;
+    // A child that dies before it holds the queue (a failed import, a lock it
+    // could not take) must fail the case that is waiting on it, with its own
+    // output, rather than leave that case waiting for a line that never comes.
+    child.on('close', (status, signal) => reject(new Error(`holder exited before holding the queue (${status ?? signal}):\n${out}`)));
+  });
+  // Settled by whichever case awaits it; one that never does still learns of a
+  // failed child from `done`'s exit status.
+  held.catch(() => {});
+  child.stdout.on('data', (d) => {
+    out += d;
+    if (out.includes('HELD ')) markHeld();
+  });
   child.stderr.on('data', (d) => { out += d; });
   const done = new Promise((resolve) => child.on('close', (status) => resolve({ status, out })));
-  const held = new Promise((resolve) => {
-    const look = () => (out.includes('HELD ') ? resolve() : setTimeout(look, 10));
-    look();
-  });
   return { child, done, held };
 }
 
