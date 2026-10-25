@@ -2,7 +2,7 @@
 // tier in the header. Reports carry the tier in the language their evaluation
 // mode writes it in, so each locale's tier names need their own case here.
 //
-// Run:  node --test tests/lib/format-legitimacy-tone.test.mjs
+// Run:  node --experimental-strip-types --test tests/lib/format-legitimacy-tone.test.mjs
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
