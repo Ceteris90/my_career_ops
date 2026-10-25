@@ -296,8 +296,36 @@ function fail(message, code = 2) {
   process.exit(code);
 }
 
+/**
+ * Contents of a file that may legitimately not exist yet.
+ *
+ * ENOENT is the only failure that means '' here. A user who has never logged a
+ * follow-up has no data/follow-ups.md, and that absence is real information:
+ * the open-follow-up gate genuinely has nothing to say about any row.
+ *
+ * Every OTHER failure means the file is THERE and could not be read, and ''
+ * would be a lie with teeth. All three of this script's skip signals are read
+ * through here — the open-follow-up gate, the active-interview gate and the
+ * status-log gate — and each one skips a row by finding evidence IN the file.
+ * No evidence found is indistinguishable from no file, so an unreadable
+ * follow-ups file does not stop the run: it silently switches off the
+ * protection and keeps closing rows. With --confirm that writes `Discarded`
+ * over applications the user is still following up on, or still interviewing
+ * for, which is the one outcome this script's own header promises cannot
+ * happen.
+ *
+ * So anything that is not ENOENT ends the run. A gate that cannot be evaluated
+ * is not a gate that passed.
+ */
 function readIfExists(path) {
-  try { return existsSync(path) ? readFileSync(path, 'utf-8') : ''; } catch { return ''; }
+  try {
+    return readFileSync(path, 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return '';
+    fail(`cannot read ${path}: ${err.message}. This file decides which rows are skipped, `
+      + 'so closing rows without it would disable that check rather than apply it.');
+    return '';  // unreachable: fail() exits
+  }
 }
 
 function loadContext({ dataRoot, trackerPath, today, days, states }) {
