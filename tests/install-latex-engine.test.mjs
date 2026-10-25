@@ -112,7 +112,7 @@ test('a download that does not match the pinned digest installs nothing', async 
     const result = await installTectonic({
       root, platform: 'linux', arch: 'x64', fetchImpl: impl, detectEngine: () => null,
     });
-    assert.equal(result.status, 'checksum-mismatch');
+    assert.equal(result.status, 'checksum-mismatch', describeSpawn(result));
     assert.equal(calls.length, 1);
     assert.deepEqual(readdirSync(root), [], 'something was written to the install root');
   } finally {
@@ -127,7 +127,7 @@ test('an HTTP error is reported as a failure, not a crash', async () => {
     const result = await installTectonic({
       root, platform: 'linux', arch: 'x64', fetchImpl: impl, detectEngine: () => null,
     });
-    assert.equal(result.status, 'failed');
+    assert.equal(result.status, 'failed', describeSpawn(result));
     assert.match(result.error, /HTTP 404/);
     assert.deepEqual(readdirSync(root), []);
   } finally {
@@ -140,7 +140,7 @@ test('an unsupported platform never downloads and points at manual install', asy
   const result = await installTectonic({
     platform: 'freebsd', arch: 'x64', fetchImpl: impl, detectEngine: () => null,
   });
-  assert.equal(result.status, 'unsupported-platform');
+  assert.equal(result.status, 'unsupported-platform', describeSpawn(result));
   assert.match(result.error, /install tectonic or pdflatex manually/i);
   assert.equal(calls.length, 0);
 });
@@ -157,7 +157,7 @@ test('tectonic that is already available short-circuits without downloading', as
 test('a host with only pdflatex still gets tectonic', async () => {
   const { impl, calls } = fakeFetch('x');
   const { result } = await installInEmptyRoot({ fetchImpl: impl, detectEngine: () => 'pdflatex' });
-  assert.equal(result.status, 'checksum-mismatch', 'the download did not run');
+  assert.equal(result.status, 'checksum-mismatch', describeSpawn(result, 'the download did not run'));
   assert.equal(calls.length, 1);
 });
 
@@ -165,7 +165,7 @@ test('a download that never answers times out instead of hanging', async () => {
   const { result, written } = await installInEmptyRoot({
     timeoutMs: 50, fetchImpl: () => new Promise(() => {}),
   });
-  assert.equal(result.status, 'failed');
+  assert.equal(result.status, 'failed', describeSpawn(result));
   assert.match(result.error, /timed out/);
   assert.deepEqual(written, []);
 });
@@ -176,7 +176,7 @@ test('a body that stalls mid-download times out too', async () => {
   const { result, written } = await installInEmptyRoot({
     timeoutMs: 50, fetchImpl: async (_url, init) => { signal = init.signal; return new Response(stalled); },
   });
-  assert.equal(result.status, 'failed');
+  assert.equal(result.status, 'failed', describeSpawn(result));
   assert.match(result.error, /timed out/);
   assert.equal(signal.aborted, true, 'the fetch was not aborted');
   assert.deepEqual(written, []);
@@ -188,7 +188,7 @@ test('a declared Content-Length over the cap is refused before reading the body'
     maxBytes: 4096,
     fetchImpl: async () => new Response(stream, { headers: { 'content-length': String(10 * 1024 * 1024) } }),
   });
-  assert.equal(result.status, 'failed');
+  assert.equal(result.status, 'failed', describeSpawn(result));
   assert.match(result.error, /exceeds/);
   assert.equal(counter.pulls, 0, 'the body was read anyway');
   assert.deepEqual(written, []);
@@ -199,7 +199,7 @@ test('an undeclared body that runs past the cap stops being read', async () => {
   const { result, written } = await installInEmptyRoot({
     maxBytes: 4096, fetchImpl: async () => new Response(stream),
   });
-  assert.equal(result.status, 'failed');
+  assert.equal(result.status, 'failed', describeSpawn(result));
   assert.match(result.error, /exceeds/);
   assert.ok(counter.pulls <= 6, `read ${counter.pulls} KB against a 4 KB cap`);
   assert.deepEqual(written, []);
@@ -211,7 +211,7 @@ test('--force skips the already-available short-circuit', async () => {
     platform: 'linux', arch: 'x64', force: true, fetchImpl: impl,
     detectEngine: () => { throw new Error('detectEngine must not run under --force'); },
   });
-  assert.equal(result.status, 'checksum-mismatch');
+  assert.equal(result.status, 'checksum-mismatch', describeSpawn(result));
   assert.equal(calls.length, 1);
 });
 
@@ -248,7 +248,7 @@ for (const [name, probeResult] of [['a binary that does not run', null], ['a bin
       });
       assert.equal(probed.length, 1);
       assert.notEqual(probed[0], target, 'the probe ran against the live target, not a staged copy');
-      assert.equal(result.status, probeResult ? 'installed' : 'failed');
+      assert.equal(result.status, probeResult ? 'installed' : 'failed', describeSpawn(result));
       assert.equal(readFileSync(target, 'utf-8'), probeResult ? 'new' : 'old');
       assert.deepEqual(readdirSync(root), [basename(target)]);
     } finally {
@@ -269,7 +269,7 @@ test('install-latex-engine --help prints usage and exits 0', () => {
 
 test('install-latex-engine rejects an unrecognized flag before doing anything', () => {
   const result = run(SCRIPT, ['--chekc']);
-  assert.equal(result.status, 1);
+  assert.equal(result.status, 1, describeSpawn(result));
   assert.match(result.all, /unrecognized flag\(s\): --chekc/i);
   assert.doesNotMatch(result.all, /Downloading/);
 });
