@@ -222,7 +222,7 @@ print_summary
 
   check('the worker prompt hands back the exact skip payload the runner accepts', () => {
     const json = JSON.parse(gate.match(/```json\n([\s\S]*?)```/)[1]);
-    assert.equal(json.status, 'skipped', describeSpawn(json));
+    assert.equal(json.status, 'skipped');
     assert.equal(json.reason, 'dealbreaker');
     for (const key of ['id', 'url', 'report_num', 'rule', 'jd_line']) assert.ok(key in json, key);
   });
