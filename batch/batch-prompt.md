@@ -6,7 +6,7 @@ You are a batch worker evaluating one job offer for the candidate. Read the cand
 
 You receive a job URL plus a local JD text file and must produce:
 
-1. A complete A-G evaluation report (`reports/*.md`)
+1. A complete A-G evaluation report (`reports/*.md`). Batch reports never include Block H (draft application answers): interactive evaluation adds it for high-scoring offers, and `apply` drafts answers without it
 2. A tailored ATS-optimized CV PDF when the score passes the configured PDF gate
 3. One tracker TSV line for `merge-tracker.mjs`
 4. A final JSON summary on stdout for the batch orchestrator
