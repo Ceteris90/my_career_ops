@@ -52,7 +52,7 @@ function fixture(t) {
 }
 
 function assertMiss(result) {
-  assert.equal(result.status, 'miss', describeSpawn(result));
+  assert.equal(result.status, 'miss');
   assert.equal(typeof result.reason, 'string');
   assert.ok(result.reason.length > 0);
   assert.equal(result.payload, undefined);
@@ -130,7 +130,7 @@ test('authoritatively resolved aliases reuse the same key with liveness bound to
   assert.equal(identity.listingKey(alias), identity.listingKey(f.fingerprint));
   assertMiss(await lookupJobFacts({ ...f.args, fingerprint: alias }));
   const result = await lookupJobFacts({ ...f.args, fingerprint: alias, liveness: { ...f.liveness, url: aliasUrl, listing_fingerprint: alias } });
-  assert.equal(result.status, 'hit', describeSpawn(result));
+  assert.equal(result.status, 'hit');
   assert.deepEqual(result.payload.job_facts, FACTS);
 });
 
@@ -273,7 +273,7 @@ test('deleting the newest invalidated report cannot revive an older duplicate', 
   assertMiss(await lookupJobFacts(after));
   f.write('003-recaptured.md', { captured_at: iso(NOW + 1000) });
   const result = await lookupJobFacts(after);
-  assert.equal(result.status, 'hit', describeSpawn(result));
+  assert.equal(result.status, 'hit');
   assert.equal(result.payload.captured_at, iso(NOW + 1000));
 });
 
@@ -320,7 +320,7 @@ test('invalidation preserves valid opaque identifiers containing replacement met
   });
   const path = f.write('001-example.md', { listing_fingerprint: fingerprint });
   const result = await invalidateJobFacts({ ...f.args, fingerprint, liveness: { ...f.liveness, url, listing_fingerprint: fingerprint, result: 'expired', code: 'expired_body' } });
-  assert.equal(result.status, 'invalidated', describeSpawn(result));
+  assert.equal(result.status, 'invalidated');
   const parsed = yamlLoad(readFileSync(path, 'utf8').match(/```yaml\n([\s\S]*?)\n```/)[1]);
   assert.deepEqual(parsed.job_facts_cache.listing_fingerprint, fingerprint);
   assert.equal(parsed.job_facts_cache.invalidated_at, iso(NOW));
