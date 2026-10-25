@@ -136,6 +136,21 @@ export function applyLineLabel(score, legitimacy) {
 }
 
 /**
+ * Block-G legitimacy tier → badge tone. Matches the same localized tiers as
+ * flaggedPosting (English, Spanish, Chinese).
+ *
+ * @param {string} l
+ * @returns {"good" | "warn" | "bad" | "muted"}
+ */
+export function legitimacyTone(l) {
+  const s = l.toLowerCase();
+  if (s.includes("high") || s.includes("confian") || s.includes("legit") || s.includes("高置信") || s.includes("高信心")) return "good";
+  if (s.includes("caution") || s.includes("precau") || s.includes("caut") || s.includes("谨慎") || s.includes("審慎")) return "warn";
+  if (s.includes("suspic") || s.includes("sospech") || s.includes("scam") || s.includes("fake") || s.includes("疑似")) return "bad";
+  return "muted";
+}
+
+/**
  * Apply is the primary CTA only when the methodology says apply. Below 4.0 or
  * a caution/suspicious legitimacy tier, keep the control but drop brand fill
  * so it does not out-shout the verdict (#4206).

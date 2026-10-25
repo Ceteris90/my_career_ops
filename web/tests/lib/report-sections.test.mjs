@@ -14,6 +14,7 @@ import {
   cleanHeading,
   firstProseParagraph,
   isLeadSection,
+  legitimacyTone,
   isVerdictHeading,
   splitSections,
   sectionPreview,
@@ -255,6 +256,19 @@ test("applyLineLabel: Chinese legitimacy tiers flag the posting too", () => {
   assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "疑似虚假" }), true);
   assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "審慎推進" }), true);
   assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "高信心" }), false);
+});
+
+test("legitimacyTone: English and Chinese tiers map to good / warn / bad", () => {
+  assert.equal(legitimacyTone("High Confidence"), "good");
+  assert.equal(legitimacyTone("Proceed with Caution"), "warn");
+  assert.equal(legitimacyTone("Suspicious"), "bad");
+  assert.equal(legitimacyTone("高置信度"), "good");
+  assert.equal(legitimacyTone("谨慎推进"), "warn");
+  assert.equal(legitimacyTone("疑似虚假"), "bad");
+  assert.equal(legitimacyTone("高信心"), "good");
+  assert.equal(legitimacyTone("審慎推進"), "warn");
+  assert.equal(legitimacyTone("疑似虛假"), "bad");
+  assert.equal(legitimacyTone("unknown"), "muted");
 });
 
 test("applyCtaQuiet: below the apply line or caution legitimacy", () => {
