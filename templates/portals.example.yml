@@ -2107,6 +2107,18 @@ search_queries:
 #     careers_url: https://jobs.lever.co/someagency
 #     aggregator: true
 
+# ── max_response_mb (optional, per entry) ─────────────────────────────
+# The scanner refuses a response body over 10 MB, so a broken or hostile
+# endpoint cannot fill its memory. A board that returns its whole catalogue,
+# descriptions included, in one response can be bigger, and the scan then
+# reports "HTTP body exceeded maxBytes" for it. Raise the cap for that entry
+# only, in megabytes. The value wins over any limit the provider sets; every
+# other entry keeps the default.
+#
+#   - name: BigCo
+#     careers_url: https://jobs.ashbyhq.com/bigco
+#     max_response_mb: 20
+
 tracked_companies:
 
   - name: YMCA of Greater Toronto

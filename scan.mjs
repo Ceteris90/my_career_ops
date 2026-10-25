@@ -3716,6 +3716,37 @@ export async function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH
   });
 }
 
+/**
+ * Apply an entry's `max_response_mb` to the ctx a provider fetches with.
+ *
+ * fetchJson / fetchText refuse a body over DEFAULT_MAX_BODY_BYTES (_http.mjs)
+ * unless the call passes `maxBytes`. A board that is legitimately bigger sets
+ * `max_response_mb` on its own portals.yml entry; the setting is the user's,
+ * so it wins over a `maxBytes` the provider passes, and every other entry
+ * keeps the default. An entry without the key, or with a value that is not a
+ * positive number, leaves the ctx as it is.
+ *
+ * @param {object} ctx - The per-entry ctx; fetchJson / fetchText are replaced in place.
+ * @param {{ name?: string, max_response_mb?: unknown }} entry
+ * @returns {object} The same ctx.
+ */
+export function applyEntryResponseCap(ctx, entry) {
+  const raw = entry?.max_response_mb;
+  if (raw === undefined || raw === null) return ctx;
+  const mb = Number(raw);
+  if (!Number.isFinite(mb) || mb <= 0) {
+    console.error(`⚠️  ${entry?.name}: max_response_mb must be a positive number, got ${JSON.stringify(raw)} — ignored`);
+    return ctx;
+  }
+  const maxBytes = Math.floor(mb * 1024 * 1024);
+  for (const method of ['fetchJson', 'fetchText']) {
+    const original = ctx[method];
+    if (typeof original !== 'function') continue;
+    ctx[method] = (url, opts = {}) => original(url, { ...opts, maxBytes });
+  }
+  return ctx;
+}
+
 export function loadPortalHealth(filePath = PORTAL_HEALTH_PATH) {
   if (!existsSync(filePath)) return [];
   const lines = readFileSync(filePath, 'utf-8').split('\n');
@@ -4408,6 +4439,7 @@ async function main() {
       ...(normalizeFilterOn(company.filter_on).includes('title') ? { titleWanted: (title) => titleFilter(title) } : {}),
       idCache: idCaches.forProvider(provider.id),
     };
+    applyEntryResponseCap(ctx, company);
     let sourceName = provider.id === 'local-parser' ? 'local-parser' : `${provider.id}-api`;
     try {
       let jobs;
