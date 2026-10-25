@@ -114,7 +114,9 @@ export const APPLY_LINE = 4.0;
 /** @param {unknown} legitimacy */
 function flaggedPosting(legitimacy) {
   const s = String(legitimacy ?? "").toLowerCase();
-  return /caut|precau|suspic|sospech|scam|fake/.test(s);
+  // Chinese reports (modes/zh/oferta.md, modes/zh-TW/oferta.md) write the tier in
+  // Chinese: 谨慎推进 / 審慎推進 (caution), 疑似虚假 / 疑似虛假 (suspicious).
+  return /caut|precau|suspic|sospech|scam|fake|谨慎|審慎|疑似/.test(s);
 }
 
 /**

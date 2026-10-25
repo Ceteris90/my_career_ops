@@ -244,6 +244,19 @@ test("applyLineLabel: a flagged posting above the line is not Recommended", () =
   assert.equal(applyLineLabel("3.1/5", "Proceed with Caution"), "Below the apply line");
 });
 
+test("applyLineLabel: Chinese legitimacy tiers flag the posting too", () => {
+  // modes/zh/oferta.md (Simplified) and modes/zh-TW/oferta.md (Traditional).
+  assert.equal(applyLineLabel("4.9/5", "谨慎推进"), "Check the posting first");
+  assert.equal(applyLineLabel("4.9/5", "疑似虚假"), "Check the posting first");
+  assert.equal(applyLineLabel("4.9/5", "高置信度"), "Recommended");
+  assert.equal(applyLineLabel("4.9/5", "審慎推進"), "Check the posting first");
+  assert.equal(applyLineLabel("4.9/5", "疑似虛假"), "Check the posting first");
+  assert.equal(applyLineLabel("4.9/5", "高信心"), "Recommended");
+  assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "疑似虚假" }), true);
+  assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "審慎推進" }), true);
+  assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "高信心" }), false);
+});
+
 test("applyCtaQuiet: below the apply line or caution legitimacy", () => {
   assert.equal(applyCtaQuiet({ score: 4.2 }), false);
   assert.equal(applyCtaQuiet({ score: 3.3 }), true);

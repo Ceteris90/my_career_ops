@@ -63,9 +63,9 @@ export function scoreTone(score: string): "good" | "warn" | "bad" | "muted" {
 /** Block-G legitimacy tier → tone. */
 export function legitimacyTone(l: string): "good" | "warn" | "bad" | "muted" {
   const s = l.toLowerCase();
-  if (s.includes("high") || s.includes("confian") || s.includes("legit")) return "good";
-  if (s.includes("caution") || s.includes("precau") || s.includes("caut")) return "warn";
-  if (s.includes("suspic") || s.includes("sospech") || s.includes("scam") || s.includes("fake")) return "bad";
+  if (s.includes("high") || s.includes("confian") || s.includes("legit") || s.includes("高置信") || s.includes("高信心")) return "good";
+  if (s.includes("caution") || s.includes("precau") || s.includes("caut") || s.includes("谨慎") || s.includes("審慎")) return "warn";
+  if (s.includes("suspic") || s.includes("sospech") || s.includes("scam") || s.includes("fake") || s.includes("疑似")) return "bad";
   return "muted";
 }
 
