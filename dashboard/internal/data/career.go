@@ -789,7 +789,8 @@ func splitTrackerRow(line string) []string {
 
 // trackerPostingURL is a row's JobURL from its tracker URL cell: the posting
 // URL the cell names, or "" when it names none — a "—"/"N/A" placeholder (the
-// cell merge-tracker writes for a row with no URL), or a local:jds/ pointer.
+// tracker's empty-cell marker, which a hand-added row carries; "N/A" for a
+// recruiter-sourced role), or a local:jds/ pointer.
 //
 // extractCellURL returns such a cell verbatim, as Node's extractCellUrl does;
 // Node's consumers then key it through normalizeUrl, which yields nothing for

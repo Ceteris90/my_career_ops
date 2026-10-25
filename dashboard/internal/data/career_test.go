@@ -413,8 +413,8 @@ func TestParseApplicationsUsesTrackerURLBeforeLegacyEnrichment(t *testing.T) {
 	}
 }
 
-// A URL cell that names no posting is not a JobURL: the "—" merge-tracker
-// writes for a row with no URL, "N/A", or a local:jds/ pointer. Kept as one, it
+// A URL cell that names no posting is not a JobURL: the "—" empty-cell marker
+// a hand-added row carries, "N/A", or a local:jds/ pointer. Kept as one, it
 // switched off every enrichment tier, since each runs only for an empty
 // JobURL, so the report's own **URL:** header was never read. And the
 // pipeline's open action handed "—" to the platform opener.
