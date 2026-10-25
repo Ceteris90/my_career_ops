@@ -83,16 +83,17 @@ function resolveOrigin(entry) {
 }
 
 // The board page carries its server state as one JSON object on a single
-// line of an inline script: `window.serverInitialData = {...};`. The CSRF
-// token and the board are top-level keys of that object, so they are read
-// from it and from nowhere else on the page: a "csrfToken" or "board" key in
-// some other script cannot be picked up.
+// line of an inline script: `window.serverInitialData = {...};`, which ends
+// that line or is followed by the script's closing tag. The CSRF token and
+// the board are top-level keys of that object, so they are read from it and
+// from nowhere else on the page: a "csrfToken" or "board" key in some other
+// script cannot be picked up.
 /**
  * @param {string} html
  * @returns {Record<string, any> | null}
  */
 function extractServerData(html) {
-  const m = html.match(/window\.serverInitialData\s*=\s*(\{.*\})\s*;?\s*$/m);
+  const m = html.match(/window\.serverInitialData\s*=\s*(\{.*?\})\s*;?\s*(?:<\/script>|$)/m);
   if (!m) return null;
   try {
     const data = JSON.parse(m[1]);

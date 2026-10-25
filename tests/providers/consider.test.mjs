@@ -272,6 +272,16 @@ try {
         fail(`acquireCsrfHandshake board = ${JSON.stringify(pageBoardPosted)}`);
       }
 
+      // The same state with the closing tag on its line, as a minified page has it.
+      let sameLineBoard = null;
+      await consider.fetch({ name: 'Acme Ventures', careers_url: 'https://jobs.acmevc.example/jobs' }, {
+        fetchResponse: async () => handshakeResponse(200, [],
+          `<script>window.serverInitialData = {"csrfToken":"handshake-token-ok","board":{"id":"acme-portfolio","isParent":true}};</script><script>window.other = {"board":{"id":"other"}};</script>`),
+        fetchJson: async (_url, opts) => { sameLineBoard = JSON.parse(opts.body).board; return { jobs: [] }; },
+      });
+      if (sameLineBoard?.id === 'acme-portfolio') pass('acquireCsrfHandshake reads window.serverInitialData followed by </script> on the same line');
+      else fail(`acquireCsrfHandshake same-line board = ${JSON.stringify(sameLineBoard)}`);
+
       // "csrfToken" and "board" keys in any other script are not picked up:
       // only the top level of window.serverInitialData counts.
       let strayPosted = false;
