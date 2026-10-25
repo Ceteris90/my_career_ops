@@ -470,7 +470,12 @@ if (flags.cover && existsSync(flags.cover)) {
 // 3. Archive job posting or write explicit stub, preserving existing files instead of overwriting.
 let postingArchived = false;
 let resolvedPostingPath = null;
-const targetUrl = flags.url || (matchedRow.notes && matchedRow.notes.match(/https?:\/\/[^\s|)]+/)?.[0]);
+// The tracker's URL column before Notes: merge-tracker writes a row's posting
+// URL there (#3516), not in Notes, so a row it added had no URL to archive
+// from and got a "None provided" stub. A placeholder cell ("—", "N/A") names
+// no posting and is skipped.
+const cellUrl = /^https?:\/\//i.test(matchedRow.url || '') ? matchedRow.url : null;
+const targetUrl = flags.url || cellUrl || (matchedRow.notes && matchedRow.notes.match(/https?:\/\/[^\s|)]+/)?.[0]);
 // Captures are keyed by REPORT number: archive-posting --report=N names them
 // `{N}-…`, jd-capture.mjs looks them up that way, and the PDF lookup above
 // already keys by it. matchedRow.num is the TRACKER #, and the two differ once
