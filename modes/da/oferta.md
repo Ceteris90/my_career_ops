@@ -6,7 +6,7 @@ Når kandidaten indsætter et opslag (tekst eller URL), så lever ALTID alle blo
 
 ## Fælles regler fra `modes/oferta.md`
 
-Denne fil er laget for det danske marked: dansk ordforråd, markedstjek og report-skabelonen. Forløbet er det kanoniske i `modes/oferta.md`. Læs den før blok A, og anvend disse afsnit, som de står der:
+Denne fil er markedslaget for Danmark: dansk ordforråd, markedstjek og report-skabelonen. Forløbet er det kanoniske i `modes/oferta.md`. Læs den før blok A, og anvend disse afsnit, som de står der:
 
 - **Unattended runs**, **Liveness gate** (for LinkedIn-URL'er først AGENTS.md -> **LinkedIn JD loading guard**), **Local public facts reuse**, **Blacklist gate**, **Dealbreaker gate** og **Agency confirmation gate** -- alle før blok A. En gate, der stopper, stopper også her.
 - **Bounded Research Budget**: højst 5 WebSearch-forespørgsler for blok D og G tilsammen, ingen `deep`, ingen subagents.
@@ -257,7 +257,7 @@ Feltnavnene i hovedet (`Date`, `URL`, `Archetype`, `Score`, `Legitimacy`, `PDF`)
 
 **Machine Summary (obligatorisk):** YAML-blok lige efter hovedet, med skema, eksakte feltnavne og regler fra `batch/batch-prompt.md` (kilden; gentages ikke her). Indeholder `advertised_comp` (opslagets lønbeløb ordret, eller `null`), `risk_summary` og `requirement_importance` (blok B række for række; `inferred`-grænsen gælder også her).
 
-**Arkivering af opslaget (obligatorisk, #2789):** Hver rapport SKAL have et afsnit `## Job Description (archived verbatim)` med opslagets fulde tekst, aldrig opsummeret eller omskrevet. Overskriften forbliver på engelsk: `check-jd-archive.mjs` finder den ved navn. Første linje er den synlige opslagsdato (`Posted: {dato eller relativ tekst}`, eller `Posted: not visible in source`), aldrig rapportfilens dato. Er opslaget for langt eller kan ikke citeres helt, så gem det med `archive-posting.mjs <url> --company={company-slug} --report={num}` og skriv **præcis** `See jds/{filename} for the full archive (archive-posting.mjs --report={num}).` i afsnittet, uden anden tekst. Aldrig en parafrase i stedet; den fulde regel står i `modes/oferta.md` (**JD archival**).
+**Arkivering af opslaget (obligatorisk, #2789):** Hver rapport SKAL have et afsnit `## Job Description (archived verbatim)` med opslagets fulde tekst, aldrig opsummeret eller omskrevet. Overskriften forbliver på engelsk: `check-jd-archive.mjs` finder den ved navn. Første linje er den synlige opslagsdato (`Posted: {dato eller relativ tekst}`, eller `Posted: not visible in source`), aldrig rapportfilens dato. Er opslaget for langt eller kan ikke citeres helt, så gem det med `archive-posting.mjs <url> --company={company-slug} --report={num}` og skriv **præcis** `See jds/{filename} for the full archive (archive-posting.mjs --report={num}).` i afsnittet, uden anden tekst. Er ingen maskinel sikring mulig (fx en lang indsat tekst uden URL), så omdøb afsnittet til `## Job Description (not archived)` og skriv hvorfor. Aldrig en parafrase i stedet; den fulde regel står i `modes/oferta.md` (**JD archival**).
 
 ### 1b. Indsæt ATS-nøgleordsdækning
 

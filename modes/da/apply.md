@@ -110,7 +110,7 @@ Noter:
 
 Hvis kandidaten bekræfter, at ansøgningen er sendt:
 1. Opdatér status til "Applied" med det kanoniske CLI: `node set-status.mjs --report <report#> Applied` (redigér ikke `applications.md`-tabellen i hånden)
-2. Opdatér report'ens Blok H med de endelige svar
+2. Opdatér report'ens `## Application Answers`-afsnit med de endelige svar og `**State:** submitted` (format i `modes/apply.md` -> Step 8). Blok H forbliver evalueringens udkast og ændres ikke
 3. Foreslå næste trin: `/career-ops contacto` til LinkedIn-outreach mod den ansættende leder
 
 ## Håndtering af scroll

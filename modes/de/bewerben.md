@@ -110,7 +110,7 @@ Hinweise:
 
 Wenn der Kandidat bestätigt, dass die Bewerbung raus ist:
 1. Status mit dem kanonischen CLI auf "Applied" setzen: `node set-status.mjs --report <report#> Applied` (die Tabelle in `applications.md` nie von Hand editieren)
-2. Block H im Report mit den finalen Antworten aktualisieren
+2. Den Abschnitt `## Application Answers` im Report mit den finalen Antworten und `**State:** submitted` aktualisieren (Format in `modes/apply.md` → Step 8). Block H bleibt der Entwurf der Bewertung und wird nicht geändert
 3. Nächsten Schritt vorschlagen: `/career-ops contacto` für LinkedIn-Outreach an den Personalleiter / Hiring Manager
 
 ## Scroll-Handling

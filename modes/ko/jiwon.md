@@ -111,7 +111,7 @@ Notes:
 
 후보자가 지원서를 제출했다고 확인하면:
 1. 정식 CLI로 status를 `Applied`로 변경합니다: `node set-status.mjs --report <report#> Applied` (`data/applications.md` 표를 직접 수정하지 않습니다). TSV 병합은 기존 row의 status를 바꾸지 않습니다.
-2. 최종 답변을 report의 블록 H에 업데이트합니다.
+2. 최종 답변을 report의 `## Application Answers` 섹션에 `**State:** submitted`와 함께 업데이트합니다(형식은 `modes/apply.md` -> Step 8). 블록 H는 평가 단계의 초안이므로 수정하지 않습니다.
 3. 다음 단계로 `/career-ops contacto`를 제안해 hiring manager 또는 recruiter에게 LinkedIn outreach를 할 수 있게 합니다.
 
 ## 스크롤 처리

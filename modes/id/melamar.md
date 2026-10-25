@@ -110,7 +110,7 @@ Catatan:
 
 Jika kandidat mengonfirmasi lamaran sudah dikirim:
 1. Perbarui status dari "Evaluated" menjadi "Applied" dengan `node set-status.mjs --report <report#> Applied` (jangan mengedit tabel `applications.md` secara manual)
-2. Perbarui Blok H report dengan jawaban final
+2. Perbarui bagian `## Application Answers` di report dengan jawaban final dan `**State:** submitted` (format di `modes/apply.md` -> Step 8). Blok H tetap draft dari evaluasi dan tidak diubah
 3. Sarankan langkah berikutnya: `/career-ops contacto` untuk outreach LinkedIn ke hiring manager
 
 ## Penanganan scroll

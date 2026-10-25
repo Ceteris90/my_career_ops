@@ -105,7 +105,7 @@ Note:
 
 Se il candidato conferma di aver inviato il modulo:
 1. Aggiornare lo stato ad "Applied" con la CLI canonica: `node set-status.mjs --report <report#> Applied` (non modificare la tabella di `applications.md` a mano).
-2. Aggiornare il Blocco H del report con le risposte effettivamente inviate.
+2. Aggiornare la sezione `## Application Answers` del report con le risposte effettivamente inviate e `**State:** submitted` (formato in `modes/apply.md` -> Step 8). Il Blocco H resta la bozza della valutazione e non va modificato.
 3. Suggerire il passo successivo: `/career-ops contacto` per avviare il contatto su LinkedIn con il responsabile della selezione.
 
 ## Gestione dello scorrimento

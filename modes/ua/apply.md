@@ -114,5 +114,5 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 Якщо кандидат підтвердив відправку:
 
 1. Оновити статус на "Applied" через канонічний CLI: `node set-status.mjs --report <report#> Applied` (не редагувати таблицю `data/applications.md` вручну)
-2. Оновити секцію H звіту фінальними відповідями
+2. Оновити розділ `## Application Answers` звіту фінальними відповідями і `**State:** submitted` (формат — у `modes/apply.md` → Step 8). Секція H лишається чернеткою з оцінки й не змінюється
 3. Запропонувати: `/career-ops contacto` для LinkedIn outreach

@@ -110,7 +110,7 @@ Notas:
 
 Se o candidato confirmar que enviou a candidatura:
 1. Atualizar status para "Applied" com o CLI canônico: `node set-status.mjs --report <report#> Applied` (não editar a tabela de `applications.md` manualmente)
-2. Atualizar Bloco H do report com as respostas finais
+2. Atualizar a seção `## Application Answers` do report com as respostas finais e `**State:** submitted` (formato em `modes/apply.md` → Step 8). O Bloco H continua sendo o rascunho da avaliação e não é alterado
 3. Sugerir próximo passo: `/career-ops contacto` para LinkedIn outreach
 
 ## Scroll handling
