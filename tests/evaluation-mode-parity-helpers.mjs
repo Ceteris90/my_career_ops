@@ -11,7 +11,7 @@ export const FROZEN_EVALUATION_MODES = new Set([
   'da/oferta.md', 'pl/oferta.md', 'pt/oferta.md', 'ua/oferta.md',
   // market-named evaluation modes (#3828)
   'de/angebot.md', 'fr/offre.md', 'hi/naukri.md', 'id/lowongan.md', 'it/annuncio.md',
-  'ko/gonggo.md', 'nl/vacature.md', 'tr/is-ilani.md',
+  'ko/gonggo.md', 'nl/vacature.md',
 ]);
 
 // A known file that stops being discovered (renamed, or its A) block dropped)
