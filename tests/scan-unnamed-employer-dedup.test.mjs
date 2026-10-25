@@ -42,10 +42,15 @@ function scan(jobs) {
       '    enabled: true',
       '',
     ].join('\n'));
+    // The fixtures travel as a JSON file the preload reads, not as source text
+    // spliced into the preload: data never becomes code.
+    writeFileSync(join(dir, 'jobs.json'), JSON.stringify(jobs));
     const preload = join(dir, 'preload.mjs');
     writeFileSync(preload, [
+      "import { readFileSync } from 'node:fs';",
       `import provider from ${JSON.stringify(pathToFileURL(join(ROOT, 'providers', 'builtin.mjs')).href)};`,
-      `provider.fetch = async () => ${JSON.stringify(jobs)};`,
+      "const jobs = JSON.parse(readFileSync(new URL('./jobs.json', import.meta.url), 'utf-8'));",
+      'provider.fetch = async () => jobs;',
       '// Fail closed if the fixture ever starts making real requests.',
       "globalThis.fetch = async () => { throw new Error('Unexpected network request'); };",
       '',
