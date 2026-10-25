@@ -45,7 +45,7 @@ syncBuiltinESMExports();
     assert.equal(result.status, 1, result.error?.message || result.stderr);
     if (json) {
       const error = JSON.parse(result.stdout);
-      assert.equal(error.code, 'cv-archive-locked', describeSpawn(error));
+      assert.equal(error.code, 'cv-archive-locked', describeSpawn(result));
       assert.match(error.error, /CV archive lock unavailable/);
       assert.equal(result.stderr, '');
     } else {
