@@ -173,7 +173,7 @@ test('tab headers use the same column map as tab data rows', () => {
   const options = { allowTabs: true, allowIndentation: true };
   const parsed = parseTrackerRow(row, resolveColumns([header, row], options), options);
   assert.equal(parsed.num, 42);
-  assert.equal(parsed.status, 'Evaluated', describeSpawn(parsed));
+  assert.equal(parsed.status, 'Evaluated');
   assert.equal(parsed.report, '[7](reports/007.md)');
   assert.equal(parsed.notes, 'original');
 });
