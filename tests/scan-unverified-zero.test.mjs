@@ -37,7 +37,7 @@ test('parallel provider contexts distinguish a healthy empty board from a swallo
       }).catch(error => error),
     ]);
     assert.deepEqual(jobs, []);
-    assert.equal(failure.status, 503, describeSpawn(failure));
+    assert.equal(failure.status, 503);
     assert.deepEqual(responses, [503]);
     assert.deepEqual(healthy.observation, { requests: 1, successfulResponses: 1, lastStatus: 200 });
     assert.deepEqual(failed.observation, { requests: 1, successfulResponses: 0, lastStatus: 503 });
