@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { fetchText, fetchResponse } from '../../providers/_http.mjs';
+import { describeSpawn } from '../helpers/describe-spawn.mjs';
 
 async function listening(server) {
   server.listen(0, '127.0.0.1');
@@ -77,7 +78,7 @@ test('proxied manual redirects remain inspectable only through fetchResponse', a
   try {
     await withProxyEnv({ CAREER_OPS_TRUST_PROXY_EGRESS: '1', HTTP_PROXY: proxyUrl }, async () => {
       const response = await fetchResponse('http://unresolvable.invalid/job', { redirect: 'manual' });
-      assert.equal(response.status, 302);
+      assert.equal(response.status, 302, describeSpawn(response));
       assert.equal(response.headers.get('location'), 'http://127.0.0.1/private');
       await assert.rejects(fetchText('http://unresolvable.invalid/job', { redirect: 'manual' }),
         (error) => error.status === 302);
@@ -133,7 +134,7 @@ test('direct requests work without undici; opting in explains how to install it'
     await assert.rejects(fetchText('http://public.example/'), /run npm install/);
   `;
   const result = spawnSync(process.execPath, ['--experimental-loader', loader, '--input-type=module', '-e', script], { encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.status, 0, describeSpawn(result));
 });
 
 test('credential-bearing HTTP proxies are rejected without exposing their credentials', async () => {
