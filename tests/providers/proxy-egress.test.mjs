@@ -78,7 +78,7 @@ test('proxied manual redirects remain inspectable only through fetchResponse', a
   try {
     await withProxyEnv({ CAREER_OPS_TRUST_PROXY_EGRESS: '1', HTTP_PROXY: proxyUrl }, async () => {
       const response = await fetchResponse('http://unresolvable.invalid/job', { redirect: 'manual' });
-      assert.equal(response.status, 302, describeSpawn(response));
+      assert.equal(response.status, 302);
       assert.equal(response.headers.get('location'), 'http://127.0.0.1/private');
       await assert.rejects(fetchText('http://unresolvable.invalid/job', { redirect: 'manual' }),
         (error) => error.status === 302);
