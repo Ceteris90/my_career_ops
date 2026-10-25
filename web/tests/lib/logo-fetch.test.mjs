@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cacheLogoResult, fetchFavicon, resolveLogo } from "../../src/lib/core/logo-fetch.mjs";
+import { COMPANY_KEY_VERSION } from "../../src/lib/core/logo-cache-key.mjs";
 
 const ICON = new Uint8Array(519).fill(7); // a real favicon is larger than the placeholder cap
 const GLOBE = new Uint8Array(726).fill(1); // what Google sends with its 404
@@ -126,4 +127,12 @@ test("the logo route resolves and caches through logo-fetch.mjs, not a private c
   // The write that cached every failed lookup as a miss must not come back.
   assert.doesNotMatch(route, /fs\.writeFile\(/);
   assert.doesNotMatch(route, /s2\/favicons/);
+});
+
+test("the company key version was bumped past the one that cached failures as misses", () => {
+  // Same reasoning as company-domains.test.mjs's pin: a v4 install already
+  // holds empty sentinels written by failed lookups, and on disk they look
+  // exactly like real misses. Only a new key version makes those companies
+  // ask again.
+  assert.notEqual(COMPANY_KEY_VERSION, "v4", "failed lookups stopped being cached while COMPANY_KEY_VERSION stayed at v4");
 });
