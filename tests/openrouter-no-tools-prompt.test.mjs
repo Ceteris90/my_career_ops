@@ -5,7 +5,7 @@
 // written for Claude Code and tell the model to navigate with Playwright, use
 // WebFetch and Bash, and read cv.md. The runner's request carries no `tools`, so
 // free models answered with tool calls and the runner found no score (23 replies,
-// 0 scores). The runner now drops those parts, by heading, and says first that
+// 0 scores). The runner now drops those parts, by heading or by line, and says first that
 // there are no tools.
 //
 // fetch() is captured, so no network is used.
@@ -33,6 +33,16 @@ const TOOL_INSTRUCTIONS = {
   'the WebFetch row': '| WebFetch |',
   'reading cv.md': 'Read them from cv.md',
   'the dead-posting marker': '---DEAD_POSTING---',
+  'the cv-sync-check run': 'Run `node cv-sync-check.mjs`',
+  'the WebSearch rule': 'Use WebSearch for comp and company data',
+  'the WebSearch cap': 'total WebSearch queries',
+  'the subagent section': '### Subagent delegation',
+  'the layoff searches': 'Search: `"{company}"',
+  'the company-history run': 'node company-history.mjs',
+  'the keyword-match step': '### 1b. Embed ATS keyword coverage',
+  'the tracker step': '### 2. Record in tracker',
+  'the salary-file step': '### 3. Salary observations',
+  'the report-number run': 'you MUST run `node reserve-report-num.mjs`',
 };
 
 /** Import a fresh copy of the runner against a throwaway data root. */
@@ -72,7 +82,10 @@ test('the system prompt drops the tool instructions and says there are no tools 
     for (const [name, text] of Object.entries(TOOL_INSTRUCTIONS)) assert.ok(!prompt.includes(text), `the prompt still has ${name}`);
     assert.match(prompt, /needs_confirmation/, 'other mode text was dropped with the tool sections');
     assert.match(prompt, /## Block A — Role Summary/, 'oferta.md lost the section after the liveness gate');
-    assert.match(prompt, /### Subagent delegation/, '_shared.md lost the section after the Tools table');
+    assert.match(prompt, /\*\*RULE: Agency confirmation must happen before any tracker, report, or CV write\.\*\*/, '_shared.md lost the agency rule after the Subagent section');
+    for (const kept of ['3. Cite exact lines from CV when matching', '## Step 0 — Archetype Detection', '### Edge case handling:', '## Machine Summary']) {
+      assert.ok(prompt.includes(kept), `the prompt lost "${kept}"`);
+    }
     const note = prompt.indexOf('you have no tools');
     assert.notEqual(note, -1, 'the system prompt has no no-tools note');
     assert.ok(note < prompt.indexOf('# System Context -- career-ops'), 'the no-tools note comes after modes/_shared.md');
@@ -86,6 +99,8 @@ test('a section runs to the next heading of its level, and a missing heading cha
     assert.equal(runner.stripToolInstructions(text), '# Top\n\n### Next\n\nkept');
     const other = '# Top\n\n### Tooling\n\n| Bash | x |';
     assert.equal(runner.stripToolInstructions(other), other);
+    const guarded = '### Subagent delegation (cost guardrail)\n\nspawn\n\n<!-- guardrail:agency-confirmation -->\n**RULE**\n\n### Next';
+    assert.equal(runner.stripToolInstructions(guarded), '<!-- guardrail:agency-confirmation -->\n**RULE**\n\n### Next');
   });
 });
 
@@ -121,4 +136,26 @@ test('the request body carries no tools, pinned and rotated', async () => {
       assert.equal(system.includes('browser_navigate'), false, 'the sent system message still tells the model to navigate');
     });
   }
+});
+
+test('only the evaluate path calls the user message job text; every caller gets the no-tools note', async () => {
+  await withRunner('callers', async (runner) => {
+    const evaluate = runner.buildSystemPrompt(OFERTA, CTX, { evaluate: true });
+    const apply = runner.buildSystemPrompt('# Mode: apply', CTX);
+    for (const prompt of [evaluate, apply]) {
+      assert.match(prompt, /you have no tools/);
+      assert.match(prompt, /Do not navigate, fetch, read files or run commands/);
+    }
+    assert.match(evaluate, /The job text is in the user message/);
+    assert.equal(apply.includes('job text'), false, 'the apply prompt calls the report job text');
+  });
+  // cmdEvaluate and cmdApply are not exported, so check what each passes.
+  const src = readFileSync(join(ROOT, 'openrouter-runner.mjs'), 'utf-8');
+  const body = (name) => {
+    const start = src.indexOf(`async function ${name}(`);
+    const end = src.indexOf('\nasync function ', start + 1);
+    return src.slice(start, end === -1 ? undefined : end);
+  };
+  assert.match(body('cmdEvaluate'), /buildSystemPrompt\(modeContent, ctx, \{ evaluate: true \}\)/);
+  assert.match(body('cmdApply'), /buildSystemPrompt\(modeContent, ctx\)/);
 });
