@@ -1,0 +1,21 @@
+{
+  "name": "career-ops-plugin-apify-search",
+  "id": "apify-search",
+  "repo": "https://github.com/johnisanerd/career-ops-plugin-apify-search",
+  "author": "johnisanerd",
+  "hooks": [
+    "provider"
+  ],
+  "description": "Role and location search on LinkedIn, Indeed, Wellfound and Google Jobs through Apify Actors, with a cost estimate and per-board caps before anything runs.",
+  "requiredEnv": [
+    "APIFY_TOKEN"
+  ],
+  "allowedHosts": [
+    "api.apify.com"
+  ],
+  "skill": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "sha": "e37f882bf11f3c96fcd2a0868b01ca80284348f2",
+  "registrationIssue": "https://github.com/career-ops-hq/career-ops/issues/2584"
+}
