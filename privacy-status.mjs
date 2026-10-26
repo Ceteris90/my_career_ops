@@ -125,7 +125,7 @@ function render(report) {
     lines.push('  ⚠️  The guard could NOT be loaded:');
     lines.push(`      ${report.error}`);
     lines.push('      The guard refuses to run on a config it cannot read. Fix the file,');
-    lines.push('      or remove it to run with pattern detection only.');
+    lines.push('      or remove it to disable all configured checks.');
     return lines.join('\n');
   }
 
@@ -138,20 +138,20 @@ function render(report) {
 
   if (report.state === 'disabled-by-config') {
     lines.push('  ℹ️  The guard is disabled by configuration (enabled: false in privacy.yml).');
-    lines.push('      Nothing is being inspected. Set enabled: true in config/privacy.yml to re-enable.');
+    lines.push(`      Nothing is being inspected. Set enabled: true in ${report.configPath} to re-enable.`);
     return lines.join('\n');
   }
 
   if (report.configSource === 'absent') {
-    lines.push('  ℹ️  No config/privacy.yml — privacy guard is inactive (opt-in).');
+    lines.push(`  ℹ️  No ${report.configPath} — privacy guard is inactive (opt-in).`);
     lines.push('      To guard your own values and enable pattern detection:');
     lines.push(`        copy ${getPrivacyExamplePath()}`);
     lines.push(`          →  ${report.configPath}`);
     lines.push('      and replace the fictional placeholders with your own.');
   } else if (report.configSource === 'empty') {
-    lines.push('  ℹ️  config/privacy.yml exists but configures no values.');
+    lines.push(`  ℹ️  ${report.configPath} exists but configures no values.`);
   } else if (report.configuredCount === 0) {
-    lines.push('  ℹ️  config/privacy.yml loaded, but every value was too short to guard');
+    lines.push(`  ℹ️  ${report.configPath} loaded, but every value was too short to guard`);
     lines.push('      safely (5+ characters, 5+ digits). Nothing configured is protected.');
   } else {
     lines.push(`  ✅ Guard active: ${report.configuredCount} configured value(s) and`);
