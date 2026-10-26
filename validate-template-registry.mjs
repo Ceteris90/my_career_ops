@@ -48,7 +48,11 @@ if (isMainModule(import.meta.url)) {
     process.exit(0);
   }
   const i = argv.indexOf('--root');
-  const root = i >= 0 && argv[i + 1] ? path.resolve(argv[i + 1]) : DEFAULT_ROOT;
+  if (i >= 0 && (!argv[i + 1] || argv[i + 1].startsWith('-'))) {
+    process.stderr.write('Usage: node validate-template-registry.mjs [--root <dir>]\n--root needs a directory\n');
+    process.exit(2);
+  }
+  const root = i >= 0 ? path.resolve(argv[i + 1]) : DEFAULT_ROOT;
   const problems = validateRegistry(root);
   if (problems.length) { for (const p of problems) console.error(`✗ ${p}`); process.exit(1); }
   console.log('✓ template registry is valid');
