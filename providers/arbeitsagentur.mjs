@@ -1,6 +1,7 @@
 // @ts-check
 /** @typedef {import('./_types.js').Provider} Provider */
 
+import { intInRange } from './_config-utils.mjs';
 import { safeEncodeURIComponent } from './_safe-url.mjs';
 import { fetchJsonWithRetry, sleep } from './_http.mjs';
 
@@ -44,14 +45,6 @@ const API_KEY = 'jobboerse-jobsuche'; // public client key the arbeitsagentur.de
 const DETAIL_BASE = 'https://www.arbeitsagentur.de/jobsuche/jobdetail/';
 const INTER_PAGE_DELAY_MS = 200; // between filter-mode page requests
 const REMOTE_RE =/(remote|homeoffice|home[-\s]?office|ortsunabh|deutschlandweit|bundesweit|100\s*%|full[-\s]?remote|fully remote)/i;
-
-// Clamp a runtime integer into [min, max], falling back to `def` for NaN, so a
-// stray portals.yml value can't produce empty (size=0) or pathological queries.
-function intInRange(val, def, min, max) {
-  const n = Number(val);
-  if (!Number.isFinite(n)) return def;
-  return Math.min(max, Math.max(min, Math.trunc(n)));
-}
 
 /**
  * Reads and sanitizes the entry's `arbeitsagentur:` config block.
