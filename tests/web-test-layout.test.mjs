@@ -151,6 +151,8 @@ function parseRange(range) {
       }
     }
     if (lowers.length !== 1) return null;
+    // `<=` and `^` derive their bound by adding 1, which can step past 2^53 - 1 too.
+    if (!uppers.flat().every(Number.isSafeInteger)) return null;
     const lower = lowers[0];
     // An upper bound at or below the floor makes the alternative unsatisfiable.
     if (uppers.some((u) => order(u, lower) <= 0)) return null;
@@ -320,6 +322,8 @@ if (!existsSync(WEB_PKG)) {
       '>=022.13.0',           // leading zero — not a valid npm version
       '^22.013.0',            // leading zero in the minor
       '>=22.13.9007199254740993',   // past Number.MAX_SAFE_INTEGER — would round
+      '^9007199254740991',          // derived upper bound past MAX_SAFE_INTEGER
+      '>=22 <=22.9007199254740991', // derived upper bound past MAX_SAFE_INTEGER
       '>=22 | >=23',          // single pipe
       '>=22 >=24',            // two lower bounds — ambiguous
       '^22 >=22.5',           // two lower bounds — ambiguous
