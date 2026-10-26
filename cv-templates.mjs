@@ -778,7 +778,10 @@ const RENDER_RULES = [
 export function renderLint(path) {
   const result = { ok: true, path, findings: [], error: null };
   try {
-    const html = readFileSync(path, 'utf-8').replace(/<!--[\s\S]*?-->/g, ' ');
+    // Comments go, except inside a <style> body: there `<!--` and `-->` are raw
+    // CSS text (ignored tokens), and the rules between them are live. The
+    // alternation is leftmost-first, so a comment wrapping a <style> is stripped.
+    const html = readFileSync(path, 'utf-8').replace(/<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => (m.startsWith('<!--') ? ' ' : m));
     for (const { id, rule, detect } of RENDER_RULES) {
       for (const detail of detect(html)) {
         result.findings.push({ id, rule, severity: 'warning', detail });

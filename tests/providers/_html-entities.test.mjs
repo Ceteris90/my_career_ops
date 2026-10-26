@@ -92,6 +92,9 @@ try {
   eq('bareNumeric still decodes semicolon-terminated references', decodeEntities('&#106;s &amp;', { bareNumeric: true }), 'js &');
   eq('bareNumeric leaves a semicolon-free named reference alone', decodeEntities('&amp#58', { bareNumeric: true }), '&amp#58');
   eq('the default mode leaves a semicolon-free numeric reference alone', decodeEntities('https&#58//x'), 'https&#58//x');
+
+  // URL punctuation: a scheme or authority written as references must decode.
+  eq('decodeEntities decodes &colon; and &sol;', decodeEntities('https&colon;&sol;&sol;x'), 'https://x');
 } catch (e) {
   fail(`_html-entities tests crashed: ${e.message}`);
 }
