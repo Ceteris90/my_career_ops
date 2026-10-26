@@ -87,7 +87,15 @@ export async function duplicateTemplate(root, { kind, from, name, userDir }) {
 
   if (source.pack) {
     const dest = path.join(userDir, name);
-    await fs.mkdir(dest, { recursive: true });
+    await fs.mkdir(userDir, { recursive: true });
+    // Not recursive, so an existing folder under this name fails here instead of
+    // being merged into, and the rollback below only ever removes what this call made.
+    try {
+      await fs.mkdir(dest);
+    } catch (e) {
+      if (e.code === "EEXIST") throw new Error(`A folder named "${name}" already exists in your templates.`);
+      throw e;
+    }
     try {
       await fs.writeFile(path.join(dest, file), text, { flag: "wx" });
       const sections = path.join(path.dirname(source.path), "sections");

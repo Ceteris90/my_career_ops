@@ -157,3 +157,14 @@ test("renaming the default reports it, so the profile can follow", async () => {
 
   assert.deepEqual(out, { wasDefault: true });
 });
+
+test("duplicating a pack never removes a folder that was already there under the new name", async () => {
+  const s = scratch();
+  // A user folder that happens to carry the name, holding something else.
+  fs.mkdirSync(path.join(s.userDir, "my-ats"), { recursive: true });
+  fs.writeFileSync(path.join(s.userDir, "my-ats", "notes.txt"), "keep me");
+
+  await assert.rejects(duplicateTemplate(CORE, { kind: "cv", from: "ats", name: "my-ats", userDir: s.userDir }), /folder|already/i);
+
+  assert.equal(fs.readFileSync(path.join(s.userDir, "my-ats", "notes.txt"), "utf8"), "keep me");
+});
