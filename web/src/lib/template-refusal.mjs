@@ -12,3 +12,16 @@ export class TemplateRefusal extends Error {
     this.status = status;
   }
 }
+
+/**
+ * What to throw for an error caught while validating a template. The core's own
+ * validation errors are the caller's to correct, so they become a refusal. An
+ * operating-system error (it has a syscall, and its message carries an absolute
+ * path) is returned unchanged for the route to answer generically.
+ * @param {unknown} e
+ * @param {string} [prefix]
+ */
+export function refusalFrom(e, prefix = "") {
+  if (e && typeof e === "object" && "syscall" in e) return e;
+  return new TemplateRefusal(prefix + (e instanceof Error ? e.message : String(e)));
+}

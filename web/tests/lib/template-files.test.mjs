@@ -18,7 +18,7 @@ import {
   deleteTemplate,
   isValidTemplateName,
 } from "../../src/lib/template-files.mjs";
-import { TemplateRefusal } from "../../src/lib/template-refusal.mjs";
+import { TemplateRefusal, refusalFrom } from "../../src/lib/template-refusal.mjs";
 
 const CORE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -196,4 +196,12 @@ test("an operating-system failure is not a refusal", async () => {
 
   assert.ok(err);
   assert.ok(!(err instanceof TemplateRefusal));
+});
+
+test("only validation errors become refusals; an operating-system error passes through untouched", () => {
+  const validation = new Error("Template x missing required placeholders: {{NAME}}");
+  const os = Object.assign(new Error("ENOENT: no such file or directory, open '/home/someone/data/templates/x'"), { code: "ENOENT", syscall: "open" });
+
+  assert.ok(refusalFrom(validation) instanceof TemplateRefusal);
+  assert.equal(refusalFrom(os), os);
 });

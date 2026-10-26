@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { TemplateRefusal } from "./template-refusal.mjs";
+import { TemplateRefusal, refusalFrom } from "./template-refusal.mjs";
 
 // Duplicate, rename and delete of the user's own templates (#1692). They live in
 // data/templates/ under the data root, the directory cv-templates.mjs searches
@@ -82,7 +82,7 @@ export async function duplicateTemplate(root, { kind, from, name, userDir }) {
   try {
     resolver.resolveTemplate(kind, from, { userDir });
   } catch (e) {
-    throw new TemplateRefusal(`That template cannot be copied because it does not resolve: ${e instanceof Error ? e.message : String(e)}`);
+    throw refusalFrom(e, "That template cannot be copied because it does not resolve: ");
   }
   assertNameFree(resolver, kind, userDir, name);
 

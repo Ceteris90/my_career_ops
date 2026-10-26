@@ -168,11 +168,12 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
                     </button>
                     <button
                       type="button"
+                      disabled={busy !== null}
                       onClick={() => {
                         setPending(null);
                         setError(null);
                       }}
-                      className="rounded-md px-2 py-1 text-xs underline"
+                      className="rounded-md px-2 py-1 text-xs underline disabled:opacity-60"
                     >
                       Cancel
                     </button>
