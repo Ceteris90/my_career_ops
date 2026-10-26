@@ -609,11 +609,9 @@ function attrValue(tag, name) {
   const re = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
   for (const m of body.matchAll(re)) {
     // The browser decodes character references in attribute values, so the
-    // lint must too: `https&#58;//x` is a remote URL. A numeric reference
-    // without its semicolon is decoded in attribute values as well.
-    if (m[1].toLowerCase() === name) {
-      return decodeEntities((m[2] ?? m[3] ?? m[4] ?? '').replace(/&(#[xX][0-9a-fA-F]+(?![0-9a-fA-F;])|#[0-9]+(?![0-9;]))/g, '&$1;'));
-    }
+    // lint must too: `https&#58;//x` is a remote URL, and so is `https&#58//x`
+    // (a numeric reference decodes without its semicolon in an attribute).
+    if (m[1].toLowerCase() === name) return decodeEntities(m[2] ?? m[3] ?? m[4] ?? '', { bareNumeric: true });
   }
   return null;
 }
