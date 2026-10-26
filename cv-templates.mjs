@@ -609,8 +609,9 @@ function attrValue(tag, name) {
   const re = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
   for (const m of body.matchAll(re)) {
     // The browser decodes character references in attribute values, so the
-    // lint must too: `https&#58;//x` is a remote URL.
-    if (m[1].toLowerCase() === name) return decodeEntities(m[2] ?? m[3] ?? m[4] ?? '');
+    // lint must too: `https&#58;//x` is a remote URL, and so is `https&#58//x`
+    // (a numeric reference decodes without its semicolon in an attribute).
+    if (m[1].toLowerCase() === name) return decodeEntities(m[2] ?? m[3] ?? m[4] ?? '', { bareNumeric: true });
   }
   return null;
 }
@@ -678,7 +679,7 @@ const RENDER_RULES = [
       const sources = [];
       let open = null;
       for (const m of html.matchAll(ANY_TAG_RE)) {
-        if (/^<style\b/i.test(m[0])) open = m.index + m[0].length;
+        if (open === null && /^<style\b/i.test(m[0])) open = m.index + m[0].length;
         else if (open !== null && /^<\/style\b/i.test(m[0])) { sources.push(html.slice(open, m.index)); open = null; }
       }
       for (const tag of html.match(TAG_RE) || []) {

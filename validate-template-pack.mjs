@@ -140,7 +140,10 @@ if (isMainModule(import.meta.url)) {
   const dir = argv.find((a) => !a.startsWith('-'));
   if (!dir) { process.stderr.write(usage); process.exit(2); }
   const problems = validatePack(dir);
-  if (problems.length) { for (const p of problems) console.error(`✗ ${p}`); process.exit(1); }
+  // Problems quote pack-controlled strings; escape control characters so a
+  // newline or escape sequence cannot forge output lines or drive the terminal.
+  const safe = (s) => String(s).replace(/[\u0000-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+  if (problems.length) { for (const p of problems) console.error(`✗ ${safe(p)}`); process.exit(1); }
   console.log(`✓ template pack is valid (${path.resolve(dir)})`);
   process.exit(0);
 }
