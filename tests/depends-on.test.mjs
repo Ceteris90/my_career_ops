@@ -604,7 +604,20 @@ function workflowJobs() {
       // This sweep reads repo-root-relative paths only.
       const run = steps.filter((s) => s?.run && !s['working-directory']).map((s) => s.run).join('\n');
       const live = stripShellComments(run);
-      out.push({ file, job, sparse, invoked: paths(INVOKES, live), guarded: paths(GUARDS, live) });
+      // A second checkout of THIS repository into a subdirectory (`path: base`,
+      // used to run a validator the PR cannot edit) holds the same tree one level
+      // down, so `node base/x.mjs` names `x.mjs` at the repo root. A checkout of
+      // another repository (`repository:`) says nothing about this one and is not
+      // unwrapped.
+      const prefixes = steps
+        .filter((s) => String(s?.uses ?? '').startsWith('actions/checkout@') && s.with?.path && !s.with.repository)
+        .map((s) => `${String(s.with.path).replace(/\/+$/, '')}/`);
+      const unwrap = (p) => { const pre = prefixes.find((x) => p.startsWith(x)); return pre ? p.slice(pre.length) : p; };
+      out.push({
+        file, job, sparse,
+        invoked: [...new Set(paths(INVOKES, live).map(unwrap))].sort(),
+        guarded: [...new Set(paths(GUARDS, live).map(unwrap))].sort(),
+      });
     }
   }
   return out;
