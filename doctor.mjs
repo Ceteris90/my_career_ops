@@ -1158,7 +1158,7 @@ function checkUserTemplates(root) {
     label: `data/templates: ${findings.length} template${findings.length === 1 ? '' : 's'} need${findings.length === 1 ? 's' : ''} attention`,
     fix: findings.flatMap((f) => f.problems.map((p) => {
       const file = f.path.split(/[\\/]/).pop();
-      return p.type === 'invalid'
+      return p.type === 'invalid' || p.type === 'name'
         ? `${file}: ${p.detail}`
         : `${file}: lacks ${p.missing.map((m) => `{{${m}}}`).join(', ')}, which every shipped ${f.kind === 'cv' ? 'CV' : 'cover-letter'} variant keeps`;
     })),

@@ -643,6 +643,8 @@ function coreSlots(system) {
  * Returns one finding per template that has a problem, and [] when all is well:
  *   - invalid: it does not resolve (missing required placeholders, or a declared
  *     section with no partial). The message is the resolver's own.
+ *   - name: its file name is not in the normalized form the resolver looks for, so
+ *     no name selects it.
  *   - drifted: it lacks a slot every shipped variant of its kind keeps.
  * Never throws for a template problem and never blocks a render; callers decide
  * how loudly to report.
@@ -655,10 +657,22 @@ export function auditUserTemplates({ dir = DEFAULT_TEMPLATES_DIR, userDir = DEFA
     const core = coreSlots(system);
     for (const entry of discoverIn(kind, { dir: userDir, format }, 'user').values()) {
       const problems = [];
-      try {
-        resolveTemplate(kind, entry.name, { dir, userDir, format });
-      } catch (err) {
-        problems.push({ type: 'invalid', detail: err.message });
+      // resolveTemplate() normalizes every name it is given (kebab), and discovery
+      // accepts the raw file name, so a file such as cv-template.a--b.html lists as
+      // "a--b" yet no name selects it: both "a--b" and "a-b" look for cv-template.a-b.html.
+      // Say that, and the name to use, instead of the resolver's "not found".
+      const usable = kebab(entry.name);
+      if (usable !== entry.name) {
+        problems.push({
+          type: 'name',
+          detail: `no name selects this file: names are normalized to "${usable}". Rename it to ${KINDS[kind].prefix}.${usable}.${format}`,
+        });
+      } else {
+        try {
+          resolveTemplate(kind, entry.name, { dir, userDir, format });
+        } catch (err) {
+          problems.push({ type: 'invalid', detail: err.message });
+        }
       }
       if (core) {
         const have = placeholdersOf(entry.path);

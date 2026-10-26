@@ -86,3 +86,15 @@ test('a missing user directory yields no findings', () => {
 
   assert.deepEqual(auditUserTemplates({ dir: l.system, userDir: join(l.user, 'nope') }), []);
 });
+
+test('a file whose name is not kebab-case is reported for its name, with the name to use', () => {
+  const l = layers();
+  writeFileSync(join(l.user, 'cv-template.a--b.html'), '{{NAME}}{{EXPERIENCE}}{{EDUCATION}}{{SKILLS}}');
+
+  const [finding] = audit(l);
+
+  assert.equal(finding.name, 'a--b');
+  assert.equal(finding.problems.length, 1);
+  assert.equal(finding.problems[0].type, 'name');
+  assert.match(finding.problems[0].detail, /cv-template\.a-b\.html/);
+});
