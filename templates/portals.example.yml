@@ -188,7 +188,10 @@
 # unlike the shared location filter, that alternative does not use URL hints.
 #
 # Example below targets US-based remote + a couple of US metros, blocking
-# common foreign hubs. Customize to your geography.
+# common foreign hubs. Customize to your geography. Keywords match whole words
+# and take no `word:`/`stem:` prefix. Some providers mark remote roles in their
+# own words: arbeitsagentur writes "Deutschlandweit (Homeoffice)", so a German
+# commute filter needs always_allow: ["Deutschlandweit"] (see its entry below).
 
 # location_filter:
 #   # always_allow is checked BEFORE block — keep this list to your home region only
@@ -1750,6 +1753,25 @@ search_queries:
 #     umkreis: 50         # optional km radius around wo (0-1000)
 #     days: 30            # optional recency window (1-1000)
 #     size: 100           # optional results per keyword (1-100)
+#     angebotsart: [1]    # optional offer types: 1 job (default), 34 internship/
+#                         #   trainee (most Werkstudent/Praktikum ads), 4 vocational
+#                         #   training, 2 self-employment; [1, 34] queries both
+#     # Remote roles: a posting in Germany whose title says it is remote, or
+#     # that states 100 % home office, gets "Deutschlandweit (Homeoffice)" added
+#     # to its location, next to its city. If your location_filter is limited to a
+#     # commute area, add always_allow: ["Deutschlandweit"] to keep these roles.
+#     # Keywords match whole words, so "Deutschland" or "Remote" do not match it.
+#     # The optional nationwide pass below also finds remote roles whose office
+#     # is outside wo/umkreis. It runs only when wo is set.
+#     remoteNationwide: false # optional: true runs the remote pass
+#     remoteMatch: title  # optional, how the pass finds remote roles:
+#                         #   title  (default) nationwide search, keeps hits whose
+#                         #          title says remote or that state 100 % home office
+#                         #   filter (recommended) server-side "home office possible"
+#                         #          search, paginated; same proof needed for the
+#                         #          marker, other hits keep their own city
+#                         #   off    no remote pass
+#     remoteMaxPages: 1   # optional, filter mode: pages per keyword (1-20)
 #   enabled: true
 #
 # - name: VDAB — AI/ML Vlaanderen        # Flanders (BE) public employment service
