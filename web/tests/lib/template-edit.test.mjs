@@ -13,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { duplicateTemplate } from "../../src/lib/template-files.mjs";
 import { TemplateRefusal } from "../../src/lib/template-refusal.mjs";
-import { readUserTemplate, checkTemplateEdit, MAX_TEMPLATE_BYTES } from "../../src/lib/template-edit.mjs";
+import { readUserTemplate, checkTemplateEdit, assertVersionUnchanged, MAX_TEMPLATE_BYTES } from "../../src/lib/template-edit.mjs";
 
 const CORE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -103,4 +103,15 @@ test("edit refusals are typed, with the status they deserve", async () => {
 
   for (const e of [shipped, missing, broken, large, stale]) assert.ok(e instanceof TemplateRefusal, e.message);
   assert.deepEqual([shipped, missing, broken, large, stale].map((e) => e.status), [422, 404, 422, 422, 409]);
+});
+
+test("the version is checked again at write time, so a save that lost a race is refused", async () => {
+  const userDir = await withCopy();
+  const { text, version } = await readUserTemplate(CORE, { kind: "cv", name: "mine", userDir });
+  const checked = await checkTemplateEdit(CORE, { kind: "cv", name: "mine", text, version, userDir });
+
+  assert.doesNotThrow(() => assertVersionUnchanged(checked.path, version));
+  fs.appendFileSync(checked.path, "\n<!-- written by a faster save -->\n");
+
+  assert.throws(() => assertVersionUnchanged(checked.path, version), (e) => e instanceof TemplateRefusal && e.status === 409);
 });

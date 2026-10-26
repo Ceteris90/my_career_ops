@@ -3,7 +3,7 @@ import { careerOpsRoot } from "@/lib/career-ops";
 import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { atomicWriteWithBackup } from "@/lib/core/safe-write";
 import { parseKind, userTemplatesDir } from "@/lib/template-gallery.mjs";
-import { checkTemplateEdit, readUserTemplate } from "@/lib/template-edit.mjs";
+import { assertVersionUnchanged, checkTemplateEdit, readUserTemplate } from "@/lib/template-edit.mjs";
 import { readJsonObject } from "@/lib/json-body";
 import { failure, text } from "../manage";
 
@@ -39,6 +39,8 @@ export async function PUT(req: Request) {
   const { codeRoot, userDir } = where();
   try {
     const checked = await checkTemplateEdit(codeRoot, { kind, name: text(body.name), text: text(body.text), version: text(body.version), userDir });
+    // Compared again here, with no await before the write: the check above awaited.
+    assertVersionUnchanged(checked.path, text(body.version));
     atomicWriteWithBackup(checked.path, text(body.text));
     return NextResponse.json({ ok: true, version: checked.version });
   } catch (e) {

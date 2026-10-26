@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { TemplateRefusal } from "./template-refusal.mjs";
+import { TemplateRefusal, refusalFrom } from "./template-refusal.mjs";
 
 // Editing the body of one of the user's own templates (#1692). Whether the result
 // is usable stays the core's call: the candidate text is put where the resolver
@@ -70,10 +71,23 @@ export async function checkTemplateEdit(root, { kind, name, text, version, userD
     try {
       resolver.resolveTemplate(kind, name, { dir: scratch, userDir: null });
     } catch (e) {
-      throw new TemplateRefusal(e instanceof Error ? e.message : String(e));
+      throw refusalFrom(e);
     }
   } finally {
     await fs.rm(scratch, { recursive: true, force: true });
   }
   return { path: entry.path, version: versionOf(text) };
+}
+
+/**
+ * Synchronous, so the caller can compare and write with no await between them:
+ * checkTemplateEdit awaits scratch-directory work after it compares, and a second
+ * save carrying the same version could otherwise pass and overwrite the first.
+ * @param {string} file the template path checkTemplateEdit returned
+ * @param {string} version the version the edit was made against
+ */
+export function assertVersionUnchanged(file, version) {
+  if (versionOf(readFileSync(file, "utf8")) !== version) {
+    throw new TemplateRefusal("This template changed since you opened it. Reload it, then apply your edit again.", 409);
+  }
 }
