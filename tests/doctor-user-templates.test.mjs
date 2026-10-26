@@ -61,5 +61,14 @@ test('the shipped baseline comes from the checkout being diagnosed when it has a
 
   const out = doctorJson(dir);
 
+  // An audit that threw would also leave this template unmentioned, so rule it out.
+  assert.ok(!out.warnings.some((w) => w.includes('could not be audited')), JSON.stringify(out.warnings));
   assert.ok(!out.warnings.some((w) => w.includes('cv-template.lean.html')), JSON.stringify(out.warnings));
+
+  // The same template in a data-only target (no templates/ of its own) is judged
+  // against this checkout's shipped set, which keeps more slots, so it is flagged.
+  const dataOnly = target({ 'cv-template.lean.html': '{{NAME}}{{EXPERIENCE}}{{EDUCATION}}' });
+  const flagged = doctorJson(dataOnly).warnings.find((w) => w.includes('cv-template.lean.html'));
+  assert.ok(flagged, 'a data-only target falls back to this checkout as the baseline');
+  assert.match(flagged, /lacks/);
 });
