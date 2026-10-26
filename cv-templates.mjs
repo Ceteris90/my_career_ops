@@ -594,7 +594,7 @@ export function atsLint(path, kind, opts = {}) {
 // describe the renderer, not modes/pdf.md.
 const TAG_RE = /<[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
 const ANY_TAG_RE = /<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
-const REMOTE_RE = /^\s*(?:https?:)?\/\//i;
+const REMOTE_RE = /^\s*(?:(?:https?|ftp):)?\/\//i;
 
 // Attribute text of a tag with quoted values removed, so `title="once=x"` is
 // not read as an attribute named once.
@@ -678,17 +678,25 @@ const RENDER_RULES = [
       // quoted attribute value is text, not an element.
       const sources = [];
       let open = null;
+      let isCss = false;
       for (const m of html.matchAll(ANY_TAG_RE)) {
-        if (open === null && /^<style\b/i.test(m[0])) open = m.index + m[0].length;
-        else if (open !== null && /^<\/style\b/i.test(m[0])) { sources.push(html.slice(open, m.index)); open = null; }
+        if (open === null && /^<style\b/i.test(m[0])) {
+          open = m.index + m[0].length;
+          // A style element with another type is not CSS; browsers ignore it.
+          const type = attrValue(m[0], 'type');
+          isCss = type === null || /^\s*(?:text\/css)?\s*$/i.test(type);
+        } else if (open !== null && /^<\/style\b/i.test(m[0])) {
+          if (isCss) sources.push(html.slice(open, m.index));
+          open = null;
+        }
       }
       for (const tag of html.match(TAG_RE) || []) {
         const inline = attrValue(tag, 'style');
         if (inline) sources.push(inline);
       }
       const css = sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
-      for (const m of css.matchAll(/url\(\s*["']?\s*((?:https?:)?\/\/[^)"']*)/gi)) out.push(excerpt(`url(${m[1]})`));
-      for (const m of css.matchAll(/@import\s+["']\s*((?:https?:)?\/\/[^"']*)/gi)) out.push(excerpt(`@import ${m[1]}`));
+      for (const m of css.matchAll(/url\(\s*["']?\s*((?:(?:https?|ftp):)?\/\/[^)"']*)/gi)) out.push(excerpt(`url(${m[1]})`));
+      for (const m of css.matchAll(/@import\s+["']\s*((?:(?:https?|ftp):)?\/\/[^"']*)/gi)) out.push(excerpt(`@import ${m[1]}`));
       return out;
     },
   },

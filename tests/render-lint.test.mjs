@@ -60,6 +60,9 @@ const CASES = [
       '<img src="https&#58;//example.com/a.png">',
       '<img src="&#104;ttps://example.com/a.png">',
       '<img src="https&#58//example.com/a.png">',
+      '<img src="ftp://example.com/a.png">',
+      '<style type="text/css">body{background:url(https://example.com/a.png)}</style>',
+      '<style>body{background:url(ftp://example.com/a.png)}</style>',
       '<img src="https&#x3a//example.com/a.png">',
       '<style>body{background:url(https://example.com/a.png);content:"<style>"}</style>',
       '<div style="background:url(&quot;https://example.com/a.png&quot;)"></div>',
@@ -76,6 +79,8 @@ const CASES = [
       '<img alt="src=https://example.com/a.png" src="photo.png">',
       '<img srcset="photo.png 1x, photo-2x.png 2x">',
       '<title>url(https://example.com/a.png)</title>',
+      '<style type="text/plain">body{background:url(https://example.com/a.png)}</style>',
+      '<img src="#frag"><img src="">',
       '<img alt="<style>body{background:url(https://example.com/a.png)}</style>" src="a.png">',
       '<p>Docs: url(https://example.com/a.png) and @import "https://example.com/a.css"</p>',
     ],
@@ -114,7 +119,7 @@ test('an unreadable path is reported, never thrown', () => {
 });
 
 test('lint --render runs the render check and exits 0 on findings', () => {
-  const out = execFileSync('node', ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], { cwd: ROOT, encoding: 'utf-8' });
+  const out = execFileSync(process.execPath, ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], { cwd: ROOT, encoding: 'utf-8' });
   const parsed = JSON.parse(out);
   assert.ok(Array.isArray(parsed.findings));
   assert.equal(parsed.ok, true);
