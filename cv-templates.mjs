@@ -613,6 +613,64 @@ export function atsLint(path, kind, opts = {}) {
   return result;
 }
 
+// ---- User template audit (#5777) ----
+
+const PLACEHOLDER_RE = /\{\{[A-Z_]+\}\}/g;
+
+function placeholdersOf(path) {
+  return new Set((readFileSync(path, 'utf-8').match(PLACEHOLDER_RE) || []).map((t) => t.slice(2, -2)));
+}
+
+// The slots the shipped templates of one kind all keep: those in the base template
+// that every shipped named variant also carries. A slot a shipped variant drops
+// (INTERESTS, say) is optional by the project's own example, so a user copy
+// dropping it is not drift. With no shipped variant there is nothing to tell
+// optional from core, so nothing is judged (null) rather than every slot flagged.
+function coreSlots(system) {
+  const base = system.get('standard');
+  const variants = [...system.values()].filter((e) => e.name !== 'standard');
+  if (!base || variants.length === 0) return null;
+  let core = placeholdersOf(base.path);
+  for (const v of variants) {
+    const have = placeholdersOf(v.path);
+    core = new Set([...core].filter((slot) => have.has(slot)));
+  }
+  return core;
+}
+
+/**
+ * Advisory audit of the user's own templates (those under data/templates/).
+ * Returns one finding per template that has a problem, and [] when all is well:
+ *   - invalid: it does not resolve (missing required placeholders, or a declared
+ *     section with no partial). The message is the resolver's own.
+ *   - drifted: it lacks a slot every shipped variant of its kind keeps.
+ * Never throws for a template problem and never blocks a render; callers decide
+ * how loudly to report.
+ */
+export function auditUserTemplates({ dir = DEFAULT_TEMPLATES_DIR, userDir = DEFAULT_USER_TEMPLATES_DIR(), format = 'html' } = {}) {
+  assertFormat(format);
+  const findings = [];
+  for (const kind of Object.keys(KINDS)) {
+    const system = discoverIn(kind, { dir, format }, 'system');
+    const core = coreSlots(system);
+    for (const entry of discoverIn(kind, { dir: userDir, format }, 'user').values()) {
+      const problems = [];
+      try {
+        resolveTemplate(kind, entry.name, { dir, userDir, format });
+      } catch (err) {
+        problems.push({ type: 'invalid', detail: err.message });
+      }
+      if (core) {
+        const have = placeholdersOf(entry.path);
+        const missing = [...core].filter((slot) => !have.has(slot)).sort();
+        if (missing.length) problems.push({ type: 'drifted', missing });
+      }
+      if (problems.length) findings.push({ kind, name: entry.name, path: entry.path, problems });
+    }
+  }
+  return findings;
+}
+
 export function loadProfileDefault(kind, { profilePath = DEFAULT_PROFILE_PATH, strict = false } = {}) {
   const cfg = KINDS[kind];
   if (!cfg) throw new Error(`Unknown template kind: ${kind}`);
