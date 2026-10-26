@@ -14,7 +14,10 @@
  *   1. url / req   exact normalizeUrl() match, or the same requisition ID
  *                  (REQ_NUMBER_RE via extractReqNumber) at the same or a parent
  *                  company. A bare req ID with an unrelated company never counts.
+ *                  IDs are compared after normReq(), so JR9727 == JR-9727 == 9727.
  *   2. same-title  same normalized company and the same titleIdentityKey().
+ *   Same-company tiers ignore one trailing parenthesised location/remote suffix
+ *   on either title ("HR Generalist (Brampton, ON)" == "HR Generalist").
  *   3. parent-org / similar-title
  *                  same parent organisation (one name is a leading-token prefix
  *                  of the other, or differs only by a parenthesised unit) or the
@@ -43,9 +46,36 @@ import { isMainModule } from './lib/is-main-module.mjs';
 
 const CANONICAL_STATES = loadCanonicalStates(join(dirname(fileURLToPath(import.meta.url)), 'templates', 'states.yml'));
 
-/** Requisition ID without a leading REQ label, so "REQ-2026-32061" and "2026-32061" compare equal. */
+/**
+ * Requisition ID reduced to its identity, applied to BOTH the --req value and the
+ * tracker note so the two sides compare equal however the site wrote the ID:
+ * "REQ-2026-32061" == "2026-32061", and "JR9727" == "JR-9727" == "9727". Only a
+ * leading label (REQ / JR / R / JOB / POSTING / ID) is dropped, and only when an ID
+ * with a digit follows it; the ID body is never altered. tracker-parse.mjs's
+ * extractReqNumber() is deliberately left as is (merge-tracker, scan and
+ * followup-cadence depend on it), so the normalization lives here.
+ */
 function normReq(v) {
-  return String(v ?? '').trim().replace(/^REQ[-s:#_]+/i, '').toUpperCase();
+  let s = String(v ?? '').trim().toUpperCase().replace(/^REQ[-\s:#_]+/, '');
+  const m = s.match(/^(?:JR|R|JOB|POSTING|ID)[-\s:#_]*(\S*\d\S*)$/);
+  if (m) s = m[1];
+  return s;
+}
+
+/** Trailing parenthesised level markers are part of the title, not a location. */
+const LEVEL_SUFFIX_RE = /^(?:i{1,3}|iv|v|\d+|sr\.?|jr\.?|senior|junior|lead|intern|co-?op|contract|temporary|part[- ]time|full[- ]time)$/i;
+
+/**
+ * Title without one trailing parenthesised location/remote suffix:
+ * "HR Generalist (Brampton, ON)" -> "HR Generalist". Only the LAST group at the
+ * very end is removed, never when nothing would be left, and never for a level
+ * marker such as "(II)".
+ */
+export function stripLocationSuffix(title) {
+  const t = String(title ?? '').trim();
+  const m = t.match(/^(.*\S)\s*\(([^()]*)\)$/);
+  if (!m || LEVEL_SUFFIX_RE.test(m[2].trim())) return t;
+  return m[1].trim();
 }
 
 // ADDING A FLAG: add it to BOTH lists below and to USAGE (validateFlags reads these).
@@ -105,7 +135,8 @@ export function companyRelation(a, b) {
 export function findDuplicateCandidates(rows, { company = '', title = '', req = '', url = '' } = {}) {
   const wantUrl = normalizeUrl(url);
   const wantReq = normReq(req);
-  const wantTitleKey = title ? titleIdentityKey(title) : '';
+  const cleanTitle = stripLocationSuffix(title);
+  const wantTitleKey = cleanTitle ? titleIdentityKey(cleanTitle) : '';
   const out = [];
   for (const row of rows) {
     const rel = companyRelation(company, row.company);
@@ -114,11 +145,11 @@ export function findDuplicateCandidates(rows, { company = '', title = '', req = 
       reason = 'url';
     } else if (wantReq && rel && normReq(extractReqNumber(row.notes)) === wantReq) {
       reason = 'req';
-    } else if (rel === 'same' && wantTitleKey && titleIdentityKey(row.role) === wantTitleKey) {
+    } else if (rel === 'same' && wantTitleKey && titleIdentityKey(stripLocationSuffix(row.role)) === wantTitleKey) {
       reason = 'same-title';
-    } else if (rel === 'parent' && title && roleFuzzyMatch(title, row.role)) {
+    } else if (rel === 'parent' && cleanTitle && roleFuzzyMatch(cleanTitle, stripLocationSuffix(row.role))) {
       reason = 'parent-org';
-    } else if (rel === 'same' && title && roleFuzzyMatch(title, row.role)) {
+    } else if (rel === 'same' && cleanTitle && roleFuzzyMatch(cleanTitle, stripLocationSuffix(row.role))) {
       reason = 'similar-title';
     }
     if (!reason) continue;

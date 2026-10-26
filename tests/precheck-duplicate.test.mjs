@@ -5,7 +5,7 @@ import { execFileSync } from 'child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { findDuplicateCandidates, companyRelation } from '../precheck-duplicate.mjs';
+import { findDuplicateCandidates, companyRelation, stripLocationSuffix } from '../precheck-duplicate.mjs';
 
 console.log('\nprecheck-duplicate — read-only pre-apply duplicate check');
 
@@ -125,6 +125,45 @@ try {
   const w = findDuplicateCandidates(reqRows, { company: 'Northwind Hospital', title: 'Zzz', req: '2026-32061' })[0];
   if (w && w.warning === true) pass('a bold/dated Rejected status still sets the warning flag');
   else fail('decorated Rejected status should warn');
+
+  // 13. Issue #5997: separator-less req IDs and location-suffixed titles (fictional tracker).
+  const root2 = join(work, 'root2');
+  mkdirSync(join(root2, 'data'), { recursive: true });
+  writeFileSync(join(root2, 'data', 'applications.md'), [...HEADER,
+    row(1, '2026-10-23', 'Acme Supply Canada', 'HR Generalist (Brampton, ON)', 'Applied', 'Brampton ON on-site; JR9727; full time'),
+    row(2, '2026-10-24', 'Northwind Foods', 'Operations Analyst', 'Applied', 'req JR-4411; remote'),
+    row(3, '2026-10-25', 'Acme Supply Canada', 'Payroll Manager (Brampton, ON)', 'Applied'),
+  ].join('\n') + '\n');
+  const q = (args) => json(args, { CAREER_OPS_ROOT: root2 }).candidates;
+  let cc = q(['--company', 'Acme Supply Canada', '--title', 'Zzz Unrelated', '--req', 'JR9727']);
+  if (cc[0]?.num === 1 && cc[0].reason === 'req') pass('--req JR9727 matches a note written JR9727');
+  else fail(`JR9727: ${JSON.stringify(cc)}`);
+  for (const rq of ['JR-9727', '9727']) {
+    cc = q(['--company', 'Acme Supply Canada', '--title', 'Zzz Unrelated', '--req', rq]);
+    if (cc[0]?.num === 1 && cc[0].reason === 'req') pass(`--req ${rq} matches the same requisition as JR9727`);
+    else fail(`${rq}: ${JSON.stringify(cc)}`);
+  }
+  cc = q(['--company', 'Acme Supply Canada', '--title', 'HR Generalist']);
+  if (cc.length === 1 && cc[0].num === 1 && cc[0].reason === 'same-title') pass('title without the location suffix matches the suffixed row');
+  else fail(`suffix one side: ${JSON.stringify(cc)}`);
+  cc = q(['--company', 'Acme Supply Canada', '--title', 'HR Generalist (Brampton, ON)', '--req', 'JR9727']);
+  if (cc[0]?.num === 1 && cc[0].reason === 'req') pass('suffixed title plus req still matches #1');
+  else fail(`suffix + req: ${JSON.stringify(cc)}`);
+  cc = q(['--company', 'Northwind Foods', '--title', 'Operations Analyst II', '--req', 'JR-4411']);
+  if (cc[0]?.num === 2 && cc[0].reason === 'req') pass('hyphenated JR-4411 still matches');
+  else fail(`JR-4411: ${JSON.stringify(cc)}`);
+  cc = q(['--company', 'Globex Corp', '--title', 'HR Generalist', '--req', 'JR9727']);
+  if (cc.length === 0) pass('same req at an unrelated company still does not match');
+  else fail(`unrelated company req: ${JSON.stringify(cc)}`);
+  cc = q(['--company', 'Acme Supply Canada', '--title', 'Warehouse Supervisor (Brampton, ON)']);
+  if (cc.length === 0) pass('different titles at the same company do not match on a shared suffix');
+  else fail(`suffix-only match: ${JSON.stringify(cc)}`);
+  cc = q(['--company', 'Acme Supply Canada', '--title', 'Payroll Manager']);
+  if (cc.length === 1 && cc[0].num === 3) pass('suffix stripping does not cross-match #1 and #3');
+  else fail(`payroll: ${JSON.stringify(cc)}`);
+  if (stripLocationSuffix('Analyst (II)') === 'Analyst (II)' && stripLocationSuffix('(Remote)') === '(Remote)' && stripLocationSuffix('Analyst (Remote)') === 'Analyst')
+    pass('stripLocationSuffix keeps level markers and never empties a title');
+  else fail('stripLocationSuffix edge cases');
 
   // 12. A lookup with no usable key is rejected, not reported as "no duplicate".
   const rejects = (args) => {
