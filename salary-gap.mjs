@@ -13,7 +13,7 @@
  * Fold: per (tracker#, type), highest trust tier wins, then latest date.
  *   actual:     contract > offer-letter > recruiter-verbal > user
  *   desired:    user > profile
- *   advertised: user > recruiter-verbal > jd
+ *   advertised: user > recruiter-verbal > jd > third-party (unverified estimate; flagged `unverified`)
  *
  * `stated` observations are a separate, narrower-purpose log: a specific number
  * the candidate verbally committed to, in a specific interview round, to a
@@ -68,9 +68,9 @@
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
 import { resolveColumns, parseTrackerRow, extractTrackerReportLinks, extractTrackerReportNumbers } from './tracker-parse.mjs';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, hasFlag } from './lib/cli-flags.mjs';
 import { parseAmount, compensationPeriod } from './providers/_salary-text.mjs';
@@ -143,7 +143,10 @@ const relocHomeLocationFlag = flagValue(args, '--home-location') ?? null;
 const TRUST = {
   actual: { contract: 3, 'offer-letter': 2, 'recruiter-verbal': 1, user: 0 },
   desired: { user: 1, profile: 0 },
-  advertised: { user: 2, 'recruiter-verbal': 1, jd: 0 },
+  // `third-party` = an unverified pay estimate from an aggregator / salary-estimate
+  // site (not the employer, not a recruiter). Lowest tier, advertised-only, so any
+  // jd / recruiter-verbal / user row for the same tracker# supersedes it.
+  advertised: { user: 2, 'recruiter-verbal': 1, jd: 0, 'third-party': -1 },
 };
 
 const VALID_TYPES = new Set(['desired', 'advertised', 'actual', 'stated']);
@@ -250,7 +253,7 @@ export function reportToObservation(content, num, date) {
 export function loadRelocationTable(tablePath = RELOCATION_TABLE_PATH) {
   if (!existsSync(tablePath)) return null;
   try {
-    const doc = yaml.load(readFileSync(tablePath, 'utf-8').replace(/\r\n/g, '\n'));
+    const doc = loadYaml(readFileSync(tablePath, 'utf-8').replace(/\r\n/g, '\n'));
     return doc?.jurisdictions && typeof doc.jurisdictions === 'object' ? doc.jurisdictions : null;
   } catch {
     return null;
@@ -521,6 +524,8 @@ function pickEffective(type, candidates) {
     currency: top.currency, raw: top.amount,
     period: top.period ?? compensationPeriod(top.amount),
     postingLocation: top.postingLocation ?? null,
+    // only present when true, so output for data without third-party rows is unchanged
+    ...(top.source === 'third-party' ? { unverified: true } : {}),
   };
 }
 
@@ -1494,10 +1499,10 @@ function collectSources() {
 }
 
 function loadProfileDesired() {
-  const profilePath = join(CAREER_OPS, 'config/profile.yml');
+  const profilePath = getProfilePath();
   if (!existsSync(profilePath)) return null;
   try {
-    const profile = yaml.load(readFileSync(profilePath, 'utf-8'));
+    const profile = loadYaml(readFileSync(profilePath, 'utf-8'));
     const comp = profile?.compensation;
     if (!comp?.target_range) return null;
     return { amount: String(comp.target_range), currency: comp.currency ? String(comp.currency) : null };
@@ -1512,10 +1517,10 @@ function loadProfileDesired() {
 // throughout config/profile.example.yml; `location.city` is the fallback for
 // a profile that only fills in the structured `location:` block.
 function loadProfileLocation() {
-  const profilePath = join(CAREER_OPS, 'config/profile.yml');
+  const profilePath = getProfilePath();
   if (!existsSync(profilePath)) return null;
   try {
-    const profile = yaml.load(readFileSync(profilePath, 'utf-8'));
+    const profile = loadYaml(readFileSync(profilePath, 'utf-8'));
     const candidateLoc = profile?.candidate?.location;
     if (typeof candidateLoc === 'string' && candidateLoc.trim()) return candidateLoc.trim();
     const city = profile?.location?.city;
@@ -1527,7 +1532,7 @@ function loadProfileLocation() {
 
 // --- Output ---
 const fmtVal = (v) => (v >= 1000 && v % 500 === 0 ? `${v / 1000}k` : String(v));
-const fmtEff = (e) => (e ? `${fmtVal(e.value)} ${e.currency || ''} (${e.source}, ${e.date})`.replace('  ', ' ') : '—');
+const fmtEff = (e) => (e ? `${e.unverified ? '~ ' : ''}${fmtVal(e.value)} ${e.currency || ''} (${e.source}, ${e.date})${e.unverified ? ' [unverified estimate]' : ''}`.replace('  ', ' ') : '—');
 const fmtPct = (p) => (p === null || p === undefined ? '—' : `${p >= 0 ? '+' : ''}${p.toFixed(1)}%`);
 const daysOld = (date) => Math.max(0, Math.round((Date.now() - Date.parse(date)) / 86400000));
 // Rounded to the nearest $100 — this is a bracket-only estimate, never claim

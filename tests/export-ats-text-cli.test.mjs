@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describeSpawn } from './helpers/describe-spawn.mjs';
+import { describeSpawn, exitedNonZero } from './helpers/describe-spawn.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/export-ats-text.mjs', import.meta.url));
 
@@ -78,7 +78,7 @@ test('unknown flags and missing values still fail without creating an export', (
     ['--help', '--profile'],
   ]) {
     const result = run(root, args);
-    assert.notEqual(result.status, 0, `accepted ${args.join(' ')}`);
+    assert.ok(exitedNonZero(result), describeSpawn(result, `accepted ${args.join(' ')}`));
     assert.equal(existsSync(output), false);
   }
 });
@@ -90,7 +90,7 @@ test('help flags cannot supply a required value or overwrite an export', (t) => 
   for (const option of ['--section', '--out', '--profile', '--cv']) {
     for (const help of ['--help', '-h']) {
       const result = run(root, ['--out', output, option, help]);
-      assert.equal(result.status, 1, `accepted ${option} ${help}`);
+      assert.equal(result.status, 1, describeSpawn(result, `accepted ${option} ${help}`));
       assert.match(result.stderr, new RegExp(`${option} requires a value`));
       assert.equal(result.stdout, '');
       assert.equal(readFileSync(output, 'utf8'), 'Keep this previous export.\n');
