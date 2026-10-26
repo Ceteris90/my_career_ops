@@ -19,6 +19,7 @@ import {
   profileWithCvTemplate,
   renderTemplatePreview,
   assertSelectableTemplate,
+  withPreviewCsp,
 } from "../../src/lib/template-gallery.mjs";
 import { SAMPLE_CV_PAYLOAD } from "../../src/lib/template-sample-resume.mjs";
 
@@ -95,4 +96,27 @@ test("the fictional resume carries only reserved example contact details", () =>
   assert.equal(candidate.linkedin, undefined);
   assert.equal(candidate.github, undefined);
   assert.equal(candidate.portfolio, undefined);
+});
+
+test("a flow-style cv mapping with comments is refused, not rewritten without them", () => {
+  const source = "# my profile\ncv: { template: standard } # base\n";
+
+  assert.throws(() => profileWithCvTemplate(source, "modern"), /comment/i);
+});
+
+test("a flow-style cv mapping with no comments is still written", () => {
+  const text = profileWithCvTemplate("name: A\ncv: { template: standard }\n", "modern");
+
+  assert.match(text, /template: modern/);
+});
+
+test("the preview page carries its own CSP so it holds when loaded as srcdoc", () => {
+  const out = withPreviewCsp("<!DOCTYPE html><html><head><title>x</title></head><body>b</body></html>");
+
+  assert.match(out, /<head><meta http-equiv="Content-Security-Policy" content="[^"]*img-src data:[^"]*">/);
+  assert.ok(out.includes("<title>x</title>"));
+});
+
+test("a page with no head still gets the CSP", () => {
+  assert.match(withPreviewCsp("<p>hi</p>"), /^<meta http-equiv="Content-Security-Policy"/);
 });
