@@ -717,6 +717,12 @@ const RENDER_RULES = [
     rule: 'Every request that is not file: or data: is aborted, so a remote image, stylesheet or font is dropped without a message.',
     detect: (html) => {
       const out = [];
+      // A relative URL resolves against an absolute remote <base href>, so it is
+      // a remote request too. Only the first <base> counts, as in a browser.
+      const baseTag = (html.match(TAG_RE) || []).find((t) => /^<base\b/i.test(t) && attrValue(t, 'href') !== null);
+      const hasRemoteBase = Boolean(baseTag) && /^\s*(?:https?|ftp):\/\//i.test(attrValue(baseTag, 'href'));
+      const isRelative = (u) => { const v = u.trim(); return v !== '' && !v.startsWith('#') && !v.startsWith('{{') && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('//'); };
+      const isRemote = (u) => REMOTE_RE.test(u) || (hasRemoteBase && isRelative(u));
       for (const tag of html.match(TAG_RE) || []) {
         const name = /^<([a-zA-Z0-9]+)/.exec(tag)[1].toLowerCase();
         const attrs = [];
@@ -729,7 +735,7 @@ const RENDER_RULES = [
           const v = attrValue(tag, a) ?? '';
           return a === 'srcset' ? srcsetUrls(v) : [v];
         });
-        if (urls.some((u) => REMOTE_RE.test(u))) out.push(excerpt(tag));
+        if (urls.some(isRemote)) out.push(excerpt(tag));
       }
       // Only CSS-bearing content: <style> bodies and style="" values. A title or
       // visible text that happens to contain url(...) is prose, not a request.
@@ -754,8 +760,8 @@ const RENDER_RULES = [
         if (inline) sources.push(inline);
       }
       const css = sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
-      for (const m of css.matchAll(/url\(\s*["']?\s*((?:(?:https?|ftp):)?\/\/[^)"']*)/gi)) out.push(excerpt(`url(${m[1]})`));
-      for (const m of css.matchAll(/@import\s+["']\s*((?:(?:https?|ftp):)?\/\/[^"']*)/gi)) out.push(excerpt(`@import ${m[1]}`));
+      for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`url(${m[1]})`));
+      for (const m of css.matchAll(/@import\s+["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
       return out;
     },
   },
