@@ -972,11 +972,10 @@ if (isMain) {
         throw new Error(`lint reads HTML templates only; --format=${format} would report "no findings" without checking anything`);
       }
       const name = positionals[0];
-      if (flags.render) {
-        process.stdout.write(JSON.stringify(renderLint(resolveTemplate(kind, name, { format, fallback: Boolean(flags.fallback) })), null, 2) + '\n');
-        process.exit(0);
-      }
-      process.stdout.write(JSON.stringify(atsLint(resolveTemplate(kind, name, { format, fallback: Boolean(flags.fallback) }), kind), null, 2) + '\n');
+      // No process.exit after the write: on a pipe it can cut the JSON short.
+      const path = resolveTemplate(kind, name, { format, fallback: Boolean(flags.fallback) });
+      const report = flags.render ? renderLint(path) : atsLint(path, kind);
+      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     } else {
       process.stderr.write('Usage: node cv-templates.mjs <list|resolve|lint> <cv|cover> [name] [--format=html|tex] [--fallback] [--render]\n');
       process.exit(2);
