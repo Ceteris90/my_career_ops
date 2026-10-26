@@ -129,8 +129,8 @@ function parseRange(range) {
     const lowers = [];
     const uppers = [];
     for (const term of terms) {
-      const m = term.match(/^(>=|<=|<|\^)(\d+)(?:\.(\d+))?(?:\.(\d+))?$/);
-      if (!m) return null;   // unknown operator, x-range, single `|`, or junk
+      const m = term.match(/^(>=|<=|<|\^)(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?$/);
+      if (!m) return null;   // unknown operator, x-range, leading zero, single `|`, or junk
       const [, op, major, minor, patch] = m;
       const version = [Number(major), Number(minor ?? 0), Number(patch ?? 0)];
       if (op === '>=') {
@@ -315,6 +315,8 @@ if (!existsSync(WEB_PKG)) {
       '^22.13.0 || >=23.4.0 <23.4.0',   // one alternative unsatisfiable
       '>=22.0.0 garbage',     // trailing junk
       '^22.13.0 || garbage',  // junk in one alternative
+      '>=022.13.0',           // leading zero — not a valid npm version
+      '^22.013.0',            // leading zero in the minor
       '>=22 | >=23',          // single pipe
       '>=22 >=24',            // two lower bounds — ambiguous
       '^22 >=22.5',           // two lower bounds — ambiguous
