@@ -5,7 +5,7 @@
 // rule's must-not-flag clause from the issue.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -61,6 +61,11 @@ const CASES = [
       '<img src="&#104;ttps://example.com/a.png">',
       '<img src="https&#58//example.com/a.png">',
       '<img src="ftp://example.com/a.png">',
+      '<base href="https://cdn.example/"><img src="logo.png">',
+      '<base href="https://cdn.example/"><link rel="stylesheet" href="css/a.css">',
+      '<base href="https://cdn.example/"><img srcset="a.png 1x, b.png 2x">',
+      '<base href="https://cdn.example/"><style>body{background:url(img/a.png)}</style>',
+      '<base href="https://cdn.example/"><style>@import "a.css";</style>',
       '<style type="text/css">body{background:url(https://example.com/a.png)}</style>',
       '<style>body{background:url(ftp://example.com/a.png)}</style>',
       '<img src="https&#x3a//example.com/a.png">',
@@ -81,6 +86,10 @@ const CASES = [
       '<title>url(https://example.com/a.png)</title>',
       '<style type="text/plain">body{background:url(https://example.com/a.png)}</style>',
       '<img src="#frag"><img src="">',
+      '<base href="https://cdn.example/"><img src="data:image/png;base64,AAAA"><img src="{{PHOTO}}"><a href="rel.html">x</a>',
+      '<base href="https://cdn.example/"><style>body{background:url(data:image/png;base64,AAAA)}</style>',
+      '<base href="file:///tmp/"><img src="logo.png">',
+      '<base target="_blank"><img src="logo.png">',
       '<img alt="<style>body{background:url(https://example.com/a.png)}</style>" src="a.png">',
       '<p>Docs: url(https://example.com/a.png) and @import "https://example.com/a.css"</p>',
     ],
@@ -118,11 +127,31 @@ test('an unreadable path is reported, never thrown', () => {
   assert.ok(r.error);
 });
 
+// The child gets a throwaway data root, so a template the developer keeps in
+// their own data/templates cannot change what `standard` resolves to.
+function lintCli(userCv) {
+  const root = mkdtempSync(join(tmpdir(), 'render-lint-root-'));
+  try {
+    if (userCv !== undefined) {
+      mkdirSync(join(root, 'data', 'templates'), { recursive: true });
+      writeFileSync(join(root, 'data', 'templates', 'cv-template.standard.html'), userCv);
+    }
+    const out = execFileSync(process.execPath, ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], {
+      cwd: ROOT, encoding: 'utf-8', env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '' },
+    });
+    return JSON.parse(out);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 test('lint --render runs the render check and exits 0 on findings', () => {
-  const out = execFileSync(process.execPath, ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], { cwd: ROOT, encoding: 'utf-8' });
-  const parsed = JSON.parse(out);
+  const parsed = lintCli();
   assert.ok(Array.isArray(parsed.findings));
   assert.equal(parsed.ok, true);
+  const dirty = lintCli('<html><body><img src="https://example.com/a.png"><h1>{{NAME}}</h1>{{SECTION_EXPERIENCE}}{{EXPERIENCE}}{{SECTION_EDUCATION}}{{EDUCATION}}</body></html>');
+  assert.equal(dirty.ok, false);
+  assert.ok(dirty.findings.some((f) => f.id === 'remote-subresource'));
 });
 
 // Tracked files only: listTemplates() also walks templates/<pack>/ and any
