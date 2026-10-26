@@ -35,11 +35,11 @@ const CASES = [
   {
     id: 'event-handler-attribute',
     hit: ['<body onload="x()">', '<img src="a.png" onerror=x()>', '<a href="#" ONCLICK="x()">go</a>', '<svg/onload=x()>', '<img src="a.png"onerror=x()>', '<img src=\'a.png\'onerror=x()>'],
-    miss: ['<p title="once=twice">x</p>', '<div data-onclick="x">x</div>', '<p>onload= in text</p>'],
+    miss: ['<p title="once=twice">x</p>', '<div data-onclick="x">x</div>', '<p>onload= in text</p>', '<a href=/onload=x>x</a>', '<a href=a/onclick=b>x</a>', '<img src="a.png" alt=x/onerror=y>'],
   },
   {
     id: 'script-url',
-    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>'],
+    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>'],
     miss: ['<img src="data:image/png;base64,AAAA">', '<style>@font-face{src:url("data:font/woff2;base64,AAAA")}</style>', '<a href="{{LINKEDIN_URL}}">x</a>'],
   },
   {
@@ -61,6 +61,10 @@ const CASES = [
       '<img src="&#104;ttps://example.com/a.png">',
       '<img src="https&#58//example.com/a.png">',
       '<img src="ftp://example.com/a.png">',
+      '<img src="https&colon;//example.com/a.png">',
+      '<img src="https&colon;&sol;&sol;example.com/a.png">',
+      '<style><!-- @import url(https://fonts.example.com/a.css); --></style>',
+      '<style><!--\nbody{background:url(https://example.com/a.png)}\n--></style>',
       '<base href="https://cdn.example/"><img src="logo.png">',
       '<base href="https://cdn.example/"><link rel="stylesheet" href="css/a.css">',
       '<base href="https://cdn.example/"><img srcset="a.png 1x, b.png 2x">',
@@ -86,6 +90,8 @@ const CASES = [
       '<title>url(https://example.com/a.png)</title>',
       '<style type="text/plain">body{background:url(https://example.com/a.png)}</style>',
       '<img src="#frag"><img src="">',
+      '<!-- <style>@import url(https://fonts.example.com/a.css);</style> -->',
+      '<p>x</p><!-- <img src="https://example.com/a.png"> --><style>body{color:#000}</style>',
       '<base href="https://cdn.example/"><img src="data:image/png;base64,AAAA"><img src="{{PHOTO}}"><a href="rel.html">x</a>',
       '<base href="https://cdn.example/"><style>body{background:url(data:image/png;base64,AAAA)}</style>',
       '<base href="file:///tmp/"><img src="logo.png">',
