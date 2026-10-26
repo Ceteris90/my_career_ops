@@ -2,7 +2,7 @@
 // (#5951). The clone is injected, so nothing here touches the network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -205,6 +205,37 @@ test('remove never follows a lock path out of templates/<id>/', () => {
   writeFileSync(join(r, 'templates.lock'), JSON.stringify({ lockfileVersion: 1, packs: { demo: { files: { '../victim.txt': 'sha256-x' } } } }));
   assert.throws(() => removePack(r, 'demo', { force: true }), /outside/);
   assert.equal(existsSync(victim), true);
+});
+
+test('remove never deletes through a symlinked templates/<id>', (t) => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const outside = mk('tpl-out-');
+  writeFileSync(join(outside, 'cv-template.plain.html'), 'keep');
+  writeFileSync(join(outside, 'cover-letter-template.plain.html'), 'keep');
+  rmSync(join(r, 'templates/demo'), { recursive: true });
+  try {
+    symlinkSync(outside, join(r, 'templates/demo'));
+  } catch (err) {
+    if (err?.code === 'EPERM' || err?.code === 'EACCES') return t.skip(`cannot create symlinks here: ${err.code}`);
+    throw err;
+  }
+  assert.throws(() => removePack(r, 'demo', { force: true }), /symlink/);
+  assert.equal(readFileSync(join(outside, 'cv-template.plain.html'), 'utf-8'), 'keep');
+  assert.equal(readFileSync(join(outside, 'cover-letter-template.plain.html'), 'utf-8'), 'keep');
+});
+
+test('a forced reinstall never overwrites a file in templates/<id>/ the lock does not own', () => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const mine = join(r, 'templates/demo/cv-template.mine.html');
+  writeFileSync(mine, 'user-owned');
+  const entry = { ...manifest().templates[0], id: 'mine', files: { cv: 'templates/cv-template.mine.html', cover: 'templates/cover-letter-template.mine.html' } };
+  const v2 = () => packDir(manifest({ version: '0.2.0', templates: [entry] }), { 'templates/cv-template.mine.html': CV, 'templates/cover-letter-template.mine.html': COVER });
+  assert.throws(() => installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(v2), force: true }), /not installed by templates\.mjs|not owned/);
+  assert.equal(readFileSync(mine, 'utf-8'), 'user-owned');
+  assert.equal(readLock(r).packs.demo.version, '0.1.0');
+  assert.equal(readFileSync(join(r, 'templates/demo/cv-template.plain.html'), 'utf-8'), CV);
 });
 
 test('the CLI prints usage for --help and exits 2 for an unknown command', () => {
