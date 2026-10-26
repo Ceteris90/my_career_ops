@@ -21,6 +21,7 @@ import {
   profileWithTemplate,
   renderTemplatePreview,
   assertSelectableTemplate,
+  withPreviewCsp,
 } from "../../src/lib/template-gallery.mjs";
 import { SAMPLE_CV_PAYLOAD, SAMPLE_COVER_PAYLOAD } from "../../src/lib/template-sample-resume.mjs";
 
@@ -128,4 +129,49 @@ test("a cover template previews as a filled letter with the fictional sample", a
 
 test("a name from the other kind is not selectable", async () => {
   await assert.rejects(assertSelectableTemplate(CORE, "modern", "cover"), /not found/i);
+});
+
+test("a flow-style cv mapping with comments is refused, not rewritten without them", () => {
+  const source = "# my profile\ncv: { template: standard } # base\n";
+
+  assert.throws(() => profileWithCvTemplate(source, "modern"), /comment/i);
+});
+
+test("a flow-style cv mapping with no comments is still written", () => {
+  const text = profileWithCvTemplate("name: A\ncv: { template: standard }\n", "modern");
+
+  assert.match(text, /template: modern/);
+});
+
+test("the preview page carries its own CSP so it holds when loaded as srcdoc", () => {
+  const out = withPreviewCsp("<!DOCTYPE html><html><head><title>x</title></head><body>b</body></html>");
+
+  assert.match(out, /<head><meta http-equiv="Content-Security-Policy" content="[^"]*img-src data:[^"]*">/);
+  assert.ok(out.includes("<title>x</title>"));
+});
+
+test("a page with no head still gets the CSP", () => {
+  assert.match(withPreviewCsp("<p>hi</p>"), /^<meta http-equiv="Content-Security-Policy"/);
+});
+
+test("a comment with no space after the # still blocks a comment-dropping rewrite", () => {
+  assert.throws(() => profileWithCvTemplate("cv: { template: standard } #base\n", "modern"), /comment/i);
+});
+
+test("a # inside a value is not mistaken for a comment", () => {
+  const text = profileWithCvTemplate("name: a#b\ncv: { template: standard }\n", "modern");
+
+  assert.match(text, /template: modern/);
+});
+
+test("the CSP goes after the real head, not a <head> inside a comment", () => {
+  const out = withPreviewCsp("<!-- <head> --><html><head><title>x</title></head></html>");
+
+  assert.ok(out.startsWith("<!-- <head> --><html><head><meta http-equiv="));
+});
+
+test("a <header> element is not mistaken for the head", () => {
+  const out = withPreviewCsp("<html><body><header>h</header></body></html>");
+
+  assert.ok(out.startsWith("<meta http-equiv="));
 });
