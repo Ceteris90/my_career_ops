@@ -14,16 +14,23 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const ctx = await manageContext(req);
   if (ctx instanceof NextResponse) return ctx;
+  const name = text(ctx.body.name);
   const to = text(ctx.body.to);
   try {
-    const { wasDefault } = await renameTemplate(ctx.codeRoot, { kind: ctx.kind, name: text(ctx.body.name), to, userDir: ctx.userDir, profilePath: ctx.profilePath });
+    const { wasDefault } = await renameTemplate(ctx.codeRoot, { kind: ctx.kind, name, to, userDir: ctx.userDir, profilePath: ctx.profilePath });
     if (wasDefault) {
       try {
         atomicWriteWithBackup(ctx.profilePath, profileWithTemplate(fs.readFileSync(ctx.profilePath, "utf8"), ctx.kind, to));
       } catch (e) {
-        // The file is already renamed, so say so: a bare failure would read as "nothing happened".
-        const why = e instanceof Error ? e.message : "write failed";
-        return NextResponse.json({ error: `Renamed to "${to}", but the profile still names the old template: ${why}` }, { status: 409 });
+        // The profile still names the old template, so put the file back under that
+        // name instead of leaving the default pointing at nothing.
+        console.error("[templates] profile update failed during rename", e);
+        try {
+          await renameTemplate(ctx.codeRoot, { kind: ctx.kind, name: to, to: name, userDir: ctx.userDir, profilePath: ctx.profilePath });
+        } catch {
+          return NextResponse.json({ error: `Renamed to "${to}", but the profile still names "${name}" and the file could not be put back.` }, { status: 409 });
+        }
+        return NextResponse.json({ error: `Nothing was renamed: the profile could not be updated.` }, { status: 409 });
       }
     }
     return NextResponse.json({ ok: true, name: to, wasDefault });

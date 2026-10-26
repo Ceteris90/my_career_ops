@@ -151,6 +151,7 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
                   ) : (
                     <input
                       autoFocus
+                      disabled={busy !== null}
                       aria-label={pending.mode === "rename" ? "New name" : "Name for the copy"}
                       aria-describedby={`${copy.id}-hint`}
                       value={draft}

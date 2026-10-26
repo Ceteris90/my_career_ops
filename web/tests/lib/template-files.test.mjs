@@ -205,3 +205,15 @@ test("only validation errors become refusals; an operating-system error passes t
   assert.ok(refusalFrom(validation) instanceof TemplateRefusal);
   assert.equal(refusalFrom(os), os);
 });
+
+test("a rename can be reversed, so a failed profile update can put the file back", async () => {
+  const s = scratch();
+  await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "first", userDir: s.userDir });
+  const before = fs.readFileSync(path.join(s.userDir, "cv-template.first.html"), "utf8");
+
+  await renameTemplate(CORE, { kind: "cv", name: "first", to: "second", userDir: s.userDir, profilePath: s.profilePath });
+  await renameTemplate(CORE, { kind: "cv", name: "second", to: "first", userDir: s.userDir, profilePath: s.profilePath });
+
+  assert.equal(fs.readFileSync(path.join(s.userDir, "cv-template.first.html"), "utf8"), before);
+  assert.ok(!fs.existsSync(path.join(s.userDir, "cv-template.second.html")));
+});
