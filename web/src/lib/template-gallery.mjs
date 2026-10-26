@@ -68,7 +68,7 @@ export async function assertSelectableTemplate(root, name) {
 function editProfile(source, patch, merged) {
   const edited = patchProfileText(source, patch, merged);
   if (edited !== null) return edited;
-  if (/^\s*#|\s#\s/m.test(source)) {
+  if (/(^|\s)#/m.test(source)) {
     throw new Error(
       "config/profile.yml has comments and a layout this edit cannot place without dropping them (for example cv written as { template: ... }). Set the template in the file by hand, or write that section as an indented block.",
     );
@@ -128,7 +128,16 @@ const PREVIEW_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data
  */
 export function withPreviewCsp(html) {
   const meta = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}">`;
-  return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (open) => `${open}${meta}`) : meta + html;
+  // Skip comments, which a template may fill with markup, and match <head> as a
+  // whole tag name so <header> is not taken for it.
+  const tokens = /<!--[\s\S]*?-->|<head(?=[\s>])[^>]*>/gi;
+  let match;
+  while ((match = tokens.exec(html))) {
+    if (match[0].startsWith("<!--")) continue;
+    const end = match.index + match[0].length;
+    return html.slice(0, end) + meta + html.slice(end);
+  }
+  return meta + html;
 }
 
 /** @param {unknown} v */
