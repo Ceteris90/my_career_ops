@@ -1193,6 +1193,7 @@ search_queries:
 #   prevueaps       <tenant>.prevueaps.ca  (or api: field; domainId resolved from the tenant's /jobs/ page)
 #   rippling        ats.rippling.com/<slug>/jobs
 #   dover           app.dover.com/<Company>/careers/<board-uuid>
+#   notion          <workspace>.notion.site/<Title>-<page-id>  (the page id must be in the URL; ?v=<view-id> picks a database view)
 #   jibeapply       <slug>.jibeapply.com/jobs  (or provider: jibeapply + api: for a branded host's own /jobs path)
 #   jobvite         jobs.jobvite.com/<slug>  (add company_eid: to skip the board lookup — see the stanza below)
 #   tencent         careers.tencent.com  (zh-CN board; each keywords: entry queried server-side, results deduped)
@@ -1264,6 +1265,11 @@ search_queries:
 # origin. A custom frontend merely handing applications to Eploy (for example,
 # Specsavers' Attrax jobs page) is not the same protocol and is not supported.
 #
+# wp-job-manager is explicit-only too: it reads the WP Job Manager plugin's
+# `/?feed=job_feed` RSS feed off any WordPress job board, and a WordPress
+# host has nothing to detect. Set `provider: wp-job-manager` + `careers_url`
+# (only the host is used). Check that board's robots.txt first.
+#
 # Some providers are job boards / aggregators with no per-company careers
 # URL to detect, so they must be selected with an explicit `provider:`
 # field. Those are the provider modules that omit detect(); the commented
@@ -1319,6 +1325,12 @@ search_queries:
 #   max_pages: 10          # optional page cap (up to 1000 jobs/page, default 10, max 50) —
 #                          # raise it for a tenant with 10,000+ open postings (a warning
 #                          # is logged if the cap truncates real results)
+#   enabled: true
+#
+# - name: Example Notion Co
+#   careers_url: https://exampleco.notion.site/Careers-00000000000040008000000000000000
+#                          # a public careers page or database; the page id is the last
+#                          # 32-hex segment, and an optional ?v=<view-id> picks the view
 #   enabled: true
 #
 # - name: Example Dover Co
@@ -1834,6 +1846,12 @@ search_queries:
 #   # Division path is required; one of:
 #   # it, engineering, marketing, sales, hr, logistics, finances, other
 #   careers_url: https://solid.jobs/public-api/offers/engineering
+#   enabled: true
+#
+# - name: Example WP Job Manager Board   # any WordPress board on the WP Job Manager plugin
+#   provider: wp-job-manager             # required — WordPress hosts are not auto-detected
+#   careers_url: https://jobs.example.com/   # board address; only the host is used
+#   max_pages: 20         # optional page cap (100 items/request, default 20, max 100)
 #   enabled: true
 #
 # -- Remote-job feeds  (→ job_boards:; set provider: plus any provider-specific fields) --
