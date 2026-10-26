@@ -1141,7 +1141,14 @@ function checkCvShape(root) {
 function checkUserTemplates(root) {
   let findings;
   try {
-    findings = auditUserTemplates({ userDir: join(root, 'data', 'templates') });
+    // The shipped baseline is the checkout being diagnosed, when it has one. A
+    // --target that holds only user data has no templates/, so the executing
+    // checkout's own default stays the baseline there.
+    const shipped = join(codeRoot, 'templates');
+    findings = auditUserTemplates({
+      userDir: join(root, 'data', 'templates'),
+      ...(existsSync(join(shipped, 'cv-template.html')) ? { dir: shipped } : {}),
+    });
   } catch (err) {
     return { warn: true, label: `data/templates: could not be audited (${err.message})` };
   }

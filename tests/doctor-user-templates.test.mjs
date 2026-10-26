@@ -49,3 +49,17 @@ test('the audit is advisory: it does not turn onboarding on', () => {
 
   assert.equal(doctorJson(dir).onboardingNeeded, doctorJson(target({})).onboardingNeeded);
 });
+
+test('the shipped baseline comes from the checkout being diagnosed when it has a templates directory', () => {
+  // This checkout ships only NAME, EXPERIENCE and EDUCATION in its variants, so a
+  // user template with just those keeps every slot the target's shipped set keeps.
+  // Against THIS checkout's shipped set it would be flagged for lacking more.
+  const dir = target({ 'cv-template.lean.html': '{{NAME}}{{EXPERIENCE}}{{EDUCATION}}' });
+  mkdirSync(join(dir, 'templates'));
+  writeFileSync(join(dir, 'templates', 'cv-template.html'), '{{NAME}}{{EXPERIENCE}}{{EDUCATION}}{{SKILLS}}');
+  writeFileSync(join(dir, 'templates', 'cv-template.modern.html'), '{{NAME}}{{EXPERIENCE}}{{EDUCATION}}');
+
+  const out = doctorJson(dir);
+
+  assert.ok(!out.warnings.some((w) => w.includes('cv-template.lean.html')), JSON.stringify(out.warnings));
+});
