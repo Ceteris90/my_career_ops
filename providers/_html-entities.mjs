@@ -69,6 +69,8 @@ const NAMED_ENTITIES = {
   deg: '°', hellip: '…', laquo: '«', raquo: '»', ndash: '–', mdash: '—',
   // URL punctuation: attribute checks see `https&colon;&sol;&sol;x` as a URL.
   colon: ':', sol: '/',
+  // The URL parser drops tab and newline, so `ht&Tab;tps://x` is a remote URL.
+  Tab: '\t', NewLine: '\n',
   lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201C', rdquo: '\u201D', middot: '·', euro: '€',
 };
 
