@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { duplicateTemplate } from "../../src/lib/template-files.mjs";
+import { TemplateRefusal } from "../../src/lib/template-refusal.mjs";
 import { readUserTemplate, checkTemplateEdit, MAX_TEMPLATE_BYTES } from "../../src/lib/template-edit.mjs";
 
 const CORE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -86,4 +87,20 @@ test("a cover-letter template is editable the same way", async () => {
   const { text, version } = await readUserTemplate(CORE, { kind: "cover", name: "warm", userDir });
 
   await assert.rejects(checkTemplateEdit(CORE, { kind: "cover", name: "warm", text: text.replaceAll("{{OPENING}}", ""), version, userDir }), /OPENING/);
+});
+
+test("edit refusals are typed, with the status they deserve", async () => {
+  const userDir = await withCopy();
+  const { text, version } = await readUserTemplate(CORE, { kind: "cv", name: "mine", userDir });
+  const refusal = async (p) => p.then(() => assert.fail("expected a refusal"), (e) => e);
+
+  const shipped = await refusal(readUserTemplate(CORE, { kind: "cv", name: "compact", userDir }));
+  const missing = await refusal(readUserTemplate(CORE, { kind: "cv", name: "nope", userDir }));
+  const broken = await refusal(checkTemplateEdit(CORE, { kind: "cv", name: "mine", text: text.replaceAll("{{EXPERIENCE}}", ""), version, userDir }));
+  const large = await refusal(checkTemplateEdit(CORE, { kind: "cv", name: "mine", text: "x".repeat(MAX_TEMPLATE_BYTES + 1), version, userDir }));
+  fs.appendFileSync(path.join(userDir, "cv-template.mine.html"), "\n<!-- moved on -->\n");
+  const stale = await refusal(checkTemplateEdit(CORE, { kind: "cv", name: "mine", text, version, userDir }));
+
+  for (const e of [shipped, missing, broken, large, stale]) assert.ok(e instanceof TemplateRefusal, e.message);
+  assert.deepEqual([shipped, missing, broken, large, stale].map((e) => e.status), [422, 404, 422, 422, 409]);
 });

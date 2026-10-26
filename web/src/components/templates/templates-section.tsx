@@ -158,7 +158,10 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
                       aria-label={pending.mode === "rename" ? "New name" : "Name for the copy"}
                       aria-describedby={`${copy.id}-hint`}
                       value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
+                      onChange={(e) => {
+                        setDraft(e.target.value);
+                        setError(null);
+                      }}
                       placeholder={pending.mode === "rename" ? "new-name" : "copy-name"}
                       className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-xs"
                     />
@@ -167,7 +170,14 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
                     <button type="submit" disabled={busy !== null} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-surface">
                       {busy === t.name ? "Working…" : pending.mode === "delete" ? "Delete" : pending.mode === "rename" ? "Rename" : "Duplicate"}
                     </button>
-                    <button type="button" onClick={() => setPending(null)} className="rounded-md px-2 py-1 text-xs underline">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPending(null);
+                        setError(null);
+                      }}
+                      className="rounded-md px-2 py-1 text-xs underline"
+                    >
                       Cancel
                     </button>
                   </div>

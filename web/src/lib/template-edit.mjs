@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { TemplateRefusal } from "./template-refusal.mjs";
 
 // Editing the body of one of the user's own templates (#1692). Whether the result
 // is usable stays the core's call: the candidate text is put where the resolver
@@ -23,8 +24,8 @@ const versionOf = (text) => createHash("sha256").update(text).digest("hex");
 /** @param {any} resolver @param {string} kind @param {string} userDir @param {string} name */
 function userEntry(resolver, kind, userDir, name) {
   const entry = resolver.listTemplates(kind, { userDir }).find((t) => t.name === name);
-  if (!entry) throw new Error(`Template not found: ${String(name).slice(0, 80)}`);
-  if (entry.layer !== "user") throw new Error("Only your own templates can be edited. Duplicate this one first.");
+  if (!entry) throw new TemplateRefusal(`Template not found: ${String(name).slice(0, 80)}`, 404);
+  if (entry.layer !== "user") throw new TemplateRefusal("Only your own templates can be edited. Duplicate this one first.");
   return entry;
 }
 
@@ -48,15 +49,15 @@ export async function readUserTemplate(root, { kind, name, userDir }) {
  * @param {{kind: "cv"|"cover", name: string, text: string, version: string, userDir: string}} opts
  */
 export async function checkTemplateEdit(root, { kind, name, text, version, userDir }) {
-  if (typeof text !== "string") throw new Error("The template text is missing.");
-  if (Buffer.byteLength(text) > MAX_TEMPLATE_BYTES) throw new Error(`The template is too large (limit ${MAX_TEMPLATE_BYTES / 1024} KB).`);
-  if (text.includes("\0")) throw new Error("The template contains a NUL byte; it looks binary, not HTML.");
+  if (typeof text !== "string") throw new TemplateRefusal("The template text is missing.");
+  if (Buffer.byteLength(text) > MAX_TEMPLATE_BYTES) throw new TemplateRefusal(`The template is too large (limit ${MAX_TEMPLATE_BYTES / 1024} KB).`);
+  if (text.includes("\0")) throw new TemplateRefusal("The template contains a NUL byte; it looks binary, not HTML.");
 
   const resolver = await loadResolver(root);
   const entry = userEntry(resolver, kind, userDir, name);
   const current = await fs.readFile(entry.path, "utf8");
   if (versionOf(current) !== version) {
-    throw new Error("This template changed since you opened it. Reload it, then apply your edit again.");
+    throw new TemplateRefusal("This template changed since you opened it. Reload it, then apply your edit again.", 409);
   }
 
   const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "template-edit-"));
@@ -66,7 +67,11 @@ export async function checkTemplateEdit(root, { kind, name, text, version, userD
       if (e.code !== "ENOENT") throw e;
     });
     // userDir: null keeps the user layer out, so the scratch copy is the whole registry.
-    resolver.resolveTemplate(kind, name, { dir: scratch, userDir: null });
+    try {
+      resolver.resolveTemplate(kind, name, { dir: scratch, userDir: null });
+    } catch (e) {
+      throw new TemplateRefusal(e instanceof Error ? e.message : String(e));
+    }
   } finally {
     await fs.rm(scratch, { recursive: true, force: true });
   }
