@@ -668,7 +668,14 @@ const RENDER_RULES = [
         });
         if (urls.some((u) => REMOTE_RE.test(u))) out.push(excerpt(tag));
       }
-      const css = html.replace(/\/\*[\s\S]*?\*\//g, ' ');
+      // Only CSS-bearing content: <style> bodies and style="" values. A title or
+      // visible text that happens to contain url(...) is prose, not a request.
+      const sources = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map((m) => m[1]);
+      for (const tag of html.match(TAG_RE) || []) {
+        const inline = attrValue(tag, 'style');
+        if (inline) sources.push(inline);
+      }
+      const css = sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
       for (const m of css.matchAll(/url\(\s*["']?\s*((?:https?:)?\/\/[^)"']*)/gi)) out.push(excerpt(`url(${m[1]})`));
       for (const m of css.matchAll(/@import\s+["']\s*((?:https?:)?\/\/[^"']*)/gi)) out.push(excerpt(`@import ${m[1]}`));
       return out;

@@ -56,6 +56,7 @@ const CASES = [
       '<style>body{background:url(http://example.com/a.png)}</style>',
       '<div style="background:url(\'https://example.com/a.png\')"></div>',
       '<img alt="src=photo.png" src="https://example.com/a.png">',
+      '<STYLE>body{background:URL(https://example.com/a.png)}</STYLE>',
       '<img srcset="photo.png 1x, https://example.com/photo.png 2x">',
     ],
     miss: [
@@ -67,6 +68,8 @@ const CASES = [
       '<style>/* url(https://example.com/a.png) */ body{}</style>',
       '<img alt="src=https://example.com/a.png" src="photo.png">',
       '<img srcset="photo.png 1x, photo-2x.png 2x">',
+      '<title>url(https://example.com/a.png)</title>',
+      '<p>Docs: url(https://example.com/a.png) and @import "https://example.com/a.css"</p>',
     ],
   },
 ];
