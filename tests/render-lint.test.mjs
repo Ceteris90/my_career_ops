@@ -34,7 +34,7 @@ const CASES = [
   },
   {
     id: 'event-handler-attribute',
-    hit: ['<body onload="x()">', '<img src="a.png" onerror=x()>', '<a href="#" ONCLICK="x()">go</a>'],
+    hit: ['<body onload="x()">', '<img src="a.png" onerror=x()>', '<a href="#" ONCLICK="x()">go</a>', '<svg/onload=x()>', '<img src="a.png"onerror=x()>', '<img src=\'a.png\'onerror=x()>'],
     miss: ['<p title="once=twice">x</p>', '<div data-onclick="x">x</div>', '<p>onload= in text</p>'],
   },
   {
