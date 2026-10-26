@@ -67,6 +67,8 @@ const NAMED_ENTITIES = {
   Yacute: 'Ý',
   // Punctuation these same pages emit around titles.
   deg: '°', hellip: '…', laquo: '«', raquo: '»', ndash: '–', mdash: '—',
+  // URL punctuation: attribute checks see `https&colon;&sol;&sol;x` as a URL.
+  colon: ':', sol: '/',
   lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201C', rdquo: '\u201D', middot: '·', euro: '€',
 };
 
