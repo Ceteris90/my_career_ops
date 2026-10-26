@@ -185,7 +185,7 @@ function main() {
       console.log(`[privacy] ${file}: real values restored`);
     } else {
       const hasTokens = /PRIVACY_VALUE_|PRIVACY_REDACTED_|CANDIDATE_/.test(content);
-      console.log(`[privacy] ${file}: ${hasTokens ? 'TOKENIZED (contains tokens)' : 'holds real PII'}`);
+      console.log(`[privacy] ${file}: ${hasTokens ? 'contains tokens' : 'no tokens detected'}`);
     }
   }
 
