@@ -69,11 +69,9 @@ const LEVEL_SUFFIX_RE = /^(?:i{1,3}|iv|v|d+|sr.?|jr.?|senior|junior|lead|intern|
 // shape alone ("(Toronto)" and "(Backend)" are both one capitalised word), so a
 // parenthesised suffix is stripped ONLY when it is positively recognised:
 //   - a work-mode word (remote, hybrid, on-site, in-office, work from home);
-//   - a "City, REGION" form whose last part is a Canadian province / US state code
-//     or a country name or code;
 //   - a bare region name or code, country, or one of the major cities listed below;
 //   - a comma/slash list of the above (every component is checked, see isLocationLike).
-// Anything else ("(Backend)", "(Platform Team)", a small town not in the list) is kept,
+// Anything else ("(Backend)", "(Platform Team)", a town not in the list, "(Backend, TX)") is kept,
 // so an unlisted bare city is simply not stripped: that can only cause a missed
 // same-title match on a suffixed title (the pre-existing behaviour), never merge two
 // distinct roles. What it cannot tell apart: a team or product name that happens to
@@ -83,31 +81,26 @@ const REGION_NAMES = new Set(['alberta', 'british columbia', 'manitoba', 'new br
 const BARE_CITIES = new Set(['toronto', 'vancouver', 'montreal', 'ottawa', 'calgary', 'edmonton', 'winnipeg', 'halifax', 'mississauga', 'brampton', 'markham', 'vaughan', 'hamilton', 'kitchener', 'waterloo', 'london', 'victoria', 'regina', 'saskatoon', 'quebec city', 'new york', 'chicago', 'austin', 'seattle', 'boston', 'san francisco', 'los angeles', 'denver', 'atlanta', 'dallas', 'houston', 'miami']);
 
 const WORK_MODE_WORD_RE = /^(?:(?:fully |100% )?remote|hybrid|on[- ]?site|in[- ]office|work from home|wfh)$/;
-const WORK_MODE_START_RE = /^(?:fully |100% )?(?:remote|hybrid|on[- ]?site|in[- ]office|work from home|wfh)\b/;
 
 // One component of a comma/slash separated label is recognised on its own.
 function isKnownPlace(c) {
   return WORK_MODE_WORD_RE.test(c) || REGION_NAMES.has(c) || BARE_CITIES.has(c) || REGION_CODES.has(c.toUpperCase());
 }
 
-// EVERY component must be recognised, so "(Remote Backend)" or "(Hybrid, Platform Team)"
-// is never stripped just because it contains a work-mode word. The one free-form allowance
-// is "City, REGION": any leading city-like name (letters, spaces, dots, apostrophes, hyphens;
-// not starting with a work-mode word) is accepted when the LAST component is a region code or
-// name, so an unlisted town such as "(Oakville, ON)" still strips. Trade-offs, stated plainly:
-// a bare two-letter team or product code that equals a region code ("(ON)", "(CA)", "(ID)")
-// is stripped as a location, and "(Platform Team, ON)" is too.
+// EVERY component must be recognised (work-mode word, region code/name or listed city),
+// so "(Remote Backend)", "(Hybrid, Platform Team)" and "(Backend, TX)" are never stripped
+// just because one part looks like a location. There is deliberately NO free-form city
+// allowance: "City, REGION" strips only when the city is in BARE_CITIES, so an unlisted
+// small town such as "(Oakville, ON)" is simply not stripped (a missed same-title match,
+// acceptable) rather than risking a false merge of "(Backend, TX)" and "(Frontend, TX)".
+// Other trade-offs, stated plainly: a bare two-letter team or product code that equals a
+// region code ("(ON)", "(CA)", "(ID)") is stripped as a location, and so is a team name
+// that equals a listed city.
 function isLocationLike(text) {
   const t = text.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!t) return false;
   const parts = t.split(/\s*[,/;]\s*/).filter(Boolean);
-  if (parts.length === 0) return false;
-  if (parts.every(isKnownPlace)) return true;
-  const last = parts[parts.length - 1];
-  if (parts.length >= 2 && (REGION_CODES.has(last.toUpperCase()) || REGION_NAMES.has(last))) {
-    return parts.slice(0, -1).every(p => isKnownPlace(p) || (/^[\p{L}][\p{L} .'-]*$/u.test(p) && !WORK_MODE_START_RE.test(p)));
-  }
-  return false;
+  return parts.length > 0 && parts.every(isKnownPlace);
 }
 
 /**

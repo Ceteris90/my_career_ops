@@ -178,8 +178,8 @@ try {
   else fail(`parent-org east/west: ${JSON.stringify(par)}`);
 
   // 13c. Every component of a parenthesised label must be recognised; bare region codes count.
-  const keep = ['Engineer (Remote Backend)', 'Engineer (Hybrid, Platform Team)', 'Engineer (Remote, Backend)'];
-  const drop = ['Analyst (TX)', 'Analyst (Remote, ON)', 'Analyst (Remote/Hybrid)', 'Analyst (Oakville, ON)', 'Analyst (Fully Remote)'];
+  const keep = ['Engineer (Remote Backend)', 'Engineer (Hybrid, Platform Team)', 'Engineer (Remote, Backend)', 'Engineer (Backend, TX)', 'Engineer (Frontend, TX)', 'Engineer (Oakville, ON)'];
+  const drop = ['Analyst (TX)', 'Analyst (Remote, ON)', 'Analyst (Remote/Hybrid)', 'Analyst (Austin, TX)', 'Analyst (Fully Remote)'];
   if (keep.every(k => stripLocationSuffix(k) === k) && drop.every(d => stripLocationSuffix(d) === 'Analyst')) pass('compound labels are stripped only when every component is recognised');
   else fail(`compound labels: ${[...keep, ...drop].map(x => stripLocationSuffix(x)).join(' | ')}`);
 
