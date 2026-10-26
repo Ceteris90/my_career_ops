@@ -358,6 +358,9 @@ const SYSTEM_PATHS = [
   // drop it once a release has shipped past that move.
   'lib/context-budget.test.mjs',
   'lib/golden-budget-analysis.mjs',
+  'lib/privacy-guard.mjs',
+  'lib/llm-outbound.mjs',
+  'lib/pii-interceptor.mjs',
   'img-to-pdf.mjs',
   'apply-scope.mjs',
   'archive-posting.mjs',
@@ -507,6 +510,7 @@ const SYSTEM_PATHS = [
   'eval-golden.mjs',
   'evals/',
   'openrouter-runner.mjs',
+  'privacy-status.mjs',
   'jd-similarity.mjs',
   'test-all.mjs',
   // Retired 2026-10-04: the suite moved to tests/tracker-writer-lock.test.mjs
@@ -542,6 +546,7 @@ const SYSTEM_PATHS = [
   'fonts/',
   'examples/',
   'config/profile.example.yml',
+  'config/privacy.example.yml',
   'config/local-paths.example.txt',
   '.env.example',
   '.editorconfig',
