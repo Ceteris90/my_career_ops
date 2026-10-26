@@ -24,7 +24,7 @@ export { parseMeta, PARTIAL_SECTIONS, declaredSections, checkDeclaredSections };
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // templates/ is System Layer (code root); config/profile.yml is User Layer and
 // follows the data root. CAREER_OPS_PROFILE still wins over both.
-const DEFAULT_TEMPLATES_DIR = resolve(__dirname, 'templates');
+export const DEFAULT_TEMPLATES_DIR = resolve(__dirname, 'templates');
 const DEFAULT_PROFILE_PATH = getProfilePath();
 
 // The user layer: templates the user made or customized live under the data root,
