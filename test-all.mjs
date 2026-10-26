@@ -3556,10 +3556,23 @@ if (shared.includes('_profile.md')) {
   // Reading _writing.md loads a conditional ("no cached style: scan the
   // samples, write back") that no step owns unless the mode says so. Assert
   // that each consumer carries the trigger, not just the read.
-  const missingTrigger = WRITING_CONSUMERS.filter((path) => {
-    const src = readFile(path);
-    return !(/## Writing Style/.test(src) && /writing-samples\//.test(src) && /calibration/i.test(src));
-  });
+  // The trigger is one sentence, so it is matched as one block. Separate
+  // keyword tests pass when "writing-samples/" and "calibration" appear in
+  // unrelated text while the guard, the non-README.md condition, the
+  // write-back or the "before drafting" ordering is gone.
+  const hasCalibrationTrigger = (src) =>
+    /If `modes\/_profile\.md` has no `## Writing Style` section and `writing-samples\/` holds a file other than `README\.md`, run the Writing Style calibration in `modes\/_writing\.md`(?: now)? and write (?:the result|it) to `_profile\.md` before drafting/.test(src);
+  const scatteredFixture = [
+    '## Writing Style',
+    'Samples live in `writing-samples/`.',
+    'See the calibration notes elsewhere.',
+  ].join('\n');
+  if (hasCalibrationTrigger(scatteredFixture)) {
+    fail('calibration trigger predicate accepts scattered keywords with no trigger sentence');
+  } else {
+    pass('calibration trigger predicate rejects scattered keywords');
+  }
+  const missingTrigger = WRITING_CONSUMERS.filter((path) => !hasCalibrationTrigger(readFile(path)));
   if (missingTrigger.length === 0) {
     pass('cover.md and email.md trigger Writing Style calibration when samples exist and no cached style');
   } else {
