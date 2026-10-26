@@ -297,6 +297,13 @@ test('7c. a digit_run value is detected even when other numbers surround it in t
   // Adjacent numeric values in a JSON array without space: [1024,98765]
   // Comma must not be stripped as a thousands separator here, so 98765 stays separate.
   assert.throws(() => guard.assertSafe('tokens: [1024,98765]'), PrivacyGuardError, 'adjacent array numbers');
+
+  // Adjacent numeric values where the following number is 3 digits: [98765,123]
+  // Must preserve 98765 even if comma normalization would merge 98765,123 into 98765123.
+  assert.throws(() => guard.assertSafe('items: [98765,123]'), PrivacyGuardError, 'number before 3-digit number');
+
+  // Formatted with thousands separator: 98,765
+  assert.throws(() => guard.assertSafe('amount: 98,765'), PrivacyGuardError, 'thousands separator formatted number');
 });
 
 // ---------------------------------------------------------------------------
