@@ -74,7 +74,7 @@ async function proxyFor(url) {
     if (!configuredProxy) continue;
     const parsed = new URL(configuredProxy);
     const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    const isLoopback = host === 'localhost' || host === 'localhost.localdomain' || host === '::1' || (isIP(host) === 4 && host.startsWith('127.'));
+    const isLoopback = host === 'localhost' || host === '::1' || (isIP(host) === 4 && host.startsWith('127.'));
     if ((parsed.username || parsed.password) && parsed.protocol !== 'https:' && !isLoopback) {
       throw new Error('Proxy URLs containing credentials must use HTTPS to protect proxy authentication.');
     }
