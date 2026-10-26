@@ -468,7 +468,7 @@ const CHECK_SCOPE = {
   'layout-tables': 'structural',
   'multi-column': 'structural',
   'absolute-positioning': 'structural',
-  'images-text-baked': 'structural',
+  'images-text-baked': 'content',
   'images-non-photo': 'structural',
   'fonts': 'structural',
   'charset': 'structural',

@@ -35,8 +35,24 @@ test('every issue carries an id and a scope of structural or content', () => {
 test('the contact email is content-dependent and a table is structural', () => {
   const noEmail = byId(auditAts(CLEAN.replace(/<p><a href[^]*?<\/p>/, '<p>nowhere</p>')));
   assert.equal(noEmail['email-missing'].scope, 'content');
-  const table = byId(auditAts(CLEAN.replace('</body>', '<table><tr><td>x</td></tr></table></body>')));
-  assert.equal(table['layout-tables'].scope, 'structural');
+  const table = auditAts(CLEAN.replace('</body>', '<table><tr><td>x</td></tr></table></body>'));
+  assert.deepEqual(table.issues, [{
+    id: 'layout-tables',
+    scope: 'structural',
+    severity: 'critical',
+    message: 'Found 1 <table> element(s). Table-based layouts scramble the reading order ATS extractors follow; use a single-column flow.',
+  }]);
+});
+
+test('a baked-in image is content-dependent: the verdict turns on how much text surrounds it', () => {
+  // The critical branch fires only when the page text is short, so it cannot be
+  // judged on a template whose text is still {{PLACEHOLDER}}s. Counting the
+  // images alone is structural.
+  const sparse = byId(auditAts('<html><head><meta charset="utf-8"></head><body><img src="resume.png"><p>Resume</p></body></html>'));
+  assert.equal(sparse['images-text-baked'].scope, 'content');
+  const filler = `<p>${'Delivered the platform migration on schedule and under budget. '.repeat(30)}</p>`;
+  const plenty = byId(auditAts(CLEAN.replace('</body>', `${filler}<img src="chart.png"></body>`)));
+  assert.equal(plenty['images-non-photo'].scope, 'structural');
 });
 
 test('ids are unique per check, so a caller can key on them', () => {
