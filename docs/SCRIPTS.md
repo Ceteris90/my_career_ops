@@ -652,7 +652,8 @@ Names matching a product or requirement keyword in English or Chinese (`prd`,
 验收, …) carry them in `keywords`, and flagged names are listed first, at most
 40 per repo (`filesCapped`). Names only: no file is opened and no source code is
 read. Names are listed for public repos and allowlisted private ones; any other
-private repo shows counts only (`namesShown: false`). A truncated tree sets
+private repo or repo with unknown visibility shows counts only, with names
+hidden (`namesShown: false`). A truncated tree sets
 `treeTruncated`. A failed call is a gap in `documents.gaps` (`status` `partial`
 or `failed`) and changes neither the rest of the report nor the exit code. The
 Markdown report adds the same list as its last section. `expand` asks you which
