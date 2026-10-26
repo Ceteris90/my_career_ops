@@ -61,6 +61,8 @@ const BAD = [
   ['a repo URL whose repo is .', { repo: 'https://github.com/owner/.' }, /repo must be/],
   ['a repo URL whose owner is ..', { repo: 'https://github.com/../pack' }, /repo must be/],
   ['a repo URL whose owner is .', { repo: 'https://github.com/./pack' }, /repo must be/],
+  ['a repo whose name is not career-ops-template-<id>', { repo: 'https://github.com/alice/other-name' }, /repo name must equal/],
+  ['a repo named for a different id', { repo: 'https://github.com/alice/career-ops-template-other' }, /repo name must equal/],
   ['a repo given as an array', { repo: ['https://github.com/alice/pack'] }, /repo must be/],
   ['a sha given as an array', { sha: ['a'.repeat(40)] }, /sha must be a 40-hex/],
   ['an uppercase sha', { sha: 'A'.repeat(40) }, /sha must be a 40-hex/],
