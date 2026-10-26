@@ -2,9 +2,10 @@
 // Renders the architecture diagrams, as a light and a dark SVG each, into
 // docs/architecture-{name}-{light,dark}.svg:
 //
-//   system-overview  docs/ARCHITECTURE.md → "System Overview"
-//   component-map    ARCHITECTURE.md → "Component map"
-//   data-flow        ARCHITECTURE.md → "Data flow (a typical run)"
+//   system-overview   docs/ARCHITECTURE.md → "System Overview"
+//   batch-processing  docs/ARCHITECTURE.md → "Batch Processing"
+//   component-map     ARCHITECTURE.md → "Component map"
+//   data-flow         ARCHITECTURE.md → "Data flow (a typical run)"
 //
 //   node .github/scripts/architecture-diagrams.mjs --write   # regenerate every SVG
 //   node .github/scripts/architecture-diagrams.mjs --check   # exit 1 if an SVG drifted
@@ -51,6 +52,11 @@ const arrowRight = (x1, x2, y, c) =>
   `<line x1="${x1}" y1="${y}" x2="${x2 - 7}" y2="${y}" stroke="${c}" stroke-width="2"/>`
   + `<path d="M${x2 - 9} ${y - 6} L${x2 - 9} ${y + 6} L${x2} ${y} Z" fill="${c}"/>`;
 
+const arrowBoth = (x, y1, y2, c) =>
+  `<line x1="${x}" y1="${y1 + 7}" x2="${x}" y2="${y2 - 7}" stroke="${c}" stroke-width="2"/>`
+  + `<path d="M${x - 6} ${y1 + 9} L${x + 6} ${y1 + 9} L${x} ${y1} Z" fill="${c}"/>`
+  + `<path d="M${x - 6} ${y2 - 9} L${x + 6} ${y2 - 9} L${x} ${y2} Z" fill="${c}"/>`;
+
 const hline = (x1, x2, y, c) =>
   `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`;
 
@@ -84,6 +90,12 @@ const title2 = (title, sub, subMono = true) => [
   { text: sub, mono: subMono, muted: true, size: subMono ? 12.5 : 13, dy: 48 },
 ];
 
+const title3 = (title, path, note) => [
+  { text: title, bold: true, size: 15, dy: 24 },
+  { text: path, mono: true, muted: true, size: 12, dy: 44 },
+  { text: note, muted: true, size: 12.5, dy: 63 },
+];
+
 const svgOpen = (t, name, h) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" font-family="${SANS}" role="img" aria-labelledby="${name}-title">
   <title id="${name}-title">${esc(ALT[name])}</title>
@@ -94,9 +106,15 @@ export const ALT = {
   'system-overview': 'System overview: an AI coding CLI agent reads AGENTS.md and modes/*.md and runs one of three flows. '
     + 'Single evaluation (modes/auto-pipeline.md) goes straight to output. '
     + 'Portal scan (scan.mjs and modes/scan.md) fills the URL inbox, data/pipeline.md, which pipeline mode then evaluates. '
-    + 'Batch processing (batch/batch-runner.sh) runs N headless workers, one per offer, in parallel. '
+    + 'Batch processing (batch/batch-runner.sh) runs N headless workers, one per offer: claude -p workers run in parallel, other CLIs one offer at a time. '
     + 'All three feed the output pipeline: a report (reports/NNN-*.md, the A-H evaluation), a PDF (generate-pdf.mjs, HTML through Playwright) '
     + 'and a tracker TSV (batch/tracker-additions/, merged by merge-tracker.mjs) into the canonical tracker, data/applications.md.',
+  'batch-processing': 'Batch processing: batch/batch-input.tsv lists the offers (id, url, source, notes). '
+    + 'The orchestrator, batch/batch-runner.sh, records progress in batch/batch-state.tsv so a run can retry and resume, '
+    + 'and hands each offer to one of N headless CLI workers running the self-contained prompt batch/batch-prompt.md. '
+    + 'Workers are claude -p by default and run in parallel (--parallel, default 3); any other CLI runs one offer at a time. '
+    + 'Each worker writes a report (reports/NNN-*.md), a PDF (output/*.pdf) and a tracker TSV line (batch/tracker-additions/). '
+    + 'After the batch, merge-tracker.mjs merges the TSV lines into the canonical tracker, data/applications.md.',
   'component-map': 'Component map: an AI coding CLI (or a script) reads the prompt files in modes/*.md, the brain: '
     + 'scoring, evaluation, apply, scan and interview prompts, with _shared.md as the scoring core. '
     + 'They drive five areas: scan (scan.mjs, providers/), evaluate (modes/oferta.md plus the eval scripts), '
@@ -113,10 +131,7 @@ const COLS = [140, 380, 620];
 function systemOverview(t) {
   const H = 568;
   const col = (cx, y, lines, kind = 'step', id) => box(t, id, { x: cx - 105, y, w: 210, h: 64, kind, lines });
-  const inner = (cx, title, path, note) => box(t, '', {
-    x: cx - 100, y: 360, w: 200, h: 76, kind: 'out',
-    lines: [{ text: title, bold: true, size: 15, dy: 24 }, { text: path, mono: true, muted: true, size: 12, dy: 44 }, { text: note, muted: true, size: 12.5, dy: 63 }],
-  });
+  const inner = (cx, title, path, note) => box(t, '', { x: cx - 100, y: 360, w: 200, h: 76, kind: 'out', lines: title3(title, path, note) });
   return svgOpen(t, 'system-overview', H)
     + box(t, 'so-agent', { x: 200, y: 16, w: 360, h: 64, lines: title2('AI coding CLI agent', 'reads AGENTS.md + modes/*.md') })
     + `\n  <line x1="380" y1="80" x2="380" y2="100" stroke="${t.line}" stroke-width="2"/>`
@@ -127,7 +142,7 @@ function systemOverview(t) {
     + col(COLS[2], 124, title2('Batch processing', 'batch/batch-runner.sh'), 'step', 'so-batch')
     + `\n  ${arrowDown(COLS[1], 188, 220, t.line)}${arrowDown(COLS[2], 188, 220, t.line)}`
     + col(COLS[1], 220, title2('URL inbox', 'data/pipeline.md'), 'step', 'so-inbox')
-    + col(COLS[2], 220, title2('N headless workers', 'one per offer, in parallel', false), 'step', 'so-workers')
+    + col(COLS[2], 220, title2('N headless workers', 'parallel only with claude -p', false), 'step', 'so-workers')
     + `\n  ${arrowDown(COLS[0], 188, 316, t.line)}${arrowDown(COLS[1], 284, 316, t.line)}${arrowDown(COLS[2], 284, 316, t.line)}`
     + `\n  <text x="${COLS[1] + 8}" y="304" font-size="12" fill="${t.muted}">pipeline mode</text>`
     + box(t, '', { x: 30, y: 316, w: 700, h: 136, kind: 'group', lines: [{ text: 'Output pipeline', bold: true, size: 15, dy: 28 }] })
@@ -136,6 +151,33 @@ function systemOverview(t) {
     + inner(COLS[2], 'Tracker TSV', 'batch/tracker-additions/', 'merged by merge-tracker.mjs')
     + `\n  ${arrowDown(380, 452, 488, t.line)}`
     + box(t, '', { x: 230, y: 488, w: 300, h: 64, kind: 'out', lines: title2('Canonical tracker', 'data/applications.md') })
+    + '\n</svg>\n';
+}
+
+// --- Batch Processing (docs/ARCHITECTURE.md) -------------------------------
+
+function batchProcessing(t) {
+  const H = 446;
+  const at = (cx, y, h, lines, kind, id) => box(t, id, { x: cx - 105, y, w: 210, h, kind, lines });
+  return svgOpen(t, 'batch-processing', H)
+    + at(COLS[0], 16, 76, title3('Input offers', 'batch/batch-input.tsv', 'id, url, source, notes'), 'step', 'bp-input')
+    + at(COLS[1], 16, 76, title3('Orchestrator', 'batch/batch-runner.sh', 'parallelism, retries, resume'), 'step', 'bp-runner')
+    + at(COLS[2], 16, 76, title3('N headless workers', 'batch/batch-prompt.md', 'parallel only with claude -p'), 'step', 'bp-workers')
+    + `\n  ${arrowRight(COLS[0] + 105, COLS[1] - 105, 54, t.line)}${arrowRight(COLS[1] + 105, COLS[2] - 105, 54, t.line)}`
+    + `\n  ${arrowBoth(COLS[1], 92, 128, t.line)}`
+    + `\n  <text x="${COLS[1] + 10}" y="114" font-size="12" fill="${t.muted}">reads + writes</text>`
+    + at(COLS[1], 128, 64, title2('Progress', 'batch/batch-state.tsv'), 'step', 'bp-state')
+    + `\n  <line x1="${COLS[2]}" y1="92" x2="${COLS[2]}" y2="222" stroke="${t.line}" stroke-width="2"/>`
+    + `\n  <text x="${COLS[2] + 10}" y="160" font-size="12" fill="${t.muted}">each worker writes</text>`
+    + `\n  ${hline(COLS[0], COLS[2], 222, t.line)}`
+    + `\n  ${COLS.map((x) => arrowDown(x, 222, 246, t.line)).join('')}`
+    + at(COLS[0], 246, 72, title3('Report', 'reports/NNN-*.md', 'A-H evaluation'), 'out')
+    + at(COLS[1], 246, 72, title3('PDF', 'output/*.pdf', 'tailored CV'), 'out')
+    + at(COLS[2], 246, 72, title3('Tracker TSV', 'batch/tracker-additions/', 'one line per offer'), 'out')
+    + `\n  ${arrowDown(COLS[2], 318, 366, t.line)}`
+    + `\n  <text x="${COLS[2] - 10}" y="339" text-anchor="end" font-size="12" fill="${t.muted}">after the batch:</text>`
+    + `\n  <text x="${COLS[2] - 10}" y="356" text-anchor="end" font-size="12" font-family="${MONO}" fill="${t.muted}">merge-tracker.mjs</text>`
+    + at(COLS[2], 366, 64, title2('Canonical tracker', 'data/applications.md'), 'out')
     + '\n</svg>\n';
 }
 
@@ -208,6 +250,7 @@ function dataFlow(t) {
 /** Diagram name → [renderer, the doc that embeds it]. */
 export const DIAGRAMS = {
   'system-overview': [systemOverview, 'docs/ARCHITECTURE.md'],
+  'batch-processing': [batchProcessing, 'docs/ARCHITECTURE.md'],
   'component-map': [componentMap, 'ARCHITECTURE.md'],
   'data-flow': [dataFlow, 'ARCHITECTURE.md'],
 };

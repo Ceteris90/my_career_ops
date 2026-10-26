@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="568" viewBox="0 0 760 568" font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-labelledby="system-overview-title">
-  <title id="system-overview-title">System overview: an AI coding CLI agent reads AGENTS.md and modes/*.md and runs one of three flows. Single evaluation (modes/auto-pipeline.md) goes straight to output. Portal scan (scan.mjs and modes/scan.md) fills the URL inbox, data/pipeline.md, which pipeline mode then evaluates. Batch processing (batch/batch-runner.sh) runs N headless workers, one per offer, in parallel. All three feed the output pipeline: a report (reports/NNN-*.md, the A-H evaluation), a PDF (generate-pdf.mjs, HTML through Playwright) and a tracker TSV (batch/tracker-additions/, merged by merge-tracker.mjs) into the canonical tracker, data/applications.md.</title>
+  <title id="system-overview-title">System overview: an AI coding CLI agent reads AGENTS.md and modes/*.md and runs one of three flows. Single evaluation (modes/auto-pipeline.md) goes straight to output. Portal scan (scan.mjs and modes/scan.md) fills the URL inbox, data/pipeline.md, which pipeline mode then evaluates. Batch processing (batch/batch-runner.sh) runs N headless workers, one per offer: claude -p workers run in parallel, other CLIs one offer at a time. All three feed the output pipeline: a report (reports/NNN-*.md, the A-H evaluation), a PDF (generate-pdf.mjs, HTML through Playwright) and a tracker TSV (batch/tracker-additions/, merged by merge-tracker.mjs) into the canonical tracker, data/applications.md.</title>
   <rect width="760" height="568" rx="12" fill="#0d1117"/>
   <rect x="200" y="16" width="360" height="64" rx="10" fill="#161b22" stroke="#30363d"/>
   <clipPath id="so-agent"><rect x="200" y="16" width="360" height="64" rx="10"/></clipPath>
@@ -34,7 +34,7 @@
   <clipPath id="so-workers"><rect x="515" y="220" width="210" height="64" rx="10"/></clipPath>
   <rect x="515" y="220" width="6" height="64" fill="#DD7627" clip-path="url(#so-workers)"/>
   <text x="620" y="247" text-anchor="middle" font-size="16" font-weight="700" fill="#e6edf3">N headless workers</text>
-  <text x="620" y="268" text-anchor="middle" font-size="13" fill="#9198a1">one per offer, in parallel</text>
+  <text x="620" y="268" text-anchor="middle" font-size="13" fill="#9198a1">parallel only with claude -p</text>
   <line x1="140" y1="188" x2="140" y2="309" stroke="#6e7681" stroke-width="2"/><path d="M134 307 L146 307 L140 316 Z" fill="#6e7681"/><line x1="380" y1="284" x2="380" y2="309" stroke="#6e7681" stroke-width="2"/><path d="M374 307 L386 307 L380 316 Z" fill="#6e7681"/><line x1="620" y1="284" x2="620" y2="309" stroke="#6e7681" stroke-width="2"/><path d="M614 307 L626 307 L620 316 Z" fill="#6e7681"/>
   <text x="388" y="304" font-size="12" fill="#9198a1">pipeline mode</text>
   <rect x="30" y="316" width="700" height="136" rx="10" fill="#0d1117" stroke="#30363d"/>
