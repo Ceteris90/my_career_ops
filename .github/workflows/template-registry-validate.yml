@@ -42,5 +42,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           git fetch --no-tags origin "$BASE_REF"
-          CHANGED=$(git diff --name-only "origin/$BASE_REF"...HEAD -- 'templates-registry/*.json' | wc -l)
+          # --no-renames: a rename would otherwise count as one change and let a
+          # PR swap one pack for another.
+          CHANGED=$(git diff --no-renames --name-only "origin/$BASE_REF"...HEAD -- 'templates-registry/*.json' | wc -l)
           if [ "$CHANGED" -gt 1 ]; then echo "A registry PR may add or bump exactly one templates-registry/<id>.json file"; exit 1; fi
