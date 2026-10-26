@@ -165,6 +165,18 @@ try {
     pass('stripLocationSuffix keeps level markers and never empties a title');
   else fail('stripLocationSuffix edge cases');
 
+  // 13b. Review follow-ups: REQ9727, specialisation qualifiers, parent-org keeps suffixes.
+  const rr = findDuplicateCandidates([{ num: 9, date: '2026-10-01', company: 'Acme Supply Canada', role: 'Zzz', status: 'Applied', notes: 'REQ9727', url: '' }], { company: 'Acme Supply Canada', title: 'Other Role', req: 'REQ9727' });
+  if (rr[0]?.reason === 'req') pass('--req REQ9727 matches a note written REQ9727'); else fail('REQ9727');
+  const sw = findDuplicateCandidates([{ num: 10, date: '2026-10-01', company: 'Acme Supply Canada', role: 'Software Engineer (Backend)', status: 'Applied', notes: '', url: '' }], { company: 'Acme Supply Canada', title: 'Software Engineer (Frontend)' });
+  if (!sw.some(x => x.reason === 'same-title')) pass('(Backend) vs (Frontend) are not the same title');
+  else fail('specialisation merged');
+  if (stripLocationSuffix('Engineer (Backend)') === 'Engineer (Backend)' && stripLocationSuffix('Analyst (Hybrid)') === 'Analyst' && stripLocationSuffix('Analyst (Toronto)') === 'Analyst' && stripLocationSuffix('Analyst (Austin, TX)') === 'Analyst')
+    pass('only location/work-mode suffixes are stripped'); else fail('stripLocationSuffix location detection');
+  const par = findDuplicateCandidates([{ num: 11, date: '2026-10-01', company: 'Fabrikam University (East)', role: 'Research Analyst (East)', status: 'Applied', notes: '', url: '' }], { company: 'Fabrikam University (West)', title: 'Research Analyst (West)' });
+  if (par.length === 0) pass('parent-org tier keeps (East) vs (West) distinct (original titles)');
+  else fail(`parent-org east/west: ${JSON.stringify(par)}`);
+
   // 12. A lookup with no usable key is rejected, not reported as "no duplicate".
   const rejects = (args) => {
     try { run(args); return false; } catch (e) { return e.status === 1; }
