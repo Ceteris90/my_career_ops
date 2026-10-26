@@ -23,6 +23,7 @@ import { basename, resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
+import { flagValue } from './lib/cli-flags.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -40,13 +41,7 @@ const ALLOWED_HOSTS = new Set([
 // ── CLI args ─────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const get = (flag) => {
-  const i = args.indexOf(flag);
-  if (i !== -1) return args[i + 1] ?? null;
-  const prefix = `${flag}=`;
-  const inline = args.find(arg => arg.startsWith(prefix));
-  return inline ? inline.slice(prefix.length) : null;
-};
+const get = (flag) => flagValue(args, flag);
 
 const applyUrl  = get('--url');
 const pdfPath   = get('--pdf');
