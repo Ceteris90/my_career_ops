@@ -1,9 +1,9 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isNestedCheckout } from "../../../lib/mjs-files.mjs";
+import { listTree } from "../../../lib/walk-tree.mjs";
 
 // careerOpsRoot() is the DATA root. Since #4064 it honors CAREER_OPS_ROOT,
 // CAREER_OPS_DATA_DIR and the `.career-ops-data` marker, so in a split layout it
@@ -20,14 +20,7 @@ import { isNestedCheckout } from "../../../lib/mjs-files.mjs";
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../src");
 const read = (rel) => readFileSync(join(SRC, rel), "utf8");
 
-function walk(dir) {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) return isNestedCheckout(p) ? [] : walk(p);
-    return /\.(ts|tsx|mjs)$/.test(name) ? [p] : [];
-  });
-}
-const sources = walk(SRC).map((p) => ({ rel: relative(SRC, p), src: readFileSync(p, "utf8") }));
+const sources = listTree(SRC, { match: /\.(ts|tsx|mjs)$/ }).map((p) => ({ rel: relative(SRC, p), src: readFileSync(p, "utf8") }));
 
 test("rootScript resolves against the code checkout, not the data root", () => {
   const src = read("lib/career-ops.ts");
