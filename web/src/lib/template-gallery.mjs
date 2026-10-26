@@ -22,6 +22,11 @@ async function loadResolver(root) {
   return import(/* webpackIgnore: true */ pathToFileURL(path.join(root, "cv-templates.mjs")).href);
 }
 
+/** The user's templates directory under the data root, where cv-templates.mjs looks for the user layer. */
+export function userTemplatesDir(dataRoot) {
+  return path.join(dataRoot, "data", "templates");
+}
+
 /** Profile section holding `template` for each kind: the keys the CLI reads (KINDS in cv-templates.mjs). */
 const PROFILE_SECTION = { cv: "cv", cover: "cover_letter" };
 
@@ -42,25 +47,25 @@ export function parseKind(value) {
 /**
  * @param {string} root
  * @param {"cv"|"cover"} kind
- * @param {{profilePath?: string}} [opts] profilePath: the profile the CLI would read
- * @returns {Promise<{templates: {name: string, displayName: string, isDefault: boolean}[], defaultName: string}>}
+ * @param {{profilePath?: string, userDir?: string}} [opts] profilePath: the profile the CLI would read; userDir: the user's templates directory
+ * @returns {Promise<{templates: {name: string, displayName: string, layer: string, isDefault: boolean}[], defaultName: string}>}
  */
-export async function listTemplatesOfKind(root, kind, { profilePath } = {}) {
+export async function listTemplatesOfKind(root, kind, { profilePath, userDir } = {}) {
   assertKind(kind);
   const resolver = await loadResolver(root);
-  const listed = resolver.listTemplates(kind);
+  const listed = resolver.listTemplates(kind, userDir ? { userDir } : {});
   const configured = resolver.loadProfileDefault(kind, profilePath ? { profilePath } : {});
   const wanted = configured ? resolver.kebab(configured) : BASE_TEMPLATE;
   // A profile naming a template that is gone resolves to the base template on
   // the CLI (fallback), so that is what the gallery must show as the default.
   const defaultName = listed.some((t) => t.name === wanted) ? wanted : BASE_TEMPLATE;
   return {
-    templates: listed.map((t) => ({ name: t.name, displayName: t.displayName, isDefault: t.name === defaultName })),
+    templates: listed.map((t) => ({ name: t.name, displayName: t.displayName, layer: t.layer, isDefault: t.name === defaultName })),
     defaultName,
   };
 }
 
-/** @param {string} root @param {{profilePath?: string}} [opts] */
+/** @param {string} root @param {{profilePath?: string, userDir?: string}} [opts] */
 export const listCvTemplates = (root, opts) => listTemplatesOfKind(root, "cv", opts);
 
 /**
@@ -70,15 +75,16 @@ export const listCvTemplates = (root, opts) => listTemplatesOfKind(root, "cv", o
  * @param {string} root
  * @param {string} name
  * @param {"cv"|"cover"} [kind]
+ * @param {{userDir?: string}} [opts]
  */
-export async function assertSelectableTemplate(root, name, kind = "cv") {
+export async function assertSelectableTemplate(root, name, kind = "cv", { userDir } = {}) {
   assertKind(kind);
   const resolver = await loadResolver(root);
-  const listed = resolver.listTemplates(kind);
+  const listed = resolver.listTemplates(kind, userDir ? { userDir } : {});
   if (typeof name !== "string" || !listed.some((t) => t.name === name)) {
     throw new Error(`Template not found: ${String(name).slice(0, 80)}`);
   }
-  return resolver.resolveTemplate(kind, name);
+  return resolver.resolveTemplate(kind, name, userDir ? { userDir } : {});
 }
 
 /**
@@ -109,10 +115,11 @@ export const profileWithCvTemplate = (source, name) => profileWithTemplate(sourc
  * @param {string} root
  * @param {string} name
  * @param {"cv"|"cover"} [kind]
+ * @param {{userDir?: string}} [opts]
  * @returns {Promise<string>}
  */
-export async function renderTemplatePreview(root, name, kind = "cv") {
-  const templatePath = await assertSelectableTemplate(root, name, kind);
+export async function renderTemplatePreview(root, name, kind = "cv", { userDir } = {}) {
+  const templatePath = await assertSelectableTemplate(root, name, kind, { userDir });
   if (kind === "cover") {
     const mod = await import(/* webpackIgnore: true */ pathToFileURL(path.join(root, "generate-cover-letter.mjs")).href);
     return mod.buildHtml(structuredClone(SAMPLE_COVER_PAYLOAD), templatePath);
