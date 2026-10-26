@@ -58,7 +58,7 @@ export const LOCALES = {
   },
 };
 
-const PATHS = ['reports/*.md', 'output/*.pdf', 'applications.md'];
+const PATHS = ['reports/*.md', 'output/*.pdf', 'data/applications.md'];
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -67,7 +67,7 @@ export function altText(lang) {
   if (!lang) {
     return 'How it works: you paste a job URL or description. Archetype Detection classifies it as LLMOps, Agentic, PM, SA, FDE or Transformation. '
       + 'The A-H Evaluation reads cv.md and covers match, gaps, comp research, STAR stories and legitimacy. '
-      + 'It produces a report (reports/*.md), a PDF (output/*.pdf) and a tracker entry (applications.md).';
+      + 'It produces a report (reports/*.md), a PDF (output/*.pdf) and a tracker entry (data/applications.md).';
   }
   const L = LOCALES[lang];
   return `${L.input} → ${L.s1} (${L.n1}) → ${L.s2} (${L.sub2}; ${L.n2}) → ${L.outs.map((o, i) => `${o} (${PATHS[i]})`).join(', ')}`;
@@ -92,7 +92,7 @@ export function renderSvg(lang, theme) {
   <text x="${CX}" y="${y + 30}" text-anchor="middle" font-size="17" fill="${t.text}"><tspan font-weight="700">${esc(title)}</tspan>${sub ? `<tspan font-family="${MONO}" font-size="13" fill="${t.muted}">  ${esc(sub)}</tspan>` : ''}</text>
   <text x="${CX}" y="${y + 53}" text-anchor="middle" font-size="13.5" fill="${t.muted}">${esc(note)}</text>`;
   const output = (x, title, sub) => `
-  <rect x="${x - 90}" y="324" width="180" height="64" rx="10" fill="${t.tint}" stroke="${BRAND}"/>
+  <rect x="${x - 100}" y="324" width="200" height="64" rx="10" fill="${t.tint}" stroke="${BRAND}"/>
   <text x="${x}" y="351" text-anchor="middle" font-size="16" font-weight="700" fill="${t.text}">${esc(title)}</text>
   <text x="${x}" y="373" text-anchor="middle" font-size="13" font-family="${MONO}" fill="${t.muted}">${esc(sub)}</text>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${SANS}" role="img" aria-labelledby="hiw-title">
