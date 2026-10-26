@@ -748,7 +748,7 @@ A row is a candidate when its status resolves to `Applied` (aliases such as `Sen
 
 | Reason | Meaning |
 |--------|---------|
-| `active-interview` | the company has an entry in `data/active-interviews.md` (company match only, so a role-title mismatch never closes an application you are interviewing for) |
+| `active-interview` | the company has an entry in `data/active-interviews.md` (company match only, with or without the legal form, so `Acme, Inc.` covers an `Acme` row and a role-title mismatch never closes an application you are interviewing for) |
 | `status-log` | `data/status-log.tsv` holds a transition after Applied |
 | `open-follow-up` | `data/follow-ups.md` has a follow-up logged for this row within the last `--days` days, or an uncleared `next #N` pin dated today or later (the pin `followup-seed.mjs` writes at apply time is long past on a stale row and does not count) |
 | `previously-auto-closed` | the note tag or a `close-stale` ledger line is already present: a row you reopened stays open |
