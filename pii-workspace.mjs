@@ -36,19 +36,13 @@ import {
   getPrivacyConfigPath,
 } from './lib/privacy-guard.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+import { isMainModule } from './lib/is-main-module.mjs';
 
 const USER_FILES = ['cv.md', 'config/profile.yml', 'modes/_profile.md'];
 const TOKEN_MAP_NAME = '.pii-token-map.json';
 
 const root = getCareerOpsRoot();
 const tokenMapPath = path.join(root, TOKEN_MAP_NAME);
-
-const mode = process.argv[2]; // 'scrub' | 'restore' | 'status'
-
-if (!mode || !['scrub', 'restore', 'status'].includes(mode)) {
-  console.log(`Usage: node pii-workspace.mjs <scrub|restore|status>`);
-  process.exit(1);
-}
 
 /** Escape a literal so it can be used inside a RegExp. */
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -89,13 +83,25 @@ function atomicWriteFileSync(targetPath, content, options = {}) {
     dir,
     `.tmp-${path.basename(targetPath)}-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
-  fs.writeFileSync(tempPath, content, { ...opts, mode });
+  let renamed = false;
   try {
-    fs.chmodSync(tempPath, mode);
-  } catch {
-    /* on Windows chmod is limited, ignore chmod failures */
+    fs.writeFileSync(tempPath, content, { ...opts, mode });
+    try {
+      fs.chmodSync(tempPath, mode);
+    } catch {
+      /* on Windows chmod is limited, ignore chmod failures */
+    }
+    fs.renameSync(tempPath, targetPath);
+    renamed = true;
+  } finally {
+    if (!renamed) {
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {
+        /* ignore cleanup failures */
+      }
+    }
   }
-  fs.renameSync(tempPath, targetPath);
 }
 
 function saveTokenMap(map) {
@@ -135,12 +141,35 @@ function scrub(text, guard, map) {
 }
 
 function rehydrate(text, map) {
-  let out = text;
-  for (const [token, value] of Object.entries(map)) out = out.split(token).join(value);
+  if (!map || Object.keys(map).length === 0) return text;
+
+  // Match complete PRIVACY_VALUE tokens in a single replacement pass and look up
+  // each exact matched token, ensuring restoring a shorter token (e.g. PRIVACY_VALUE_1)
+  // cannot alter a longer one (e.g. PRIVACY_VALUE_10).
+  let out = text.replace(/PRIVACY_VALUE_\d+/g, (matched) => {
+    return Object.prototype.hasOwnProperty.call(map, matched) ? map[matched] : matched;
+  });
+
+  // Also handle any non-standard/legacy tokens in descending length order
+  const extraTokens = Object.keys(map)
+    .filter((k) => !/^PRIVACY_VALUE_\d+$/.test(k))
+    .sort((a, b) => b.length - a.length);
+
+  for (const token of extraTokens) {
+    out = out.split(token).join(map[token]);
+  }
+
   return out;
 }
 
 function main() {
+  const mode = process.argv[2]; // 'scrub' | 'restore' | 'status'
+
+  if (!mode || !['scrub', 'restore', 'status'].includes(mode)) {
+    console.log(`Usage: node pii-workspace.mjs <scrub|restore|status>`);
+    process.exit(1);
+  }
+
   let guard = null;
 
   if (mode === 'scrub') {
@@ -182,7 +211,15 @@ function main() {
     } else if (mode === 'restore') {
       const restored = rehydrate(content, map);
       if (restored !== content) atomicWriteFileSync(filePath, restored, 'utf8');
-      console.log(`[privacy] ${file}: real values restored`);
+      const unresolved = restored.match(/PRIVACY_VALUE_\d+/g);
+      if (unresolved && unresolved.length > 0) {
+        const unique = [...new Set(unresolved)];
+        console.warn(
+          `[privacy] WARNING: ${file} still contains ${unique.length} unresolved token(s): ${unique.join(', ')}`
+        );
+      } else {
+        console.log(`[privacy] ${file}: real values restored`);
+      }
     } else {
       const hasTokens = /PRIVACY_VALUE_|PRIVACY_REDACTED_|CANDIDATE_/.test(content);
       console.log(`[privacy] ${file}: ${hasTokens ? 'contains tokens' : 'no tokens detected'}`);
@@ -192,4 +229,17 @@ function main() {
   if (mode === 'scrub' && Object.keys(map).length > 0) saveTokenMap(map);
 }
 
-main();
+if (isMainModule(import.meta.url)) {
+  main();
+}
+
+export {
+  USER_FILES,
+  TOKEN_MAP_NAME,
+  loadTokenMap,
+  atomicWriteFileSync,
+  saveTokenMap,
+  scrub,
+  rehydrate,
+  main,
+};
