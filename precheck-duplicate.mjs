@@ -71,27 +71,43 @@ const LEVEL_SUFFIX_RE = /^(?:i{1,3}|iv|v|d+|sr.?|jr.?|senior|junior|lead|intern|
 //   - a work-mode word (remote, hybrid, on-site, in-office, work from home);
 //   - a "City, REGION" form whose last part is a Canadian province / US state code
 //     or a country name or code;
-//   - a bare region, country or one of the major cities listed below.
+//   - a bare region name or code, country, or one of the major cities listed below;
+//   - a comma/slash list of the above (every component is checked, see isLocationLike).
 // Anything else ("(Backend)", "(Platform Team)", a small town not in the list) is kept,
 // so an unlisted bare city is simply not stripped: that can only cause a missed
 // same-title match on a suffixed title (the pre-existing behaviour), never merge two
 // distinct roles. What it cannot tell apart: a team or product name that happens to
 // equal a listed city or region (e.g. "(Austin)" as a project name).
-const WORK_MODE_RE = /^(?:fully |100% )?(?:remote|hybrid|on[- ]?site|in[- ]office|work from home|wfh)(?:[ ,/-].*)?$/i;
 const REGION_CODES = new Set('AB BC MB NB NL NS NT NU ON PE QC SK YT AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC UK USA US CAN CA GB'.split(' '));
 const REGION_NAMES = new Set(['alberta', 'british columbia', 'manitoba', 'new brunswick', 'newfoundland and labrador', 'nova scotia', 'ontario', 'prince edward island', 'quebec', 'saskatchewan', 'canada', 'united states', 'usa', 'united kingdom', 'uk', 'north america', 'emea', 'apac', 'gta', 'greater toronto area', 'california', 'texas', 'new york', 'florida', 'washington', 'illinois', 'massachusetts']);
 const BARE_CITIES = new Set(['toronto', 'vancouver', 'montreal', 'ottawa', 'calgary', 'edmonton', 'winnipeg', 'halifax', 'mississauga', 'brampton', 'markham', 'vaughan', 'hamilton', 'kitchener', 'waterloo', 'london', 'victoria', 'regina', 'saskatoon', 'quebec city', 'new york', 'chicago', 'austin', 'seattle', 'boston', 'san francisco', 'los angeles', 'denver', 'atlanta', 'dallas', 'houston', 'miami']);
 
+const WORK_MODE_WORD_RE = /^(?:(?:fully |100% )?remote|hybrid|on[- ]?site|in[- ]office|work from home|wfh)$/;
+const WORK_MODE_START_RE = /^(?:fully |100% )?(?:remote|hybrid|on[- ]?site|in[- ]office|work from home|wfh)\b/;
+
+// One component of a comma/slash separated label is recognised on its own.
+function isKnownPlace(c) {
+  return WORK_MODE_WORD_RE.test(c) || REGION_NAMES.has(c) || BARE_CITIES.has(c) || REGION_CODES.has(c.toUpperCase());
+}
+
+// EVERY component must be recognised, so "(Remote Backend)" or "(Hybrid, Platform Team)"
+// is never stripped just because it contains a work-mode word. The one free-form allowance
+// is "City, REGION": any leading city-like name (letters, spaces, dots, apostrophes, hyphens;
+// not starting with a work-mode word) is accepted when the LAST component is a region code or
+// name, so an unlisted town such as "(Oakville, ON)" still strips. Trade-offs, stated plainly:
+// a bare two-letter team or product code that equals a region code ("(ON)", "(CA)", "(ID)")
+// is stripped as a location, and "(Platform Team, ON)" is too.
 function isLocationLike(text) {
   const t = text.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!t) return false;
-  if (WORK_MODE_RE.test(t)) return true;
-  const parts = t.split(',').map(p => p.trim()).filter(Boolean);
-  if (parts.length >= 2) {
-    const last = parts[parts.length - 1];
-    return REGION_CODES.has(last.toUpperCase()) || REGION_NAMES.has(last);
+  const parts = t.split(/\s*[,/;]\s*/).filter(Boolean);
+  if (parts.length === 0) return false;
+  if (parts.every(isKnownPlace)) return true;
+  const last = parts[parts.length - 1];
+  if (parts.length >= 2 && (REGION_CODES.has(last.toUpperCase()) || REGION_NAMES.has(last))) {
+    return parts.slice(0, -1).every(p => isKnownPlace(p) || (/^[\p{L}][\p{L} .'-]*$/u.test(p) && !WORK_MODE_START_RE.test(p)));
   }
-  return REGION_NAMES.has(t) || BARE_CITIES.has(t);
+  return false;
 }
 
 /**

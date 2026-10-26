@@ -177,6 +177,12 @@ try {
   if (par.length === 0) pass('parent-org tier keeps (East) vs (West) distinct (original titles)');
   else fail(`parent-org east/west: ${JSON.stringify(par)}`);
 
+  // 13c. Every component of a parenthesised label must be recognised; bare region codes count.
+  const keep = ['Engineer (Remote Backend)', 'Engineer (Hybrid, Platform Team)', 'Engineer (Remote, Backend)'];
+  const drop = ['Analyst (TX)', 'Analyst (Remote, ON)', 'Analyst (Remote/Hybrid)', 'Analyst (Oakville, ON)', 'Analyst (Fully Remote)'];
+  if (keep.every(k => stripLocationSuffix(k) === k) && drop.every(d => stripLocationSuffix(d) === 'Analyst')) pass('compound labels are stripped only when every component is recognised');
+  else fail(`compound labels: ${[...keep, ...drop].map(x => stripLocationSuffix(x)).join(' | ')}`);
+
   // 12. A lookup with no usable key is rejected, not reported as "no duplicate".
   const rejects = (args) => {
     try { run(args); return false; } catch (e) { return e.status === 1; }
