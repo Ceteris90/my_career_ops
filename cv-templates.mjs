@@ -655,18 +655,19 @@ const TAG_RE = /<[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
 const ANY_TAG_RE = /<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
 const REMOTE_RE = /^\s*(?:(?:https?|ftp):)?\/\//i;
 
-// Attribute text of a tag with quoted values removed, so `title="once=x"` is
-// not read as an attribute named once.
-function bareAttrs(tag) {
-  return tag.replace(/"[^"]*"|'[^']*'/g, '""');
-}
-
 // Reads attributes by walking the tag, so a quoted value that happens to
 // contain `src=x` is a value and not a second attribute.
-function attrValue(tag, name) {
+const attrMatches = (tag) => {
   const body = tag.replace(/^<[^\s>/]+/, '').replace(/\/?>$/, '');
-  const re = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-  for (const m of body.matchAll(re)) {
+  return body.matchAll(/([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g);
+};
+
+// Names only, from the same walk: `<svg/onload=x>` and `<img src="a"onerror=x>`
+// have no whitespace before the handler, and a quoted value is never a name.
+const attrNames = (tag) => [...attrMatches(tag)].map((m) => m[1].toLowerCase());
+
+function attrValue(tag, name) {
+  for (const m of attrMatches(tag)) {
     // The browser decodes character references in attribute values, so the
     // lint must too: `https&#58;//x` is a remote URL, and so is `https&#58//x`
     // (a numeric reference decodes without its semicolon in an attribute).
@@ -695,7 +696,7 @@ const RENDER_RULES = [
     id: 'event-handler-attribute',
     rule: 'An on* attribute never fires: the renderer disables JavaScript.',
     detect: (html) => (html.match(TAG_RE) || [])
-      .filter((tag) => /\son[a-z]+\s*=/i.test(bareAttrs(tag)))
+      .filter((tag) => attrNames(tag).some((n) => /^on[a-z]+$/.test(n)))
       .map(excerpt),
   },
   {
@@ -717,6 +718,12 @@ const RENDER_RULES = [
     rule: 'Every request that is not file: or data: is aborted, so a remote image, stylesheet or font is dropped without a message.',
     detect: (html) => {
       const out = [];
+      // A relative URL resolves against an absolute remote <base href>, so it is
+      // a remote request too. Only the first <base> counts, as in a browser.
+      const baseTag = (html.match(TAG_RE) || []).find((t) => /^<base\b/i.test(t) && attrValue(t, 'href') !== null);
+      const hasRemoteBase = Boolean(baseTag) && /^\s*(?:https?|ftp):\/\//i.test(attrValue(baseTag, 'href'));
+      const isRelative = (u) => { const v = u.trim(); return v !== '' && !v.startsWith('#') && !v.startsWith('{{') && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('//'); };
+      const isRemote = (u) => REMOTE_RE.test(u) || (hasRemoteBase && isRelative(u));
       for (const tag of html.match(TAG_RE) || []) {
         const name = /^<([a-zA-Z0-9]+)/.exec(tag)[1].toLowerCase();
         const attrs = [];
@@ -729,7 +736,7 @@ const RENDER_RULES = [
           const v = attrValue(tag, a) ?? '';
           return a === 'srcset' ? srcsetUrls(v) : [v];
         });
-        if (urls.some((u) => REMOTE_RE.test(u))) out.push(excerpt(tag));
+        if (urls.some(isRemote)) out.push(excerpt(tag));
       }
       // Only CSS-bearing content: <style> bodies and style="" values. A title or
       // visible text that happens to contain url(...) is prose, not a request.
@@ -754,8 +761,8 @@ const RENDER_RULES = [
         if (inline) sources.push(inline);
       }
       const css = sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
-      for (const m of css.matchAll(/url\(\s*["']?\s*((?:(?:https?|ftp):)?\/\/[^)"']*)/gi)) out.push(excerpt(`url(${m[1]})`));
-      for (const m of css.matchAll(/@import\s+["']\s*((?:(?:https?|ftp):)?\/\/[^"']*)/gi)) out.push(excerpt(`@import ${m[1]}`));
+      for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`url(${m[1]})`));
+      for (const m of css.matchAll(/@import\s+["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
       return out;
     },
   },
@@ -771,7 +778,10 @@ const RENDER_RULES = [
 export function renderLint(path) {
   const result = { ok: true, path, findings: [], error: null };
   try {
-    const html = readFileSync(path, 'utf-8').replace(/<!--[\s\S]*?-->/g, ' ');
+    // Comments go, except inside a <style> body: there `<!--` and `-->` are raw
+    // CSS text (ignored tokens), and the rules between them are live. The
+    // alternation is leftmost-first, so a comment wrapping a <style> is stripped.
+    const html = readFileSync(path, 'utf-8').replace(/<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => (m.startsWith('<!--') ? ' ' : m));
     for (const { id, rule, detect } of RENDER_RULES) {
       for (const detail of detect(html)) {
         result.findings.push({ id, rule, severity: 'warning', detail });

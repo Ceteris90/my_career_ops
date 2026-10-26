@@ -151,6 +151,12 @@ test('a repo that is not named career-ops-template-<id> or not on GitHub is refu
   assert.throws(() => installPack(root(), { repoUrl: 'https://example.com/a/career-ops-template-x', sha: SHA, clone: cloner(() => packDir()) }), /GitHub/);
 });
 
+test('an unregistered repo URL with a dot-segment owner or repo is refused', () => {
+  for (const repoUrl of ['https://github.com/../career-ops-template-x', 'https://github.com/./career-ops-template-x', 'https://github.com/a/..']) {
+    assert.throws(() => installPack(root(), { repoUrl, sha: SHA, clone: cloner(() => packDir()) }), /GitHub|career-ops-template-/, repoUrl);
+  }
+});
+
 test('the pack id must match the repo name for an unregistered pack', () => {
   const r = root();
   assert.throws(() => installPack(r, { repoUrl: 'https://github.com/a/career-ops-template-other', sha: SHA, clone: cloner(() => packDir()) }), /repo.*other.*demo/);
@@ -246,14 +252,17 @@ test('the CLI prints usage for --help and exits 2 for an unknown command', () =>
   assert.equal(bad.status, 2);
 });
 
-test('the CLI answers available and list with a zero exit', () => {
-  // Shape only: the shipped registry and a developer's own templates.lock both
-  // change what these print.
-  const a = spawnSync('node', ['templates.mjs', 'available'], { cwd: ROOT, encoding: 'utf-8' });
-  assert.equal(a.status, 0, a.stderr);
-  assert.match(a.stdout, /no packs in the registry|\bv\d+\.\d+\.\d+\b/i);
-  const l = spawnSync('node', ['templates.mjs', 'list'], { cwd: ROOT, encoding: 'utf-8' });
-  assert.equal(l.status, 0, l.stderr);
+test('available and list answer with a zero exit against a scratch root', async () => {
+  // A scratch root and an injected log: the shipped registry and a developer's
+  // own templates.lock must not decide whether this passes.
+  const e = addEnv();
+  assert.equal(await runCommand(e.r, 'list', [], { log: e.log }), 0);
+  assert.equal(await runCommand(e.r, 'available', [], { log: e.log }), 0);
+  assert.ok(e.out.some((l) => /demo/.test(l)), e.out.join('\n'));
+  assert.equal(await runCommand(e.r, 'add', ['demo'], { clone: e.clone, log: e.log }), 0);
+  e.out.length = 0;
+  assert.equal(await runCommand(e.r, 'list', [], { log: e.log }), 0);
+  assert.ok(e.out.some((l) => /demo/.test(l)), e.out.join('\n'));
 });
 
 test('a corrupt templates.lock is reported and never overwritten', () => {
