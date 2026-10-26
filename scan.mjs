@@ -3719,14 +3719,15 @@ export async function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH
 /**
  * Apply an entry's `max_response_mb` to the ctx a provider fetches with.
  *
- * fetchJson / fetchText refuse a body over DEFAULT_MAX_BODY_BYTES (_http.mjs)
- * unless the call passes `maxBytes`. A board that is legitimately bigger sets
- * `max_response_mb` on its own portals.yml entry; the setting is the user's,
- * so it wins over a `maxBytes` the provider passes, and every other entry
- * keeps the default. An entry without the key, or with a value that is not a
- * positive number, leaves the ctx as it is.
+ * fetchJson / fetchText / fetchResponse refuse a body over
+ * DEFAULT_MAX_BODY_BYTES (_http.mjs) unless the call passes `maxBytes`. A
+ * board that is legitimately bigger sets `max_response_mb` on its own
+ * portals.yml entry; the setting is the user's, so it wins over a `maxBytes`
+ * the provider passes, and every other entry keeps the default. An entry
+ * without the key, or with a value that is not a positive number, leaves the
+ * ctx as it is.
  *
- * @param {object} ctx - The per-entry ctx; fetchJson / fetchText are replaced in place.
+ * @param {object} ctx - The per-entry ctx; its fetchers are replaced in place.
  * @param {{ name?: string, max_response_mb?: unknown }} entry
  * @returns {object} The same ctx.
  */
@@ -3739,7 +3740,7 @@ export function applyEntryResponseCap(ctx, entry) {
     return ctx;
   }
   const maxBytes = Math.floor(mb * 1024 * 1024);
-  for (const method of ['fetchJson', 'fetchText']) {
+  for (const method of ['fetchJson', 'fetchText', 'fetchResponse']) {
     const original = ctx[method];
     if (typeof original !== 'function') continue;
     ctx[method] = (url, opts = {}) => original(url, { ...opts, maxBytes });

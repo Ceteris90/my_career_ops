@@ -19,7 +19,7 @@ try {
     const { ctx } = recordingCtx();
     const before = { ...ctx };
     applyEntryResponseCap(ctx, { name: 'Acme' });
-    if (ctx.fetchJson === before.fetchJson && ctx.fetchText === before.fetchText) pass('an entry without max_response_mb leaves the ctx as it is');
+    if (ctx.fetchJson === before.fetchJson && ctx.fetchText === before.fetchText && ctx.fetchResponse === before.fetchResponse) pass('an entry without max_response_mb leaves the ctx as it is');
     else fail('an entry without max_response_mb changed the ctx');
   }
 
@@ -47,9 +47,9 @@ try {
   {
     const { ctx, calls } = recordingCtx();
     applyEntryResponseCap(ctx, { name: 'BigCo', max_response_mb: 20 });
-    await ctx.fetchResponse('https://example.com/c');
-    if (!('maxBytes' in calls[0].opts)) pass('fetchResponse is left alone: it hands the body to the provider unread');
-    else fail('fetchResponse got a maxBytes');
+    await ctx.fetchResponse('https://example.com/c', { redirect: 'manual' });
+    if (calls[0].opts.maxBytes === 20 * MB && calls[0].opts.redirect === 'manual') pass('max_response_mb sets maxBytes on fetchResponse too, which reads the body under the same cap');
+    else fail(`fetchResponse did not get the entry cap: ${JSON.stringify(calls[0].opts)}`);
   }
 
   {
