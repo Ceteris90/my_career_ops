@@ -1186,6 +1186,7 @@ search_queries:
 #   recruitee       <slug>.recruitee.com
 #   bamboohr        <tenant>.bamboohr.com               (or api: field)
 #   breezy          <tenant>.breezy.hr                  (or api: field)
+#   inrecruiting    <tenant>.intervieweb.it             (Zucchetti InRecruiting career page; /en/career etc. picks the language)
 #   solidjobs       solid.jobs/public-api/offers/<division>
 #   comeet          api: https://www.comeet.co/careers-api/2.0/company/<uid>/positions?token=<token>
 #   personio        <slug>.jobs.personio.(de|com)
@@ -1296,6 +1297,11 @@ search_queries:
 # - name: Example Homerun Co
 #   careers_url: https://exampleco.homerun.co            # any <slug>.homerun.co host
 #   # Branded careers domain: api: https://feed.homerun.co/exampleco (the feed the careers page links)
+#   enabled: true
+#
+# - name: Example InRecruiting Co
+#   careers_url: https://exampleco.intervieweb.it/it/career   # any <tenant>.intervieweb.it host
+#   max_pages: 40          # optional page cap (15 jobs/page, default 40, max 200)
 #   enabled: true
 #
 # - name: Example Paylocity Co
@@ -2847,6 +2853,13 @@ tracked_companies:
     api: https://boards-api.greenhouse.io/v1/boards/amplemarket/jobs
     notes: "Lisbon PT / Remote. AI-native sales platform."
     enabled: true
+
+  # -- Italy (Zucchetti InRecruiting career pages) --
+
+  - name: Maggioli
+    careers_url: https://maggioli.intervieweb.it/it/career
+    notes: "Santarcangelo di Romagna IT. Software and services for public administration; developer, data and analyst roles across Italy."
+    enabled: false
 
   # -- AI / Developer Tools --
 

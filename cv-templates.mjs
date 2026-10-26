@@ -784,6 +784,78 @@ export function renderLint(path) {
   return result;
 }
 
+// ---- User template audit (#5777) ----
+
+const PLACEHOLDER_RE = /\{\{[A-Z_]+\}\}/g;
+
+function placeholdersOf(path) {
+  return new Set((readFileSync(path, 'utf-8').match(PLACEHOLDER_RE) || []).map((t) => t.slice(2, -2)));
+}
+
+// The slots the shipped templates of one kind all keep: those in the base template
+// that every shipped named variant also carries. A slot a shipped variant drops
+// (INTERESTS, say) is optional by the project's own example, so a user copy
+// dropping it is not drift. With no shipped variant there is nothing to tell
+// optional from core, so nothing is judged (null) rather than every slot flagged.
+function coreSlots(system) {
+  const base = system.get('standard');
+  const variants = [...system.values()].filter((e) => e.name !== 'standard');
+  if (!base || variants.length === 0) return null;
+  let core = placeholdersOf(base.path);
+  for (const v of variants) {
+    const have = placeholdersOf(v.path);
+    core = new Set([...core].filter((slot) => have.has(slot)));
+  }
+  return core;
+}
+
+/**
+ * Advisory audit of the user's own templates (those under data/templates/).
+ * Returns one finding per template that has a problem, and [] when all is well:
+ *   - invalid: it does not resolve (missing required placeholders, or a declared
+ *     section with no partial). The message is the resolver's own.
+ *   - name: its file name is not in the normalized form the resolver looks for, so
+ *     no name selects it.
+ *   - drifted: it lacks a slot every shipped variant of its kind keeps.
+ * Never throws for a template problem and never blocks a render; callers decide
+ * how loudly to report.
+ */
+export function auditUserTemplates({ dir = DEFAULT_TEMPLATES_DIR, userDir = DEFAULT_USER_TEMPLATES_DIR(), format = 'html' } = {}) {
+  assertFormat(format);
+  const findings = [];
+  for (const kind of Object.keys(KINDS)) {
+    const system = discoverIn(kind, { dir, format }, 'system');
+    const core = coreSlots(system);
+    for (const entry of discoverIn(kind, { dir: userDir, format }, 'user').values()) {
+      const problems = [];
+      // resolveTemplate() normalizes every name it is given (kebab), and discovery
+      // accepts the raw file name, so a file such as cv-template.a--b.html lists as
+      // "a--b" yet no name selects it: both "a--b" and "a-b" look for cv-template.a-b.html.
+      // Say that, and the name to use, instead of the resolver's "not found".
+      const usable = kebab(entry.name);
+      if (usable !== entry.name) {
+        problems.push({
+          type: 'name',
+          detail: `no name selects this file: names are normalized to "${usable}". Rename it to ${KINDS[kind].prefix}.${usable}.${format}`,
+        });
+      } else {
+        try {
+          resolveTemplate(kind, entry.name, { dir, userDir, format });
+        } catch (err) {
+          problems.push({ type: 'invalid', detail: err.message });
+        }
+      }
+      if (core) {
+        const have = placeholdersOf(entry.path);
+        const missing = [...core].filter((slot) => !have.has(slot)).sort();
+        if (missing.length) problems.push({ type: 'drifted', missing });
+      }
+      if (problems.length) findings.push({ kind, name: entry.name, path: entry.path, problems });
+    }
+  }
+  return findings;
+}
+
 export function loadProfileDefault(kind, { profilePath = DEFAULT_PROFILE_PATH, strict = false } = {}) {
   const cfg = KINDS[kind];
   if (!cfg) throw new Error(`Unknown template kind: ${kind}`);
@@ -900,11 +972,10 @@ if (isMain) {
         throw new Error(`lint reads HTML templates only; --format=${format} would report "no findings" without checking anything`);
       }
       const name = positionals[0];
-      if (flags.render) {
-        process.stdout.write(JSON.stringify(renderLint(resolveTemplate(kind, name, { format, fallback: Boolean(flags.fallback) })), null, 2) + '\n');
-        process.exit(0);
-      }
-      process.stdout.write(JSON.stringify(atsLint(resolveTemplate(kind, name, { format, fallback: Boolean(flags.fallback) }), kind), null, 2) + '\n');
+      // No process.exit after the write: on a pipe it can cut the JSON short.
+      const path = resolveTemplate(kind, name, { format, fallback: Boolean(flags.fallback) });
+      const report = flags.render ? renderLint(path) : atsLint(path, kind);
+      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     } else {
       process.stderr.write('Usage: node cv-templates.mjs <list|resolve|lint> <cv|cover> [name] [--format=html|tex] [--fallback] [--render]\n');
       process.exit(2);
