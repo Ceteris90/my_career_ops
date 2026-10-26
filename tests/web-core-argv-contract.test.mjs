@@ -58,11 +58,29 @@ const CALL_SITES = [
     probe: 'run',
   },
   {
-    source: 'web/src/app/api/status/route.ts',
+    // Before the set-status probe, which moves row 1 off Applied.
+    source: 'web/src/lib/core-cli.ts',
+    argvSource: 'web/src/app/api/followups/seed/route.ts',
+    script: 'followup-seed.mjs',
+    args: ['1', '--json'],
+    probe: 'run',
+  },
+  {
+    source: 'web/src/lib/core-cli.ts',
+    argvSource: 'web/src/app/api/status/route.ts',
     script: 'set-status.mjs',
-    // The route builds ['--row', row, canon, '--source', 'web', '--json'];
+    // The route builds ['--row', row, canon, '--source', 'web', '--detach-jd-archive', '--json'];
     // row 1 and Responded are the fixture tracker's row and a canonical state.
-    args: ['--row', '1', 'Responded', '--source', 'web', '--json'],
+    args: ['--row', '1', 'Responded', '--source', 'web', '--detach-jd-archive', '--json'],
+    probe: 'run',
+  },
+  {
+    // The same route's {n, undo: true} shape. It takes back the Responded
+    // write above, so row 1 is Applied again for the probes below.
+    source: 'web/src/lib/core-cli.ts',
+    argvSource: 'web/src/app/api/status/route.ts',
+    script: 'set-status.mjs',
+    args: ['--row', '1', '--undo', '--source', 'web', '--detach-jd-archive', '--json'],
     probe: 'run',
   },
   {
@@ -117,6 +135,33 @@ const CALL_SITES = [
     probe: 'json-any-exit',
   },
   {
+    source: 'web/src/app/api/keyword-match/route.ts',
+    script: 'keyword-match.mjs',
+    // {{report}} is replaced with the fixture report below. This script takes a
+    // FILE as its first argument, so unlike every other site here the argv is
+    // only meaningful against a real report — and `--help` exits 1, so
+    // 'flags-only' cannot stand in for it either.
+    args: ['{{report}}', '--json'],
+    probe: 'run',
+  },
+  {
+    source: 'web/src/app/api/upskill/route.ts',
+    script: 'upskill.mjs',
+    // No flags: upskill.mjs prints JSON by default and rejects a --json flag,
+    // the same convention stats.mjs and company-history.mjs follow while the
+    // follow-up routes pass one. The empty argv is the assertion.
+    args: [],
+    probe: 'run',
+  },
+  {
+    source: 'web/src/app/api/company-history/route.ts',
+    script: 'company-history.mjs',
+    // The fixture tracker's own company, so the probe exercises a real lookup
+    // rather than the not-found fallback.
+    args: ['--company', 'Northwind Robotics'],
+    probe: 'run',
+  },
+  {
     source: 'web/src/lib/core/pipeline.ts',
     script: null,
     args: [],
@@ -157,14 +202,22 @@ export function verifyWebStaticSources({ root = ROOT, reportPass = pass, reportF
 
   // Every `"--flag"` literal in a listed source must appear in its argv here.
   // This covers the argv literals the routes write inline; it does NOT cover a
-  // flag assembled at runtime from a variable or a template string.
-  const flagDrift = [];
+  // flag assembled at runtime from a variable or a template string. A route
+  // that spawns through a shared runner names its own file as `argvSource`.
+  // A source with more than one argv shape lists one probe per shape, so a
+  // flag counts as covered when any probe for that source passes it.
+  const probedFlags = new Map();
   for (const site of CALL_SITES) {
-    const src = readFileSync(join(root, site.source), 'utf-8');
+    const argvSource = site.argvSource ?? site.source;
+    probedFlags.set(argvSource, [...(probedFlags.get(argvSource) ?? []), ...site.args]);
+  }
+  const flagDrift = [];
+  for (const [argvSource, args] of probedFlags) {
+    const src = readFileSync(join(root, argvSource), 'utf-8');
     const literals = [...new Set([...src.matchAll(/"(--[a-z][a-z0-9-]*)"/g)].map((m) => m[1]))];
     for (const flag of literals) {
-      if (!site.args.includes(flag))
-        flagDrift.push(`${site.source} passes ${flag}, which no probe above covers`);
+      if (!args.includes(flag))
+        flagDrift.push(`${argvSource} passes ${flag}, which no probe above covers`);
     }
   }
   if (flagDrift.length === 0)
@@ -208,6 +261,30 @@ export function runWebCoreArgvContract() {
       'utf-8',
     );
 
+    // The report the fixture tracker already links to, which until now was not
+    // written. keyword-match.mjs reads a report's `## Keywords extracted` block,
+    // so a probe of its argv needs one to exist.
+    const reportFile = join(sandbox, 'reports', '001-northwind-robotics-2026-01-05.md');
+    mkdirSync(join(sandbox, 'reports'), { recursive: true });
+    writeFileSync(
+      reportFile,
+      '**URL:** https://example.invalid/northwind\n**Legitimacy:** verified\n\n' +
+        '## Keywords extracted\n\n- Go\n- PostgreSQL\n- Kubernetes\n\n' +
+        '## Job Description (archived verbatim)\n\nFixture posting text.\n',
+      'utf-8',
+    );
+
+    // keyword-match.mjs compares the report against the CV at the data root and
+    // exits 1 when there is none, so the fixture needs both halves of the
+    // comparison. Two of the three keywords above appear here on purpose: the
+    // probe asserts the argv and the JSON shape, and a run with no overlap at
+    // all would exercise a narrower path than the web's.
+    writeFileSync(
+      join(sandbox, 'cv.md'),
+      '# Fixture CV\n\nBackend engineer. Go and PostgreSQL in production.\n',
+      'utf-8',
+    );
+
     const env = {
       ...process.env,
       CAREER_OPS_ROOT: sandbox,
@@ -224,8 +301,14 @@ export function runWebCoreArgvContract() {
 
     for (const site of CALL_SITES) {
       if (site.probe === 'none') continue;
-      const argv = site.probe === 'flags-only' ? [...site.args, '--help'] : site.args;
-      const label = `${site.script} ${argv.join(' ')}`.trim();
+      // {{report}} is the only token: a couple of scripts take a FILE rather
+      // than flags, and the file only exists once the sandbox is built.
+      const resolved = site.args.map((a) => (a === '{{report}}' ? reportFile : a));
+      const argv = site.probe === 'flags-only' ? [...resolved, '--help'] : resolved;
+      // Label with the TOKEN, not the resolved temp path: a failure message
+      // naming /var/folders/…/T/co-web-argv-xyz/reports/… is unreadable and
+      // changes every run.
+      const label = `${site.script} ${(site.probe === 'flags-only' ? [...site.args, '--help'] : site.args).join(' ')}`.trim();
       const result = spawnSync(NODE, [join(ROOT, site.script), ...argv], {
         cwd: ROOT,
         encoding: 'utf-8',

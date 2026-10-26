@@ -3,8 +3,7 @@
  *
  * Plain .mjs (same pattern as pdf-paths.mjs / clean-chips.mjs) so this can be
  * unit-tested with `node --test`, no TypeScript build step. `spawnFn`,
- * `execPath`, and `coreRoot` (the code checkout — the scripts live there, not
- * in the data root) are injected rather than importing node:child_process
+ * `execPath`, and `coreRoot` (the code checkout — the scripts live there, not in the data root) are injected rather than importing node:child_process
  * or career-ops.ts directly, keeping this module free of TypeScript
  * dependencies and letting tests substitute a fake child process.
  *
@@ -103,7 +102,9 @@ export function spawnGeneratePdf({ spawnFn, execPath, coreRoot, html, finalPdf, 
       // hard-fail every web-triggered render — same bypass a human already
       // applies manually via the CLI when this diverges.
       [path.join(coreRoot, "generate-pdf.mjs"), html, finalPdf, `--format=${format}`, `--report=${reportNum}`, "--allow-reorder"],
-      { cwd: coreRoot },
+      // windowsHide: see api/doctor/route.ts — a stale inherited console
+      // kills every child with 0xC0000142 on Windows; never inherit one.
+      { cwd: coreRoot, windowsHide: true },
     );
     let stderr = "";
     child.stderr.on("data", (d) => { stderr += d.toString(); });
@@ -117,12 +118,13 @@ export function spawnGeneratePdf({ spawnFn, execPath, coreRoot, html, finalPdf, 
  * JSON stdout when present (mark-pdf-ready.mjs prints a JSON payload even on
  * a failure exit when --json is passed) so a caller can surface the specific
  * reason (not-found / ambiguous / lock-timeout / ...) rather than raw stderr.
+ * `code` is the exit code, or null when the child never started.
  * @param {{spawnFn: Function, execPath: string, coreRoot: string, reportNum: string}} args
- * @returns {Promise<{ok: boolean, data: object | null, stderr: string}>}
+ * @returns {Promise<{ok: boolean, code: number | null, data: {error?: string} | null, stderr: string}>}
  */
 export function markTrackerReady({ spawnFn, execPath, coreRoot, reportNum }) {
   return new Promise((resolve) => {
-    const child = spawnFn(execPath, [path.join(coreRoot, "mark-pdf-ready.mjs"), reportNum, "--json"], { cwd: coreRoot });
+    const child = spawnFn(execPath, [path.join(coreRoot, "mark-pdf-ready.mjs"), reportNum, "--json"], { cwd: coreRoot, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d) => { stdout += d.toString(); });
@@ -130,9 +132,9 @@ export function markTrackerReady({ spawnFn, execPath, coreRoot, reportNum }) {
     child.on("close", (code) => {
       let data = null;
       try { data = JSON.parse(stdout); } catch { /* not JSON, or exited before printing any */ }
-      resolve({ ok: code === 0, data, stderr: stderr.trim() });
+      resolve({ ok: code === 0, code, data, stderr: stderr.trim() });
     });
-    child.on("error", (e) => resolve({ ok: false, data: null, stderr: `mark-pdf-ready.mjs failed to start: ${e.message}` }));
+    child.on("error", (e) => resolve({ ok: false, code: null, data: null, stderr: `mark-pdf-ready.mjs failed to start: ${e.message}` }));
   });
 }
 
@@ -166,6 +168,20 @@ export function cleanupPdfScratch(scratchDir, prefix) {
 }
 
 /**
+ * Keep the rendered HTML beside its PDF. The CV Studio edits that HTML, and
+ * the scratch copy is deleted right after the render.
+ * @param {{html: string, finalPdf: string}} pdfPaths
+ * @param {string[]} warnings
+ */
+export function keepTailoredHtml(pdfPaths, warnings) {
+  try {
+    fs.copyFileSync(pdfPaths.html, pdfPaths.finalPdf.replace(/\.pdf$/i, ".html"));
+  } catch (err) {
+    warnings.push(`PDF rendered, but its HTML was not kept for the CV Studio: ${err.message}`);
+  }
+}
+
+/**
  * @typedef {Object} RenderFailedResult
  * @property {"render-failed"} kind
  * @property {string} error
@@ -193,6 +209,7 @@ export async function renderAndMarkPdf({ spawnFn, execPath, coreRoot, pdfPaths, 
   const warnings = [];
 
   const render = await spawnGeneratePdf({ spawnFn, execPath, coreRoot, html: pdfPaths.html, finalPdf: pdfPaths.finalPdf, format, reportNum });
+  if (render.ok) keepTailoredHtml(pdfPaths, warnings);
   cleanupPdfScratch(path.dirname(pdfPaths.html), `cv-web-${reportNum}.`);
 
   if (!render.ok) {

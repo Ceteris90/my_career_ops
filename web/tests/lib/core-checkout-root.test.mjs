@@ -74,12 +74,16 @@ test("the cwd check detects both forbidden forms", () => {
   assert.doesNotMatch("{ cwd: rootDir }", DATA_ROOT_CWD);
 });
 
+// The assistant spawns an agent CLI that works on the user's files, so its cwd is
+// the data root; it only imports rootScript() to load lib/personalization.
+const AGENT_CWD_ALLOWED = new Set(["app/api/assistant/route.ts"]);
+
 test("core scripts run with the code checkout as cwd", () => {
   // The CLI runs scripts from the checkout (doctor.mjs, e.g., looks for the MCP
   // config in its cwd); scripts find the data root themselves via path-resolver.
   const offenders = [];
   for (const { rel, src } of sources) {
-    if (!/rootScript\(/.test(src) || rel === "lib/career-ops.ts") continue;
+    if (!/rootScript\(/.test(src) || rel === "lib/career-ops.ts" || AGENT_CWD_ALLOWED.has(rel)) continue;
     if (DATA_ROOT_CWD.test(src)) offenders.push(rel);
   }
   assert.deepEqual(offenders, [], `script spawns must use cwd: resolveCodeRoot(process.cwd(), process.env):\n${offenders.join("\n")}`);
