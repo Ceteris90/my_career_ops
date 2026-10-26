@@ -676,8 +676,45 @@ function attrValue(tag, name) {
   return null;
 }
 
+// The URL parser drops tab, LF and CR from anywhere in a URL, so `ht&#9;tps://x`
+// is remote. Only the URL consumers strip: `rel`, `type` and `http-equiv` need
+// the raw value. srcset is not stripped: tab, LF and CR are whitespace there, so
+// they end a candidate URL instead of sitting inside one.
+const urlValue = (tag, name) => {
+  const v = attrValue(tag, name);
+  return v === null ? null : v.replace(/[\t\n\r]/g, '');
+};
+
 // The URL of every srcset candidate, since a remote one can follow a local one.
-const srcsetUrls = (v) => v.split(',').map((c) => c.trim().split(/\s+/)[0]).filter(Boolean);
+// A candidate URL is the run of non-whitespace characters, so the comma inside
+// `data:image/png;base64,AAAA` stays part of it; only a comma that ends the run
+// separates candidates (HTML Standard, "parse a srcset attribute").
+function srcsetUrls(v) {
+  const out = [];
+  let i = 0;
+  while (i < v.length) {
+    while (i < v.length && /[\s,]/.test(v[i])) i++;
+    const start = i;
+    while (i < v.length && !/\s/.test(v[i])) i++;
+    const token = v.slice(start, i);
+    if (token === '') break;
+    const url = token.replace(/,+$/, '');
+    if (url !== token) {
+      // A trailing comma ends the candidate: there are no descriptors.
+    } else {
+      // Descriptors run to the next comma outside parentheses.
+      let depth = 0;
+      while (i < v.length) {
+        const c = v[i++];
+        if (c === '(') depth++;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (c === ',' && depth === 0) break;
+      }
+    }
+    if (url) out.push(url);
+  }
+  return out;
+}
 
 const excerpt = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
 
@@ -690,7 +727,11 @@ const RENDER_RULES = [
   {
     id: 'embedded-content',
     rule: '<iframe>, <object> and <embed> pull in content the renderer will not load.',
-    detect: (html) => (html.match(TAG_RE) || []).filter((tag) => /^<(?:iframe|object|embed)\b/i.test(tag)).map(excerpt),
+    // An iframe with srcdoc carries its own static markup, which renders with
+    // JavaScript off and needs no request.
+    detect: (html) => (html.match(TAG_RE) || [])
+      .filter((tag) => /^<(?:iframe|object|embed)\b/i.test(tag) && !(/^<iframe\b/i.test(tag) && attrNames(tag).includes('srcdoc')))
+      .map(excerpt),
   },
   {
     id: 'event-handler-attribute',
@@ -703,7 +744,7 @@ const RENDER_RULES = [
     id: 'script-url',
     rule: 'A javascript: or data:text/html URL is never followed.',
     detect: (html) => (html.match(TAG_RE) || [])
-      .filter((tag) => ['href', 'src', 'xlink:href'].some((a) => /^\s*(?:javascript:|data:text\/html)/i.test(attrValue(tag, a) ?? '')))
+      .filter((tag) => ['href', 'src', 'xlink:href'].some((a) => /^\s*(?:javascript:|data:text\/html)/i.test(urlValue(tag, a) ?? '')))
       .map(excerpt),
   },
   {
@@ -721,9 +762,12 @@ const RENDER_RULES = [
       // A relative URL resolves against an absolute remote <base href>, so it is
       // a remote request too. Only the first <base> counts, as in a browser.
       const baseTag = (html.match(TAG_RE) || []).find((t) => /^<base\b/i.test(t) && attrValue(t, 'href') !== null);
-      const hasRemoteBase = Boolean(baseTag) && /^\s*(?:https?|ftp):\/\//i.test(attrValue(baseTag, 'href'));
-      const isRelative = (u) => { const v = u.trim(); return v !== '' && !v.startsWith('#') && !v.startsWith('{{') && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('//'); };
-      const isRemote = (u) => REMOTE_RE.test(u) || (hasRemoteBase && isRelative(u));
+      const hasRemoteBase = Boolean(baseTag) && /^\s*(?:https?|ftp):\/\//i.test(urlValue(baseTag, 'href'));
+      const isRelative = (u) => { const v = u.trim(); return v !== '' && !v.startsWith('{{') && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('//'); };
+      // A fragment-only URL is a resource request that resolves against the base
+      // (`<img src="#logo">`), but a same-document reference in `<use>` and CSS
+      // `url(#id)`, which is never fetched.
+      const isRemote = (u, { sameDocFragment = false } = {}) => REMOTE_RE.test(u) || (hasRemoteBase && isRelative(u) && !(sameDocFragment && u.trim().startsWith('#')));
       for (const tag of html.match(TAG_RE) || []) {
         const name = /^<([a-zA-Z0-9]+)/.exec(tag)[1].toLowerCase();
         const attrs = [];
@@ -732,11 +776,12 @@ const RENDER_RULES = [
         if (name === 'video') attrs.push('poster');
         if (name === 'image' || name === 'use') attrs.push('href', 'xlink:href');
         if (name === 'link' && /\b(?:stylesheet|preload|icon|prefetch)\b/i.test(attrValue(tag, 'rel') ?? '')) attrs.push('href');
+        const sameDocFragment = name === 'use';
         const urls = attrs.flatMap((a) => {
-          const v = attrValue(tag, a) ?? '';
-          return a === 'srcset' ? srcsetUrls(v) : [v];
+          if (a === 'srcset') return srcsetUrls(attrValue(tag, a) ?? '');
+          return [urlValue(tag, a) ?? ''];
         });
-        if (urls.some(isRemote)) out.push(excerpt(tag));
+        if (urls.some((u) => isRemote(u, { sameDocFragment }))) out.push(excerpt(tag));
       }
       // Only CSS-bearing content: <style> bodies and style="" values. A title or
       // visible text that happens to contain url(...) is prose, not a request.
@@ -761,8 +806,8 @@ const RENDER_RULES = [
         if (inline) sources.push(inline);
       }
       const css = sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
-      for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`url(${m[1]})`));
-      for (const m of css.matchAll(/@import\s+["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
+      for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1], { sameDocFragment: true })) out.push(excerpt(`url(${m[1]})`));
+      for (const m of css.matchAll(/@import\s*["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
       return out;
     },
   },
