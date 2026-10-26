@@ -3561,7 +3561,7 @@ if (shared.includes('_profile.md')) {
   // unrelated text while the guard, the non-README.md condition, the
   // write-back or the "before drafting" ordering is gone.
   const hasCalibrationTrigger = (src) =>
-    /If `modes\/_profile\.md` has no `## Writing Style` section and `writing-samples\/` holds a file other than `README\.md`, run the Writing Style calibration in `modes\/_writing\.md`(?: now)? and write (?:the result|it) to `_profile\.md` before drafting/.test(src);
+    /If `modes\/_profile\.md` has no `## Writing Style` section and `writing-samples\/` holds a file other than `README\.md`, run the Writing Style calibration in `modes\/_writing\.md`(?: now)? and write (?:the result|it) to `modes\/_profile\.md` before drafting/.test(src);
   const scatteredFixture = [
     '## Writing Style',
     'Samples live in `writing-samples/`.',
@@ -3571,6 +3571,12 @@ if (shared.includes('_profile.md')) {
     fail('calibration trigger predicate accepts scattered keywords with no trigger sentence');
   } else {
     pass('calibration trigger predicate rejects scattered keywords');
+  }
+  const bareWriteBack = readFile('modes/cover.md').replace('write the result to `modes/_profile.md`', 'write the result to `_profile.md`');
+  if (hasCalibrationTrigger(bareWriteBack)) {
+    fail('calibration trigger predicate accepts a write-back to bare _profile.md');
+  } else {
+    pass('calibration trigger predicate rejects a write-back to bare _profile.md');
   }
   const missingTrigger = WRITING_CONSUMERS.filter((path) => !hasCalibrationTrigger(readFile(path)));
   if (missingTrigger.length === 0) {
