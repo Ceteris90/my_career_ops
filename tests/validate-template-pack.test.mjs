@@ -132,21 +132,33 @@ test('a preview that is a directory is rejected', () => {
   has(validatePack(dir), /previews\.cv.*not a file/);
 });
 
-test('a preview symlink that points outside the pack is rejected', () => {
+// Symlinks need privileges on some platforms (Windows without developer mode).
+// Skip only on a permission error; any other failure is a real failure.
+function trySymlink(t, target, link) {
+  try {
+    symlinkSync(target, link);
+    return true;
+  } catch (err) {
+    if (err?.code === 'EPERM' || err?.code === 'EACCES') { t.skip(`cannot create symlinks here: ${err.code}`); return false; }
+    throw err;
+  }
+}
+
+test('a preview symlink that points outside the pack is rejected', (t) => {
   const outside = mkdtempSync(join(tmpdir(), 'tpl-out-'));
   dirs.push(outside);
   writeFileSync(join(outside, 'p.png'), 'png');
   const dir = pack(basePack(), { 'previews/plain-cv.png': null });
-  symlinkSync(join(outside, 'p.png'), join(dir, 'previews/plain-cv.png'));
+  if (!trySymlink(t, join(outside, 'p.png'), join(dir, 'previews/plain-cv.png'))) return;
   has(validatePack(dir), /previews\.cv.*outside the pack/);
 });
 
-test('a symlink that points outside the pack is rejected', () => {
+test('a symlink that points outside the pack is rejected', (t) => {
   const outside = mkdtempSync(join(tmpdir(), 'tpl-out-'));
   dirs.push(outside);
   writeFileSync(join(outside, 'cv.html'), CV);
   const dir = pack(basePack(), { 'templates/cv-template.plain.html': null });
-  symlinkSync(join(outside, 'cv.html'), join(dir, 'templates/cv-template.plain.html'));
+  if (!trySymlink(t, join(outside, 'cv.html'), join(dir, 'templates/cv-template.plain.html'))) return;
   has(validatePack(dir), /outside the pack/);
 });
 
@@ -182,6 +194,15 @@ test('the CLI exits 0 on a valid pack and 1 with problems on a bad one', () => {
   const bad = spawnSync('node', ['validate-template-pack.mjs', pack(basePack({ packVersion: 9 }))], { cwd: ROOT, encoding: 'utf-8' });
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /packVersion/);
+});
+
+test('the CLI escapes control characters in a printed problem', () => {
+  const m = basePack({ templates: [baseEntry({ files: { cv: 'templates/a\nb\u001b[31m.html', cover: 'templates/cover-letter-template.plain.html' } })] });
+  const r = spawnSync('node', ['validate-template-pack.mjs', pack(m)], { cwd: ROOT, encoding: 'utf-8' });
+  assert.equal(r.status, 1);
+  assert.doesNotMatch(r.stderr, /[\u001b\u007f]/);
+  for (const line of r.stderr.trimEnd().split('\n')) assert.match(line, /^✗ /, `unprefixed line: ${line}`);
+  assert.match(r.stderr, /a\\x0ab\\x1b\[31m/);
 });
 
 test('the CLI exits 2 with usage when given no directory', () => {
