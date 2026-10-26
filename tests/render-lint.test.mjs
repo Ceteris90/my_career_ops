@@ -69,6 +69,7 @@ const CASES = [
       '<img alt="src=https://example.com/a.png" src="photo.png">',
       '<img srcset="photo.png 1x, photo-2x.png 2x">',
       '<title>url(https://example.com/a.png)</title>',
+      '<img alt="<style>body{background:url(https://example.com/a.png)}</style>" src="a.png">',
       '<p>Docs: url(https://example.com/a.png) and @import "https://example.com/a.css"</p>',
     ],
   },
