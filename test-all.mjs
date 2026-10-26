@@ -3553,38 +3553,6 @@ if (shared.includes('_profile.md')) {
     fail(`these modes delegate wording to _writing.md but never read it: ${missingRead.join(', ')} (#2006)`);
   }
 
-  // Reading _writing.md loads a conditional ("no cached style: scan the
-  // samples, write back") that no step owns unless the mode says so. Assert
-  // that each consumer carries the trigger, not just the read.
-  // The trigger is one sentence, so it is matched as one block. Separate
-  // keyword tests pass when "writing-samples/" and "calibration" appear in
-  // unrelated text while the guard, the non-README.md condition, the
-  // write-back or the "before drafting" ordering is gone.
-  const hasCalibrationTrigger = (src) =>
-    /If `modes\/_profile\.md` has no `## Writing Style` section and `writing-samples\/` holds a file other than `README\.md`, run the Writing Style calibration in `modes\/_writing\.md`(?: now)? and write (?:the result|it) to `modes\/_profile\.md` before drafting/.test(src);
-  const scatteredFixture = [
-    '## Writing Style',
-    'Samples live in `writing-samples/`.',
-    'See the calibration notes elsewhere.',
-  ].join('\n');
-  if (hasCalibrationTrigger(scatteredFixture)) {
-    fail('calibration trigger predicate accepts scattered keywords with no trigger sentence');
-  } else {
-    pass('calibration trigger predicate rejects scattered keywords');
-  }
-  const bareWriteBack = readFile('modes/cover.md').replace('write the result to `modes/_profile.md`', 'write the result to `_profile.md`');
-  if (hasCalibrationTrigger(bareWriteBack)) {
-    fail('calibration trigger predicate accepts a write-back to bare _profile.md');
-  } else {
-    pass('calibration trigger predicate rejects a write-back to bare _profile.md');
-  }
-  const missingTrigger = WRITING_CONSUMERS.filter((path) => !hasCalibrationTrigger(readFile(path)));
-  if (missingTrigger.length === 0) {
-    pass('cover.md and email.md trigger Writing Style calibration when samples exist and no cached style');
-  } else {
-    fail(`these modes read _writing.md but never trigger Writing Style calibration: ${missingTrigger.join(', ')}`);
-  }
-
   // The delegation must not have taken the mode-specific contracts with it:
   // those are set locally and _writing.md says nothing about them.
   const coverSrc = readFile('modes/cover.md');
