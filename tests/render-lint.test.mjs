@@ -24,12 +24,12 @@ const CASES = [
   {
     id: 'script-element',
     hit: ['<body><script>fetch("x")</script></body>', '<SCRIPT src="a.js"></SCRIPT>'],
-    miss: ['<p>Wrote a script for the pipeline</p>', '<noscript>Enable JS</noscript>', '<!-- <script>x</script> -->'],
+    miss: ['<p>Wrote a script for the pipeline</p>', '<noscript>Enable JS</noscript>', '<!-- <script>x</script> -->', '<img alt="<script>" src="a.png">'],
   },
   {
     id: 'embedded-content',
     hit: ['<iframe src="a.html"></iframe>', '<object data="a.pdf"></object>', '<embed src="a.svg">'],
-    miss: ['<img src="a.png">', '<svg><rect/></svg>'],
+    miss: ['<img src="a.png">', '<svg><rect/></svg>', '<img alt="<iframe>" src="a.png">'],
   },
   {
     id: 'event-handler-attribute',
@@ -55,6 +55,8 @@ const CASES = [
       '<style>@import "https://fonts.example.com/a.css";</style>',
       '<style>body{background:url(http://example.com/a.png)}</style>',
       '<div style="background:url(\'https://example.com/a.png\')"></div>',
+      '<img alt="src=photo.png" src="https://example.com/a.png">',
+      '<img srcset="photo.png 1x, https://example.com/photo.png 2x">',
     ],
     miss: [
       '<a href="https://example.com/me">me</a>',
@@ -63,6 +65,8 @@ const CASES = [
       '<link rel="stylesheet" href="fonts/a.css">',
       '<style>@font-face{src:url("./fonts/a.woff2")}</style>',
       '<style>/* url(https://example.com/a.png) */ body{}</style>',
+      '<img alt="src=https://example.com/a.png" src="photo.png">',
+      '<img srcset="photo.png 1x, photo-2x.png 2x">',
     ],
   },
 ];
@@ -100,7 +104,7 @@ test('an unreadable path is reported, never thrown', () => {
 
 test('lint --render runs the render check and exits 0 on findings', () => {
   const root = join(import.meta.dirname, '..');
-  const out = execFileSync('node', ['cv-templates.mjs', 'lint', 'cv', '--render'], { cwd: root, encoding: 'utf-8' });
+  const out = execFileSync('node', ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], { cwd: root, encoding: 'utf-8' });
   const parsed = JSON.parse(out);
   assert.ok(Array.isArray(parsed.findings));
   assert.equal(parsed.ok, true);

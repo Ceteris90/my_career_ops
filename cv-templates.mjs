@@ -601,10 +601,19 @@ function bareAttrs(tag) {
   return tag.replace(/"[^"]*"|'[^']*'/g, '""');
 }
 
+// Reads attributes by walking the tag, so a quoted value that happens to
+// contain `src=x` is a value and not a second attribute.
 function attrValue(tag, name) {
-  const m = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag);
-  return m ? (m[1] ?? m[2] ?? m[3] ?? '') : null;
+  const body = tag.replace(/^<[^\s>/]+/, '').replace(/\/?>$/, '');
+  const re = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  for (const m of body.matchAll(re)) {
+    if (m[1].toLowerCase() === name) return m[2] ?? m[3] ?? m[4] ?? '';
+  }
+  return null;
 }
+
+// The URL of every srcset candidate, since a remote one can follow a local one.
+const srcsetUrls = (v) => v.split(',').map((c) => c.trim().split(/\s+/)[0]).filter(Boolean);
 
 const excerpt = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
 
@@ -612,12 +621,12 @@ const RENDER_RULES = [
   {
     id: 'script-element',
     rule: 'A <script> never runs: the renderer disables JavaScript.',
-    detect: (html) => (html.match(/<script\b[^>]*>/gi) || []).map(excerpt),
+    detect: (html) => (html.match(TAG_RE) || []).filter((tag) => /^<script\b/i.test(tag)).map(excerpt),
   },
   {
     id: 'embedded-content',
     rule: '<iframe>, <object> and <embed> pull in content the renderer will not load.',
-    detect: (html) => (html.match(/<(?:iframe|object|embed)\b[^>]*>/gi) || []).map(excerpt),
+    detect: (html) => (html.match(TAG_RE) || []).filter((tag) => /^<(?:iframe|object|embed)\b/i.test(tag)).map(excerpt),
   },
   {
     id: 'event-handler-attribute',
@@ -653,7 +662,11 @@ const RENDER_RULES = [
         if (name === 'video') attrs.push('poster');
         if (name === 'image' || name === 'use') attrs.push('href', 'xlink:href');
         if (name === 'link' && /\b(?:stylesheet|preload|icon|prefetch)\b/i.test(attrValue(tag, 'rel') ?? '')) attrs.push('href');
-        if (attrs.some((a) => REMOTE_RE.test(attrValue(tag, a) ?? ''))) out.push(excerpt(tag));
+        const urls = attrs.flatMap((a) => {
+          const v = attrValue(tag, a) ?? '';
+          return a === 'srcset' ? srcsetUrls(v) : [v];
+        });
+        if (urls.some((u) => REMOTE_RE.test(u))) out.push(excerpt(tag));
       }
       const css = html.replace(/\/\*[\s\S]*?\*\//g, ' ');
       for (const m of css.matchAll(/url\(\s*["']?\s*((?:https?:)?\/\/[^)"']*)/gi)) out.push(excerpt(`url(${m[1]})`));
