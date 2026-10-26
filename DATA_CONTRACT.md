@@ -196,7 +196,7 @@ That is what `update-system.mjs apply` does with every system file this install 
 
 ## Custom Data Directory
 
-By default, all User Layer files reside inside the project repository root. You can configure a separate, external directory for your personal data.
+By default, a checkout keeps all User Layer files inside the project repository root. A Claude Code plugin install keeps them in `~/career-ops-data` instead (see the Plugin Install Default below). Either way, you can configure a separate, external directory for your personal data.
 
 ### Resolution Precedence:
 1. **Environment Variables (`CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR`):** Set this to the absolute or relative path of your custom data directory.

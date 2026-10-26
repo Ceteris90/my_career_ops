@@ -30,9 +30,16 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getCareerOpsRoot, isPluginInstallCopy } from '../path-resolver.mjs';
+import { acquireDirLock, releaseOrWarn } from '../lib/dir-lock.mjs';
 import { isMainModule } from '../lib/is-main-module.mjs';
 
 const STAMP = 'career-ops-deps.json';
+
+// Sessions that start together share ${CLAUDE_PLUGIN_DATA}, even across plugin
+// versions, so the stamp check, the install and the stamp write run under one
+// lock in that folder. A waiter gives up before the hook's 300 s timeout.
+const DEPS_LOCK = 'deps.lock';
+const DEPS_LOCK_OPTIONS = { timeoutMs: 240_000, maxWaitMs: 240_000, retryMs: 250, staleMs: 30_000 };
 
 /**
  * The package.json the hook installs from: the plugin's runtime dependencies
@@ -65,32 +72,51 @@ function runNpmInstall(cwd) {
   return { ok: result.status === 0, code: result.status, error: result.error?.message };
 }
 
+function lstatOrNull(path) {
+  try {
+    return lstatSync(path);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Install the runtime dependencies into dataDir when they are missing or
  * package.json changed since the last install, then link them into the copy.
+ * Everything after the "provided" check runs under the data folder's lock.
  *
- * @param {{pluginRoot: string, dataDir: string, install?: (cwd: string) => {ok: boolean, code?: number|null, error?: string}}} opts
- * @returns {{status: 'provided'|'ready'|'installed'|'failed', detail?: string}}
+ * @param {{pluginRoot: string, dataDir: string, install?: (cwd: string) => {ok: boolean, code?: number|null, error?: string}, lockOptions?: object}} opts
+ * @returns {Promise<{status: 'provided'|'ready'|'installed'|'failed', detail?: string}>}
  */
-export function ensureDependencies({ pluginRoot, dataDir, install = runNpmInstall }) {
+export async function ensureDependencies({ pluginRoot, dataDir, install = runNpmInstall, lockOptions = {} }) {
   const link = join(pluginRoot, 'node_modules');
-  const target = join(dataDir, 'node_modules');
-
-  let linkStat = null;
-  try {
-    linkStat = lstatSync(link);
-  } catch {
-    // Absent: linked below.
-  }
+  const initial = lstatOrNull(link);
   // A real directory means Claude Code installed the packages itself.
-  if (linkStat && !linkStat.isSymbolicLink()) return { status: 'provided' };
+  if (initial && !initial.isSymbolicLink()) return { status: 'provided' };
 
+  mkdirSync(dataDir, { recursive: true });
+  const lock = await acquireDirLock(join(dataDir, DEPS_LOCK), {
+    ...DEPS_LOCK_OPTIONS,
+    ...lockOptions,
+    owner: { purpose: 'career-ops plugin dependency install' },
+  });
+  try {
+    return installAndLink({ pluginRoot, dataDir, install, link });
+  } finally {
+    releaseOrWarn(lock);
+  }
+}
+
+// Read every piece of state only after the lock is held: the session that held
+// it before this one may have just installed and linked these packages.
+function installAndLink({ pluginRoot, dataDir, install, link }) {
+  const target = join(dataDir, 'node_modules');
+  const linkStat = lstatOrNull(link);
   const manifest = dependencyManifest(pluginRoot);
   const stampPath = join(dataDir, STAMP);
   const current = JSON.stringify(readJson(stampPath));
   let status = 'ready';
   if (current !== JSON.stringify(manifest.dependencies) || !existsSync(target)) {
-    mkdirSync(dataDir, { recursive: true });
     writeFileSync(join(dataDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     rmSync(stampPath, { force: true });
     const result = install(dataDir);
@@ -130,15 +156,21 @@ export function ensureDataRoot(root = getCareerOpsRoot()) {
 
 /**
  * @param {NodeJS.ProcessEnv} [env]
- * @returns {string[]} Lines for the session context; empty when nothing changed
+ * @returns {Promise<string[]>} Lines for the session context; empty when nothing changed
  */
-export function sessionStart(env = process.env) {
+export async function sessionStart(env = process.env) {
   const pluginRoot = resolve(env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..'));
   const dataDir = env.CLAUDE_PLUGIN_DATA;
   if (!dataDir || !isPluginInstallCopy(pluginRoot, env)) return [];
 
   const lines = [];
-  const deps = ensureDependencies({ pluginRoot, dataDir });
+  let deps;
+  try {
+    deps = await ensureDependencies({ pluginRoot, dataDir });
+  } catch (err) {
+    // The lock wait ran out: another session is still installing.
+    deps = { status: 'failed', detail: err.message };
+  }
   if (deps.status === 'installed') {
     lines.push(`career-ops plugin: installed its Node packages into ${join(dataDir, 'node_modules')}.`);
   } else if (deps.status === 'failed') {
@@ -173,7 +205,7 @@ if (isMainModule(import.meta.url)) {
     process.exit(0);
   }
   try {
-    const lines = sessionStart();
+    const lines = await sessionStart();
     if (lines.length > 0) console.log(lines.join('\n'));
   } catch (err) {
     console.log(`career-ops plugin: session setup failed (${err.message}).`);

@@ -1206,6 +1206,10 @@ async function main() {
   console.log('================\n');
 
   const { cli: activeCli, source: cliSource, warning: cliWarning } = resolveActiveCli();
+  // A data root inside the plugin copy is deleted on the next plugin update,
+  // so the checks that create User Layer folders and files skip it.
+  const pluginInstall = checkPluginInstall(projectRoot);
+  const userLayerWritable = !pluginInstall || pluginInstall.pass;
 
   const checks = [
     checkNodeVersion(),
@@ -1214,7 +1218,7 @@ async function main() {
     geminiNodeFloor(activeCli, process.versions.node),
     checkBillingSource(),
     checkDependencies(),
-    checkPluginInstall(projectRoot),
+    pluginInstall,
     checkWebDependencies(),
     checkTrackedBakFiles(codeRoot),
     checkSkillEntrypoints(codeRoot),
@@ -1228,10 +1232,9 @@ async function main() {
     checkTitleFilterConflicts(projectRoot),
     checkCvShape(projectRoot),
     checkUserTemplates(projectRoot),
-    checkAutoDir('data'),
-    checkPipelineFile(),
-    checkAutoDir('output'),
-    checkAutoDir('reports'),
+    ...(userLayerWritable
+      ? [checkAutoDir('data'), checkPipelineFile(), checkAutoDir('output'), checkAutoDir('reports')]
+      : []),
     checkPlugins(projectRoot),
     // checkPrereq already explains the .env case when the profile is missing.
     prereqPresent(projectRoot, { path: 'config/profile.yml' }) ? checkEnvFileProfile(projectRoot) : null,
@@ -1458,6 +1461,9 @@ function checkTitleFilterConflicts(root) {
 
 function onboardingState(root) {
   const autoCopied = [];
+  // Same rule as main(): never seed User Layer files inside a plugin copy.
+  const pluginInstall = checkPluginInstall(root);
+  const userLayerWritable = !pluginInstall || pluginInstall.pass;
   const templates = [
     { target: 'modes/_profile.md', template: 'modes/_profile.template.md' },
     { target: 'modes/_custom.md', template: 'modes/_custom.template.md' },
@@ -1469,7 +1475,7 @@ function onboardingState(root) {
     const rootTemplatePath = join(root, ...template.split('/'));
     const templatePath = existsSync(rootTemplatePath) ? rootTemplatePath : join(__dirname, ...template.split('/'));
     // Diagnosis must not create user files. Copy only during explicit onboarding.
-    if (INIT_TEMPLATES && !existsSync(targetPath) && existsSync(templatePath)) {
+    if (INIT_TEMPLATES && userLayerWritable && !existsSync(targetPath) && existsSync(templatePath)) {
       try {
         mkdirSync(dirname(targetPath), { recursive: true });
         copyFileSync(templatePath, targetPath, constants.COPYFILE_EXCL);
@@ -1504,7 +1510,6 @@ function onboardingState(root) {
   const cvShape = checkCvShape(root);
   const userTemplates = checkUserTemplates(root);
   const envFileProfile = checkEnvFileProfile(root);
-  const pluginInstall = checkPluginInstall(root);
   const warnings = [
     ...(cliWarning ? [cliWarning] : []),
     ...(pluginInstall && !pluginInstall.pass ? [`${pluginInstall.label}\n→ ${pluginInstall.fix}`] : []),

@@ -30,7 +30,7 @@ Then start a new session. The first start takes a few seconds longer while the p
 | What | Where | Survives a plugin update? |
 |------|-------|---------------------------|
 | career-ops code | `~/.claude/plugins/cache/career-ops/career-ops/<version>/` (Customize installs: `~/.claude/plugins/synced/`) | No, it is replaced |
-| Node packages | `~/.claude/plugins/data/career-ops-career-ops/node_modules` | Yes |
+| Node packages | `${CLAUDE_PLUGIN_DATA}/node_modules`: `~/.claude/plugins/data/career-ops-career-ops/` for a `/plugin` install, `~/.claude/plugins/data/career-ops-synced/` for a Customize install | Yes |
 | Your CV, profile, tracker, reports | `~/career-ops-data` | Yes, Claude Code never touches it |
 
 Claude Code replaces the code folder on every plugin update, so career-ops never keeps your files there. `path-resolver.mjs` detects a plugin install and uses `~/career-ops-data` when nothing else names a data folder.
@@ -55,7 +55,7 @@ Uninstalling the plugin deletes the Node packages folder, not `~/career-ops-data
 
 `hooks/hooks.json` runs `scripts/claude-plugin-session-start.mjs` when a session starts. For a plugin install it does two things:
 
-1. **Installs the runtime packages.** It runs `npm install --omit=dev --ignore-scripts` into the plugin's data folder, then links that `node_modules` into the code folder. It reinstalls only when `package.json` changes, so later sessions start silently. Claude Code's own dependency install needs a committed `package-lock.json`, which this repository doesn't keep.
+1. **Installs the runtime packages.** It runs `npm install --omit=dev --ignore-scripts` into the plugin's data folder, then links that `node_modules` into the code folder. It reinstalls only when `package.json` changes, so later sessions start silently. Sessions that start together take turns: the check, the install and the link run under a lock in the data folder, so two of them never run `npm install` there at once. Claude Code's own dependency install needs a committed `package-lock.json`, which this repository doesn't keep.
 2. **Creates the data folder** if it is missing.
 
 For a checkout loaded in place, the hook does nothing. Its packages and data are yours to manage.

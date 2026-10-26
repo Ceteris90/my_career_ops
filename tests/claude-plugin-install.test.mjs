@@ -10,13 +10,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isPluginInstallCopy } from '../path-resolver.mjs';
+import { linkNodeModules } from './helpers.mjs';
 import { ensureDataRoot, ensureDependencies, sessionStart } from '../scripts/claude-plugin-session-start.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -103,12 +104,12 @@ function recordingInstall(calls, ok = true) {
   };
 }
 
-test('the hook installs dependencies into the data folder and links them into the copy', (t) => {
+test('the hook installs dependencies into the data folder and links them into the copy', async (t) => {
   const base = sandbox(t);
   const { pluginRoot, dataDir } = fakePlugin(base);
   const calls = [];
 
-  assert.deepEqual(ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'installed' });
+  assert.deepEqual(await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'installed' });
   assert.deepEqual(calls, [dataDir]);
   const link = join(pluginRoot, 'node_modules');
   assert.equal(lstatSync(link).isSymbolicLink(), true);
@@ -119,52 +120,52 @@ test('the hook installs dependencies into the data folder and links them into th
   assert.equal(installed.scripts, undefined);
 
   // Unchanged package.json: no reinstall.
-  assert.deepEqual(ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'ready' });
+  assert.deepEqual(await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'ready' });
   assert.equal(calls.length, 1);
 });
 
-test('an updated copy reuses the installed packages and relinks them', (t) => {
+test('an updated copy reuses the installed packages and relinks them', async (t) => {
   const base = sandbox(t);
   const { pluginRoot, dataDir } = fakePlugin(base);
   const calls = [];
-  ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) });
+  await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) });
 
   const next = join(dirname(pluginRoot), '1.1.0');
   mkdirSync(next);
   copyFileSync(join(pluginRoot, 'package.json'), join(next, 'package.json'));
-  assert.deepEqual(ensureDependencies({ pluginRoot: next, dataDir, install: recordingInstall(calls) }), { status: 'ready' });
+  assert.deepEqual(await ensureDependencies({ pluginRoot: next, dataDir, install: recordingInstall(calls) }), { status: 'ready' });
   assert.equal(calls.length, 1);
   assert.equal(existsSync(join(next, 'node_modules', 'js-yaml')), true);
 });
 
-test('changed dependencies trigger a reinstall', (t) => {
+test('changed dependencies trigger a reinstall', async (t) => {
   const base = sandbox(t);
   const { pluginRoot, dataDir } = fakePlugin(base);
   const calls = [];
-  ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) });
+  await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) });
   writeFileSync(join(pluginRoot, 'package.json'), JSON.stringify({ dependencies: { 'js-yaml': '^5.4.0' } }));
-  assert.deepEqual(ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'installed' });
+  assert.deepEqual(await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'installed' });
   assert.equal(calls.length, 2);
 });
 
-test('a failed install is reported and retried next session', (t) => {
+test('a failed install is reported and retried next session', async (t) => {
   const base = sandbox(t);
   const { pluginRoot, dataDir } = fakePlugin(base);
   const calls = [];
-  const result = ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls, false) });
+  const result = await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls, false) });
   assert.equal(result.status, 'failed');
   assert.match(result.detail, /code 1/);
   assert.equal(existsSync(join(pluginRoot, 'node_modules')), false);
-  assert.deepEqual(ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'installed' });
+  assert.deepEqual(await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'installed' });
   assert.equal(calls.length, 2);
 });
 
-test('node_modules that Claude Code installed itself are left alone', (t) => {
+test('node_modules that Claude Code installed itself are left alone', async (t) => {
   const base = sandbox(t);
   const { pluginRoot, dataDir } = fakePlugin(base);
   mkdirSync(join(pluginRoot, 'node_modules'));
   const calls = [];
-  assert.deepEqual(ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'provided' });
+  assert.deepEqual(await ensureDependencies({ pluginRoot, dataDir, install: recordingInstall(calls) }), { status: 'provided' });
   assert.equal(calls.length, 0);
 });
 
@@ -185,9 +186,9 @@ test('the hook creates the data root, never one inside a plugin copy', (t) => {
   assert.equal(existsSync(inside), false);
 });
 
-test('the hook does nothing for a checkout loaded in place', (t) => {
+test('the hook does nothing for a checkout loaded in place', async (t) => {
   const base = sandbox(t);
-  assert.deepEqual(sessionStart({ CLAUDE_PLUGIN_ROOT: ROOT, CLAUDE_PLUGIN_DATA: join(base, 'data') }), []);
+  assert.deepEqual(await sessionStart({ CLAUDE_PLUGIN_ROOT: ROOT, CLAUDE_PLUGIN_DATA: join(base, 'data') }), []);
   assert.equal(existsSync(join(base, 'data')), false);
 });
 
@@ -211,4 +212,114 @@ test('update-system reports managed-by-plugin inside a plugin copy and refuses a
   const apply = spawnSync(process.execPath, [join(copy, 'update-system.mjs'), 'apply', '--confirm'], { cwd: copy, env, encoding: 'utf-8' });
   assert.equal(apply.status, 1);
   assert.match(apply.stderr, /Claude Code plugin/);
+});
+
+// Runs ensureDependencies in its own process, with an install that takes long
+// enough for two sessions started together to overlap if nothing serializes them.
+function hookRunner(base) {
+  const runner = join(base, 'run-hook.mjs');
+  const hook = pathToFileURL(join(ROOT, 'scripts', 'claude-plugin-session-start.mjs')).href;
+  writeFileSync(runner, `
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { ensureDependencies } from ${JSON.stringify(hook)};
+const [pluginRoot, dataDir, log] = process.argv.slice(2);
+const result = await ensureDependencies({
+  pluginRoot,
+  dataDir,
+  lockOptions: { retryMs: 20 },
+  install(cwd) {
+    appendFileSync(log, 'start\\n');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400);
+    mkdirSync(join(cwd, 'node_modules', 'js-yaml'), { recursive: true });
+    appendFileSync(log, 'end\\n');
+    return { ok: true, code: 0 };
+  },
+});
+console.log(result.status);
+`);
+  return runner;
+}
+
+function runNode(args) {
+  return new Promise((resolveRun) => {
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('close', (code) => resolveRun({ code, stdout: stdout.trim(), stderr }));
+  });
+}
+
+test('sessions that start together run the install once, never at the same time', async (t) => {
+  const base = sandbox(t);
+  const { pluginRoot, dataDir } = fakePlugin(base);
+  const log = join(base, 'install.log');
+  const runner = hookRunner(base);
+
+  const results = await Promise.all([runNode([runner, pluginRoot, dataDir, log]), runNode([runner, pluginRoot, dataDir, log])]);
+  for (const r of results) assert.equal(r.code, 0, r.stderr);
+  // The second session waited for the lock, then found the packages installed.
+  assert.deepEqual(results.map((r) => r.stdout).sort(), ['installed', 'ready']);
+  assert.deepEqual(readFileSync(log, 'utf-8').trim().split('\n'), ['start', 'end']);
+  assert.equal(existsSync(join(dataDir, 'deps.lock')), false);
+});
+
+// doctor.mjs run from a plugin install copy: the tracked code files copied
+// under a fake plugins/cache/, with this checkout's node_modules linked in.
+let doctorCopy = null;
+function doctorPluginCopy(t) {
+  if (doctorCopy) return doctorCopy;
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'career-ops-plugin-doctor-')));
+  process.on('exit', () => rmSync(base, { recursive: true, force: true }));
+  const copy = join(base, 'plugins', 'cache', 'career-ops', 'career-ops', '1.0.0');
+  const skip = /^(docs|tests|web|dashboard|fonts|examples)\/|^README\.|^CHANGELOG/;
+  const files = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf-8' }).split('\0').filter((f) => f && !skip.test(f));
+  for (const file of files) {
+    const from = join(ROOT, file);
+    if (!existsSync(from)) continue;
+    mkdirSync(dirname(join(copy, file)), { recursive: true });
+    cpSync(from, join(copy, file), { verbatimSymlinks: true });
+  }
+  const depsReason = linkNodeModules(copy);
+  if (depsReason) {
+    t.skip(depsReason);
+    return null;
+  }
+  doctorCopy = { base, copy };
+  return doctorCopy;
+}
+
+function runDoctor({ base, copy }, args, extra = {}) {
+  const home = mkdtempSync(join(base, 'home-'));
+  const env = { ...childEnv(base, extra), HOME: home, USERPROFILE: home };
+  const result = spawnSync(process.execPath, [join(copy, 'doctor.mjs'), ...args], { cwd: copy, env, encoding: 'utf-8' });
+  return { ...result, home };
+}
+
+test('doctor creates no User Layer files when the data root is inside the plugin copy', (t) => {
+  const setup = doctorPluginCopy(t);
+  if (!setup) return;
+  const inside = join(setup.copy, 'userdata');
+
+  const human = runDoctor(setup, [], { CAREER_OPS_ROOT: inside });
+  assert.match(human.stdout, /inside the Claude Code plugin install/);
+  assert.equal(existsSync(inside), false, 'doctor created User Layer folders inside the plugin copy');
+
+  const onboarding = runDoctor(setup, ['--json', '--init-templates'], { CAREER_OPS_ROOT: inside });
+  const state = JSON.parse(onboarding.stdout);
+  assert.deepEqual(state.autoCopied, []);
+  assert.ok(state.warnings.some((w) => w.includes('inside the Claude Code plugin install')), state.warnings.join('\n'));
+  assert.equal(existsSync(inside), false, '--init-templates seeded files inside the plugin copy');
+});
+
+test('doctor sets up ~/career-ops-data for a plugin copy with no override', (t) => {
+  const setup = doctorPluginCopy(t);
+  if (!setup) return;
+  const run = runDoctor(setup, []);
+  const dataRoot = join(run.home, 'career-ops-data');
+  assert.match(run.stdout, /Claude Code plugin install: your files live in/);
+  assert.equal(existsSync(join(dataRoot, 'data')), true);
+  assert.equal(existsSync(join(setup.copy, 'data', 'pipeline.md')), false);
 });
