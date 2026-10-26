@@ -62,7 +62,8 @@ export function validatePack(dir) {
   try { realRoot = realpathSync(root); } catch { /* reported by the file checks */ }
 
   if (pack.packVersion !== 1) problems.push(`unsupported packVersion ${JSON.stringify(pack.packVersion)} (expected 1)`);
-  if (!ID_RE.test(pack.id || '')) problems.push(`invalid pack id ${JSON.stringify(pack.id)} (must match ${ID_RE})`);
+  // typeof first: RegExp.test coerces, so ["demo"] and 123 would pass the id check.
+  if (typeof pack.id !== 'string' || !ID_RE.test(pack.id)) problems.push(`invalid pack id ${JSON.stringify(pack.id)} (must match ${ID_RE})`);
   if (pack.name !== NAME_PREFIX + pack.id) problems.push(`pack name must equal "${NAME_PREFIX}${pack.id}" (got ${JSON.stringify(pack.name)})`);
   for (const field of ['displayName', 'description', 'author', 'license', 'version']) {
     if (!isText(pack[field])) problems.push(`missing or empty pack field: ${field}`);
@@ -76,7 +77,7 @@ export function validatePack(dir) {
   for (const entry of pack.templates) {
     const eid = (entry && entry.id) || '?';
     if (!entry || typeof entry !== 'object') { problems.push(`${eid}: template entry is not an object`); continue; }
-    if (!ID_RE.test(entry.id || '')) problems.push(`${eid}: invalid template id`);
+    if (typeof entry.id !== 'string' || !ID_RE.test(entry.id)) problems.push(`${eid}: invalid template id`);
     if (ids.has(entry.id)) problems.push(`duplicate template id: ${entry.id}`);
     ids.add(entry.id);
     if (!isText(entry.displayName)) problems.push(`${eid}: missing or empty displayName`);
@@ -107,6 +108,8 @@ export function validatePack(dir) {
       if (!isText(prel)) problems.push(`${eid}: previews.${kind} missing`);
       else if (!pabs) problems.push(`${eid}: previews.${kind} "${prel}" is outside the pack`);
       else if (!existsSync(pabs)) problems.push(`${eid}: previews.${kind} "${prel}" not found on disk`);
+      else if (!statSync(pabs).isFile()) problems.push(`${eid}: previews.${kind} "${prel}" is not a file`);
+      else if (!realInside(realRoot, pabs)) problems.push(`${eid}: previews.${kind} "${prel}" is outside the pack (symlink)`);
     }
   }
   return problems;

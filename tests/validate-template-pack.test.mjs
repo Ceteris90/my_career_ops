@@ -75,6 +75,8 @@ test('a missing or invalid pack.json is reported', () => {
 const MANIFEST_CASES = [
   ['an unsupported packVersion', { packVersion: 2 }, /packVersion/],
   ['an invalid id', { id: 'Demo', name: 'career-ops-template-Demo' }, /invalid pack id/],
+  ['an id given as an array', { id: ['demo'] }, /invalid pack id/],
+  ['a numeric id', { id: 123, name: 'career-ops-template-123' }, /invalid pack id/],
   ['a name that does not match the id', { name: 'career-ops-template-other' }, /name must equal/],
   ['an empty description', { description: '  ' }, /description/],
   ['a missing author', { author: undefined }, /author/],
@@ -88,6 +90,7 @@ for (const [label, over, re] of MANIFEST_CASES) {
 
 const ENTRY_CASES = [
   ['an invalid template id', { id: 'Plain' }, /invalid template id/],
+  ['a template id given as an array', { id: ['plain'] }, /invalid template id/],
   ['an unknown kind', { kind: 'tex' }, /invalid kind/],
   ['a non-boolean ats', { ats: 'yes' }, /ats must be a boolean/],
   ['an unknown atsRisk', { atsRisk: 'high' }, /invalid atsRisk/],
@@ -121,6 +124,21 @@ test('a declared file that does not exist is reported', () => {
 
 test('a declared preview that does not exist is reported', () => {
   has(validatePack(pack(basePack(), { 'previews/plain-cover.png': null })), /previews\.cover.*not found/);
+});
+
+test('a preview that is a directory is rejected', () => {
+  const dir = pack(basePack(), { 'previews/plain-cv.png': null });
+  mkdirSync(join(dir, 'previews/plain-cv.png'));
+  has(validatePack(dir), /previews\.cv.*not a file/);
+});
+
+test('a preview symlink that points outside the pack is rejected', () => {
+  const outside = mkdtempSync(join(tmpdir(), 'tpl-out-'));
+  dirs.push(outside);
+  writeFileSync(join(outside, 'p.png'), 'png');
+  const dir = pack(basePack(), { 'previews/plain-cv.png': null });
+  symlinkSync(join(outside, 'p.png'), join(dir, 'previews/plain-cv.png'));
+  has(validatePack(dir), /previews\.cv.*outside the pack/);
 });
 
 test('a symlink that points outside the pack is rejected', () => {
