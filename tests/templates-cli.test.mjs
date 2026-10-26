@@ -8,6 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { installPack, removePack, installedPacks, readLock } from '../lib/templates-install.mjs';
+import { runCommand } from '../templates.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SHA = 'b'.repeat(40);
@@ -214,10 +215,115 @@ test('the CLI prints usage for --help and exits 2 for an unknown command', () =>
   assert.equal(bad.status, 2);
 });
 
-test('the CLI lists the shipped (empty) registry and no installed packs', () => {
+test('the CLI answers available and list with a zero exit', () => {
+  // Shape only: the shipped registry and a developer's own templates.lock both
+  // change what these print.
   const a = spawnSync('node', ['templates.mjs', 'available'], { cwd: ROOT, encoding: 'utf-8' });
   assert.equal(a.status, 0, a.stderr);
-  assert.match(a.stdout, /no packs in the registry/i);
+  assert.match(a.stdout, /no packs in the registry|\bv\d+\.\d+\.\d+\b/i);
   const l = spawnSync('node', ['templates.mjs', 'list'], { cwd: ROOT, encoding: 'utf-8' });
   assert.equal(l.status, 0, l.stderr);
+});
+
+test('a corrupt templates.lock is reported and never overwritten', () => {
+  const r = root();
+  writeFileSync(join(r, 'templates.lock'), '{ "packs": { "keep": ');
+  assert.throws(() => readLock(r), /templates\.lock/);
+  assert.throws(() => installPack(r, { entry: reg(), clone: cloner(() => packDir()) }), /templates\.lock/);
+  assert.throws(() => removePack(r, 'keep'), /templates\.lock/);
+  assert.equal(readFileSync(join(r, 'templates.lock'), 'utf-8'), '{ "packs": { "keep": ');
+  assert.equal(existsSync(join(r, 'templates', 'demo')), false);
+});
+
+test('a lock with the wrong shape is reported, an absent lock is empty', () => {
+  const r = root();
+  assert.deepEqual(readLock(r).packs, {});
+  writeFileSync(join(r, 'templates.lock'), '[]');
+  assert.throws(() => readLock(r), /templates\.lock/);
+});
+
+test('the lock is written through a temp file that is renamed into place', () => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  assert.deepEqual(readdirSync(r).filter((f) => f.endsWith('.tmp')), []);
+  assert.ok(JSON.parse(readFileSync(join(r, 'templates.lock'), 'utf-8')).packs.demo);
+});
+
+// A directory squatting on the temp lock path makes the lock write fail after
+// the files are copied, which is the late failure the installer has to undo.
+const squatTmpLock = (r) => mkdirSync(join(r, `templates.lock.${process.pid}.tmp`));
+
+test('a failure after the copy removes the files it wrote and leaves nothing behind', () => {
+  const r = root();
+  squatTmpLock(r);
+  assert.throws(() => installPack(r, { entry: reg(), clone: cloner(() => packDir()) }));
+  assert.equal(existsSync(join(r, 'templates', 'demo')), false);
+  assert.equal(existsSync(join(r, 'templates.lock')), false);
+  // The retry is not blocked by a half install.
+  rmSync(join(r, `templates.lock.${process.pid}.tmp`), { recursive: true });
+  assert.equal(installPack(r, { entry: reg(), clone: cloner(() => packDir()) }).id, 'demo');
+});
+
+test('a late failure during a forced reinstall restores the previous version', () => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  squatTmpLock(r);
+  const v2 = () => packDir(manifest({ version: '0.2.0' }), { 'templates/cv-template.plain.html': CV + '<!-- v2 -->' });
+  assert.throws(() => installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(v2), force: true }));
+  assert.equal(readFileSync(join(r, 'templates/demo/cv-template.plain.html'), 'utf-8'), CV);
+  assert.equal(existsSync(join(r, 'templates/demo/cover-letter-template.plain.html')), true);
+  assert.equal(readLock(r).packs.demo.version, '0.1.0');
+});
+
+test('one file that cannot be removed does not stop the rest, and the lock keeps only it', () => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const stuck = join(r, 'templates/demo/cv-template.plain.html');
+  rmSync(stuck);
+  mkdirSync(stuck);
+  writeFileSync(join(stuck, 'inner'), 'x');
+  assert.throws(() => removePack(r, 'demo', { force: true }), /could not remove[\s\S]*cv-template\.plain\.html/);
+  assert.equal(existsSync(join(r, 'templates/demo/cover-letter-template.plain.html')), false);
+  assert.deepEqual(Object.keys(readLock(r).packs.demo.files), ['templates/demo/cv-template.plain.html']);
+});
+
+// ---- the add command, through the CLI's own wiring ----
+function addEnv() {
+  const r = root();
+  mkdirSync(join(r, 'templates-registry'));
+  writeFileSync(join(r, 'templates-registry', 'demo.json'), JSON.stringify(reg()));
+  const calls = [];
+  const clone = (url, sha) => { calls.push({ url, sha }); return packDir(); };
+  const out = [];
+  const log = { log: (m) => out.push(String(m)), error: (m) => out.push(String(m)) };
+  return { r, calls, clone, out, log };
+}
+
+test('add <id> sends the registry entry URL and pinned SHA to the clone', async () => {
+  const e = addEnv();
+  const code = await runCommand(e.r, 'add', ['demo'], { clone: e.clone, log: e.log });
+  assert.equal(code, 0, e.out.join('\n'));
+  assert.deepEqual(e.calls, [{ url: URL_, sha: SHA }]);
+  assert.ok(readLock(e.r).packs.demo);
+});
+
+test('add refuses --sha for a registered pack, and a --sha with no operand', async () => {
+  const e = addEnv();
+  assert.equal(await runCommand(e.r, 'add', ['demo', '--sha', SHA], { clone: e.clone, log: e.log }), 2);
+  assert.equal(await runCommand(e.r, 'add', ['demo', '--sha'], { clone: e.clone, log: e.log }), 2);
+  assert.equal(await runCommand(e.r, 'add', ['someone/career-ops-template-x', '--sha'], { clone: e.clone, log: e.log }), 2);
+  assert.equal(await runCommand(e.r, 'add', ['demo', '--sha', 'zzz'], { clone: e.clone, log: e.log }), 2);
+  assert.deepEqual(e.calls, []);
+});
+
+test('add rejects an unknown flag such as --sha=<commit>', async () => {
+  const e = addEnv();
+  assert.equal(await runCommand(e.r, 'add', ['demo', `--sha=${SHA}`], { clone: e.clone, log: e.log }), 2);
+  assert.deepEqual(e.calls, []);
+});
+
+test('add of an unregistered owner/repo needs --sha and --confirm', async () => {
+  const e = addEnv();
+  assert.equal(await runCommand(e.r, 'add', ['someone/career-ops-template-demo2', '--sha', SHA], { clone: e.clone, log: e.log }), 2);
+  assert.deepEqual(e.calls, []);
 });
