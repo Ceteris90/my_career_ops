@@ -66,6 +66,9 @@
 /plugins/_lock.mjs             @santifer
 /plugins/_net.mjs              @santifer
 /plugins/_registry.mjs         @santifer
+/validate-template-pack.mjs    @santifer
+/templates.mjs                 @santifer
+/lib/templates-install.mjs     @santifer
 /.github/workflows/            @santifer
 /docs/PLUGIN_REVIEW.md         @santifer
 
