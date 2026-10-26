@@ -269,7 +269,7 @@ Levels are additive — they are executed in order, and results are merged and d
       - **Active**: visible job title + role description + visible Apply/Submit/Apply Now control inside the main content area. Do not count generic header/navbar/footer text.
       - **Expired** (any of these signals):
         - Final URL contains `?error=true` (Greenhouse redirects here when an offer is closed).
-        - Page contains: "job no longer available" / "no longer open" / "position has been filled" / "this job has expired" / "page not found".
+        - Page contains: "job no longer available" / "no longer open" / "position has been filled" / "this job has expired".
       - **Unconfirmed**: only navbar and footer are visible, with no JD content (content < ~300 characters) and none of the expired signals above. The posting may not have rendered yet, so this is not evidence it closed.
    d. If expired: record in `scan-history.tsv` with status `skipped_expired` and discard. If unconfirmed: skip it for this scan without recording it, so the next scan checks it again.
    e. If active: continue to step 8.
