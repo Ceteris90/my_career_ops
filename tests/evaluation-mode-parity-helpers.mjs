@@ -7,11 +7,10 @@ import { isNestedCheckout } from '../lib/mjs-files.mjs';
 // Shared inventory for the harness and regression suite. Remove a re-synced
 // locale from FROZEN_EVALUATION_MODES here; keep it in KNOWN_EVALUATION_MODES.
 export const FROZEN_EVALUATION_MODES = new Set([
-  // modes/<lang>/oferta.md (#3669)
-  'da/oferta.md', 'pl/oferta.md', 'pt/oferta.md', 'ua/oferta.md',
-  // market-named evaluation modes (#3828)
-  'de/angebot.md', 'fr/offre.md', 'hi/naukri.md', 'id/lowongan.md', 'it/annuncio.md',
-  'ko/gonggo.md', 'nl/vacature.md', 'tr/is-ilani.md',
+  // market-named evaluation modes (#3828); da, de, fr, hi, id, it, ko, nl
+  // and pl were re-synced as market layers over modes/oferta.md (#5843), and
+  // pt and ua as full translations (#5433)
+  'tr/is-ilani.md',
 ]);
 
 // A known file that stops being discovered (renamed, or its A) block dropped)

@@ -342,7 +342,7 @@ try {
       && documented?.[3] === String(DEFAULTS.maxAgeDays),
       'config/profile.example.yml documents the same defaults the script uses (off, 5 PRs, 30 days)');
 
-    check(read('update-system.mjs').includes("  'evidence-freshness.mjs',\n"), 'evidence-freshness.mjs is in update-system.mjs SYSTEM_PATHS');
+    check(read('lib/update-manifest.mjs').includes("  'evidence-freshness.mjs',\n"), 'evidence-freshness.mjs is in lib/update-manifest.mjs SYSTEM_PATHS');
   }
 } finally {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
