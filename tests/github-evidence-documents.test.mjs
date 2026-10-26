@@ -350,6 +350,31 @@ function cli(root, runGh) {
 
 {
   const root = sandbox();
+  try {
+    let treeCalls = 0;
+    const fixture = fullGh().runner;
+    const runGh = (args) => {
+      if (isDocumentCall(args)) treeCalls += 1;
+      return fixture(args);
+    };
+    const result = runCli({
+      args: ['--json', '--skip-document-listing'], dataRoot: root, runGh,
+      profilePath: join(root, 'config', 'profile.yml'), today: '2026-10-23',
+      stdout: () => {}, stderr: () => {}, pause: () => {},
+    });
+    const json = JSON.parse(readFileSync(join(root, 'output', 'github-evidence-2026-10-23.json'), 'utf8'));
+    const md = readFileSync(join(root, 'output', 'github-evidence-2026-10-23.md'), 'utf8');
+    check(result === 0 && json.documents?.status === 'skipped' && treeCalls === 0,
+      'the skip flag omits document tree queries and marks documents skipped');
+    check(md.includes('Document listing skipped') && json.contributions.length > 0,
+      'the skip flag preserves PR and commit evidence and records the omission in Markdown');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+{
+  const root = sandbox();
   const failRoot = sandbox();
   try {
     const good = cli(root, fullGh().runner);
