@@ -608,7 +608,9 @@ function attrValue(tag, name) {
   const body = tag.replace(/^<[^\s>/]+/, '').replace(/\/?>$/, '');
   const re = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
   for (const m of body.matchAll(re)) {
-    if (m[1].toLowerCase() === name) return m[2] ?? m[3] ?? m[4] ?? '';
+    // The browser decodes character references in attribute values, so the
+    // lint must too: `https&#58;//x` is a remote URL.
+    if (m[1].toLowerCase() === name) return decodeEntities(m[2] ?? m[3] ?? m[4] ?? '');
   }
   return null;
 }
