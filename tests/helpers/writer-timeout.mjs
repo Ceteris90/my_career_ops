@@ -28,8 +28,12 @@ const seconds = (ms) => `${(ms / 1000).toFixed(1)}s`;
  */
 export function describeWriterTimeout({ launchedAt, reachedLockAt, markerExpected, releasedAt, exitedAt, waitMs }) {
   if (exitedAt != null && exitedAt - releasedAt <= waitMs) {
-    return `its process exited ${seconds(exitedAt - releasedAt)} after the lock release, `
-      + `but its output streams were still open ${seconds(waitMs)} after it`;
+    // It can exit while the harness is still waiting for its marker, before the release.
+    const when = exitedAt < releasedAt
+      ? `${seconds(releasedAt - exitedAt)} before`
+      : `${seconds(exitedAt - releasedAt)} after`;
+    return `its process exited ${when} the lock release, `
+      + `but its output streams were still open ${seconds(waitMs)} after the release`;
   }
   if (markerExpected && reachedLockAt == null) {
     return `it had not reached the lock ${seconds(releasedAt - launchedAt)} after it was started, `

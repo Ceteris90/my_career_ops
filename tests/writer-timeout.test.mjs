@@ -11,7 +11,14 @@ test('a writer that exited but kept its streams open is not called stuck', () =>
   const line = describeWriterTimeout({
     launchedAt: T0, reachedLockAt: T0 + 400, markerExpected: true, releasedAt: T0 + 500, exitedAt: T0 + 7_600, waitMs: 10_000,
   });
-  assert.match(line, /^its process exited 7\.1s after the lock release, but its output streams were still open 10\.0s after it$/);
+  assert.match(line, /^its process exited 7\.1s after the lock release, but its output streams were still open 10\.0s after the release$/);
+});
+
+test('a writer that exited before the release is said to have exited before it', () => {
+  const line = describeWriterTimeout({
+    launchedAt: T0, reachedLockAt: null, markerExpected: true, releasedAt: T0 + 10_300, exitedAt: T0 + 8_000, waitMs: 10_000,
+  });
+  assert.equal(line, 'its process exited 2.3s before the lock release, but its output streams were still open 10.0s after the release');
 });
 
 test('a writer that had not reached the lock is reported as still starting', () => {
