@@ -295,6 +295,47 @@ else fail(`provider id: ${provider.id}`);
   }
 }
 
+// ── a restyled page 2 keeps page 1 instead of failing the whole target ──
+{
+  const page1 = careerPage(card('data-analyst-501', 'Data Analyst', 'Bologna Italia'), 2);
+  const restyled = pageResponse(card('stage-bi-502', 'Stage BI', 'Bologna Italia'), null).replace(/h3/g, 'h4');
+  const { ctx } = mockCtx(page1, () => restyled);
+  const { result: jobs, lines } = await captureErrors(() =>
+    provider.fetch({ name: 'Acme', careers_url: 'https://acme.intervieweb.it/it/career' }, ctx));
+  if (jobs.length === 1 && jobs[0].title === 'Data Analyst' && jobs.inrecruitingTruncated === true
+    && lines.some((l) => /truncated at page 2/.test(l)) && !lines.some((l) => /raise max_pages/.test(l))) {
+    pass('a page 2 that links postings but parses none keeps page 1, tagged truncated');
+  } else {
+    fail(`restyled page 2: jobs=${JSON.stringify(jobs)} truncated=${jobs.inrecruitingTruncated} lines=${JSON.stringify(lines)}`);
+  }
+
+  const probe = mockCtx(page1, () => restyled, { maxPages: 2 });
+  let err = null;
+  try {
+    await provider.fetch({ name: 'Acme', careers_url: 'https://acme.intervieweb.it/it/career' }, probe.ctx);
+  } catch (e) {
+    err = e;
+  }
+  if (err && /markup changed/.test(err.message)) pass('while probing, a restyled later page still throws');
+  else fail(`probe on restyled page 2: ${err ? err.message : 'no throw'}`);
+}
+
+// ── a page holding only already-seen postings does not end the walk ──
+{
+  const page1 = careerPage(card('data-analyst-601', 'Data Analyst', 'Bologna Italia'), 2);
+  const { ctx, calls } = mockCtx(page1, (page) => {
+    if (page === 2) return pageResponse(card('data-analyst-601', 'Data Analyst', 'Bologna Italia'), 3);
+    if (page === 3) return pageResponse(card('stage-bi-603', 'Stage BI', 'Modena Italia'), null);
+    throw new Error(`unexpected page ${page}`);
+  });
+  const jobs = await provider.fetch({ name: 'Acme', careers_url: 'https://acme.intervieweb.it/it/career' }, ctx);
+  if (calls.length === 3 && JSON.stringify(jobs.map((j) => j.title)) === JSON.stringify(['Data Analyst', 'Stage BI'])) {
+    pass('a duplicate-only page 2 still leads on to page 3 and its new posting');
+  } else {
+    fail(`duplicate-only page: calls=${calls.length} titles=${JSON.stringify(jobs.map((j) => j.title))}`);
+  }
+}
+
 // ── page ceilings ──
 {
   // Every page links a next one and adds a new posting, so only a cap stops it.

@@ -311,10 +311,21 @@ export default {
       fetched++;
       const rows = parseCards(pageHtml, tenant.host);
       if (rows.length === 0) {
-        assertParsedSomething(pageHtml, paging.announcesUrl);
+        // Page 1 already proved the markup; a later page that links postings
+        // but parses none ends the walk with the pages collected so far.
+        try {
+          assertParsedSomething(pageHtml, paging.announcesUrl);
+        } catch (err) {
+          if (probing) throw err;
+          console.error(`⚠️  inrecruiting: ${entry.name} truncated at page ${next.page} (${jobs.length} jobs): ${err.message}`);
+          stopReason = 'fetch-error';
+        }
         break;
       }
-      if (push(rows) === 0) break; // the server ignored `page`
+      // No stop on a page that only repeats earlier postings: a later page can
+      // still hold new ones. A server ignoring `page` is caught by the pager
+      // check below, since page 1's pager never points past the page asked for.
+      push(rows);
       const following = parseNextPage(pageHtml);
       // A pager pointing backwards or at itself would loop forever.
       next = following && following.page > next.page ? following : null;
