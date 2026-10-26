@@ -593,6 +593,7 @@ export function atsLint(path, kind, opts = {}) {
 // The rules live here rather than in templates/ats-rules.yml because they
 // describe the renderer, not modes/pdf.md.
 const TAG_RE = /<[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
+const ANY_TAG_RE = /<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
 const REMOTE_RE = /^\s*(?:https?:)?\/\//i;
 
 // Attribute text of a tag with quoted values removed, so `title="once=x"` is
@@ -670,7 +671,14 @@ const RENDER_RULES = [
       }
       // Only CSS-bearing content: <style> bodies and style="" values. A title or
       // visible text that happens to contain url(...) is prose, not a request.
-      const sources = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map((m) => m[1]);
+      // Bodies are found by walking real tags, so `<style>` written inside a
+      // quoted attribute value is text, not an element.
+      const sources = [];
+      let open = null;
+      for (const m of html.matchAll(ANY_TAG_RE)) {
+        if (/^<style\b/i.test(m[0])) open = m.index + m[0].length;
+        else if (open !== null && /^<\/style\b/i.test(m[0])) { sources.push(html.slice(open, m.index)); open = null; }
+      }
       for (const tag of html.match(TAG_RE) || []) {
         const inline = attrValue(tag, 'style');
         if (inline) sources.push(inline);
