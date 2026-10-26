@@ -30,7 +30,7 @@ const CASES = [
   {
     id: 'embedded-content',
     hit: ['<iframe src="a.html"></iframe>', '<object data="a.pdf"></object>', '<embed src="a.svg">'],
-    miss: ['<img src="a.png">', '<svg><rect/></svg>', '<img alt="<iframe>" src="a.png">'],
+    miss: ['<img src="a.png">', '<svg><rect/></svg>', '<img alt="<iframe>" src="a.png">', '<iframe srcdoc="<p>Hello</p>"></iframe>', '<IFRAME SRCDOC=\'<p>Hello</p>\'></IFRAME>'],
   },
   {
     id: 'event-handler-attribute',
@@ -39,7 +39,7 @@ const CASES = [
   },
   {
     id: 'script-url',
-    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>'],
+    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="java&Tab;script:alert(1)">x</a>', '<a href="java&NewLine;script:alert(1)">x</a>', '<a href="java\nscript:alert(1)">x</a>', '<a href="java\tscript:alert(1)">x</a>'],
     miss: ['<img src="data:image/png;base64,AAAA">', '<style>@font-face{src:url("data:font/woff2;base64,AAAA")}</style>', '<a href="{{LINKEDIN_URL}}">x</a>'],
   },
   {
@@ -77,6 +77,26 @@ const CASES = [
       '<div style="background:url(&quot;https://example.com/a.png&quot;)"></div>',
       '<STYLE>body{background:URL(https://example.com/a.png)}</STYLE>',
       '<img srcset="photo.png 1x, https://example.com/photo.png 2x">',
+      // Quoted @import needs no whitespace after the at-keyword.
+      '<style>@import"https://fonts.example.com/a.css";</style>',
+      "<style>@import'https://fonts.example.com/a.css';</style>",
+      '<base href="https://cdn.example/"><style>@import"a.css";</style>',
+      // A data URL's comma is not a candidate separator, so a remote candidate after it still counts.
+      '<img srcset="data:image/png;base64,AAAA 1x, https://example.com/a.png 2x">',
+      '<base href="https://cdn.example/"><img srcset="data:image/png;base64,AAAA 1x, b.png 2x">',
+      // The URL parser drops tab, LF and CR anywhere in a URL.
+      '<img src="ht&#9;tps://example.com/a.png">',
+      '<img src="ht&Tab;tps://example.com/a.png">',
+      '<img src="ht&NewLine;tps://example.com/a.png">',
+      '<img src="ht\ntps://example.com/a.png">',
+      '<img src="ht\ttps://example.com/a.png">',
+      '<img src="https://example.com/\r\na.png">',
+      '<link rel="stylesheet" href="ht&#10;tps://example.com/a.css">',
+      '<base href="ht&#9;tps://cdn.example/"><img src="logo.png">',
+      // A fragment-only resource URL resolves against a remote <base href>.
+      '<base href="https://cdn.example/icon.svg"><img src="#logo">',
+      '<base href="https://cdn.example/"><img srcset="#a 1x">',
+      '<base href="https://cdn.example/"><link rel="stylesheet" href="#x">',
     ],
     miss: [
       '<a href="https://example.com/me">me</a>',
@@ -98,6 +118,20 @@ const CASES = [
       '<base target="_blank"><img src="logo.png">',
       '<img alt="<style>body{background:url(https://example.com/a.png)}</style>" src="a.png">',
       '<p>Docs: url(https://example.com/a.png) and @import "https://example.com/a.css"</p>',
+      // A data: srcset candidate stays local under a remote base, whatever its comma does.
+      '<base href="https://cdn.example/"><img srcset="data:image/png;base64,AAAA 1x">',
+      '<base href="https://cdn.example/"><img srcset="data:image/png;base64,AAAA">',
+      '<base href="https://cdn.example/"><source srcset="data:image/svg+xml,%3Csvg%3E 1x, data:image/png;base64,BBBB 2x">',
+      // Tab/LF/CR separate srcset candidates and descriptors; they are not stripped before the split.
+      '<img srcset="a.png\n1x,\nb.png\t2x">',
+      // rel is read raw: stripping would turn this into a stylesheet link.
+      '<link rel="style\nsheet" href="https://example.com/a.css">',
+      // Same-document references stay local under a remote base.
+      '<base href="https://cdn.example/"><svg><use href="#a"/></svg>',
+      '<base href="https://cdn.example/"><style>.a{fill:url(#g)}</style>',
+      // Not fetched by the renderer (JavaScript is off), so nothing is dropped: probed with
+      // Playwright's javaScriptEnabled:false context, where modulepreload and icon never reach route().
+      '<link rel="modulepreload" href="https://cdn.example/m.js">',
     ],
   },
 ];
