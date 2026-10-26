@@ -39,7 +39,7 @@ export const text = (v: unknown) => (typeof v === "string" ? v : "");
 /** Our own refusals are the caller's to fix (422, or 404 for a missing name); anything else is a 500. */
 export function failure(e: unknown): NextResponse {
   const message = e instanceof Error ? e.message : "could not complete that";
-  const known = /not found|already|your own|default|name must|sections/i.test(message);
-  const status = /not found/i.test(message) ? 404 : known ? 422 : 500;
+  const known = /not found|already|your own|default|name must|sections|placeholders|too large|NUL|changed since|missing/i.test(message);
+  const status = /not found/i.test(message) ? 404 : /changed since/i.test(message) ? 409 : known ? 422 : 500;
   return NextResponse.json({ error: message }, { status });
 }

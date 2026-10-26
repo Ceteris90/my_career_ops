@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { TemplateEditor } from "@/components/templates/template-editor";
 
 // The CV templates the core resolves, each shown filled with a fictional resume
 // so the design is visible before it is chosen. Choosing one writes cv.template
@@ -31,6 +32,9 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  // Bumped after a save so the card previews fetch the edited template.
+  const [rev, setRev] = useState(0);
 
   const load = useCallback(() => {
     setLoadError(false);
@@ -120,7 +124,7 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
         <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
           {templates.map((t) => (
             <li key={t.name} className="rounded-xl border border-border bg-surface/40 p-3">
-              <Thumb kind={kind} name={t.name} title={`${t.displayName} preview`} />
+              <Thumb key={`${t.name}-${rev}`} kind={kind} name={t.name} title={`${t.displayName} preview`} />
               <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-medium">{t.displayName}</span>
                 {t.isDefault ? (
@@ -175,6 +179,9 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
                   </button>
                   {t.layer === "user" && (
                     <>
+                      <button type="button" disabled={busy !== null} onClick={() => setEditing(t.name)} className="underline">
+                        Edit
+                      </button>
                       <button type="button" disabled={busy !== null} onClick={() => ask(t.name, "rename")} className="underline">
                         Rename
                       </button>
@@ -193,6 +200,16 @@ export function TemplatesSection({ kind = "cv" }: { kind?: "cv" | "cover" }) {
         <p role="alert" className="mt-3 text-sm text-red-500">
           {error}
         </p>
+      )}
+      {editing && templates?.some((t) => t.name === editing) && (
+        <TemplateEditor
+          key={editing}
+          kind={kind}
+          name={editing}
+          title={templates.find((t) => t.name === editing)?.displayName ?? editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => setRev((n) => n + 1)}
+        />
       )}
     </section>
   );
