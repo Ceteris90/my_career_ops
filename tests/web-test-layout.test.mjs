@@ -133,6 +133,8 @@ function parseRange(range) {
       if (!m) return null;   // unknown operator, x-range, leading zero, single `|`, or junk
       const [, op, major, minor, patch] = m;
       const version = [Number(major), Number(minor ?? 0), Number(patch ?? 0)];
+      // Past 2^53 - 1, Number() rounds, so the range evaluated would not be the one declared.
+      if (!version.every(Number.isSafeInteger)) return null;
       if (op === '>=') {
         lowers.push(version);
       } else if (op === '<') {
@@ -317,6 +319,7 @@ if (!existsSync(WEB_PKG)) {
       '^22.13.0 || garbage',  // junk in one alternative
       '>=022.13.0',           // leading zero — not a valid npm version
       '^22.013.0',            // leading zero in the minor
+      '>=22.13.9007199254740993',   // past Number.MAX_SAFE_INTEGER — would round
       '>=22 | >=23',          // single pipe
       '>=22 >=24',            // two lower bounds — ambiguous
       '^22 >=22.5',           // two lower bounds — ambiguous
@@ -339,12 +342,14 @@ if (!existsSync(WEB_PKG)) {
     }
   });
 
-  // ── ...and reads the disjoint project range at its edges (#5929) ──
+  // ── ...and reads web's declared range at its edges (#5929) ──
   // node:sqlite needs no flag from 22.13 on the 22.x line but only from 23.4 on
   // the 23.x line, so 23.0–23.3 sit numerically above the floor yet outside
-  // the range. A parser that only took the minimum would admit them.
-  scenario('that the disjoint project range admits exactly the supported Node versions', () => {
-    const RANGE = '^22.13.0 || >=23.4.0';
+  // the range. A parser that only took the minimum would admit them. The range
+  // is read from web/package.json, so a coordinated change to it and to
+  // NODE_ENGINES that moves these edges fails here too.
+  scenario("that web's engines range admits exactly the supported Node versions", () => {
+    const RANGE = pkg.engines?.node ?? '';
     const ADMITTED = ['22.13.0', '22.13.1', '22.20.0', '22.99.99', '23.4.0', '23.11.1', '24.0.0', '26.10.0'];
     const EXCLUDED = ['20.19.0', '21.7.3', '22.0.0', '22.12.0', '22.12.9', '23.0.0', '23.3.0', '23.3.9'];
     const wrong = [
@@ -354,7 +359,8 @@ if (!existsSync(WEB_PKG)) {
     if (wrong.length === 0) {
       pass(`${RANGE} admits ${ADMITTED.length} supported versions and excludes ${EXCLUDED.length} unsupported ones`);
     } else {
-      fail(`range parser misread ${RANGE} (#5929): ${wrong.join('; ')}`);
+      fail(`web engines.node ${JSON.stringify(RANGE)} does not admit exactly the supported Node versions (#5929):`
+        + ` ${wrong.join('; ')} — it should state NODE_ENGINES from lib/node-floor.mjs`);
     }
   });
 
