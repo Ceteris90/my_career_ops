@@ -406,11 +406,13 @@ export function isUnreadableVerdict(verdict) {
 /**
  * Does this verdict prove the posting is CLOSED?
  *
- * `expired` alone does not: an `insufficient_content` verdict is also
- * `expired`, and it means the body could not be read — a page still
- * hydrating, a client-side render that never landed — not that the posting
- * is gone (#5408). AGENTS.md is explicit that "an unreadable JD, loading
- * placeholder, or login/error page is unconfirmed, not closed".
+ * `expired` alone does not. classifyLiveness now returns an
+ * `insufficient_content` verdict as `uncertain`, but an older or hand-built
+ * verdict can still carry that code under `expired`, and it means the body
+ * could not be read — a page still hydrating, a client-side render that never
+ * landed — not that the posting is gone (#5408). AGENTS.md is explicit that
+ * "an unreadable JD, loading placeholder, or login/error page is unconfirmed,
+ * not closed".
  *
  * One definition, because the rule used to be COPIED. The scan-history record
  * planner and batch-evaluate-gemini.mjs each spelled it out as
@@ -445,7 +447,9 @@ export function discardableExpiredUrls(verdicts) {
   for (const v of verdicts ?? []) {
     if (!v?.url) continue;
     if (isClosureEvidence(v)) closed.push(v.url);
-    else if (v.result === 'expired' && isUnreadableVerdict(v)) unreadable.push(v.url);
+    // Not gated on `expired`: classifyLiveness returns an unreadable page as
+    // `uncertain`, and the user still needs to hear why that row stayed open.
+    else if (isUnreadableVerdict(v)) unreadable.push(v.url);
   }
   return { closed, unreadable };
 }
