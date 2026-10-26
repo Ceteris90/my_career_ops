@@ -27,9 +27,11 @@ function layers() {
 
 test('the default user directory is data/templates under the data root', () => {
   const prior = process.env.CAREER_OPS_ROOT;
-  process.env.CAREER_OPS_ROOT = '/tmp/some-data-root';
+  // An absolute path on this platform: a bare '/tmp/...' gains a drive letter on Windows.
+  const root = join(tmpdir(), 'some-data-root');
+  process.env.CAREER_OPS_ROOT = root;
   try {
-    assert.equal(DEFAULT_USER_TEMPLATES_DIR(), join('/tmp/some-data-root', 'data', 'templates'));
+    assert.equal(DEFAULT_USER_TEMPLATES_DIR(), join(root, 'data', 'templates'));
   } finally {
     if (prior === undefined) delete process.env.CAREER_OPS_ROOT;
     else process.env.CAREER_OPS_ROOT = prior;
