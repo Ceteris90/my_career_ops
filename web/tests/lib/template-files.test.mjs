@@ -15,6 +15,7 @@ import { listTemplatesOfKind } from "../../src/lib/template-gallery.mjs";
 import {
   duplicateTemplate,
   renameTemplate,
+  renameTemplateAndFollow,
   deleteTemplate,
   isValidTemplateName,
 } from "../../src/lib/template-files.mjs";
@@ -206,7 +207,7 @@ test("only validation errors become refusals; an operating-system error passes t
   assert.equal(refusalFrom(os), os);
 });
 
-test("a rename can be reversed, so a failed profile update can put the file back", async () => {
+test("renaming a template and renaming it back restores the original file exactly", async () => {
   const s = scratch();
   await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "first", userDir: s.userDir });
   const before = fs.readFileSync(path.join(s.userDir, "cv-template.first.html"), "utf8");
@@ -216,4 +217,52 @@ test("a rename can be reversed, so a failed profile update can put the file back
 
   assert.equal(fs.readFileSync(path.join(s.userDir, "cv-template.first.html"), "utf8"), before);
   assert.ok(!fs.existsSync(path.join(s.userDir, "cv-template.second.html")));
+});
+
+test("when the profile update fails, a renamed default is put back and the failure is a 409 refusal", async () => {
+  const s = scratch();
+  await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "favorite", userDir: s.userDir });
+  fs.writeFileSync(s.profilePath, "cv:\n  template: favorite\n");
+  const before = fs.readFileSync(path.join(s.userDir, "cv-template.favorite.html"), "utf8");
+  let calls = 0;
+  const failing = async () => {
+    calls += 1;
+    throw new Error("EACCES: permission denied, open '/home/someone/config/profile.yml'");
+  };
+
+  const err = await renameTemplateAndFollow(CORE, { kind: "cv", name: "favorite", to: "renamed", userDir: s.userDir, profilePath: s.profilePath }, failing)
+    .then(() => null, (e) => e);
+
+  assert.equal(calls, 1);
+  assert.ok(err instanceof TemplateRefusal);
+  assert.equal(err.status, 409);
+  assert.match(err.message, /Nothing was renamed/);
+  assert.ok(!/someone/.test(err.message), "the operating-system message is not returned");
+  assert.match(err.cause.message, /EACCES/);
+  assert.equal(fs.readFileSync(path.join(s.userDir, "cv-template.favorite.html"), "utf8"), before);
+  assert.ok(!fs.existsSync(path.join(s.userDir, "cv-template.renamed.html")));
+});
+
+test("a rename of a template that is not the default never touches the profile", async () => {
+  const s = scratch();
+  await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "plain", userDir: s.userDir });
+  let calls = 0;
+
+  const out = await renameTemplateAndFollow(CORE, { kind: "cv", name: "plain", to: "plainer", userDir: s.userDir, profilePath: s.profilePath }, async () => { calls += 1; });
+
+  assert.deepEqual(out, { wasDefault: false });
+  assert.equal(calls, 0);
+});
+
+test("a successful rename of the default runs the profile update once", async () => {
+  const s = scratch();
+  await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "fav", userDir: s.userDir });
+  fs.writeFileSync(s.profilePath, "cv:\n  template: fav\n");
+  let calls = 0;
+
+  const out = await renameTemplateAndFollow(CORE, { kind: "cv", name: "fav", to: "fav2", userDir: s.userDir, profilePath: s.profilePath }, async () => { calls += 1; });
+
+  assert.deepEqual(out, { wasDefault: true });
+  assert.equal(calls, 1);
+  assert.ok(fs.existsSync(path.join(s.userDir, "cv-template.fav2.html")));
 });

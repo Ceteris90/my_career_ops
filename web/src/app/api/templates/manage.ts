@@ -43,7 +43,11 @@ export const text = (v: unknown) => (typeof v === "string" ? v : "");
  * message carries an absolute local path.
  */
 export function failure(e: unknown): NextResponse {
-  if (e instanceof TemplateRefusal) return NextResponse.json({ error: e.message }, { status: e.status });
+  if (e instanceof TemplateRefusal) {
+    // The refusal's own message is safe to return; what caused it may not be.
+    if (e.cause) console.error("[templates]", e.cause);
+    return NextResponse.json({ error: e.message }, { status: e.status });
+  }
   console.error("[templates]", e);
   return NextResponse.json({ error: "Could not complete that." }, { status: 500 });
 }

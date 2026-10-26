@@ -5,9 +5,9 @@
  * message carries an absolute path) with a generic 500.
  */
 export class TemplateRefusal extends Error {
-  /** @param {string} message @param {number} [status] */
-  constructor(message, status = 422) {
-    super(message);
+  /** @param {string} message @param {number} [status] @param {{cause?: unknown}} [options] */
+  constructor(message, status = 422, options = {}) {
+    super(message, options);
     this.name = "TemplateRefusal";
     this.status = status;
   }
