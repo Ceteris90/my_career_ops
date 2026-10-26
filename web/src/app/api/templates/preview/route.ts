@@ -1,5 +1,5 @@
 import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
-import { parseKind, assertSelectableTemplate, renderTemplatePreview } from "@/lib/template-gallery.mjs";
+import { parseKind, assertSelectableTemplate, renderTemplatePreview, withPreviewCsp } from "@/lib/template-gallery.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     return Response.json({ error: e instanceof Error ? e.message : "unknown template" }, { status: 404 });
   }
   try {
-    return new Response(await renderTemplatePreview(root, name, kind), {
+    return new Response(withPreviewCsp(await renderTemplatePreview(root, name, kind)), {
       headers: {
         "content-type": "text/html; charset=utf-8",
         // A template is user-editable markup. The sandbox keeps any script in it
