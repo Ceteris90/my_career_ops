@@ -103,7 +103,7 @@ test('without --root the validator judges its own directory, which is why the wo
 test('a validator rewritten inside the PR is not the one that runs', () => {
   const pr = prCheckout({ 'evil.json': JSON.stringify({ name: 'oops', id: 'evil' }) });
   const tampered = join(pr, 'validate-template-registry.mjs');
-  writeFileSync(tampered, 'console.log("ok"); process.exit(0);\n');
+  writeFileSync(tampered, 'console.log("ok");\n');
   assert.equal(run(tampered, '--root', pr).status, 0, 'the PR copy passes anything');
   assert.equal(run(VALIDATOR, '--root', pr).status, 1, 'the base copy still rejects the entry');
 });
