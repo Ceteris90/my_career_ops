@@ -75,6 +75,36 @@ try {
   check(ctx.cv === CV, 'anonymizeContext does not mutate its input');
   check(isRedactionEnabled(anon.profile), 'redacted profile still parses and keeps the privacy flag');
 
+  // ── Review follow-ups ────────────────────────────────────────────────────
+  const altProfile = (altBlock) => `
+candidate:
+  full_name: "Jane Doe"
+  email: "jane.doe@example.org"
+  alternate_emails:
+${altBlock}
+  linkedin: "https://www.linkedin.com/in/janedoe/?utm_source=share#about"
+privacy:
+  redact_contact_info: true
+`;
+  const PROFILE_ALT = altProfile('    - "jane@work.example"\n    - "jd@home.example"');
+  const PROFILE_ALT_MAP = altProfile('    work: "jane@work.example"\n    personal: "jd@home.example"');
+  for (const [label, prof] of [['list', PROFILE_ALT], ['mapping', PROFILE_ALT_MAP]]) {
+    const out = anonymizeContext({
+      cv: 'Mail jane@work.example or JD@HOME.example or jane.doe@example.org',
+      profile: prof,
+    });
+    check(!/work\.example|home\.example|jane\.doe@/i.test(out.cv), `alternate_emails (${label}) are redacted through anonymizeContext`);
+  }
+  check(restoreCandidatePII(PLACEHOLDERS.email, PROFILE_ALT) === 'jane.doe@example.org', 'placeholder restores to the primary email, not an alternate');
+
+  const urlOut = redactCandidatePII(
+    'See https://www.linkedin.com/in/janedoe/?utm_source=share#about and linkedin.com/in/janedoe?trk=x.', PROFILE_ALT);
+  check(!/janedoe|utm_source|trk=/.test(urlOut), 'LinkedIn URL with query/fragment is redacted in full');
+  check(urlOut.endsWith('.'), 'sentence punctuation after the URL is kept');
+
+  const upper = restoreCandidatePII(`${PLACEHOLDERS.name.toUpperCase()} <${PLACEHOLDERS.email.toUpperCase()}>`, PROFILE_ON);
+  check(upper === 'Jane Doe <jane.doe@example.org>', 'restore is case-insensitive for an uppercased model response');
+
   // ── Edge cases ───────────────────────────────────────────────────────────
   check(redactCandidatePII(null, PROFILE_ON) === null, 'null text passes through');
   check(redactCandidatePII('Text', '') === 'Text', 'empty profile passes text through');

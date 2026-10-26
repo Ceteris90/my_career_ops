@@ -60,7 +60,7 @@ function cleanString(v) {
 }
 
 function normalizeUrl(v) {
-  return v.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
+  return v.replace(/[?#].*$/, '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
 }
 
 /**
@@ -83,8 +83,13 @@ function buildRules(profileYmlText) {
     });
   }
 
-  const email = cleanString(candidate.email);
-  if (email) {
+  // Primary first: it is the address restored from the placeholder. Alternates
+  // (a list, or a name -> address mapping) are redacted to the same placeholder.
+  const alternates = candidate.alternate_emails;
+  const altList = Array.isArray(alternates) ? alternates
+    : (alternates && typeof alternates === 'object' ? Object.values(alternates) : []);
+  const emails = [candidate.email, ...altList].map(cleanString).filter(Boolean);
+  for (const email of [...new Set(emails)]) {
     rules.push({
       kind: 'email',
       original: email,
@@ -115,7 +120,8 @@ function buildRules(profileYmlText) {
     rules.push({
       kind,
       original: url,
-      find: new RegExp(`${URL_PREFIX}${escapeRegex(normalizeUrl(url))}(?![\\w-])\\/?`, 'gi'),
+      // Canonical profile path, plus any ?query / #fragment that follows it in the text.
+      find: new RegExp(`${URL_PREFIX}${escapeRegex(normalizeUrl(url))}(?![\\w-])\\/?(?:[?#][^\\s)\\]>"']*?(?=[.,;:!]*(?:[\\s)\\]>"']|$)))?`, 'gi'),
     });
   }
 
@@ -160,7 +166,7 @@ export function restoreCandidatePII(text, profileYmlText) {
     const placeholder = escapeRegex(PLACEHOLDERS[rule.kind]);
     const re = isUrl
       ? new RegExp(`${URL_PREFIX}${placeholder}(?![\\w-])`, 'gi')
-      : new RegExp(placeholder, 'g');
+      : new RegExp(placeholder, 'gi');
     out = out.replace(re, () => rule.original);
   }
   return out;
