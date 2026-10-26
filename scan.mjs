@@ -60,6 +60,7 @@ import { loadYaml } from './lib/yaml-document.mjs';
 import { makeHttpCtx } from './providers/_http.mjs';
 import { buildTrustValidator } from './providers/_trust-validator.mjs';
 import { loadProviders, resolveProvider } from './providers/_registry.mjs';
+import { openProviderIdCache, PROVIDER_ID_CACHE_DIR } from './provider-id-cache.mjs';
 import { mergeProviderPlugins } from './plugins/_engine.mjs';
 import { classifyFetchError } from './verify-portals.mjs';
 import { fingerprintText, findCrossListings } from './fingerprint-core.mjs';
@@ -75,8 +76,9 @@ import { withPortalHealthLock } from './portal-health-lock.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { printScanSummaryHeader } from './lib/scan-summary-marker.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
-import { SCAN_HISTORY_COLUMNS, parseScanHistoryLine } from './lib/scan-history-columns.mjs';
+import { SCAN_HISTORY_COLUMNS, parseScanHistoryLine, scanHistoryDataLines } from './lib/scan-history-columns.mjs';
 import { escapeFormulaCell } from './lib/tsv-formula-escape.mjs';
+import { sectionKind } from './lib/pipeline-sections.mjs';
 import { promoteKnownFragmentIdentity, LANGUAGE_PARAMS, languageSubtag } from './url-key.mjs';
 import { getCareerOpsRoot, getProfilePath, hasProfileOverride } from './path-resolver.mjs';
 import { checkLivenessViaApi } from './liveness-api.mjs';
@@ -1503,6 +1505,13 @@ const RECHECKABLE_SCAN_HISTORY_STATUSES = new Set(['added', 'skipped_expired']);
  * learns each board, since a posting that reads `active` gets an `added` row
  * and stops coming back.
  *
+ * `skipped_content`, `skipped_visa` and `skipped_country_eligibility` are
+ * scan-dayforce.mjs's rows for its `content_filter`, visa and
+ * `country_eligibility_filter` cuts: CONFIG again, by the same reasoning as the
+ * first three. They were missing here, so they fell through to the permanent
+ * pin, and widening one of those filters never handed back a Dayforce posting
+ * it had dropped. (scan.mjs counts the same cuts and records no row for them.)
+ *
  * `collectSeenCompanyRoles` needs no companion change — it already seeds from
  * `added` rows alone.
  */
@@ -1511,6 +1520,9 @@ const OBSERVATIONAL_SCAN_HISTORY_STATUSES = new Set([
   'skipped_location',
   'skipped_age',
   'skipped_no_apply_control',
+  'skipped_content',
+  'skipped_visa',
+  'skipped_country_eligibility',
 ]);
 
 /**
@@ -1529,7 +1541,7 @@ const OBSERVATIONAL_SCAN_HISTORY_STATUSES = new Set([
  */
 export function unrecordedOffers(offers, status, scanHistoryText = '') {
   const recorded = new Set();
-  for (const line of scanHistoryText.split('\n').slice(1)) { // skip header
+  for (const line of scanHistoryDataLines(scanHistoryText)) {
     const [url, , , , , rowStatus] = line.split('\t');
     if (url && rowStatus === status) recorded.add(normalizeUrlForDedup(url));
   }
@@ -2043,10 +2055,8 @@ export function collectSeenUrls(sources = {}, policy = {}, { extraTokensFor } = 
   };
 
   // scan-history.tsv
-  // Skip line 0 only when it is the header; a headerless legacy file starts with a data row.
-  const historyLines = scanHistoryText.split('\n');
-  if (historyLines[0].startsWith('url\t')) historyLines.shift();
-  for (const line of historyLines) {
+  // Line 0 only when it is the header; a headerless legacy file starts with a data row.
+  for (const line of scanHistoryDataLines(scanHistoryText)) {
     const { url, first_seen: firstSeen, portal, status: rawStatus, title, language, listing_key: listingKey } = parseScanHistoryLine(line);
     const status = rawStatus || 'added';
     if (!url) continue;
@@ -2890,7 +2900,7 @@ export function collectSeenCompanyRoles(sources = {}, policy = {}, canonicalize 
   // and (trailing) requisition_id + language. This is the source that carries a
   // location for every scanned posting, and so the one that makes the opt-in key
   // discriminate between two cities of one role.
-  for (const line of scanHistoryText.split('\n').slice(1)) { // skip header
+  for (const line of scanHistoryDataLines(scanHistoryText)) {
     const row = parseScanHistoryLine(line);
     const status = row.status || 'added';
     if (!row.url) continue;
@@ -2933,7 +2943,7 @@ export function collectSeenCompanyRoles(sources = {}, policy = {}, canonicalize 
  */
 export function collectPostingAttributes(scanHistoryText) {
   const attributes = new Map();
-  for (const line of scanHistoryText.split('\n').slice(1)) {
+  for (const line of scanHistoryDataLines(scanHistoryText)) {
     const row = parseScanHistoryLine(line);
     const requisitionId = row.requisition_id.trim();
     const language = row.language.trim();
@@ -3350,11 +3360,6 @@ Paste job URLs below as \`- [ ] {url}\` then run \`/career-ops pipeline\`.
 ## Processed
 `;
 
-// Current section names (English). Legacy Spanish names are checked as fallback
-// so existing pipeline.md files created before this change keep working.
-const PENDING_MARKERS = ['## Pending', '## Pendientes'];
-const PROCESSED_MARKERS = ['## Processed', '## Procesadas'];
-
 // Locked (pipeline-lock.mjs) so scan.mjs, scan-ats-full.mjs, and plugins.mjs
 // (pipeline mode) — the three current callers — can never interleave their
 // read-modify-write and silently drop each other's offers.
@@ -3369,21 +3374,18 @@ export async function appendToPipeline(offers, { pipelinePath = PIPELINE_PATH } 
       ? readFileSync(pipelinePath, 'utf-8')
       : PIPELINE_SKELETON;
 
-    const marker = PENDING_MARKERS.find(m => text.includes(m)) ?? null;
-    const idx = marker !== null ? text.indexOf(marker) : -1;
+    const headings = [...text.matchAll(/^##[ \t].*$/gm)];
+    const pending = headings.find(h => sectionKind(h[0]) === 'pending');
 
-    if (idx === -1) {
+    if (!pending) {
       // No Pending section found — insert one before Processed (or at end)
-      const procIdx = PROCESSED_MARKERS.reduce((found, m) => {
-        const i = text.indexOf(m);
-        return (found === -1 || (i !== -1 && i < found)) ? i : found;
-      }, -1);
-      const insertAt = procIdx === -1 ? text.length : procIdx;
+      const processed = headings.find(h => sectionKind(h[0]) === 'processed');
+      const insertAt = processed ? processed.index : text.length;
       const block = `\n## Pending\n\n` + offers.map(formatPipelineOffer).join('\n') + '\n\n';
       text = text.slice(0, insertAt) + block + text.slice(insertAt);
     } else {
       // Find the end of existing Pending content (next ## or end)
-      const afterMarker = idx + marker.length;
+      const afterMarker = pending.index + pending[0].length;
       const nextSection = text.indexOf('\n## ', afterMarker);
       const insertAt = nextSection === -1 ? text.length : nextSection;
 
@@ -3988,7 +3990,10 @@ const USAGE = `Usage:
   node scan.mjs --posted-before 2026-08-01   # absolute upper bound on posting date
   node scan.mjs --json                       # emit one machine-readable receipt on stdout
   node scan.mjs --quiet                      # suppress the manifesto footer
-  node scan.mjs --help                       # print this usage block and exit`;
+  node scan.mjs --help                       # print this usage block and exit
+
+Exit status: 0 when the scan ran, 1 on a configuration or fatal error, 2 when
+every target it tried failed (with --json: when any target failed).`;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -4104,13 +4109,12 @@ async function main() {
 
   // Seniority tier classifier integration
   let classifyTier = null;
-  const skipTiers = Array.isArray(config.skip_tiers)
-    ? config.skip_tiers.filter(t => typeof t === 'string').map(t => t.toLowerCase())
-    : [];
-  if (skipTiers.length > 0) {
-    const mod = await import('./classify-tier.mjs');
-    classifyTier = mod.classifyTier || mod.default;
-  }
+  const TIERS = ['intern', 'entry', 'mid', 'senior'];
+  const tierList = list => list.filter(t => typeof t === 'string').map(t => t.toLowerCase());
+  const skipTiers = Array.isArray(config.skip_tiers) ? tierList(config.skip_tiers) : [];
+  // #5778. An entry's own skip_tiers replaces the global list for that entry;
+  // [] turns the tier filter off there.
+  const entrySkipTiers = entry => (Array.isArray(entry.skip_tiers) ? tierList(entry.skip_tiers) : skipTiers);
 
   const locationFilter = buildLocationFilter(config.location_filter);
   const postingAgeFilter = buildPostingAgeFilter(config.max_posting_age_days);
@@ -4246,6 +4250,16 @@ async function main() {
         exitOnConfigError(`${target.name}: filter_on "${field}" has no field_filters.${field} block in portals.yml`);
       }
     }
+    if (target.skip_tiers !== undefined
+      && (!Array.isArray(target.skip_tiers)
+        || target.skip_tiers.some(t => typeof t !== 'string' || !TIERS.includes(t.toLowerCase())))) {
+      exitOnConfigError(`${target.name}: skip_tiers must be a list of ${TIERS.join(', ')}, or [] to turn the tier filter off`);
+    }
+  }
+  const tierFilterActive = skipTiers.length > 0 || targets.some(t => entrySkipTiers(t).length > 0);
+  if (tierFilterActive) {
+    const mod = await import('./classify-tier.mjs');
+    classifyTier = mod.classifyTier || mod.default;
   }
 
   const localParserCount = targets.filter(t => t._provider.id === 'local-parser').length;
@@ -4318,6 +4332,9 @@ async function main() {
   const newOffers = [];
   const verifyDedupKeys = new Map();
   const errors = [...resolveErrors];
+  // Targets whose fetch threw. Not errors.length: that also holds resolve
+  // errors and a local parser rescued by its API fallback, which succeeded.
+  let failedTargets = 0;
   const emptyTargets = [];
   const unverifiedZeroTargets = [];
 
@@ -4346,6 +4363,9 @@ async function main() {
       process.exit(130);
     });
   }
+
+  // Values providers resolve once and reuse on later scans (provider-id-cache.mjs).
+  const idCaches = openProviderIdCache(path.join(DATA_ROOT, PROVIDER_ID_CACHE_DIR));
 
   const tasks = targets.map(company => async () => {
     let provider = company._provider;
@@ -4386,6 +4406,7 @@ async function main() {
       // the title filter below will drop. Absent when this company's filter_on
       // leaves the title out, since then no title is dropped.
       ...(normalizeFilterOn(company.filter_on).includes('title') ? { titleWanted: (title) => titleFilter(title) } : {}),
+      idCache: idCaches.forProvider(provider.id),
     };
     let sourceName = provider.id === 'local-parser' ? 'local-parser' : `${provider.id}-api`;
     try {
@@ -4398,6 +4419,7 @@ async function main() {
         if (!fallback || fallback.error) throw parserErr;
         provider = fallback.provider;
         sourceName = `${provider.id}-api`;
+        ctx.idCache = idCaches.forProvider(provider.id);
         jobs = await provider.fetch(company, ctx);
         errors.push({
           company: company.name,
@@ -4429,6 +4451,7 @@ async function main() {
       }
 
       const declaredFields = normalizeFilterOn(company.filter_on);
+      const companySkipTiers = entrySkipTiers(company);
       const orderedJobs = preferredLanguageRank ? orderByPreferredLanguage(jobs, preferredLanguageRank) : jobs;
       for (const job of orderedJobs) {
         const listingToken = refreshListingKey(job);
@@ -4496,7 +4519,7 @@ async function main() {
           continue;
         }
         if (sawAbsentField) totalPassedFieldAbsent++;
-        if (classifyTier && skipTiers.includes(classifyTier(job.title))) {
+        if (classifyTier && companySkipTiers.includes(classifyTier(job.title))) {
           totalFilteredTier++;
           continue;
         }
@@ -4556,7 +4579,15 @@ async function main() {
         // the prebuilt aggregate of located rows. An unknown ID keeps the
         // historical duplicate decision. Aggregators use URL dedup only.
         const baseKey = companyRoleDedupKey(job.company, job.title, canonicalizeCompany);
-        const key = company.aggregator === true
+        // No employer, no company+role identity. A board that cannot name a
+        // posting's employer returns `company: ''` (providers/_types.js allows
+        // it; builtin, platsbanken, justjoin and vdab do it), and `::{title}`
+        // then stood for every unnamed employer at once: a second "Senior
+        // Software Engineer" from a different company was dropped as a
+        // duplicate of the first. Seeding already skips such rows
+        // (collectSeenCompanyRoles), so they dedup by URL only, as an
+        // aggregator's do.
+        const key = company.aggregator === true || !canonicalizeCompany(job.company)
           ? null
           : (dedupIncludeLocation
             ? companyRoleDedupKey(job.company, job.title, canonicalizeCompany, job.location)
@@ -4614,6 +4645,7 @@ async function main() {
         });
       }
     } catch (err) {
+      failedTargets++;
       errors.push({
         company: company.name,
         error: err.message,
@@ -4624,6 +4656,15 @@ async function main() {
   });
 
   await parallelFetch(tasks, CONCURRENCY, progressTicker(tasks.length));
+  // --dry-run leaves no trace, this cache included.
+  if (!dryRun) {
+    try {
+      await idCaches.save();
+    } catch (err) {
+      // Losing the cache costs a lookup on the next scan, not this scan's results.
+      console.warn(`⚠️  could not save the provider id cache: ${err.message}`);
+    }
+  }
 
   // 5.5. Optional liveness verification — drop expired and guard-rejected postings
   let verifiedOffers = newOffers;
@@ -4784,7 +4825,7 @@ async function main() {
     console.log(`Filtered by field:     ${totalFilteredDeclaredField} removed`);
     console.log(`Passed, field absent:  ${totalPassedFieldAbsent} ungated`);
   }
-  if (skipTiers.length > 0) {
+  if (tierFilterActive) {
     console.log(`Filtered by tier:      ${totalFilteredTier} removed`);
   }
   if (config.location_filter || totalFilteredLocation > 0) {
@@ -5061,10 +5102,24 @@ async function main() {
     }, errors.length > 0 ? 2 : 0);
   }
 
+  // A run in which every target it tried failed read nothing, and exiting 0
+  // told cron and the web scheduler it succeeded with zero new offers. Exit 2,
+  // the receipt's failure code, so the outage is visible. Only when all failed:
+  // a few dead boards are routine, and every run would turn red. An empty
+  // config tried nothing and still exits 0. This runs after the bookkeeping
+  // above, so the scan-runs and portal-health rows are already written; the
+  // message goes to stderr last, where a scheduler reads the cause.
+  const attempted = targets.length + resolveErrors.length;
+  const everyTargetFailed = attempted > 0 && failedTargets + resolveErrors.length === attempted;
+  if (everyTargetFailed && !jsonMode) {
+    console.error(`Error: every scan target failed (${attempted} of ${attempted}); no board could be read. See the errors above.`);
+    process.exitCode = 2;
+  }
+
   // One-time-ever manifesto note: first successful REAL run only. The state
   // file keeps it from ever repeating; --dry-run must leave no trace, and a
   // piped/quiet run is not the moment for it.
-  if (!dryRun && process.stdout.isTTY && !process.argv.includes('--quiet') && !existsSync('.manifesto-noted')) {
+  if (!dryRun && !everyTargetFailed && process.stdout.isTTY && !process.argv.includes('--quiet') && !existsSync('.manifesto-noted')) {
     // OSC 8 hyperlink where support is known, so the click attributes as
     // utm_source=cli while the visible text stays clean; otherwise print the
     // URL with the utm so typed visits attribute too.

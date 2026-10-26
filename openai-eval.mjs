@@ -3,7 +3,7 @@
  * openai-eval.mjs — OpenAI-compatible Job Offer Evaluator for career-ops
  *
  * Evaluate job offers with ANY OpenAI-compatible chat endpoint instead of Claude.
- * Works with OpenAI, OpenRouter, Requesty, Cheaper Inference, API Route, Together, Groq, DeepSeek, Zhipu GLM,
+ * Works with OpenAI, OpenRouter, Requesty, Cheaper Inference, API Route, Runcrate, Together, Groq, DeepSeek, Zhipu GLM,
  * MiniMax, Fireworks, and local servers that speak the OpenAI API (LM Studio, llama.cpp,
  * vLLM, Ollama's /v1). Point it at a base URL + model + key and go.
  *
@@ -70,6 +70,7 @@ const PATHS = {
   cv:        join(DATA_ROOT, 'cv.md'),
   profileYml: getProfilePath(),
   profile:    join(DATA_ROOT, 'modes', '_profile.md'),
+  custom:     join(DATA_ROOT, 'modes', '_custom.md'),
   reports:    join(DATA_ROOT, 'reports'),
   // CAREER_OPS_ADDITIONS mirrors merge-tracker.mjs:43. Writing under DATA_ROOT
   // regardless would drop the addition somewhere the merge it instructs never
@@ -117,6 +118,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     Requesty:    --url https://router.requesty.ai/v1  --model deepseek/deepseek-chat
     Cheaper Inference: --url https://api.cheaperinference.com/v1  --model gpt-5.4-mini
     API Route:   --url https://global.api-route.com/v1  --model gpt-5.5
+    Runcrate:    --url https://api.runcrate.ai/v1  --model deepseek-ai/DeepSeek-V4.1-Flash
     Together:    --url https://api.together.xyz/v1     --model meta-llama/Llama-3.3-70B-Instruct-Turbo
     Groq:        --url https://api.groq.com/openai/v1  --model llama-3.3-70b-versatile
     DeepSeek:    --url https://api.deepseek.com/v1     --model deepseek-chat
@@ -258,6 +260,8 @@ const ofertaLogic   = readFile(PATHS.oferta,     'modes/oferta.md');
 const cvContent     = readFile(PATHS.cv,         'cv.md');
 const profileYml    = readFile(PATHS.profileYml, 'config/profile.yml');
 const profileContent = readFile(PATHS.profile,   'modes/_profile.md');
+// _custom.md is optional: an absent file is a valid end state, so no warning.
+const customContent = existsSync(PATHS.custom) ? readFileSync(PATHS.custom, 'utf-8').trim() : '';
 const languageInstruction = outputLanguageInstruction(parseOutputLanguage(profileYml));
 
 // ---------------------------------------------------------------------------
@@ -269,6 +273,7 @@ const { contextBody, budgetReport } = buildBudgetedPrompt({
   cvContent,
   profileYml,
   profileContent,
+  customContent,
   jdText,
   noCompress,
   modelName,

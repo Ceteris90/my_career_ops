@@ -122,6 +122,7 @@ async function runWhileLocked({
   verifyOutput,
   mutateWhileLocked,
   beforeMutationOutput = null,
+  isolateDataRoot = false,
 }) {
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-writer-lock-'));
   const tracker = join(dir, 'applications.md');
@@ -147,6 +148,10 @@ async function runWhileLocked({
     CAREER_OPS_TRACKER_DB: db,
     CAREER_OPS_TRACKER_LOCK: lockDir,
     CAREER_OPS_TRACKER_LOCK_RETRY_MS: '20',
+    // Opt-in for writers that also read sibling data files (active-interviews,
+    // follow-ups): point the data root at the fixture dir so a developer's real
+    // data can never change the outcome.
+    ...(isolateDataRoot ? { CAREER_OPS_ROOT: dir, CAREER_OPS_DATA_DIR: '', CAREER_OPS_FOLLOWUPS: '' } : {}),
   };
   const launchWriter = (timeoutMs, markerPath = null) => {
     let stdout = '';
@@ -347,7 +352,11 @@ function writerCase({
           + 'longer reached on contention'));
         assert.equal(marker.lockDir, lockDir, say('the marker names a different lock'));
         assert.equal(marker.guardCreated, true, say('the marker does not record the recover guard being created'));
-        assert.equal(marker.pid, runPid, say('the marker came from a different process'));
+        // A writer that delegates its write to set-status.mjs (reply-watch,
+        // #5536) contends in that child, so the marker is the child's. Only
+        // such a case accepts a marker whose parent is the writer.
+        assert.equal(options.delegatesWrite ? marker.ppid : marker.pid, runPid,
+          say('the marker came from a different process'));
       });
     }
 
@@ -393,6 +402,20 @@ writerCase({
   verify: content => (content.match(/\| Acme \| Engineer \|/g) || []).length === 1,
   verifyOutput: (stdout, _stderr, tracker) => stdout.includes(`Written to ${realpathSync(tracker)}`)
     && stdout.includes(`${realpathSync(tracker)}.bak`),
+});
+
+writerCase({
+  name: 'close-stale',
+  script: 'close-stale.mjs',
+  isolateDataRoot: true,
+  args: ['--confirm', '--today', '2026-10-24'],
+  content: trackerTable([
+    '| 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ❌ | [1](reports/001-acme.md) | seed |',
+  ]),
+  verify: content => content.includes('| Discarded |') && content.includes('no response (auto-closed 2026-10-24, 60d)'),
+  // The row committed while the writer waited is old and Applied too, so it is closed
+  // as well: what must survive is the row itself, not its Applied status.
+  verifyConcurrent: after => after.includes('ConcurrentCo') && after.includes('preserve me'),
 });
 
 writerCase({
@@ -461,6 +484,7 @@ writerCase({
 writerCase({
   name: 'reply-watch',
   script: 'reply-watch.mjs',
+  delegatesWrite: true,
   stdin: 'y\n',
   content: trackerTable([
     '| 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ❌ | [1](reports/001-acme.md) | contact hr@acme.com |',
@@ -472,6 +496,7 @@ writerCase({
 writerCase({
   name: 'reply-watch-identical',
   script: 'reply-watch.mjs',
+  delegatesWrite: true,
   stdin: 'y\n',
   candidates: [
     {
@@ -500,6 +525,7 @@ writerCase({
 writerCase({
   name: 'reply-watch-stale-status',
   script: 'reply-watch.mjs',
+  delegatesWrite: true,
   stdin: 'y\n',
   content: trackerTable([
     '| 1 | 2026-01-01 | Acme | Engineer | 4.0/5 | Applied | ❌ | [1](reports/001-acme.md) | contact hr@acme.com |',
