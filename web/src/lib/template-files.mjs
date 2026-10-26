@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { TemplateRefusal } from "./template-refusal.mjs";
 
 // Duplicate, rename and delete of the user's own templates (#1692). They live in
 // data/templates/ under the data root, the directory cv-templates.mjs searches
@@ -25,7 +26,7 @@ async function loadResolver(root) {
 /** @param {string} name */
 function assertValidName(name) {
   if (!isValidTemplateName(name)) {
-    throw new Error(
+    throw new TemplateRefusal(
       `Template name must be lowercase letters and digits joined by single hyphens, at most ${MAX_NAME} characters, and not "${BASE_NAME}".`,
     );
   }
@@ -42,15 +43,15 @@ function listing(resolver, kind, userDir) {
  */
 function findEntry(resolver, kind, userDir, name, { user = false } = {}) {
   const entry = listing(resolver, kind, userDir).find((t) => t.name === name);
-  if (!entry) throw new Error(`Template not found: ${String(name).slice(0, 80)}`);
-  if (user && entry.layer !== "user") throw new Error("Only your own templates can be changed. Duplicate this one first.");
+  if (!entry) throw new TemplateRefusal(`Template not found: ${String(name).slice(0, 80)}`, 404);
+  if (user && entry.layer !== "user") throw new TemplateRefusal("Only your own templates can be changed. Duplicate this one first.");
   return entry;
 }
 
 /** @param {any} resolver @param {string} kind @param {string} userDir @param {string} name */
 function assertNameFree(resolver, kind, userDir, name) {
   if (listing(resolver, kind, userDir).some((t) => t.name === name)) {
-    throw new Error(`A template named "${name}" already exists.`);
+    throw new TemplateRefusal(`A template named "${name}" already exists.`);
   }
 }
 
@@ -78,7 +79,11 @@ export async function duplicateTemplate(root, { kind, from, name, userDir }) {
   const source = findEntry(resolver, kind, userDir, from);
   // Throws for a source that does not resolve itself (missing placeholders, a
   // declared section with no partial), so a broken template is not copied.
-  resolver.resolveTemplate(kind, from, { userDir });
+  try {
+    resolver.resolveTemplate(kind, from, { userDir });
+  } catch (e) {
+    throw new TemplateRefusal(`That template cannot be copied because it does not resolve: ${e instanceof Error ? e.message : String(e)}`);
+  }
   assertNameFree(resolver, kind, userDir, name);
 
   const prefix = resolver.KINDS[kind].prefix;
@@ -93,7 +98,7 @@ export async function duplicateTemplate(root, { kind, from, name, userDir }) {
     try {
       await fs.mkdir(dest);
     } catch (e) {
-      if (e.code === "EEXIST") throw new Error(`A folder named "${name}" already exists in your templates.`);
+      if (e.code === "EEXIST") throw new TemplateRefusal(`A folder named "${name}" already exists in your templates.`);
       throw e;
     }
     try {
@@ -151,7 +156,7 @@ export async function deleteTemplate(root, { kind, name, userDir, profilePath })
   const resolver = await loadResolver(root);
   const entry = findEntry(resolver, kind, userDir, name, { user: true });
   if (defaultName(resolver, kind, profilePath) === name) {
-    throw new Error("This is your default template. Make another one the default first.");
+    throw new TemplateRefusal("This is your default template. Make another one the default first.");
   }
   await fs.rm(entry.path);
   const dir = path.dirname(entry.path);

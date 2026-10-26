@@ -4,6 +4,7 @@ import { resolveCodeRoot } from "@/lib/core/code-root.mjs";
 import { getProfilePath } from "@/lib/core/profile-path.mjs";
 import { readJsonObject } from "@/lib/json-body";
 import { parseKind, userTemplatesDir } from "@/lib/template-gallery.mjs";
+import { TemplateRefusal } from "@/lib/template-refusal.mjs";
 
 // What the three manage routes (duplicate, rename, delete) share: the body, the
 // kind, and the three locations. The core scripts live in the engine checkout; the
@@ -36,10 +37,13 @@ export async function manageContext(req: Request): Promise<ManageContext | NextR
 /** A name a request carries, or "" when it is missing or not text. */
 export const text = (v: unknown) => (typeof v === "string" ? v : "");
 
-/** Our own refusals are the caller's to fix (422, or 404 for a missing name); anything else is a 500. */
+/**
+ * A typed refusal is the caller's to fix and carries its own status. Anything else
+ * is ours: it is logged here and answered generically, because a filesystem error's
+ * message carries an absolute local path.
+ */
 export function failure(e: unknown): NextResponse {
-  const message = e instanceof Error ? e.message : "could not complete that";
-  const known = /not found|already|your own|default|name must|sections/i.test(message);
-  const status = /not found/i.test(message) ? 404 : known ? 422 : 500;
-  return NextResponse.json({ error: message }, { status });
+  if (e instanceof TemplateRefusal) return NextResponse.json({ error: e.message }, { status: e.status });
+  console.error("[templates]", e);
+  return NextResponse.json({ error: "Could not complete that." }, { status: 500 });
 }

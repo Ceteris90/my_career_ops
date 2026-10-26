@@ -18,6 +18,7 @@ import {
   deleteTemplate,
   isValidTemplateName,
 } from "../../src/lib/template-files.mjs";
+import { TemplateRefusal } from "../../src/lib/template-refusal.mjs";
 
 const CORE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -167,4 +168,32 @@ test("duplicating a pack never removes a folder that was already there under the
   await assert.rejects(duplicateTemplate(CORE, { kind: "cv", from: "ats", name: "my-ats", userDir: s.userDir }), /folder|already/i);
 
   assert.equal(fs.readFileSync(path.join(s.userDir, "my-ats", "notes.txt"), "utf8"), "keep me");
+});
+
+test("caller-correctable refusals are typed, with the status they deserve", async () => {
+  const s = scratch();
+  await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "fav", userDir: s.userDir });
+  fs.writeFileSync(s.profilePath, "cv:\n  template: fav\n");
+  const refusal = async (p) => p.then(() => assert.fail("expected a refusal"), (e) => e);
+
+  const badName = await refusal(duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "Bad Name", userDir: s.userDir }));
+  const missing = await refusal(duplicateTemplate(CORE, { kind: "cv", from: "nope", name: "fresh", userDir: s.userDir }));
+  const taken = await refusal(duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "fav", userDir: s.userDir }));
+  const shipped = await refusal(deleteTemplate(CORE, { kind: "cv", name: "modern", userDir: s.userDir, profilePath: s.profilePath }));
+  const isDefault = await refusal(deleteTemplate(CORE, { kind: "cv", name: "fav", userDir: s.userDir, profilePath: s.profilePath }));
+
+  for (const e of [badName, missing, taken, shipped, isDefault]) assert.ok(e instanceof TemplateRefusal, e.message);
+  assert.equal(missing.status, 404);
+  assert.deepEqual([badName, taken, shipped, isDefault].map((e) => e.status), [422, 422, 422, 422]);
+});
+
+test("an operating-system failure is not a refusal", async () => {
+  const s = scratch();
+  fs.mkdirSync(path.dirname(s.userDir), { recursive: true });
+  fs.writeFileSync(s.userDir, "a file where the templates folder should be");
+
+  const err = await duplicateTemplate(CORE, { kind: "cv", from: "modern", name: "mine", userDir: s.userDir }).then(() => null, (e) => e);
+
+  assert.ok(err);
+  assert.ok(!(err instanceof TemplateRefusal));
 });

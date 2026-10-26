@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { TemplateRefusal } from "./template-refusal.mjs";
 import * as yaml from "js-yaml";
 import { patchProfileText } from "./profile-yaml-edit.mjs";
 import { SAMPLE_CV_PAYLOAD, SAMPLE_COVER_PAYLOAD } from "./template-sample-resume.mjs";
@@ -82,7 +83,7 @@ export async function assertSelectableTemplate(root, name, kind = "cv", { userDi
   const resolver = await loadResolver(root);
   const listed = resolver.listTemplates(kind, userDir ? { userDir } : {});
   if (typeof name !== "string" || !listed.some((t) => t.name === name)) {
-    throw new Error(`Template not found: ${String(name).slice(0, 80)}`);
+    throw new TemplateRefusal(`Template not found: ${String(name).slice(0, 80)}`, 404);
   }
   return resolver.resolveTemplate(kind, name, userDir ? { userDir } : {});
 }
