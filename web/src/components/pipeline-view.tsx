@@ -8,6 +8,7 @@ import type { Application, InboxJob } from "@/lib/career-ops";
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
 import { CANONICAL_STATES, canonStatus, scoreNum, scoreTone } from "@/lib/format";
+import { JobNotes } from "@/components/job-notes";
 import { StatusSelect } from "@/components/status-select";
 import { applicationKey, applySavedStatus, saveStatuses } from "@/lib/pipeline-status.mjs";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
@@ -345,6 +346,7 @@ export function PipelineView({
                     </button>
                   </th>
                 ))}
+                <th className="px-4 py-2.5 font-medium">Notes</th>
               </tr>
             </thead>
             {/* Keep editors mounted while query navigation is pending: sorting
@@ -418,6 +420,7 @@ export function PipelineView({
                     />
                   </td>
                   <td className="hidden whitespace-nowrap px-4 py-3 text-faint tabular-nums lg:table-cell">{r.date}</td>
+                  <td className="px-4 py-3"><JobNotes n={r.n} status={r.status} notes={r.notes} label={`${company.label} — ${r.role} (#${r.n})`} /></td>
                   </tr>
                 );
               })}

@@ -14,6 +14,7 @@ import {
   splitSections,
   verdictReason,
 } from "@/lib/report-sections.mjs";
+import { JobNotes } from "@/components/job-notes";
 import { StatusSelect } from "@/components/status-select";
 import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
@@ -108,6 +109,7 @@ export function ReportView({
 
         <div className="mt-4 flex flex-wrap items-center gap-2.5">
           {app && <StatusSelect n={id} current={app.status} />}
+          {app && <JobNotes n={app.n} status={app.status} notes={app.notes} label={`${companyName} — ${app.role} (#${app.n})`} />}
           <GeneratePdfButton n={id} company={app?.company ?? meta?.title ?? id} pdfReady={pdfReady} />
           {app && report && <CoverDraftButton n={id} company={companyName} />}
           {applyHref && (
