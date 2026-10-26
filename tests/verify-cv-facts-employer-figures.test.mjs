@@ -14,6 +14,7 @@ const exempt = [
   ["you've", "I noticed you've opened 3 offices this year.", '3 offices'],
   ['complementizer "that"', 'I read that your team ran four regional sessions in July.', '4 sessions'],
   ['complementizer "how"', 'I admire how your team grew to 12 offices.', '12 offices'],
+  ['bare "you" after a complementizer', 'I noticed that you shipped 12 integrations.', '12 integrations'],
 ];
 for (const [label, text, claim] of exempt) {
   const claims = metricClaims(text);
@@ -30,6 +31,7 @@ const kept = [
   ['first person after your', 'Your team grew and I managed 5 people.', '5 people'],
   ['possessive object of a first-person verb', 'I managed your 12 engineers.', '12 engineers'],
   ['possessive inside a first-person object', 'I led your team of 12 engineers.', '12 engineers'],
+  ['bare "you" as an object', 'I worked with you for 12 years.', '12 years'],
 ];
 for (const [label, text, claim] of kept) {
   const claims = metricClaims(text);

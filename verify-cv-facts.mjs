@@ -1493,16 +1493,18 @@ function isDisclosedRequirement(clean, match, allMatches) {
 // first and still checks the second, and "I ran four sessions for your team"
 // stays a personal claim because "your" comes after the number.
 //
-// A possessive "your" is only a subject when nothing first-person governs it:
-// in "I managed your 12 engineers" the candidate is the subject and "your"
-// merely modifies the object, so the count stays a personal claim. A
+// "your" and a bare "you" are only a subject when nothing first-person governs
+// them: in "I managed your 12 engineers" or "I worked with you for 12 years" the
+// candidate is the subject and the second-person word is a possessive or an
+// object, so the count stays a personal claim. The contractions ("you've",
+// "you're", ...) are always subjects and need no such check. A
 // complementizer between the two ("I read that your team ran four sessions",
 // "I admire how your team grew") starts a new clause whose subject is "your
 // team", so that case is still an employer figure. Where the two cannot be told
 // apart ("I saw your team ran four sessions") the count stays checked.
 const SECOND_PERSON_RE = /\b(?:your|yours|you|you['\u2019](?:re|ve|ll|d))\b/gi;
 const FIRST_PERSON_RE = /\b(?:I|I['\u2019](?:m|ve|ll|d)|me|my|mine|myself|we|we['\u2019](?:re|ve|ll|d)|our|ours)\b/gi;
-const POSSESSIVE_RE = /^yours?$/i;
+const BARE_SECOND_PERSON_RE = /^(?:you|yours?)$/i;
 const COMPLEMENTIZER_RE = /\b(?:that|how|what|when|where|why|because|since|while|as|if|whether)\b/i;
 
 /**
@@ -1526,7 +1528,7 @@ function isEmployerFigure(clean, match) {
   // candidate is the nearest subject.
   if (firsts.some((m) => m.index > second.index)) return false;
   const first = firsts.at(-1);
-  if (!first || !POSSESSIVE_RE.test(second[0])) return true;
+  if (!first || !BARE_SECOND_PERSON_RE.test(second[0])) return true;
   return COMPLEMENTIZER_RE.test(before.slice(first.index + first[0].length, second.index));
 }
 
