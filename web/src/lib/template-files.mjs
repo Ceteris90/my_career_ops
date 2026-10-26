@@ -146,6 +146,32 @@ export async function renameTemplate(root, { kind, name, to, userDir, profilePat
 }
 
 /**
+ * Rename a template and, when it was the default, run `updateProfile` so the
+ * profile follows. If that update fails, the file is renamed back, so the profile
+ * never points at a template that is gone. The failure is a 409 refusal that
+ * carries the original error as its `cause`; only the cause holds a path.
+ * @param {string} root
+ * @param {{kind: "cv"|"cover", name: string, to: string, userDir: string, profilePath?: string}} opts
+ * @param {() => Promise<void> | void} updateProfile
+ * @returns {Promise<{wasDefault: boolean}>}
+ */
+export async function renameTemplateAndFollow(root, opts, updateProfile) {
+  const { wasDefault } = await renameTemplate(root, opts);
+  if (!wasDefault) return { wasDefault };
+  try {
+    await updateProfile();
+  } catch (cause) {
+    try {
+      await renameTemplate(root, { ...opts, name: opts.to, to: opts.name });
+    } catch {
+      throw new TemplateRefusal(`Renamed to "${opts.to}", but the profile still names "${opts.name}" and the file could not be put back.`, 409, { cause });
+    }
+    throw new TemplateRefusal("Nothing was renamed: the profile could not be updated.", 409, { cause });
+  }
+  return { wasDefault };
+}
+
+/**
  * Delete one of the user's own templates. The template the profile names as the
  * default is refused: removing it would leave the profile naming a template that
  * falls back to the base one without anyone choosing that.
