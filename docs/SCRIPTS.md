@@ -653,7 +653,11 @@ Names matching a product or requirement keyword in English or Chinese (`prd`,
 40 per repo (`filesCapped`). Names only: no file is opened and no source code is
 read. Names are listed for public repos and allowlisted private ones; any other
 private repo or repo with unknown visibility shows counts only, with names
-hidden (`namesShown: false`). A truncated tree sets
+hidden (`namesShown: false`). This visibility rule applies only to the
+`documents` section; the existing PR metadata section continues to show
+non-allowlisted private repositories by name and count. Hidden document rows
+also omit repository names, branch names and raw GitHub error paths from JSON,
+Markdown and stderr while retaining safe error types and HTTP status codes. A truncated tree sets
 `treeTruncated`. A failed call is a gap in `documents.gaps` (`status` `partial`
 or `failed`) and changes neither the rest of the report nor the exit code. The
 Markdown report adds the same list as its last section. `expand` asks you which

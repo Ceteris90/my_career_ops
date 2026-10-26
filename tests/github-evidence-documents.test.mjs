@@ -228,17 +228,18 @@ const rowOf = (docs, repo) => docs.repos.find((r) => r.repo === repo);
   check(docs.status === 'partial', `a failed tree read makes the status partial (got ${docs.status})`);
   check(same(docs.ownRepos, { total: 45, listed: 8, max: MAX_DOCUMENT_REPOS }), `ownRepos reports how many were listed of how many (got ${JSON.stringify(docs.ownRepos)})`);
   check(docs.scanned === 8, `scanned counts every repo read, empty ones included (got ${docs.scanned})`);
-  check(same(docs.gaps.map((g) => g.repo), [`gone/repo`, `${USER}/broken`]) && /HTTP 404/.test(docs.gaps[1].detail),
-    `gaps name each repo not read and why (got ${JSON.stringify(docs.gaps)})`);
+  check(same(docs.gaps.map((g) => g.repo), [null, `${USER}/broken`]) && /HTTP 404/.test(docs.gaps[1].detail),
+    `gaps hide unknown-visibility repo names and retain public names (got ${JSON.stringify(docs.gaps)})`);
 
   const pub = rowOf(docs, `${USER}/public-app`);
   check(pub?.namesShown && pub.own && pub.files[0].path === 'docs/需求变更对比.docx' && same(pub.files[0].keywords, ['需求']),
     'public own repo: flagged Chinese name listed first with its keyword');
-  const hidden = rowOf(docs, `${USER}/client-portal`);
-  check(hidden && hidden.namesShown === false && hidden.total === 2 && hidden.flagged === 1,
-    'private own repo not allowlisted: counts only');
-  check(!JSON.stringify(docs).includes('SECRETCLIENT') && !renderDocumentsMarkdown(docs).includes('SECRETCLIENT'),
-    'names from a private repo that is not allowlisted appear nowhere in the JSON or Markdown');
+  const hidden = docs.repos.find((r) => r.visibility === 'private' && r.own && r.namesShown === false);
+  check(hidden && hidden.repo === null && hidden.branch === null && hidden.total === 2 && hidden.flagged === 1,
+    'private own repo not allowlisted: repo, branch and file names are hidden, counts remain');
+  check(!JSON.stringify(docs).includes('client-portal') && !JSON.stringify(docs).includes('SECRETCLIENT')
+    && !renderDocumentsMarkdown(docs).includes('client-portal') && !renderDocumentsMarkdown(docs).includes('SECRETCLIENT'),
+    'private repo and document names appear nowhere in the JSON or Markdown');
   check(rowOf(docs, `${USER}/allowed-private`)?.namesShown === true, 'allowlisted own private repo: names listed');
   const client = rowOf(docs, 'ClientCo/App');
   check(client && client.own === false && client.allowlisted && client.branch === 'trunk' && same(client.files[0].keywords, ['契约', '口径']),
@@ -250,11 +251,12 @@ const rowOf = (docs, repo) => docs.repos.find((r) => r.repo === repo);
 
   const md = renderDocumentsMarkdown(docs);
   check(/untrusted external content/i.test(md) && /No file was opened/.test(md), 'the Markdown section says names only, untrusted');
-  check(md.includes(`### ${USER}/client-portal (private, yours): 2 documents, 1 flagged`) && md.includes('Names hidden (private, not allowlisted)'),
-    'the Markdown says which names are hidden and how to list them');
+  check(md.includes('### Hidden repo (private, yours): 2 documents, 1 flagged') && md.includes('Names hidden (private, not allowlisted)'),
+    'the Markdown hides the repo name and explains the document counts');
   check(md.includes('- `docs/需求变更对比.docx` (flagged: 需求)'), 'the Markdown lists a flagged name with its keyword');
-  check(md.includes(`- ${USER}/broken: tree read failed`) && md.includes('8 of your 45 own non-fork repos'),
-    'the Markdown lists the gaps and the repo cap');
+  check(md.includes(`- ${USER}/broken: tree read failed`) && md.includes('8 of your 45 own non-fork repos')
+    && md.includes('- private or unknown-visibility repo / own repo list: metadata read HTTP 404 not found'),
+    'the Markdown lists safe gap labels and the repo cap');
 }
 
 {
@@ -273,7 +275,8 @@ const rowOf = (docs, repo) => docs.repos.find((r) => r.repo === repo);
   let docs;
   let threw = false;
   try { docs = collectDocuments(USER, runner); } catch { threw = true; }
-  check(!threw && docs.gaps.length === 7 && docs.gaps.every((g) => /unexpected gh call/.test(g.detail)) && docs.status === 'partial',
+  check(!threw && docs.gaps.length === 7 && docs.gaps.every((g) => typeof g.detail === 'string' && g.detail.length > 0)
+    && docs.gaps.some((g) => /unexpected gh call/.test(g.detail)) && docs.status === 'partial',
     `a runner that throws is recorded as a gap, never thrown (got ${threw ? 'a throw' : `${docs.gaps.length} gaps, ${docs.status}`})`);
   const emptyRepo = collectDocuments(USER, () => ({ status: 1, stdout: '', stderr: 'gh: Git Repository is empty. (HTTP 409)' }), {});
   check(emptyRepo.gaps.length === 1 && emptyRepo.gaps[0].repo === null, 'HTTP 409 on the list is still a gap');
@@ -308,8 +311,15 @@ const isDocumentCall = (args) => args[0] === 'api'
  * later evidence step) answers 404, the same in every run, so the comparison
  * below holds whatever else the script reads.
  */
-function fullGh({ failDocs = false } = {}) {
-  const docs = docsGh();
+function fullGh({ failDocs = false, leakHiddenErrors = false } = {}) {
+  const fixture = docsFixture();
+  if (leakHiddenErrors) {
+    fixture.own.push(ownRepo('SECRET_PRIVATE_REPO', { isPrivate: true, branch: 'secret-branch' }));
+    fixture.trees[`${USER}/SECRET_PRIVATE_REPO`] = failed(
+      `gh: HTTP 403 Forbidden: https://api.github.com/repos/${USER}/SECRET_PRIVATE_REPO/git/trees/secret-branch?recursive=1`,
+    );
+  }
+  const docs = docsGh(fixture);
   const runner = (args) => {
     if (args[0] === '--version') return ok('gh version 2.60.0');
     if (args[0] === 'api' && args[1] === 'user') return ok(`${USER}\n`);
@@ -317,6 +327,9 @@ function fullGh({ failDocs = false } = {}) {
     const meta = args[0] === 'api' && args.includes('{private: .private, fork: .fork, stars: .stargazers_count}')
       ? REPO_META[args[1].replace(/^repos\//, '').toLowerCase()] : undefined;
     if (meta) return ok(JSON.stringify(meta));
+    if (leakHiddenErrors && args[0] === 'api' && args[1] === 'repos/secretco/private-repo') {
+      return failed('gh: HTTP 404 Not Found: https://api.github.com/repos/secretco/private-repo');
+    }
     if (!isDocumentCall(args)) return failed('gh: Not Found (HTTP 404)');
     if (failDocs) return failed('gh: HTTP 503: Service Unavailable');
     return docs.runner(args);
@@ -368,6 +381,29 @@ function cli(root, runGh) {
       'the skip flag omits document tree queries and marks documents skipped');
     check(md.includes('Document listing skipped') && json.contributions.length > 0,
       'the skip flag preserves PR and commit evidence and records the omission in Markdown');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+{
+  const root = sandbox();
+  try {
+    const profilePath = join(root, 'config', 'profile.yml');
+    writeFileSync(profilePath, readFileSync(profilePath, 'utf8').replace(
+      `    - "clientco/app"`, `    - "clientco/app"\n    - "secretco/private-repo"`,
+    ));
+    const result = cli(root, fullGh({ leakHiddenErrors: true }).runner);
+    const json = readFileSync(join(root, 'output', 'github-evidence-2026-10-23.json'), 'utf8');
+    const md = readFileSync(join(root, 'output', 'github-evidence-2026-10-23.md'), 'utf8');
+    const allOutput = `${json}\n${md}\n${result.err}`;
+    check(result.code === 0 && /HTTP 403 forbidden/.test(json) && /HTTP 404 not found/.test(json),
+      'hidden-repo failures preserve safe HTTP status and error kind');
+    check(!/SECRET_PRIVATE_REPO|secretco\/private-repo|api\.github\.com\/repos\//i.test(allOutput)
+      && !allOutput.includes('secret-branch'),
+      'private repo paths, API URLs and branch names are absent from JSON, Markdown and CLI stderr');
+    check(json.includes(`${USER}/broken`) && /HTTP 404/.test(json),
+      'public repo failures retain their normal diagnostic detail');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

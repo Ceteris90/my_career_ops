@@ -804,6 +804,21 @@ export function documentKeywords(path) {
 // characters are replaced, so a name cannot break its line in the report.
 const cleanPath = (p) => String(p).replace(/[\u0000-\u001f\u007f]/g, '�');
 
+/** Safe diagnostic for a hidden repo: preserve error class/status, never stderr paths. */
+function hiddenRepoFailure(res, operation) {
+  const stderrText = String(res?.stderr || '');
+  const http = stderrText.match(/HTTP\s+(\d{3})/i)?.[1];
+  const kind = /rate limit/i.test(stderrText) ? 'rate limited'
+    : /not found/i.test(stderrText) ? 'not found'
+      : /unauthorized|authentication/i.test(stderrText) ? 'unauthorized'
+        : /forbidden|permission/i.test(stderrText) ? 'forbidden'
+          : /bad gateway/i.test(stderrText) ? 'bad gateway'
+            : /service unavailable/i.test(stderrText) ? 'service unavailable'
+              : /conflict/i.test(stderrText) ? 'conflict'
+                : http ? 'HTTP error' : 'command failed';
+  return `${operation} ${http ? `HTTP ${http} ${kind}` : kind}`;
+}
+
 /**
  * Pure core for one repo: its blob paths in, its `documents.repos` row out.
  * Flagged files come first. File names are listed only for a public repo or
@@ -831,7 +846,7 @@ export function summarizeDocuments({
   docs.sort((a, b) => (isFlagged(b) - isFlagged(a)) || a.path.localeCompare(b.path));
   const namesShown = visibility === 'public' || (visibility === 'private' && allowlisted);
   return {
-    repo, visibility, own, allowlisted, branch,
+    repo: namesShown ? repo : null, visibility, own, allowlisted, branch: namesShown ? branch : null,
     treeTruncated: Boolean(treeTruncated),
     total: docs.length,
     flagged: docs.filter(isFlagged).length,
@@ -907,11 +922,11 @@ export function collectDocuments(user, runGh, {
     const res = run(['api', `repos/${key}`, '--jq', '{name: .full_name, private: .private, fork: .fork, branch: .default_branch}']);
     const m = res.status === 0 ? jsonOrNull(res.stdout) : null;
     if (!m || typeof m !== 'object') {
-      gaps.push({ repo: key, detail: `metadata read ${res.status === 0 ? 'returned output that is not JSON' : `failed: ${failureDetail(res)}`}` });
+      gaps.push({ repo: null, detail: res.status === 0 ? 'metadata read returned output that is not JSON' : hiddenRepoFailure(res, 'metadata read') });
       continue;
     }
     if (m.fork === true) continue; // a fork is never evidence
-    if (m.fork !== false) { gaps.push({ repo: key, detail: 'fork flag could not be read' }); continue; }
+    if (m.fork !== false) { gaps.push({ repo: null, detail: 'fork flag could not be read' }); continue; }
     targets.set(key, {
       repo: typeof m.name === 'string' ? m.name : key,
       private: boolOrNull(m.private),
@@ -929,7 +944,11 @@ export function collectDocuments(user, runGh, {
     if (res.status !== 0 && /HTTP 409/.test(res.stderr)) { scanned += 1; continue; }
     const body = res.status === 0 ? jsonOrNull(res.stdout) : null;
     if (!Array.isArray(body?.tree)) {
-      gaps.push({ repo: t.repo, detail: `tree read ${res.status === 0 ? 'returned output that is not a tree' : `failed: ${failureDetail(res)}`}` });
+      const namesShown = t.private === false || (t.private === true && allowlist.has(key));
+      const detail = res.status === 0
+        ? 'tree read returned output that is not a tree'
+        : namesShown ? `tree read failed: ${failureDetail(res)}` : hiddenRepoFailure(res, 'tree read');
+      gaps.push({ repo: namesShown ? t.repo : null, detail });
       continue;
     }
     scanned += 1;
@@ -950,7 +969,7 @@ export function collectDocuments(user, runGh, {
     status: gaps.length === 0 ? 'ok' : scanned === 0 ? 'failed' : 'partial',
     ownRepos: { total: ownTotal, listed: ownListed, max: maxRepos },
     scanned,
-    repos: repos.sort((a, b) => (b.flagged - a.flagged) || (b.total - a.total) || a.repo.localeCompare(b.repo)),
+    repos: repos.sort((a, b) => (b.flagged - a.flagged) || (b.total - a.total) || String(a.repo ?? '').localeCompare(String(b.repo ?? ''))),
     gaps: gaps.map((g) => ({ repo: g.repo, detail: cleanTitle(g.detail) })),
   };
 }
@@ -981,11 +1000,14 @@ export function renderDocumentsMarkdown(documents) {
   if (!documents.repos.length) md.push('No documents found.', '');
   for (const r of documents.repos) {
     const tags = [r.visibility, r.own ? 'yours' : null, r.allowlisted ? 'allowlisted' : null].filter(Boolean).join(', ');
-    md.push(`### ${r.repo} (${tags}): ${r.total} documents, ${r.flagged} flagged`);
+    md.push(`### ${r.repo ?? 'Hidden repo'} (${tags}): ${r.total} documents, ${r.flagged} flagged`);
     if (r.treeTruncated) md.push('GitHub truncated this tree, so the list may be incomplete.');
     if (!r.namesShown) {
       const why = r.visibility === 'private' ? 'private, not allowlisted' : 'visibility could not be read';
-      md.push(`Names hidden (${why}): add the repo to \`github_evidence.private_allowlist\` in config/profile.yml to list them.`);
+      const remedy = r.visibility === 'private'
+        ? 'Add the repo to `github_evidence.private_allowlist` in config/profile.yml to list names.'
+        : 'Resolve the visibility read first; allowlisting alone does not reveal names.';
+      md.push(`Names hidden (${why}): ${remedy}`);
     }
     for (const f of r.files) md.push(`- ${codeSpan(f.path)}${f.keywords.length ? ` (flagged: ${f.keywords.join(', ')})` : ''}`);
     if (r.filesCapped) md.push(`- … and ${r.total - r.files.length} more`);
@@ -993,7 +1015,7 @@ export function renderDocumentsMarkdown(documents) {
   }
   if (documents.gaps.length) {
     md.push('Not listed (the rest of this report is unaffected):');
-    for (const g of documents.gaps) md.push(`- ${g.repo ?? 'own repo list'}: ${g.detail}`);
+    for (const g of documents.gaps) md.push(`- ${g.repo ?? 'private or unknown-visibility repo / own repo list'}: ${g.detail}`);
     md.push('');
   }
   return md.join('\n');
@@ -1077,7 +1099,7 @@ export function runCli({
     : collectDocuments(user, runGh, { allowlist });
   if (result.documents.status !== 'ok' && result.documents.status !== 'skipped') {
     const [first] = result.documents.gaps;
-    stderr(`github-evidence: document listing ${result.documents.status}: ${result.documents.gaps.length} not listed (first: ${first.repo ?? 'own repo list'}: ${first.detail}).\n`);
+    stderr(`github-evidence: document listing ${result.documents.status}: ${result.documents.gaps.length} not listed (first: ${first.repo ?? 'private or unknown-visibility repo / own repo list'}: ${first.detail}).\n`);
   }
   const jsonPath = join(outDir, `github-evidence-${today}.json`);
   const mdPath = join(outDir, `github-evidence-${today}.md`);
