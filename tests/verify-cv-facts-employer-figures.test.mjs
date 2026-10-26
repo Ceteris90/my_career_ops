@@ -32,6 +32,10 @@ const kept = [
   ['possessive object of a first-person verb', 'I managed your 12 engineers.', '12 engineers'],
   ['possessive inside a first-person object', 'I led your team of 12 engineers.', '12 engineers'],
   ['bare "you" as an object', 'I worked with you for 12 years.', '12 years'],
+  // Deliberately conservative: "and you" cannot be told from an object ("Sam and
+  // you"), and a wrongly checked number is safer than a wrongly skipped one.
+  ['coordinated "and you" stays checked', 'I shipped 4 integrations and you shipped 12 integrations.', '12 integrations'],
+  ['"and you" as an object', 'I thanked Sam and you for 12 years.', '12 years'],
 ];
 for (const [label, text, claim] of kept) {
   const claims = metricClaims(text);

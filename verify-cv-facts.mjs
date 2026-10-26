@@ -1501,7 +1501,9 @@ function isDisclosedRequirement(clean, match, allMatches) {
 // complementizer between the two ("I read that your team ran four sessions",
 // "I admire how your team grew") starts a new clause whose subject is "your
 // team", so that case is still an employer figure. Where the two cannot be told
-// apart ("I saw your team ran four sessions") the count stays checked.
+// apart ("I saw your team ran four sessions", or a coordinated "I shipped 4
+// integrations and you shipped 12") the count stays checked: treating "and you" as
+// a new clause would also exempt "I thanked Sam and you for 12 years".
 const SECOND_PERSON_RE = /\b(?:your|yours|you|you['\u2019](?:re|ve|ll|d))\b/gi;
 const FIRST_PERSON_RE = /\b(?:I|I['\u2019](?:m|ve|ll|d)|me|my|mine|myself|we|we['\u2019](?:re|ve|ll|d)|our|ours)\b/gi;
 const BARE_SECOND_PERSON_RE = /^(?:you|yours?)$/i;
