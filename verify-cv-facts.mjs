@@ -1507,7 +1507,9 @@ function isDisclosedRequirement(clean, match, allMatches) {
 const SECOND_PERSON_RE = /\b(?:your|yours|you|you['\u2019](?:re|ve|ll|d))\b/gi;
 const FIRST_PERSON_RE = /\b(?:I|I['\u2019](?:m|ve|ll|d)|me|my|mine|myself|we|we['\u2019](?:re|ve|ll|d)|our|ours)\b/gi;
 const BARE_SECOND_PERSON_RE = /^(?:you|yours?)$/i;
-const COMPLEMENTIZER_RE = /\b(?:that|how|what|when|where|why|because|since|while|as|if|whether)\b/i;
+// Must END the text between the two words: it has to introduce the pronoun
+// directly ("that your team"), not merely appear earlier ("because of you").
+const COMPLEMENTIZER_RE = /\b(?:that|how|what|when|where|why|because|since|while|as|if|whether)\s*$/i;
 
 /**
  * Whether `match` is a number about the addressed employer (second-person
