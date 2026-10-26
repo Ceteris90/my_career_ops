@@ -3724,8 +3724,9 @@ export async function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH
  * board that is legitimately bigger sets `max_response_mb` on its own
  * portals.yml entry; the setting is the user's, so it wins over a `maxBytes`
  * the provider passes, and every other entry keeps the default. An entry
- * without the key, or with a value that is not a positive number, leaves the
- * ctx as it is.
+ * without the key leaves the ctx as it is. So does a value that is not a YAML
+ * number (a quoted string, a boolean, a list) or that does not come to a whole
+ * positive finite byte count, with a warning naming the entry.
  *
  * @param {object} ctx - The per-entry ctx; its fetchers are replaced in place.
  * @param {{ name?: string, max_response_mb?: unknown }} entry
@@ -3734,12 +3735,11 @@ export async function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH
 export function applyEntryResponseCap(ctx, entry) {
   const raw = entry?.max_response_mb;
   if (raw === undefined || raw === null) return ctx;
-  const mb = Number(raw);
-  if (!Number.isFinite(mb) || mb <= 0) {
+  const maxBytes = typeof raw === 'number' ? Math.floor(raw * 1024 * 1024) : NaN;
+  if (!Number.isFinite(maxBytes) || maxBytes < 1) {
     console.error(`⚠️  ${entry?.name}: max_response_mb must be a positive number, got ${JSON.stringify(raw)} — ignored`);
     return ctx;
   }
-  const maxBytes = Math.floor(mb * 1024 * 1024);
   for (const method of ['fetchJson', 'fetchText', 'fetchResponse']) {
     const original = ctx[method];
     if (typeof original !== 'function') continue;

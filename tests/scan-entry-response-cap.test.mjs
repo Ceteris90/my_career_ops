@@ -56,9 +56,12 @@ try {
     const realError = console.error;
     const warnings = [];
     console.error = (msg) => { warnings.push(String(msg)); };
+    // Not a YAML number (Number() would turn true into 1 MiB and [20] into
+    // 20 MiB), or a number that floors to 0 bytes or overflows to Infinity.
+    const bads = [0, -5, 'big', '20', true, [20], Number.NaN, 1e-9, 1e303];
     let unchanged = 0;
     try {
-      for (const bad of [0, -5, 'big', Number.NaN]) {
+      for (const bad of bads) {
         const { ctx } = recordingCtx();
         const before = ctx.fetchJson;
         applyEntryResponseCap(ctx, { name: 'BadCo', max_response_mb: bad });
@@ -67,8 +70,8 @@ try {
     } finally {
       console.error = realError;
     }
-    if (unchanged === 4 && warnings.length === 4 && warnings.every((w) => w.includes('BadCo') && w.includes('max_response_mb'))) {
-      pass('a max_response_mb that is not a positive number is ignored with a warning naming the entry');
+    if (unchanged === bads.length && warnings.length === bads.length && warnings.every((w) => w.includes('BadCo') && w.includes('max_response_mb'))) {
+      pass('a max_response_mb that is not a positive YAML number of at least one byte is ignored with a warning naming the entry');
     } else {
       fail(`bad values: unchanged=${unchanged}, warnings=${JSON.stringify(warnings)}`);
     }
