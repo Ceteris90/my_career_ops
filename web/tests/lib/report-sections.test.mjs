@@ -245,6 +245,13 @@ test("applyLineLabel: a flagged posting above the line is not Recommended", () =
   assert.equal(applyLineLabel("3.1/5", "Proceed with Caution"), "Below the apply line");
 });
 
+test("applyLineLabel: Turkish legitimacy tiers flag the posting too", () => {
+  assert.equal(applyLineLabel("4.9/5", "Dikkatli İlerle"), "Check the posting first");
+  assert.equal(applyLineLabel("4.9/5", "Şüpheli"), "Check the posting first");
+  assert.equal(applyLineLabel("4.9/5", "Güvenilir"), "Recommended");
+  assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "Şüpheli" }), true);
+});
+
 test("applyLineLabel: Chinese legitimacy tiers flag the posting too", () => {
   // modes/zh/oferta.md (Simplified) and modes/zh-TW/oferta.md (Traditional).
   assert.equal(applyLineLabel("4.9/5", "谨慎推进"), "Check the posting first");
@@ -258,10 +265,13 @@ test("applyLineLabel: Chinese legitimacy tiers flag the posting too", () => {
   assert.equal(applyCtaQuiet({ score: 4.5, legitimacy: "高信心" }), false);
 });
 
-test("legitimacyTone: English and Chinese tiers map to good / warn / bad", () => {
+test("legitimacyTone: English, Turkish and Chinese tiers map to good / warn / bad", () => {
   assert.equal(legitimacyTone("High Confidence"), "good");
   assert.equal(legitimacyTone("Proceed with Caution"), "warn");
   assert.equal(legitimacyTone("Suspicious"), "bad");
+  assert.equal(legitimacyTone("Güvenilir"), "good");
+  assert.equal(legitimacyTone("Dikkatli İlerle"), "warn");
+  assert.equal(legitimacyTone("Şüpheli"), "bad");
   assert.equal(legitimacyTone("高置信度"), "good");
   assert.equal(legitimacyTone("谨慎推进"), "warn");
   assert.equal(legitimacyTone("疑似虚假"), "bad");
