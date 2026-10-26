@@ -9,8 +9,9 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { renderLint, listTemplates } from '../cv-templates.mjs';
+import { renderLint } from '../cv-templates.mjs';
 
+const ROOT = join(import.meta.dirname, '..');
 const dir = mkdtempSync(join(tmpdir(), 'render-lint-'));
 let n = 0;
 function lint(html) {
@@ -38,7 +39,7 @@ const CASES = [
   },
   {
     id: 'script-url',
-    hit: ['<a href="javascript:alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>'],
+    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>'],
     miss: ['<img src="data:image/png;base64,AAAA">', '<style>@font-face{src:url("data:font/woff2;base64,AAAA")}</style>', '<a href="{{LINKEDIN_URL}}">x</a>'],
   },
   {
@@ -56,6 +57,9 @@ const CASES = [
       '<style>body{background:url(http://example.com/a.png)}</style>',
       '<div style="background:url(\'https://example.com/a.png\')"></div>',
       '<img alt="src=photo.png" src="https://example.com/a.png">',
+      '<img src="https&#58;//example.com/a.png">',
+      '<img src="&#104;ttps://example.com/a.png">',
+      '<div style="background:url(&quot;https://example.com/a.png&quot;)"></div>',
       '<STYLE>body{background:URL(https://example.com/a.png)}</STYLE>',
       '<img srcset="photo.png 1x, https://example.com/photo.png 2x">',
     ],
@@ -107,19 +111,30 @@ test('an unreadable path is reported, never thrown', () => {
 });
 
 test('lint --render runs the render check and exits 0 on findings', () => {
-  const root = join(import.meta.dirname, '..');
-  const out = execFileSync('node', ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], { cwd: root, encoding: 'utf-8' });
+  const out = execFileSync('node', ['cv-templates.mjs', 'lint', 'cv', 'standard', '--render'], { cwd: ROOT, encoding: 'utf-8' });
   const parsed = JSON.parse(out);
   assert.ok(Array.isArray(parsed.findings));
   assert.equal(parsed.ok, true);
 });
 
-test('the shipped templates are clean', () => {
-  const shipped = [...listTemplates('cv'), ...listTemplates('cover')];
+// Tracked files only: listTemplates() also walks templates/<pack>/ and any
+// template the developer added, so a local install could fail this test.
+function trackedTemplates() {
+  try {
+    return execFileSync('git', ['ls-files', '-z', 'templates'], { cwd: ROOT, encoding: 'utf-8' })
+      .split('\0').filter((f) => f.endsWith('.html')).map((f) => join(ROOT, f));
+  } catch {
+    return null;
+  }
+}
+
+test('the shipped templates are clean', (t) => {
+  const shipped = trackedTemplates();
+  if (!shipped) return t.skip('git is unavailable, so the tracked template set cannot be read');
   assert.ok(shipped.length >= 8, `expected the shipped template set, found ${shipped.length}`);
-  for (const t of shipped) {
-    const r = renderLint(t.path);
-    assert.deepEqual(r.findings, [], `${t.path}: ${JSON.stringify(r.findings)}`);
+  for (const path of shipped) {
+    const r = renderLint(path);
+    assert.deepEqual(r.findings, [], `${path}: ${JSON.stringify(r.findings)}`);
     assert.equal(r.error, null);
   }
 });
