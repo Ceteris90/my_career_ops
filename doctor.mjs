@@ -23,46 +23,6 @@ import { classifyChromiumLaunchError } from './lib/chromium-launch-error.mjs';
 import { findExperienceSections, parseCompanyHeading, EXPERIENCE_HEADING_NAMES } from './lib/cv-markdown.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// A static import of a missing npm package fails before any line of this file
-// runs, so the dependency check could never report it. Every import that is not
-// a Node builtin goes through load(), which stops the run only when a package
-// doctor itself needs is missing. Any other missing package still reaches the
-// full report.
-async function load(specifier) {
-  try {
-    return await import(specifier);
-  } catch (err) {
-    const name = err.code === 'ERR_MODULE_NOT_FOUND' && /Cannot find package '([^']+)'/.exec(err.message)?.[1];
-    if (!name) throw err;
-    let missing;
-    try {
-      missing = findMissingDependencies(__dirname);
-    } catch {
-      missing = [];
-    }
-    if (!missing.includes(name)) missing.unshift(name);
-    console.error(`career-ops doctor: Dependencies missing: ${missing.join(', ')}\n  → Run: npm install`);
-    process.exit(1);
-  }
-}
-
-const { hasYamlContent, loadYaml } = await load('./lib/yaml-document.mjs');
-const { default: dotenv } = await load('dotenv');
-const { AGENT_CLIS } = await load('./lib/agent-cli.mjs');
-const { findTitleFilterConflicts } = await load('./lib/title-filter-conflicts.mjs');
-const { sectionState, scanHeadings, SECTIONS } = await load('./lib/personalization.mjs');
-const { discoverPlugins, pluginRoots, pluginStatus } = await load('./plugins/_engine.mjs');
-const { getCareerOpsRoot, getProfilePath, hasProfileOverride } = await load('./path-resolver.mjs');
-const { validateProfile, EXAMPLE_PATH } = await load('./validate-profile.mjs');
-const { resolveExtractorMode } = await load('./browser-extract.mjs');
-const { parseConfigByExtension } = await load('./jsonc-parse.mjs');
-const { validateFlags } = await load('./lib/cli-flags.mjs');
-const { geminiNodeFloor } = await load('./lib/gemini-node-floor.mjs');
-const { SKILL_ENTRYPOINTS } = await load('./scaffolder/bin/skill-entrypoints.mjs');
-const { nodeFloor } = await load('./lib/node-floor.mjs');
-const { findExperienceSections, parseCompanyHeading, EXPERIENCE_HEADING_NAMES } = await load('./lib/cv-markdown.mjs');
-
 const argv = process.argv.slice(2);
 
 // Modules that import an npm package (directly or through their own imports)
@@ -91,7 +51,9 @@ try {
   ]);
 } catch (err) {
   let missing = [];
-  try { missing = findMissingDependencies(__dirname); } catch { /* no readable package.json: rethrow below */ }
+  try { missing = findMissingDependencies(__dirname); } catch { /* no readable package.json: the error still names the package */ }
+  const name = /Cannot find package '((?:@[^/'\\:]+\/)?[^/'\\:]+)'/.exec(err?.message)?.[1];
+  if (name && !missing.includes(name)) missing.unshift(name);
   if (err?.code !== 'ERR_MODULE_NOT_FOUND' || missing.length === 0) throw err;
   console.error(`career-ops dependencies are not installed in ${__dirname} (missing: ${missing.join(', ')}), so doctor cannot run its checks.\nFix: run \`npm install\` in ${__dirname}, then run doctor again.`);
   process.exit(1);

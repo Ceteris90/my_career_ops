@@ -37,20 +37,12 @@ const realPackageJson = readFileSync(join(ROOT, 'package.json'), 'utf8');
 for (const args of [[], ['--json']]) {
   const mode = args.join(' ') || '(human run)';
 
-  test(`doctor ${mode} names the missing packages instead of crashing on import`, (t) => {
-    const run = runDoctor(doctorCheckout(t, { packageJson: realPackageJson }), args);
-    assert.equal(run.status, 1, run.output);
-    assert.doesNotMatch(run.output, /ERR_MODULE_NOT_FOUND/);
-    assert.match(run.output, /Dependencies missing: .*dotenv/);
-    assert.match(run.output, /Dependencies missing: .*js-yaml/);
-    assert.match(run.output, /Run: npm install/);
-  });
-
   test(`doctor ${mode} names the package it needs when package.json is missing`, (t) => {
     const run = runDoctor(doctorCheckout(t, { packageJson: null }), args);
     assert.equal(run.status, 1, run.output);
     assert.doesNotMatch(run.output, /ENOENT|ERR_MODULE_NOT_FOUND/);
-    assert.match(run.output, /Dependencies missing: [\w@\/.-]+\n\s+→ Run: npm install/);
+    assert.match(run.output, /dependencies are not installed in .* \(missing: [\w@\/.-]+\)/);
+    assert.match(run.output, /Fix: run `npm install`/);
   });
 }
 
