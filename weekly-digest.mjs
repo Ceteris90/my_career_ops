@@ -354,8 +354,8 @@ function printSummary(result) {
       ? '(interview-prep/sessions/ not found)'
       : '(no session files fall inside this range)';
     console.log(`No interviews recorded in this range ${reason}.`);
-    console.log('This reads interview notes in interview-prep/sessions, not job-scan results. New roles land in data/pipeline.md.');
-    console.log('Example: node scan.mjs --dry-run');
+    console.log('This reads interview notes in interview-prep/sessions, not job-scan results. A scan saves new roles to data/pipeline.md, or to CAREER_OPS_PIPELINE when set.');
+    console.log('Example: node scan.mjs');
     console.log('');
     return;
   }
@@ -680,7 +680,8 @@ const USAGE = `Usage:
   node weekly-digest.mjs --help                 # show this message
 
 Reads interview notes in interview-prep/sessions. It does not list jobs from a scan.
-New roles are written to data/pipeline.md by: node scan.mjs --dry-run
+node scan.mjs saves new roles to data/pipeline.md (or CAREER_OPS_PIPELINE).
+node scan.mjs --dry-run previews them and saves nothing.
 
 Both bounds are optional; supplying one without the other is rejected rather
 than silently widened.`;

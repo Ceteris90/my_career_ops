@@ -30,7 +30,9 @@ test('empty summary points at interview notes and the scan command', () => {
   assert.match(out, /No interviews recorded/);
   assert.match(out, /interview-prep\/sessions/);
   assert.match(out, /data\/pipeline\.md/);
-  assert.match(out, /node scan\.mjs --dry-run/);
+  assert.match(out, /CAREER_OPS_PIPELINE/);
+  // --dry-run saves nothing, so it is not the command to suggest here.
+  assert.match(out, /Example: node scan\.mjs$/m);
 });
 
 test('--help says this is interview notes, not a job scan', () => {
@@ -40,6 +42,7 @@ test('--help says this is interview notes, not a job scan', () => {
   assert.match(out, /interview-prep\/sessions/);
   assert.match(out, /does not list jobs from a scan/);
   assert.match(out, /data\/pipeline\.md/);
+  assert.match(out, /--dry-run previews them and saves nothing/);
 });
 
 test('a bad date exits 1 and prints a working example', () => {
