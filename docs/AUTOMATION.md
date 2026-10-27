@@ -170,8 +170,8 @@ Run the installer again after you change them.
 
 After any of these, new postings land in `data/pipeline.md` under `## Pending` on
 each run. The same check reads `data/linkedin-alerts` when that folder exists,
-and runs `node plugins.mjs run gmail` when the gmail plugin is enabled and
-`auto` is not false. See [docs/LINKEDIN_JOBS.md](LINKEDIN_JOBS.md). Next you
+and runs `node plugins.mjs run gmail` when the gmail plugin is enabled with
+`auto: true`. See [docs/LINKEDIN_ALERTS.md](LINKEDIN_ALERTS.md). Next you
 decide which are worth your attention — cheaply.
 
 ---

@@ -28,8 +28,8 @@ plugins:
 
   # ── gmail (ingest) ── pull job leads from a Gmail label into your pipeline. (feature #810, ported from PR #1203)
   # Needs GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET in .env, then `node plugins.mjs auth gmail`.
-  # Run via `node plugins.mjs run gmail`. The 15-minute scan schedule runs it too.
-  # auto: false keeps runs manual. See docs/LINKEDIN_JOBS.md for a path with no Google account.
+  # Run via `node plugins.mjs run gmail`. Add `auto: true` to have the 15-minute
+  # scan schedule run it too. See docs/LINKEDIN_ALERTS.md for a path with no Google account.
   gmail:
     enabled: false
     # label: "Job Leads"     # the Gmail label to scan

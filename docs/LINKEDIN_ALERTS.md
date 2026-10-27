@@ -17,20 +17,20 @@ This path has no password and no API key.
 
 ## Gmail, if you already have a Desktop client
 
-Reading Gmail needs `gmail.readonly`. Google marks that scope restricted. An open-source project cannot ship one shared client for every user. You create a Desktop OAuth client once, in your own Google Cloud project.
+Reading Gmail needs the `gmail.readonly` scope, which Google classes as restricted. A single client shared by every CareerOps user would need Google's restricted-scope verification, so CareerOps does not ship one. You create a Desktop OAuth client once, in your own Google Cloud project, and only your account signs in to it.
 
 1. Open https://console.cloud.google.com/apis/credentials and create an OAuth client ID of type Desktop app.
 2. Put `GMAIL_CLIENT_ID` and `GMAIL_CLIENT_SECRET` in `.env`.
 3. Run `node plugins.mjs auth gmail`. A browser opens on your machine, Google redirects to `127.0.0.1`, and the command writes `GMAIL_REFRESH_TOKEN` into `.env`. The token is not printed.
 4. Run `node plugins.mjs enable gmail --confirm`.
 
-After that, the same 15-minute worker runs `node plugins.mjs run gmail`. Set `auto: false` under `plugins.gmail` in `config/plugins.yml` if you want to run it only by hand. Put a Gmail filter on a label such as `Job Leads` if you do not want every message in that label imported. LinkedIn tracking links in those messages are stored as `linkedin.com/jobs/view/{id}`.
+To have the same 15-minute worker run `node plugins.mjs run gmail`, add `auto: true` under `plugins.gmail` in `config/plugins.yml`. Without it, the plugin runs only when you run it by hand, as before. Put a Gmail filter on a label such as `Job Leads` if you do not want every message in that label imported. LinkedIn tracking links in those messages are stored as `linkedin.com/jobs/view/{id}`.
 
 ### The token dies after 7 days
 
 `node doctor.mjs` exchanges the refresh token. When Google answers `invalid_grant`, the usual cause is the OAuth consent screen still set to Testing. Google expires those refresh tokens after 7 days.
 
-Publish the app to Production on the OAuth consent screen, then run `node plugins.mjs auth gmail` again. Publishing does not remove Google's unverified-app warning. It stops the 7-day expiry. A password change on the Google account, or you revoking CareerOps, also produces `invalid_grant`. The same command signs you in again.
+Publish the app to Production on the OAuth consent screen, then run `node plugins.mjs auth gmail` again. For a client that only you use, publishing does not require Google's verification review. Google still shows an unverified-app warning at sign-in, which you can continue past for your own app. Publishing stops the 7-day expiry. A password change on the Google account, or you revoking CareerOps, also produces `invalid_grant`. The same command signs you in again.
 
 ## What this does not do
 

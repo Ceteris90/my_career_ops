@@ -1171,13 +1171,6 @@ async function checkGmailRefresh(root) {
   }
 }
 
-function checkLinkedInAlerts() {
-  return {
-    pass: true,
-    label: 'LinkedIn alerts: save the email in data/linkedin-alerts, or run node plugins.mjs auth gmail',
-  };
-}
-
 // profile.yml steers scoring targets, output language, spend tier, CV format and
 // location policy — and the existence check above is all that ever looked at it.
 // Every reader does `profile?.language?.output` and takes the fallback when the
@@ -1305,9 +1298,8 @@ async function main() {
     ...(userLayerWritable
       ? [checkAutoDir('data'), checkPipelineFile(), checkAutoDir('output'), checkAutoDir('reports')]
       : []),
-    checkPlugins(projectRoot),
     await checkGmailRefresh(projectRoot),
-    checkLinkedInAlerts(projectRoot),
+    checkPlugins(projectRoot),
     // checkPrereq already explains the .env case when the profile is missing.
     prereqPresent(projectRoot, { path: 'config/profile.yml' }) ? checkEnvFileProfile(projectRoot) : null,
   ].filter(Boolean);

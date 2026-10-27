@@ -11,7 +11,7 @@ emails, and returns them as leads. LinkedIn tracking links in those emails
 are stored as `https://www.linkedin.com/jobs/view/{id}`.
 
 You can skip Gmail entirely. Save the alert email in `data/linkedin-alerts`
-and run `node linkedin-watch.mjs`. See `docs/LINKEDIN_JOBS.md`.
+and run `node linkedin-watch.mjs`. See `docs/LINKEDIN_ALERTS.md`.
 
 ## Command
 
@@ -35,8 +35,8 @@ plugins:
   gmail: { enabled: true, label: "Job Leads", days_back: 7 }
 ```
 
-The 15-minute scan schedule runs this plugin while it is enabled. Set
-`auto: false` on the gmail block to keep runs manual.
+Add `auto: true` to the gmail block to have the 15-minute scan schedule run
+this plugin. Without it, runs stay manual.
 
 ## Data it produces
 
