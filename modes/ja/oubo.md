@@ -132,6 +132,7 @@ Legal、demographic、work-authorization、visa/sponsorship、salary、disabilit
 ## Responses for [Company] -- [Role]
 
 Based on: Report #NNN | Score: X.X/5 | Archetype: [type]
+[**Draft without saving** の場合は上の行を次に置き換える："No report: drafted for this posting, not saved"]
 
 ---
 

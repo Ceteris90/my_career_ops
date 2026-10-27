@@ -94,6 +94,7 @@ For hvert spørgsmål, byg svaret efter dette skema:
 ## Svar til [Virksomhed] -- [Rolle]
 
 Grundlag: Report #NNN | Score: X.X/5 | Arketype: [type]
+[Ved **Draft without saving** erstattes linjen ovenfor med: "Ingen report: udkast til dette opslag, ikke gemt"]
 
 ---
 

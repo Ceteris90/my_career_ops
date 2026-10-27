@@ -79,6 +79,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## Ответы для [Компания] — [Роль]
 
 На основе: Отчёт #NNN | Балл: X.X/5 | Архетип: [тип]
+[При **Draft without saving** заменить строку выше на: "Отчёта нет: черновик для этой вакансии, не сохранён"]
 
 ---
 

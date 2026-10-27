@@ -94,6 +94,7 @@ Untuk tiap pertanyaan, susun jawaban mengikuti skema ini:
 ## Jawaban untuk [Perusahaan] -- [Role]
 
 Dasar: Report #NNN | Score: X.X/5 | Arketipe: [tipe]
+[Untuk **Draft without saving**, ganti baris di atas dengan: "Tanpa report: draft untuk lowongan ini, tidak disimpan"]
 
 ---
 

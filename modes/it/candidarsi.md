@@ -89,6 +89,7 @@ Per ogni domanda, costruire la risposta seguendo questo schema:
 ## Risposte per [Azienda] -- [Ruolo]
 
 Base: Report #NNN | Punteggio: X.X/5 | Archetipo: [tipo]
+[Con **Draft without saving**, sostituire la riga sopra con: "Nessun report: bozza per questo annuncio, non salvata"]
 
 ---
 

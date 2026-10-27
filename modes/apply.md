@@ -324,6 +324,7 @@ Before marking any free-text answer ready for copy-paste, count the **final** re
 ## Responses for [Company] — [Role]
 
 Based on: Report #NNN | Score: X.X/5 | Archetype: [type]
+[On **Draft without saving**, replace the line above with: "No report: drafted for this posting, not saved"]
 
 ---
 

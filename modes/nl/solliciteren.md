@@ -95,6 +95,7 @@ Construeer voor elke vraag het antwoord volgens dit diagram:
 ## Antwoorden voor [Bedrijf] -- [Functie]
 
 Basis: Rapport #NNN | Score: X,X/5 | Archetype: [type]
+[Bij **Draft without saving** vervang je de regel hierboven door: "Geen rapport: concept voor deze vacature, niet opgeslagen"]
 
 ---
 

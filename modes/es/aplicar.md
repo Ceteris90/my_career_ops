@@ -94,6 +94,7 @@ Para cada pregunta, construir la respuesta según este esquema:
 ## Respuestas para [Empresa] -- [Rol]
 
 Base: Report #NNN | Score: X.X/5 | Arquetipo: [tipo]
+[Con **Draft without saving**, sustituir la línea anterior por: "Sin report: borrador para esta oferta, no guardado"]
 
 ---
 

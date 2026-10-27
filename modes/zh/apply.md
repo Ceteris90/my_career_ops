@@ -96,6 +96,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## [公司名称] — [职位名称] 表单拟答草稿
 
 关联报告: #NNN | 综合评分: X.X/5 | 检测画像: [类型]
+[选择 **Draft without saving** 时，把上面这一行换成：“无关联报告：为当前职位起草，未保存”]
 
 ---
 

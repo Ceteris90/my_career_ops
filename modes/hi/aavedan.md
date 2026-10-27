@@ -97,6 +97,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## Responses for [Company] -- [Role]
 
 Base: Report #NNN | Score: X.X/5 | Archetype: [type]
+[**Draft without saving** में ऊपर की line की जगह लिखें: "कोई report नहीं: इस posting के लिए draft, save नहीं हुआ"]
 
 ---
 

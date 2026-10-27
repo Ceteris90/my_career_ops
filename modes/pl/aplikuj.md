@@ -94,6 +94,7 @@ Dla każdego pytania zbuduj odpowiedź według tego schematu:
 ## Odpowiedzi dla [Firma] -- [Rola]
 
 Baza: Report #NNN | Score: X.X/5 | Archetyp: [typ]
+[Przy **Draft without saving** zastąp wiersz powyżej tekstem: "Brak reportu: szkic dla tej oferty, niezapisany"]
 
 ---
 

@@ -388,3 +388,15 @@ ok('modes/nl/solliciteren.md rechecks the posting before each post-apply write',
   const postApply = sectionAt(lines, lines.findIndex(l => l.includes('set-status.mjs') && l.includes('Applied')));
   assert.ok(postApply.includes('en opnieuw vlak voor elke schrijfstap hieronder (status en antwoorden)'), 'the post-apply step checks only once before both writes');
 });
+
+// The output template opens with "Based on: Report #NNN | Score | Archetype".
+// An unsaved draft has no report, so each template says what replaces it. The
+// report-number placeholder is the part no translation changes.
+for (const file of ['modes/apply.md', 'modes/sg/apply.md', ...localized]) {
+  ok(`${file}: the output header drops the report on an unsaved draft`, () => {
+    const lines = read(file).split('\n');
+    const at = lines.findIndex(l => /#(NNN|\{###\})/.test(l));
+    assert.ok(at !== -1, 'no report-number line in the output template');
+    assert.ok(lines[at + 1]?.includes('**Draft without saving**'), `the line after "${lines[at].trim()}" does not cover the unsaved draft`);
+  });
+}

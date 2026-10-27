@@ -57,6 +57,7 @@ the trailing Notes — and add the Singapore header line:
 ## Responses for [Company] — [Role]
 
 Based on: Report #NNN | Score: X.X/5 | Archetype: [type] | Market: Singapore | EP: required / not required / refused | SG status: [from profile]
+[On **Draft without saving**, drop the report number, score and archetype from the line above and open it with "No report: drafted for this posting, not saved"; keep the Singapore fields]
 
 ---
 

@@ -94,6 +94,7 @@ Pour chaque question, construire la reponse selon ce schema :
 ## Reponses pour [Entreprise] -- [Role]
 
 Base : Report #NNN | Score : X.X/5 | Archetype : [type]
+[Avec **Draft without saving**, remplacer la ligne ci-dessus par : "Aucun report : brouillon pour cette offre, non enregistre"]
 
 ---
 

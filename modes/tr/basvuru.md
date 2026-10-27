@@ -90,6 +90,7 @@ Her soru için yanıtı şu şemaya göre oluştur:
 ## [Şirket] — [Rol] için Yanıtlar
 
 Dayanak: Rapor #NNN | Puan: X.X/5 | Arketip: [tür]
+[**Draft without saving** seçildiğinde yukarıdaki satırı şununla değiştir: "Rapor yok: bu ilan için taslak, kaydedilmedi"]
 
 ---
 

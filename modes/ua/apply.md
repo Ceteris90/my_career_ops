@@ -85,6 +85,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## Відповіді для [Компанія] — [Роль]
 
 На основі: Звіт #NNN | Бал: X.X/5 | Архетип: [тип]
+[При **Draft without saving** замінити рядок вище на: "Звіту немає: чернетка для цієї вакансії, не збережено"]
 
 ---
 

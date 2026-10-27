@@ -96,6 +96,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## [公司名稱] — [職缺名稱] 表單擬答草稿
 
 關聯報告: #NNN | 綜合評分: X.X/5 | 偵測到的個人檔案類型: [類型]
+[選擇 **Draft without saving** 時，把上面這一行換成：「無關聯報告：為目前職缺草擬，未儲存」]
 
 ---
 

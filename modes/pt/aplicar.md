@@ -94,6 +94,7 @@ Para cada pergunta, gerar a resposta seguindo:
 ## Respostas para [Empresa] -- [Vaga]
 
 Base: Report #NNN | Score: X.X/5 | Arquétipo: [tipo]
+[Com **Draft without saving**, trocar a linha acima por: "Sem report: rascunho para esta vaga, não salvo"]
 
 ---
 

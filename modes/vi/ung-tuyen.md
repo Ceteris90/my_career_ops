@@ -197,6 +197,7 @@ Trước khi đánh dấu một câu trả lời tự do là sẵn sàng sao ch�
 ## Responses for [Công ty] — [Vai trò]
 
 Based on: Report #NNN | Score: X.X/5 | Archetype: [loại]
+[Ở nhánh **Draft without saving**, thay dòng trên bằng: "Không có báo cáo: bản nháp cho tin này, không lưu"]
 
 ---
 

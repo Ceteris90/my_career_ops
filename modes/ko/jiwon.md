@@ -95,6 +95,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ## [회사] -- [역할] 지원서 답변
 
 Base: Report #NNN | Score: X.X/5 | Archetype: [type]
+[**Draft without saving**이면 위 줄을 다음으로 바꿉니다: "report 없음: 이 공고용 초안, 저장하지 않음"]
 
 ---
 

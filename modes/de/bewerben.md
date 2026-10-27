@@ -94,6 +94,7 @@ Für jede Frage die Antwort nach folgendem Schema bauen:
 ## Antworten für [Firma] — [Rolle]
 
 Basis: Report #NNN | Score: X.X/5 | Archetyp: [Typ]
+[Bei **Draft without saving** die Zeile darüber ersetzen durch: "Kein Report: Entwurf für diese Stelle, nicht gespeichert"]
 
 ---
 
