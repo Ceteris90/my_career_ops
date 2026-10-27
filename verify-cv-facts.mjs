@@ -1091,7 +1091,7 @@ export function factClaims(text, sourceNormalized = null) {
 // or a certification rendered and passed the gate, which is the fabrication
 // AGENTS.md treats as most serious.
 //
-// Employer, education and certification fields BLOCK when no source contains
+// Employer, education, certification and award fields BLOCK when no source contains
 // them. The job title only WARNS: cv-title-check.mjs is deliberately warn-only
 // about titles, because reframing one is sometimes the candidate's call, and a
 // second check that blocked on the same field would overrule that choice.
@@ -1105,6 +1105,8 @@ const STRUCTURED_HTML_FIELDS = [
   ['edu-title', 'education', true],
   ['edu-org', 'education', true],
   ['cert-title', 'certification', true],
+  // Standards/authorship credits are rendered in awards too (#1411).
+  ['award-title', 'award', true],
   ['job-role', 'title', false],
 ];
 // One level of nested braces, enough for `\textbf{...}` inside an argument.
@@ -1183,7 +1185,7 @@ function extractStructuredFieldInners(raw, cls) {
 }
 
 /**
- * Employer, education, certification and title claims a CV builder emitted as
+ * Employer, education, certification, award and title claims a CV builder emitted as
  * structured fields.
  *
  * @param {string} text - generated HTML or LaTeX
