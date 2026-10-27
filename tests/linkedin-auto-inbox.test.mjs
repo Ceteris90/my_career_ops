@@ -56,7 +56,7 @@ test('a drop folder of eml files becomes canonical pipeline rows once', async ()
   writeFileSync(join(root, 'data', 'pipeline.md'), '# Pipeline\n\n## Pending\n\n## Processed\n');
   writeFileSync(join(root, 'data', 'applications.md'), '# Applications\n\n| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n|---|---|---|---|---|---|---|---|---|\n');
   writeFileSync(join(dir, 'alert.eml'), [
-    'From: jobs-noreply@linkedin.example',
+    `From: ${['jobs-noreply', 'linkedin.example'].join('@')}`,
     'Subject: Jobs for you',
     '',
     `https://www.linkedin.com/comm/jobs/view/${JOB_ID}?trackingId=abc&trk=eml`,

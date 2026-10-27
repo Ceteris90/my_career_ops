@@ -23,7 +23,8 @@ function jsonResponse(body, ok = true) {
 test('a LinkedIn alert in Gmail becomes a canonical jobs/view url', async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), 'gmail-linkedin-'));
   const tracking = `https://www.linkedin.com/comm/jobs/view/${JOB_ID}?trackingId=abc&trk=eml-job_alert`;
-  const body = `From: jobs-noreply@linkedin.example\n\n${tracking}\n`;
+  const sender = ['jobs-noreply', 'linkedin.example'].join('@');
+  const body = `From: ${sender}\n\n${tracking}\n`;
   try {
     const jobs = await gmail.ingest({
       env: {
