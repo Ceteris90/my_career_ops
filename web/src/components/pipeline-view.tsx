@@ -142,10 +142,17 @@ export function PipelineView({
 
   const filtering = query !== "" || minFilter != null;
   const tabLabel = tab === "ALL" ? null : tab.charAt(0) + tab.slice(1).toLowerCase();
+  // The empty state needs the All-tab match count. Memoize it with the same
+  // inputs as the table filter so a keystroke, while the deferred query is
+  // unchanged, does not scan the tracker again.
+  const matchesInAll = useMemo(
+    () => visibleApplications.filter(matchesFilters).length,
+    [visibleApplications, matchesFilters],
+  );
   const emptyState =
     filtered.length > 0
       ? null
-      : trackerEmptyState({ tabLabel, query, minScore: minFilter, matchesInAll: visibleApplications.filter(matchesFilters).length });
+      : trackerEmptyState({ tabLabel, query, minScore: minFilter, matchesInAll });
   const searchInput = useRef<HTMLInputElement>(null);
 
   function clearSearch() {
