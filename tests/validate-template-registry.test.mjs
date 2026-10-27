@@ -104,9 +104,10 @@ test('the filename must equal <id>.json', () => {
 test('duplicate names and ids are reported', () => {
   const p = validateRegistry(root({
     'reactive.json': good(),
-    'other.json': good({ id: 'other' }),
+    'other.json': good({ id: 'reactive' }),
   }));
   assert.ok(p.some((x) => /duplicate name/.test(x)), JSON.stringify(p));
+  assert.ok(p.some((x) => /duplicate id: reactive/.test(x)), JSON.stringify(p));
 });
 
 test('a file that is not JSON is reported, not skipped', () => {
