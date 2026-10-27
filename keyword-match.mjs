@@ -17,6 +17,7 @@
  *                                                         verify the sent document)
  *      node keyword-match.mjs <report-file> --json        (structured JSON)
  *      node keyword-match.mjs --self-test                 (built-in assertions)
+ *      node keyword-match.mjs --help                      (this list, exit 0)
  */
 
 import { readFileSync, existsSync, statSync  } from 'fs';
@@ -514,9 +515,25 @@ function runSelfTest() {
   process.exit(0);
 }
 
+const USAGE = `Usage:
+  node keyword-match.mjs <report-file>
+  node keyword-match.mjs <report-file> --json
+  node keyword-match.mjs <report-file> --cv <path>
+  node keyword-match.mjs --self-test
+  node keyword-match.mjs --help
+
+<report-file> is a reports/*.md evaluation. --cv points at a CV file.
+Without --cv, the command reads cv.md from the data root.
+Example: node keyword-match.mjs reports/001-role.md`;
+
 // --- CLI (guarded so importing this module never runs it) ---
 if (isMainModule(import.meta.url)) {
   const args = process.argv.slice(2);
+
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    process.exit(0);
+  }
 
   if (args.includes('--self-test')) {
     runSelfTest();
@@ -535,6 +552,7 @@ if (isMainModule(import.meta.url)) {
 
         if (!next || next.startsWith('--')) {
           console.error('Missing value for --cv');
+          console.error(USAGE);
           process.exit(1);
         }
 
@@ -543,6 +561,7 @@ if (isMainModule(import.meta.url)) {
       } 
       else if (a.startsWith('--')) {
         console.error(`Unknown option: ${a}`);
+        console.error(USAGE);
         process.exit(1);
       }
       else if (reportArg === null) {
@@ -550,12 +569,13 @@ if (isMainModule(import.meta.url)) {
       }
       else {
         console.error(`Unexpected argument: ${a}`);
+        console.error(USAGE);
         process.exit(1);
       }
     }
 
     if (!reportArg) {
-      console.error('Usage: node keyword-match.mjs <report-file> [--cv <path>] [--json]');
+      console.error(USAGE);
       process.exit(1);
     }
 
@@ -563,6 +583,7 @@ if (isMainModule(import.meta.url)) {
 
     if (!existsSync(reportPath) || !statSync(reportPath).isFile()) {
       console.error(`Report not found: ${reportArg}`);
+      console.error(USAGE);
       process.exit(1);
     }
 
