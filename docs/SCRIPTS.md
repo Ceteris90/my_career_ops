@@ -725,6 +725,20 @@ node rejection-latency.mjs --self-test
 
 ---
 
+## role-clarity
+
+Six-point role-clarity check on one posting's text (#6091). For each of: direct supervisor and department, scope of work, deliverables and their format, success measure in the first 3-6 months, teams or people the role coordinates with, and delivery cadence, it reports `present`, `partial` or `missing` with the quoted evidence (always an exact substring of the posting). A separate soft-verb signal lists wording such as "participate in", "support", "potential implementation" and "other duties as assigned"; three or more hits mark it `heavy`. When three or more points are `missing`, `askBeforeYouCommit` is true and `questions` lists one question per missing or partial point, which `modes/oferta.md` (Block G, Role-clarity check) turns into a recruiter question draft. Advisory only: it never changes the 1-5 score, never sends anything and never writes a file. The posting is treated as data and only pattern-matched. English keyword matching only; locale mode sets can pass `extraSoftVerbs` to `analyzeRoleClarity()` to extend the soft-verb list.
+
+```bash
+node role-clarity.mjs jds/{slug}.md             # JSON
+node role-clarity.mjs jds/{slug}.md --summary   # human-readable
+node role-clarity.mjs --self-test
+```
+
+**Exit codes:** `0` on success (an empty posting returns `emptyInput: true`), `1` for a missing file, an unrecognized flag, or a self-test failure.
+
+---
+
 ## closing-soon
 
 Surfaces tracker rows whose posting is about to close. Posting closing dates have no structured home, so people type them into Notes (`closes 2026-10-22`, `deadline Nov 4`); this script reads them and lists the rows closing within `--within N` days (default 7), soonest first. Dates are recognized only after a marker (`closes`, `closing date`, `closing`, `deadline`, `apply by`): ISO `2026-10-22`, `Mon D, YYYY`, `Mon D` (this year, or next year when it passed more than 60 days ago) and `MM/DD/YYYY` only when unambiguous. Anything else after a marker (`04/05/2026`, `4 Nov 2026`, `TBD`) is listed under `unparsed` instead of being guessed. Rows already past their date go in a separate `overdue` group (most recently overdue first). When a row's Notes carry no marker at all, the `jds/` capture resolved by report number (`jd-capture.mjs`; text captures only) is read instead. Several dates in one row surface the earliest. Rows are filtered by `--status` (default `Evaluated`; any canonical state from `templates/states.yml`, comma-separated).
