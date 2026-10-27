@@ -21,10 +21,13 @@ import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-naviga
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
+import { SCORE_FLOORS, normalizeView, parseViews, removeView, upsertView, viewUpdates } from "@/lib/pipeline-views.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
+type SavedView = NonNullable<ReturnType<typeof normalizeView>>;
 
 const SORT_KEYS = ["tracker", "company", "role", "score", "status", "date"] as const;
+const VIEWS_KEY = "career-ops:pipeline-views";
 type SortKey = (typeof SORT_KEYS)[number];
 
 export function PipelineView({
@@ -49,6 +52,11 @@ export function PipelineView({
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState("");
+  const [views, setViews] = useState<SavedView[]>([]);
+  const [viewsLoaded, setViewsLoaded] = useState(false);
+  const [naming, setNaming] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [viewError, setViewError] = useState("");
   const activeTab = useRef<HTMLButtonElement>(null);
 
   // The URL is the SINGLE source of truth for tab/min/sort/dir, so the home stat
@@ -100,6 +108,46 @@ export function PipelineView({
   useEffect(() => {
     if (!isPending) setPendingTab(null);
   }, [isPending]);
+
+  useEffect(() => {
+    try {
+      setViews(parseViews(localStorage.getItem(VIEWS_KEY) || "[]"));
+    } catch {
+      setViews([]);
+    }
+    setViewsLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!viewsLoaded) return;
+    try {
+      localStorage.setItem(VIEWS_KEY, JSON.stringify(views));
+    } catch {
+      setViewError("This view stays on this page only.");
+    }
+  }, [views, viewsLoaded]);
+
+  function saveCurrentView(name: string) {
+    const view = normalizeView({ name, tab, q, min: minFilter, sort: sort.key, dir: sort.dir });
+    if (!view) {
+      setViewError("Name the view first.");
+      return;
+    }
+    const next = upsertView(views, view);
+    const added = views.some((item) => item.name === view.name) || next.length > views.length;
+    if (!added) {
+      setViewError("Remove a view first.");
+      return;
+    }
+    setViews(next);
+    setNaming(false);
+    setDraftName("");
+    setViewError("");
+  }
+
+  function applySaved(view: SavedView) {
+    setQ(view.q);
+    setParams(viewUpdates(view));
+  }
 
   // The table filters on a deferred copy of the search text. The input shows
   // each keystroke at once; re-filtering and re-rendering every tracker row
@@ -201,6 +249,63 @@ export function PipelineView({
             </button>
           </div>
         )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {visibleTab !== "INBOX" && <label className="inline-flex items-center gap-2 text-xs text-muted">
+          Score
+          <select
+            aria-label="Minimum score"
+            value={minFilter ?? ""}
+            onChange={(event) => setParams({ min: event.target.value === "" ? null : event.target.value })}
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground"
+          >
+            <option value="">Any</option>
+            {minFilter != null && !SCORE_FLOORS.includes(minFilter) && (
+              <option value={String(minFilter)}>{minFilter}+</option>
+            )}
+            {SCORE_FLOORS.map((floor) => (
+              <option key={floor} value={String(floor)}>{floor.toFixed(1)}+</option>
+            ))}
+          </select>
+        </label>}
+        {views.map((view) => {
+          const active = view.tab === tab && view.q === q && view.min === minFilter && view.sort === sort.key && view.dir === sort.dir;
+          return (
+            <span key={view.name} className={cn("inline-flex items-center rounded-full border", active ? "border-brand/40 bg-brand-soft" : "border-border bg-surface/60")}>
+              <button type="button" onClick={() => applySaved(view)} className="px-2.5 py-1 text-xs font-medium text-foreground">
+                {view.name}
+              </button>
+              <button type="button" aria-label={`Remove view ${view.name}`} onClick={() => setViews(removeView(views, view.name))} className="px-1.5 text-xs text-faint hover:text-foreground">
+                ×
+              </button>
+            </span>
+          );
+        })}
+        {naming ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveCurrentView(draftName);
+            }}
+            className="inline-flex items-center gap-2"
+          >
+            <input
+              aria-label="View name"
+              value={draftName}
+              autoFocus
+              onChange={(event) => setDraftName(event.target.value)}
+              className="w-36 rounded-md border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-brand/50"
+            />
+            <button type="submit" className="text-xs font-medium text-brand">Save</button>
+            <button type="button" onClick={() => { setNaming(false); setDraftName(""); setViewError(""); }} className="text-xs text-muted">Cancel</button>
+          </form>
+        ) : (
+          <button type="button" onClick={() => { setViewError(""); setNaming(true); }} className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted hover:text-foreground">
+            Save view
+          </button>
+        )}
+        {viewError && <span role="alert" className="text-xs text-red-500">{viewError}</span>}
       </div>
 
       {/* tabs */}
