@@ -41,10 +41,10 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { hasYamlContent, loadYaml } from './lib/yaml-document.mjs';
-import { getProfilePath } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -200,8 +200,10 @@ function checkKnownValues(parsed, findings, file) {
   }
 }
 
-// Joined so the message can name the file without a quoted path assignment.
-const DEFAULT_PROFILE_LABEL = 'config' + '/profile.yml';
+// The CLI passes the real path. Library callers (doctor) get the resolved
+// profile relative to the data root, so an overridden profile path is named
+// as it is, not as the default.
+const DEFAULT_PROFILE_LABEL = relative(getCareerOpsRoot(), DEFAULT_PROFILE_PATH) || DEFAULT_PROFILE_PATH;
 
 export function validateProfile(profileText, exampleText, profileLabel = DEFAULT_PROFILE_LABEL) {
   const findings = [];
