@@ -1,14 +1,13 @@
-// Optional browser regression: run against a loopback server backed by disposable data.
-// Set MOBILE_NAV_TEST_URL to run this suite.
+// Optional browser regression: start a loopback server against disposable data
+// (node tests/fixtures/blank.mjs), then set MOBILE_NAV_TEST_URL to run this suite.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { liveServerSkip } from "../helpers/live-server.mjs";
 
 const url = process.env.MOBILE_NAV_TEST_URL;
 
-// Leftmost x any part of the drawer or its box-shadow paints at.
 // Chrome draws a blur out to three standard deviations, which is 1.5 times the blur radius.
-function paintedExtent() {
+function drawerLeftPaintEdge() {
   const el = document.querySelector('[role="dialog"][aria-label="Navigation menu"]');
   const rect = el.getBoundingClientRect();
   let left = rect.left;
@@ -40,7 +39,7 @@ test("mobile navigation drawer stays out of the viewport until opened", { skip: 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await opener.waitFor();
-  const closed = await page.evaluate(paintedExtent);
+  const closed = await page.evaluate(drawerLeftPaintEdge);
   assert.ok(closed.width > 0, "drawer is laid out on a phone");
   assert.ok(closed.left >= closed.viewport, `closed drawer paints from x=${closed.left} in a ${closed.viewport}px viewport`);
 
@@ -62,7 +61,7 @@ test("mobile navigation drawer stays out of the viewport until opened", { skip: 
   });
   assert.equal(await opener.getAttribute("aria-expanded"), "false");
   await page.waitForTimeout(500);
-  const reclosed = await page.evaluate(paintedExtent);
+  const reclosed = await page.evaluate(drawerLeftPaintEdge);
   assert.ok(reclosed.left >= reclosed.viewport, `drawer closed by Escape paints from x=${reclosed.left}`);
   assert.deepEqual(errors, []);
 });

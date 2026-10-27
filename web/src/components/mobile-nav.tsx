@@ -26,8 +26,8 @@ const STYLE = `
 .co-mnav{position:sticky;top:0;z-index:30;background:var(--bg);padding-top:calc(env(safe-area-inset-top) + .8rem)}
 .co-mscrim{position:fixed;inset:0;z-index:60;background:rgba(8,8,12,.45);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .3s ease}
 .co-mscrim.open{opacity:1;pointer-events:auto}
-/* Unlayered, so no display here or it beats md:hidden. Closed, the drawer also
-   clears its shadow's blur and the html scrollbar gutter. */
+/* Unlayered, so no display here or it beats md:hidden. Closed, the extra 6rem
+   moves the shadow's blur and the html scrollbar gutter off screen. */
 .co-mdrawer{position:fixed;top:0;right:0;bottom:0;z-index:61;width:min(20rem,86vw);overflow-y:auto;overscroll-behavior:contain;transform:translateX(calc(100% + 6rem));transition:transform .34s cubic-bezier(.32,.72,0,1);will-change:transform;box-shadow:-16px 0 48px -16px rgba(0,0,0,.4);padding-top:calc(env(safe-area-inset-top) + .25rem)}
 .co-mdrawer.open{transform:translateX(0)}
 .co-msafe{padding-bottom:calc(1rem + env(safe-area-inset-bottom))}
