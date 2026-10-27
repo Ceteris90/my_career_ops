@@ -495,6 +495,24 @@ test('11. the fetch wrapper blocks LLM requests and passes non-LLM ones through'
   );
   assert.equal(sent.length, 0, 'nothing was sent');
 
+  // ── An LLM Request instance carrying a protected value is also blocked.
+  const req = new Request('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    body: JSON.stringify({ q: FAKE.email }),
+  });
+  await assert.rejects(() => blocked(req), PrivacyGuardError);
+  assert.equal(sent.length, 0, 'nothing was sent for Request instance');
+
+  // ── A Buffer body in init is also scanned as text and blocked.
+  await assert.rejects(
+    () => blocked('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      body: Buffer.from(JSON.stringify({ q: FAKE.email })),
+    }),
+    PrivacyGuardError
+  );
+  assert.equal(sent.length, 0, 'nothing was sent for Buffer body');
+
   // ── A clean LLM request goes through.
   await blocked('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ q: 'a normal prompt' }) });
   assert.equal(sent.length, 1, 'the clean request was sent');
