@@ -236,9 +236,13 @@ export function PipelineView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  // Keyed on the count, not the array. filtered is rebuilt whenever sort or the
+  // optimistic rows change identity, and a state update after each rebuild kept
+  // the deferred search render from finishing.
+  const rowCount = filtered.length;
   useEffect(() => {
-    setCursor((index) => (filtered.length === 0 ? -1 : index < 0 ? index : Math.min(index, filtered.length - 1)));
-  }, [filtered]);
+    setCursor((index) => (rowCount === 0 ? -1 : index < 0 ? index : Math.min(index, rowCount - 1)));
+  }, [rowCount]);
   useEffect(() => {
     if (cursor < 0 || visibleTab === "INBOX") return;
     document.querySelector('[data-tracker-cursor="true"]')?.scrollIntoView({ block: "nearest" });
