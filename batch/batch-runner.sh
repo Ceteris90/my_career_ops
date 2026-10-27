@@ -312,20 +312,24 @@ if ! is_decimal_number "$MIN_SCORE"; then
 fi
 
 # Lock file to prevent double execution
+# noclobber makes the create atomic, so two runners started together cannot
+# both own the lock (and both stop the shared PDF painter on exit).
 acquire_lock() {
-  if [[ -f "$LOCK_FILE" ]]; then
+  if ! (set -C; printf '%s\n' "$MAIN_PID" > "$LOCK_FILE") 2>/dev/null; then
     local old_pid
-    old_pid=$(cat "$LOCK_FILE")
-    if kill -0 "$old_pid" 2>/dev/null; then
+    old_pid=$(cat "$LOCK_FILE" 2>/dev/null || true)
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
       echo "ERROR: Another batch-runner is already running (PID $old_pid)"
       echo "If this is stale, remove $LOCK_FILE"
       exit 1
-    else
-      echo "WARN: Stale lock file found (PID $old_pid not running). Removing."
-      rm -f "$LOCK_FILE"
+    fi
+    echo "WARN: Stale lock file found (PID $old_pid not running). Removing."
+    rm -f "$LOCK_FILE"
+    if ! (set -C; printf '%s\n' "$MAIN_PID" > "$LOCK_FILE") 2>/dev/null; then
+      echo "ERROR: Another batch-runner took the lock first"
+      exit 1
     fi
   fi
-  echo "$MAIN_PID" > "$LOCK_FILE"
 }
 
 release_lock() {

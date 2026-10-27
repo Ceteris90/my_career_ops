@@ -1,14 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getBash } from './helpers.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const NODE = process.execPath;
+
+// Windows IPC only listens on named pipes, the same kind of path the batch uses there.
+function testSocket(dir) {
+  if (process.platform === 'win32') return `\\\\.\\pipe\\career-ops-pdf-test-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  return join(dir, 'pdf.sock');
+}
 
 function runNode(args, env) {
   return spawnSync(NODE, args, {
@@ -23,7 +30,7 @@ test('build-cv-html self-test does not load Playwright', () => {
   const marker = join(tmpdir(), `playwright-marker-${process.pid}.txt`);
   rmSync(marker, { force: true });
   const result = runNode([
-    '--import', join(ROOT, 'tests/helpers/block-playwright-register.mjs'),
+    '--import', pathToFileURL(join(ROOT, 'tests/helpers/block-playwright-register.mjs')).href,
     'build-cv-html.mjs',
     '--test',
   ], { PLAYWRIGHT_MARKER: marker });
@@ -38,7 +45,7 @@ test('build-cv-html self-test does not load Playwright', () => {
 test('one shared browser paints two documents', async () => {
   const serverMod = await import(new URL('../lib/pdf-server.mjs', import.meta.url));
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-pdf-shared-'));
-  const socketPath = join(dir, 'pdf.sock');
+  const socketPath = testSocket(dir);
   let launches = 0;
   const server = await serverMod.startPdfServer({
     socketPath,
@@ -77,7 +84,7 @@ test('renderHtmlToPdf uses the shared browser when the batch asks it to', async 
   const serverMod = await import(new URL('../lib/pdf-server.mjs', import.meta.url));
   const { renderHtmlToPdf } = await import(new URL('../generate-pdf.mjs', import.meta.url));
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-pdf-delegate-'));
-  const socketPath = join(dir, 'pdf.sock');
+  const socketPath = testSocket(dir);
   let launches = 0;
   const seen = [];
   const server = await serverMod.startPdfServer({
@@ -97,19 +104,16 @@ test('renderHtmlToPdf uses the shared browser when the batch asks it to', async 
   process.env.CAREER_OPS_PDF_SHARED = '1';
   process.env.CAREER_OPS_PDF_SOCKET = socketPath;
   try {
-    const workspace = join(ROOT, 'output');
-    mkdirSync(workspace, { recursive: true });
-    const outputPath = join(workspace, `shared-delegate-${process.pid}.pdf`);
+    const outputPath = join(dir, 'shared-delegate.pdf');
     const result = await renderHtmlToPdf('<html><body><p>Casey Example</p></body></html>', outputPath, {
       reportNum: '404',
-      workspaceRoot: ROOT,
-      baseDir: workspace,
+      workspaceRoot: dir,
+      baseDir: dir,
     });
     assert.equal(launches, 1);
     assert.deepEqual(seen, ['404']);
     assert.equal(result.pageCount, 1);
     assert.equal(readFileSync(outputPath, 'utf8'), 'shared-pdf');
-    rmSync(outputPath, { force: true });
   } finally {
     if (previousShared === undefined) delete process.env.CAREER_OPS_PDF_SHARED;
     else process.env.CAREER_OPS_PDF_SHARED = previousShared;
@@ -118,6 +122,82 @@ test('renderHtmlToPdf uses the shared browser when the batch asks it to', async 
     await server.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('a painter that is gone reads as unavailable, so the caller paints locally', async () => {
+  const serverMod = await import(new URL('../lib/pdf-server.mjs', import.meta.url));
+  const dir = mkdtempSync(join(tmpdir(), 'career-ops-pdf-gone-'));
+  try {
+    await assert.rejects(
+      serverMod.requestPdfRender(testSocket(dir), { html: '<p>x</p>', outputPath: join(dir, 'x.pdf'), opts: {} }),
+      (err) => err.code === 'PDF_SERVER_UNAVAILABLE',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a painter that drops the request reads as unavailable, and a render error does not', async () => {
+  const serverMod = await import(new URL('../lib/pdf-server.mjs', import.meta.url));
+  const dir = mkdtempSync(join(tmpdir(), 'career-ops-pdf-drop-'));
+  const failing = testSocket(dir);
+  const server = await serverMod.startPdfServer({
+    socketPath: failing,
+    launchBrowser: async () => ({ async close() {} }),
+    render: async () => { throw new Error('bad html'); },
+  });
+  const dropping = process.platform === 'win32' ? testSocket(dir) : join(dir, 'drop.sock');
+  const dropper = net.createServer((socket) => socket.once('data', () => socket.destroy()));
+  await new Promise((resolve) => dropper.listen(dropping, resolve));
+  try {
+    await assert.rejects(
+      serverMod.requestPdfRender(failing, { html: '<p>x</p>', outputPath: join(dir, 'x.pdf'), opts: {} }),
+      (err) => err.message === 'bad html' && err.code === undefined,
+    );
+    await assert.rejects(
+      serverMod.requestPdfRender(dropping, { html: '<p>y</p>', outputPath: join(dir, 'y.pdf'), opts: {} }),
+      (err) => err.code === 'PDF_SERVER_UNAVAILABLE',
+    );
+  } finally {
+    await server.close();
+    await new Promise((resolve) => dropper.close(resolve));
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the shared path repeats the page-budget warning the painter cannot print', async () => {
+  const serverMod = await import(new URL('../lib/pdf-server.mjs', import.meta.url));
+  const { renderHtmlToPdf } = await import(new URL('../generate-pdf.mjs', import.meta.url));
+  const dir = mkdtempSync(join(tmpdir(), 'career-ops-pdf-budget-'));
+  const socketPath = testSocket(dir);
+  const server = await serverMod.startPdfServer({
+    socketPath,
+    launchBrowser: async () => ({ async close() {} }),
+    render: async (_browser, _html, outputPath) => {
+      writeFileSync(outputPath, 'shared-pdf');
+      return { outputPath, pageCount: 3, size: 10 };
+    },
+  });
+  const saved = { shared: process.env.CAREER_OPS_PDF_SHARED, socket: process.env.CAREER_OPS_PDF_SOCKET };
+  process.env.CAREER_OPS_PDF_SHARED = '1';
+  process.env.CAREER_OPS_PDF_SOCKET = socketPath;
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => { warnings.push(args.join(' ')); };
+  try {
+    await renderHtmlToPdf('<html><body><p>Casey Example</p></body></html>', join(dir, 'long.pdf'), {
+      workspaceRoot: dir,
+      baseDir: dir,
+      maxPages: 2,
+    });
+  } finally {
+    console.warn = originalWarn;
+    if (saved.shared === undefined) delete process.env.CAREER_OPS_PDF_SHARED; else process.env.CAREER_OPS_PDF_SHARED = saved.shared;
+    if (saved.socket === undefined) delete process.env.CAREER_OPS_PDF_SOCKET; else process.env.CAREER_OPS_PDF_SOCKET = saved.socket;
+    await server.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+  assert.ok(warnings.some((line) => /CV is 3 pages; the allowed maximum is 2 pages/.test(line)), warnings.join('\n'));
 });
 
 function runOneOffer(skipPdf) {

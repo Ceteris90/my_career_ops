@@ -2231,6 +2231,9 @@ export async function renderHtmlToPdf(html, outputPath, opts = {}) {
       );
       console.log(`✅ PDF generated: ${result.outputPath}`);
       console.log(`📊 Pages: ${result.pageCount}`);
+      // The painter's own warning goes nowhere, so repeat it here. A strict
+      // overflow already came back as an error.
+      enforcePageBudget(result.pageCount, { maxPages: opts.maxPages ?? 2, strictPages: false });
       console.log(`📦 Size: ${(result.size / 1024).toFixed(1)} KB`);
       return result;
     } catch (err) {
