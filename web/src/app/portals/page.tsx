@@ -6,18 +6,18 @@ import { loadPortalsDocument, watchedCompanies, type WatchedCompany } from "@/li
 
 export const dynamic = "force-dynamic";
 
-function readWatched(): { watched: WatchedCompany[]; error: string | null } {
+function readWatched(): { watched: WatchedCompany[]; missing: boolean; error: string | null } {
   const root = careerOpsRoot();
   try {
     const { doc, seeded } = loadPortalsDocument(portalsConfigPath(root), path.join(root, "templates", "portals.example.yml"));
-    return { watched: seeded ? [] : watchedCompanies(doc), error: null };
+    return { watched: seeded ? [] : watchedCompanies(doc), missing: seeded, error: null };
   } catch (e) {
-    return { watched: [], error: e instanceof Error ? e.message : String(e) };
+    return { watched: [], missing: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
 export default function PortalsPage() {
-  const { watched, error } = readWatched();
+  const { watched, missing, error } = readWatched();
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       <div className="flex items-center gap-3">
@@ -37,7 +37,7 @@ export default function PortalsPage() {
         </p>
       )}
       <div className="mt-6">
-        <PortalsView watched={watched} />
+        <PortalsView watched={watched} missing={missing} />
       </div>
     </div>
   );
