@@ -117,7 +117,7 @@ Bloklar A-F tamamlandıktan sonra **HER ZAMAN** şunları yap:
 Değerlendirmenin tamamını `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` olarak kaydet.
 
 - `{###}` = sıradaki numara (3 haneli, sıfır dolgulu). Bu numarayı atomik olarak atamak ve yarış durumlarını (race condition) önlemek için, numarayı rezerve etmek üzere `node reserve-report-num.mjs` komutunu çalıştırmalısınız (standart çıktı `{###}` değerini döndürür), raporu yazmalı ve ardından sentineli serbest bırakmak için `node reserve-report-num.mjs --release {###}` komutunu çalıştırmalısınız.
-- `{company-slug}` = şirket adı küçük harfle, boşluksuz (tire kullan)
+- `{company-slug}` = şirket adının yalnızca küçük ASCII harf, rakam ve tireden oluşan biçimi: küçük harfe çevir, aksanları ve Türkçe harfleri ASCII karşılıklarına indir (`ç` → `c`, `ğ` → `g`, `ı` → `i`, `ö` → `o`, `ş` → `s`, `ü` → `u`, `é` → `e`), diğer karakterlerin (boşluk, `&`, `.`, tırnak, `/`) her dizisini tek bir `-` ile değiştir ve baştaki ve sondaki `-` işaretlerini kırp. Sonuç `^[a-z0-9-]+$` ile eşleşmelidir; aşağıdaki arşiv ve anahtar kelime komutları başka bir değeri reddeder. Latin harf ya da rakam içermeyen bir addan geriye hiçbir şey kalmaz: harf çevirisi tahmin etmek yerine şirketin ilandaki kendi Latin harfli adını (kariyer sitesinin alan adı ya da ATS pano adı) kullan.
 - `{YYYY-MM-DD}` = bugünün tarihi
 
 **Rapor formatı:**
@@ -227,7 +227,7 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 
 ### 2. Takipçiye Kaydet
 
-**Yeni** kayıt için `data/applications.md`'yi doğrudan düzenleme. Bunun yerine `batch/tracker-additions/{num}-{company-slug}.tsv` dosyasına sekmeyle ayrılmış **iki** satır yaz: önce **sütun adları** satırı, hemen altına tam olarak bir veri satırı.
+**Yeni** kayıt için `data/applications.md`'yi doğrudan düzenleme. Bunun yerine `{DATA_ROOT}/batch/tracker-additions/{num}-{company-slug}.tsv` dosyasına sekmeyle ayrılmış **iki** satır yaz: önce **sütun adları** satırı, hemen altına tam olarak bir veri satırı.
 
 ```tsv
 num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tnotes\turl
