@@ -27,20 +27,25 @@ test("Unreadable and missing reports keep the app shell and a way back", { skip:
   const sidebar = () => page.getByRole("complementary").getByRole("navigation");
   const main = () => page.getByRole("main");
   const back = () => main().getByRole("link", { name: /pipeline/i });
+  const query = "tab=EVALUATED&min=3.5&sort=company&dir=1&q=Fixture";
 
-  await page.goto(`${origin.origin}/pipeline/12`);
+  await page.goto(`${origin.origin}/pipeline/12?${query}`);
   await main().getByRole("heading", { name: /#12\b/ }).waitFor({ timeout: 15_000 });
   assert.ok(await sidebar().isVisible(), "sidebar navigation stays on an unreadable report");
-  assert.ok(await main().getByRole("button", { name: "Try again" }).isVisible(), "unreadable report offers Try again");
-  assert.equal(await back().getAttribute("href"), "/pipeline", "unreadable report links back to the pipeline");
+  const tryAgain = main().getByRole("button", { name: "Try again" });
+  assert.ok(await tryAgain.isVisible(), "unreadable report offers Try again");
+  await tryAgain.click();
+  await main().getByRole("heading", { name: /#12\b/ }).waitFor({ timeout: 15_000 });
+  assert.equal(await back().getAttribute("href"), `/pipeline?${query}`, "unreadable report preserves pipeline filters");
   await back().click();
   await main().getByRole("heading", { name: "Pipeline", level: 1 }).waitFor();
   assert.equal(new URL(page.url()).pathname, "/pipeline", "back link reaches the pipeline list");
+  assert.equal(new URL(page.url()).search.slice(1), query, "back link preserves pipeline filters");
 
-  await page.goto(`${origin.origin}/pipeline/999`);
+  await page.goto(`${origin.origin}/pipeline/999?${query}`);
   await main().getByRole("heading", { name: /#999\b/ }).waitFor({ timeout: 15_000 });
   assert.ok(await sidebar().isVisible(), "sidebar navigation stays on a missing report");
-  assert.equal(await back().getAttribute("href"), "/pipeline", "missing report links back to the pipeline");
+  assert.equal(await back().getAttribute("href"), `/pipeline?${query}`, "missing report preserves pipeline filters");
 
   await page.goto(`${origin.origin}/pipeline/11`);
   await main().getByRole("heading", { name: "Fixture States Co", exact: true }).waitFor({ timeout: 15_000 });
