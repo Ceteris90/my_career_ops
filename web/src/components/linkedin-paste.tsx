@@ -79,10 +79,16 @@ export function LinkedInPaste() {
               const file = event.target.files?.[0];
               event.target.value = "";
               if (!file) return;
-              void file.text().then((contents) => {
-                setText(contents);
-                return submit(contents);
-              });
+              void file.text().then(
+                (contents) => {
+                  setText(contents);
+                  return submit(contents);
+                },
+                () => {
+                  setMessage("");
+                  setError("Could not read that file. Copy the email text and paste it here.");
+                },
+              );
             }}
           />
         </label>

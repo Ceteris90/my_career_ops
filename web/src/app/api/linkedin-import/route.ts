@@ -36,8 +36,14 @@ function runImport(text: string): Promise<ImportPayload> {
     child.stderr.on("data", (chunk: Buffer) => {
       err += chunk.toString();
     });
-    child.on("error", () => resolve({ ...FAILED, error: "spawn" }));
+    const killer = setTimeout(() => child.kill("SIGTERM"), 30_000);
+    child.on("error", () => {
+      clearTimeout(killer);
+      resolve({ ...FAILED, error: "spawn" });
+    });
+    child.stdin.on("error", () => resolve({ ...FAILED, error: "stdin" }));
     child.on("close", (code) => {
+      clearTimeout(killer);
       try {
         const parsed = JSON.parse(out.trim().split("\n").pop() || "") as ImportPayload;
         if (code !== 0 && !parsed.message) resolve({ ...FAILED, error: err || `exit ${code}` });
