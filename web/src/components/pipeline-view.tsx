@@ -21,6 +21,7 @@ import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-naviga
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
+import { trackerEmptyState, type TrackerEmptyState } from "@/lib/tracker-empty-state.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
 
@@ -107,29 +108,61 @@ export function PipelineView({
   // keystroke arrives, so typing no longer waits on the whole table.
   const deferredQ = useDeferredValue(q);
 
-  const filtered = useMemo(() => {
-    if (tab === "INBOX") return [];
-    let rows = visibleApplications;
-    if (tab !== "ALL") rows = rows.filter((r) => canonStatus(r.status).includes(tab));
-    if (minFilter != null) {
-      rows = rows.filter((r) => {
+  const query = deferredQ.trim();
+  const matchesFilters = useCallback(
+    (r: Application) => {
+      if (minFilter != null) {
         const n = scoreNum(r.score);
-        return !Number.isNaN(n) && n >= minFilter;
-      });
-    }
-    if (deferredQ.trim()) {
-      const needle = deferredQ.toLowerCase();
-      rows = rows.filter((r) => companySearchText(r).toLowerCase().includes(needle));
-    }
-    // scoreNum is the real score parser (it handles the tracker's "4.2/5"
-    // cells); sortRows takes it rather than keeping a second copy (#4333).
-    return sortRows(
-      rows,
-      sort,
-      scoreNum,
-      (row) => companyPresentation(row).label,
-    ) as Application[];
-  }, [visibleApplications, tab, deferredQ, sort, minFilter]);
+        if (Number.isNaN(n) || n < minFilter) return false;
+      }
+      return !query || companySearchText(r).toLowerCase().includes(deferredQ.toLowerCase());
+    },
+    [minFilter, query, deferredQ],
+  );
+
+  const tabRows = useMemo(() => {
+    if (tab === "INBOX") return [];
+    if (tab === "ALL") return visibleApplications;
+    return visibleApplications.filter((r) => canonStatus(r.status).includes(tab));
+  }, [visibleApplications, tab]);
+
+  const filtered = useMemo(
+    () =>
+      // scoreNum is the real score parser (it handles the tracker's "4.2/5"
+      // cells); sortRows takes it rather than keeping a second copy (#4333).
+      sortRows(
+        tabRows.filter(matchesFilters),
+        sort,
+        scoreNum,
+        (row) => companyPresentation(row).label,
+      ) as Application[],
+    [tabRows, matchesFilters, sort],
+  );
+
+  const filtering = query !== "" || minFilter != null;
+  const tabLabel = tab === "ALL" ? null : tab.charAt(0) + tab.slice(1).toLowerCase();
+  const emptyState =
+    filtered.length > 0
+      ? null
+      : trackerEmptyState({ tabLabel, query, minScore: minFilter, matchesInAll: visibleApplications.filter(matchesFilters).length });
+  const searchInput = useRef<HTMLInputElement>(null);
+
+  function clearSearch() {
+    setQ("");
+    searchInput.current?.focus();
+  }
+
+  const empty =
+    emptyState &&
+    emptyStateView(emptyState, {
+      tabLabel,
+      query,
+      minFilter,
+      showAll: () => setParams({ tab: "ALL" }),
+      clearSearch,
+      clearMin: () => setParams({ min: null }),
+    });
+  const filterStatus = isPending || !filtering ? "" : empty ? empty.heading : `${filtered.length} of ${tabRows.length} shown`;
 
   const filteredKeys = filtered.map(applicationKey);
   const selectedRows = filtered.filter((r) => selected.has(applicationKey(r)));
@@ -183,11 +216,30 @@ export function PipelineView({
             <div className="relative w-64 max-w-[40vw]">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
               <input
+                ref={searchInput}
+                type="search"
+                aria-label="Search applications"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && q) {
+                    e.preventDefault();
+                    setQ("");
+                  }
+                }}
                 placeholder="Search company or role…"
-                className="w-full rounded-md border border-border bg-surface/60 py-2 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-faint focus:border-brand/50 focus-visible:ring-2 focus-visible:ring-brand/40"
+                className="w-full rounded-md border border-border bg-surface/60 py-2 pl-9 pr-9 text-sm outline-none transition-colors placeholder:text-faint focus:border-brand/50 focus-visible:ring-2 focus-visible:ring-brand/40 [&::-webkit-search-cancel-button]:appearance-none"
               />
+              {q && (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={clearSearch}
+                  className="absolute right-1.5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-faint transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/40"
+                >
+                  <X aria-hidden="true" className="size-4" />
+                </button>
+              )}
             </div>
             <button
               type="button"
@@ -249,6 +301,12 @@ export function PipelineView({
             <X className="size-3" />
           </button>
         </div>
+      )}
+
+      {visibleTab !== "INBOX" && (
+        <p role="status" className={cn("text-xs tabular-nums text-muted", empty ? "sr-only" : filterStatus && "mt-3")}>
+          {filterStatus}
+        </p>
       )}
 
       {visibleTab !== "INBOX" && selectedRows.length > 0 && (
@@ -431,12 +489,64 @@ export function PipelineView({
         </div>
       ) : (
         <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-12 text-center">
-          <p className="font-display text-lg">No matches</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">Try a different tab or clear the search.</p>
+          <h2 className="font-display text-lg">{empty?.heading}</h2>
+          {empty && empty.actions.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {empty.actions.map(({ label, run }, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={run}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand/40",
+                    i === 0
+                      ? "border-brand/40 bg-brand-soft text-brand hover:bg-brand/15"
+                      : "border-border text-muted hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </PageFrame>
   );
+}
+
+function emptyStateView(
+  state: TrackerEmptyState,
+  ctx: {
+    tabLabel: string | null;
+    query: string;
+    minFilter: number | null;
+    showAll: () => void;
+    clearSearch: () => void;
+    clearMin: () => void;
+  },
+): { heading: string; actions: { label: string; run: () => void }[] } {
+  const clearSearch = { label: "Clear search", run: ctx.clearSearch };
+  switch (state.kind) {
+    case "empty-tab":
+      return { heading: ctx.tabLabel ? `No ${ctx.tabLabel} applications yet` : "No applications yet", actions: [] };
+    case "elsewhere":
+      return {
+        heading: `No matches for “${ctx.query}” in ${ctx.tabLabel}`,
+        actions: [{ label: `Show ${state.count} in All`, run: ctx.showAll }, clearSearch],
+      };
+    case "no-match":
+      return { heading: `No matches for “${ctx.query}”`, actions: [clearSearch] };
+    case "below-min":
+      return {
+        heading: `No ${ctx.tabLabel ? `${ctx.tabLabel} ` : ""}applications score ${ctx.minFilter?.toFixed(1)} or higher`,
+        actions: [{ label: "Clear score filter", run: ctx.clearMin }],
+      };
+    default: {
+      const unhandled: never = state;
+      return unhandled;
+    }
+  }
 }
 
 // Empty inbox. Self-sufficient for the mainstream user (a primary in-web action),
