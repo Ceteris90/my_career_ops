@@ -37,7 +37,7 @@ export function LinkedInPaste() {
       }
       setMessage(data.message || "");
       if ((data.added ?? 0) > 0) {
-        setText("");
+        setText((current) => (current === body ? "" : current));
         router.refresh();
       }
     } catch {
@@ -75,6 +75,7 @@ export function LinkedInPaste() {
             type="file"
             accept=".eml,.txt,.mbox,text/plain,message/rfc822"
             className="sr-only"
+            disabled={busy}
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
