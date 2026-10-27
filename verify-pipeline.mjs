@@ -352,8 +352,9 @@ function extractReportUrlKey(reportContent) {
 // Report numbers a tracker row's Report cell links: the [NNN] link text(s) and
 // the NNN- prefix of the linked filename(s). Shared with Check 10.
 function linkedReportNums(cell) {
-  const nums = [...cell.matchAll(/\[(\d+)\]/g)].map(m => parseInt(m[1], 10));
+  const nums = [];
   for (const link of parseMarkdownLinks(cell)) {
+    if (/^\d+$/.test(link.label)) nums.push(parseInt(link.label, 10));
     const m = link.target.split(/[\\/]/).pop().match(/^(\d+)-/);
     if (m) nums.push(parseInt(m[1], 10));
   }

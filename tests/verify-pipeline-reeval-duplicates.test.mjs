@@ -72,6 +72,10 @@ try {
     pass('a bare [N] in Notes without the Superseded marker is not a reference: still flagged');
   } else fail('a bare [N] in Notes was read as a superseded-report reference');
 
+  if (dupFlagged([row(1, `${L1} / [3]`, 'ok')]) === true) {
+    pass('a bare [N] in the Report cell that is not a link is not a reference: still flagged');
+  } else fail('a bare [N] in the Report cell was read as a linked report');
+
   // Two files that share a report NUMBER are a numbering collision, not a
   // re-evaluation, even when the one link covers both by number.
   writeFileSync(join(vpReports, '003-acme-2026-01-06.md'), report('Acme', 'Staff AI Engineer'));
