@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { loadYaml } from './lib/yaml-document.mjs';
 import { resolveColumns, parseTrackerRow, normalizeVia, firstLinkTarget } from './tracker-parse.mjs';
-import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
+import { getCareerOpsRoot, getProfilePath, resolveTrackerPath } from './path-resolver.mjs';
 import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerLinkDirsFor, resolveWorkspaceRoot, resolveWorkspaceRootFor } from './tracker-utils.mjs';
 import { atsVendorOf } from './ats-vendor.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
@@ -415,7 +415,7 @@ export function wilsonInterval(k, n, z = 1.96) {
 }
 
 /** role_families from config/profile.yml: { family: [title keyword, ...] }. */
-export function loadRoleFamilies(file = join(CAREER_OPS, 'config', 'profile.yml')) {
+export function loadRoleFamilies(file = getProfilePath()) {
   const raw = readTextIfExists(file);
   if (!raw) return {};
   try {
