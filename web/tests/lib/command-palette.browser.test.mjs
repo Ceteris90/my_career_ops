@@ -28,7 +28,7 @@ test("Ctrl+K jumps to a page or an application from anywhere", { skip: liveServe
   const isFocused = (locator) => locator.evaluate((el) => el === document.activeElement);
 
   await page.goto(`${origin.origin}/analytics`);
-  await trigger.filter({ hasText: "Ctrl K" }).waitFor();
+  await trigger.filter({ hasText: /Ctrl K|⌘K/ }).waitFor();
 
   await page.keyboard.press("Control+k");
   await combobox.waitFor();

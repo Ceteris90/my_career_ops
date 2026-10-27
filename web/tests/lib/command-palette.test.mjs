@@ -13,7 +13,7 @@ const app = (n, company, role, status, score = "4.0/5") => ({ n, company, via: "
 
 const applications = [
   app("3", "Kestrel Labs", "Robotics Engineer", "Evaluated"),
-  app("7", "Harbor Robotics", "Platform Engineer", "Applied"),
+  app("7", "Lattice Robotics", "Platform Engineer", "Applied"),
   app("12", "Fixture Beta", "Designer", "Interview"),
   app("15", "Kestrel Robotics", "Controls Engineer", "Evaluated"),
   app("21", "Pipeworks", "Data Engineer", "Interview"),
@@ -46,8 +46,8 @@ test("a label starting with the whole query outranks a label word matching the f
 });
 
 test("every token must match", () => {
-  assert.deepEqual(labels("kestrel harbor"), []);
-  assert.deepEqual(labels("harbor platform"), ["Harbor Robotics"]);
+  assert.deepEqual(labels("kestrel lattice"), []);
+  assert.deepEqual(labels("lattice platform"), ["Lattice Robotics"]);
 });
 
 test("the tracker number finds its application with or without #", () => {
