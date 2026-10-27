@@ -308,8 +308,11 @@ function resolvePluginArg(token) {
   if (direct) return { manifest: direct };
   const reg = typeof token === 'string' ? findInRegistry(ROOT, token) : null;
   if (reg) {
+    // A successor shares its bundled plugin's id, so the bundled manifest is
+    // not the package this name asks for.
     const installed = findManifest(reg.id);
-    if (installed) return { manifest: installed };
+    const bundledStandIn = reg.supersedesBundled === true && installed && classifySource(installed, ROOT) === 'bundled';
+    if (installed && !bundledStandIn) return { manifest: installed };
     return {
       manifest: null,
       message: `Plugin "${reg.id}" is approved but not installed.\nInstall it with: node plugins.mjs add ${reg.name}`,
