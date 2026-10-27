@@ -823,10 +823,9 @@ export function AssistantConsole() {
           ref={openerRef}
           onClick={(e) => openAssistant(e.currentTarget)}
           className="fixed bottom-5 right-5 z-50 flex items-center justify-center gap-2 rounded-full border border-border bg-surface/90 py-1.5 pl-1.5 pr-4 shadow-lg backdrop-blur transition-colors hover:bg-surface-hover max-sm:min-h-[44px]"
-          aria-label="Open assistant"
         >
           <CoMark size={26} />
-          <span className="text-sm font-medium">Ask</span>
+          <span className="text-sm font-medium">Ask<span className="sr-only"> the assistant</span></span>
         </button>
       )}
 
