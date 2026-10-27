@@ -54,6 +54,7 @@ const SUITES = {
   "inbox-undo": { url: "INBOX_UNDO_TEST_URL", root: "INBOX_UNDO_TEST_ROOT", fixture: "inbox-undo" },
   "loading-transition": { url: "LOADING_TRANSITION_TEST_URL", root: "LOADING_TRANSITION_TEST_ROOT", fixture: "pipeline-status" },
   "pipeline-inline-status": { url: "PIPELINE_STATUS_TEST_URL", root: "PIPELINE_STATUS_TEST_ROOT", fixture: "pipeline-status" },
+  "pipeline-report-states": { url: "PIPELINE_REPORT_STATES_TEST_URL", root: "PIPELINE_REPORT_STATES_TEST_ROOT", fixture: "pipeline-report-states" },
   "pipeline-return": { url: "PIPELINE_RETURN_TEST_URL", root: "PIPELINE_RETURN_TEST_ROOT", fixture: "pipeline-status" },
   "worker-feedback": { url: "WORKER_FEEDBACK_TEST_URL", fixture: "blank" },
 };
