@@ -754,6 +754,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (p === null || typeof p !== "object" || Array.isArray(p)) fail("the JSON file must hold one object");
 if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
 const args = ["keyword-match.mjs", p.report];
 if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
@@ -761,7 +762,7 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 ' {json-file}
 ```
 
-Mặc định lệnh quét `cv.md` gốc -- đọc kết quả như **danh sách khoảng trống trước khi điều chỉnh** (từ khóa JD nào cần đưa vào khi điều chỉnh CV), không phải phán quyết về tài liệu bạn sẽ gửi; đầu ra ghi rõ nó đã quét gì. Để kiểm tra CV cuối cùng đã điều chỉnh, truyền `--cv` (mode `pdf` làm việc này trên HTML đã tạo).
+Mặc định lệnh quét `cv.md` gốc -- đọc kết quả như **danh sách khoảng trống trước khi điều chỉnh** (từ khóa JD nào cần đưa vào khi điều chỉnh CV), không phải phán quyết về tài liệu bạn sẽ gửi; đầu ra ghi rõ nó đã quét gì. Để kiểm tra CV cuối cùng đã điều chỉnh, thêm `"cv": "{path}"` vào file JSON (mode `pdf` làm việc này trên HTML đã tạo).
 
 **Chỉ để chẩn đoán:** nó đánh dấu từ khóa thiếu/mỏng để người dùng quyết định nên củng cố gì. Không bao giờ bịa -- chỉ thêm từ khóa nếu nó phản ánh kinh nghiệm thật của người dùng (xem `_shared.md`).
 

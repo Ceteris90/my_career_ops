@@ -84,6 +84,9 @@ test('keyword coverage: the template placeholder, prose and comments cannot stan
   assert.deepEqual(keywordCoverageGaps(mode(REPORT + block)), ['keyword-match.mjs step']);
   // The report template is output, so a command written only there is no step.
   assert.deepEqual(keywordCoverageGaps(mode(REPORT + block + step.replace(/```(bash)?/g, ''))), ['keyword-match.mjs step']);
+  // The command's text quoted in prose is not a runnable step.
+  assert.deepEqual(keywordCoverageGaps(
+    `${mode(REPORT + block)}\nThe command builds \`["keyword-match.mjs", p.report]\`.\n`), ['keyword-match.mjs step']);
   // The old form, a report path typed into the command line, is not the step (#5853).
   assert.deepEqual(keywordCoverageGaps(
     `${mode(REPORT + block)}\nRun \`node keyword-match.mjs reports/{###}-{slug}-{date}.md\`.\n`), ['keyword-match.mjs step']);

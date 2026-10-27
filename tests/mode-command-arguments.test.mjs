@@ -90,11 +90,38 @@ if (/`\{company-slug\}` = [^\n]*`\^\[a-z0-9-\]\+\$`/.test(canonicalText)) {
 // A script name followed by whitespace and anything but a flag is an argument
 // typed into the command line: `archive-posting.mjs <url>`, `keyword-match.mjs "reports/..."`.
 const SPLICE = /(?:archive-posting|keyword-match)\.mjs[ \t]+(?!--)\S/;
+// `node archive-posting.mjs --company="$(...)"` passes SPLICE (its first argument is a
+// flag), so any direct `node` run of either script is refused too. The canonical
+// command starts `node --input-type=module` and names the scripts only inside the -e code.
+const DIRECT = /\bnode\s+(?:\S*\/)?(?:archive-posting|keyword-match)\.mjs\b/;
+
+/** Why `line` runs either script with posting values in shell text, or null. */
+function unsafeCommand(line) {
+  if (DIRECT.test(line)) return 'runs archive-posting/keyword-match directly instead of the JSON-file command';
+  if (SPLICE.test(line)) return 'types an argument into an archive-posting/keyword-match command line';
+  return null;
+}
+
+const FIXTURES = [
+  ['node archive-posting.mjs --company="$(touch pwned)" https://jobs.example.test', true],
+  ['run `node ./keyword-match.mjs --json reports/042-acme-2026-10-25.md`', true],
+  ['`archive-posting.mjs <url> --company={company-slug}`', true],
+  ['See jds/{filename} for the full archive (archive-posting.mjs --report={num}).', false],
+  ['const args = ["archive-posting.mjs", p.url];', false],
+  ["node --input-type=module -e '", false],
+  ['(printed by the `keyword-match.mjs` command in step 1b)', false],
+];
+for (const [line, unsafe] of FIXTURES) {
+  if (Boolean(unsafeCommand(line)) === unsafe) pass(`${unsafe ? 'flags' : 'allows'}: ${line}`);
+  else fail(`unsafeCommand should ${unsafe ? 'flag' : 'allow'}: ${line}`);
+}
 
 for (const rel of scannedFiles()) {
   const text = read(rel);
-  const line = text.split('\n').findIndex(l => SPLICE.test(l));
-  if (line !== -1) fail(`${rel}:${line + 1} types an argument into an archive-posting/keyword-match command line`);
+  text.split('\n').forEach((l, i) => {
+    const why = unsafeCommand(l);
+    if (why) fail(`${rel}:${i + 1} ${why}`);
+  });
   for (const script of Object.keys(MUST_CARRY)) {
     if (!canonical[script]) continue;
     const blocks = commandBlocks(text, script);
@@ -188,11 +215,15 @@ if (!['posix', 'git-bash', 'path'].includes(bashSource())) {
       [{ url: '--pipeline' }, 'a flag in place of the URL'],
       [{ url: 'file:///etc/passwd' }, 'a non-http URL'],
       [{ url: 42 }, 'a non-string URL'],
+      [null, 'a JSON null'],
+      [[{ url: 'https://x.test' }], 'a JSON array'],
+      ['https://x.test', 'a bare JSON string'],
     ];
     for (const [values, label] of badArchive) {
       r = runCommand('archive-posting.mjs', values);
-      if (r.status === 1 && r.argv === null && !pwned()) pass(`archive command refuses ${label} before the script starts`);
-      else fail(`archive command did not refuse ${label}: status ${r.status}, argv ${JSON.stringify(r.argv)}, pwned ${pwned()}`);
+      // Its own fail() message, not an uncaught TypeError that happens to exit 1 too.
+      if (r.status === 1 && r.argv === null && !pwned() && r.stderr.startsWith('archive-posting: ')) pass(`archive command refuses ${label} before the script starts`);
+      else fail(`archive command did not refuse ${label}: status ${r.status}, argv ${JSON.stringify(r.argv)}, pwned ${pwned()}, stderr ${r.stderr}`);
     }
 
     const report = 'reports/042-acme-co-2026-10-25.md';
@@ -218,11 +249,14 @@ if (!['posix', 'git-bash', 'path'].includes(bashSource())) {
       [{ report: 'reports/042-acme-2026-10-25.md\ntouch pwned10' }, 'a report path with a newline'],
       [{ report: 'reports/42-acme-2026-10-25.md' }, 'a report number that is not zero-padded'],
       [{ report, cv: '--json' }, 'a flag in place of the CV path'],
+      [null, 'a JSON null'],
+      [[report], 'a JSON array'],
     ];
     for (const [values, label] of badKeyword) {
       r = runCommand('keyword-match.mjs', values);
-      if (r.status === 1 && r.argv === null && !pwned()) pass(`keyword command refuses ${label} before the script starts`);
-      else fail(`keyword command did not refuse ${label}: status ${r.status}, argv ${JSON.stringify(r.argv)}, pwned ${pwned()}`);
+      // Its own fail() message, not an uncaught TypeError that happens to exit 1 too.
+      if (r.status === 1 && r.argv === null && !pwned() && r.stderr.startsWith('keyword-match: ')) pass(`keyword command refuses ${label} before the script starts`);
+      else fail(`keyword command did not refuse ${label}: status ${r.status}, argv ${JSON.stringify(r.argv)}, pwned ${pwned()}, stderr ${r.stderr}`);
     }
 
     r = runCommand('keyword-match.mjs', { report, cv: 'exit-7' });

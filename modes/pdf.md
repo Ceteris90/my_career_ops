@@ -27,6 +27,7 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
      import { spawnSync } from "node:child_process";
      const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
      const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
+     if (p === null || typeof p !== "object" || Array.isArray(p)) fail("the JSON file must hold one object");
      if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
      const args = ["archive-posting.mjs", p.url];
      if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
@@ -112,6 +113,7 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
     import { spawnSync } from "node:child_process";
     const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
     const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+    if (p === null || typeof p !== "object" || Array.isArray(p)) fail("the JSON file must hold one object");
     if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
     const args = ["keyword-match.mjs", p.report];
     if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }

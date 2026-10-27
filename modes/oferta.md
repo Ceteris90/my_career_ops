@@ -777,6 +777,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("archive-posting: " + msg); process.exit(1); };
+if (p === null || typeof p !== "object" || Array.isArray(p)) fail("the JSON file must hold one object");
 if (typeof p.url !== "string" || !/^https?:\/\//i.test(p.url)) fail("url must be an http(s) URL");
 const args = ["archive-posting.mjs", p.url];
 if (p.company != null) { if (typeof p.company !== "string" || !/^[a-z0-9-]+$/.test(p.company)) fail("company must match ^[a-z0-9-]+$"); args.push("--company=" + p.company); }
@@ -795,6 +796,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
 const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (p === null || typeof p !== "object" || Array.isArray(p)) fail("the JSON file must hold one object");
 if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
 const args = ["keyword-match.mjs", p.report];
 if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
@@ -802,7 +804,7 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 ' {json-file}
 ```
 
-By default this scans the base `cv.md` — read it as a **pre-tailoring gap list** (which JD keywords to weave in while tailoring), not a verdict on the document you will send; the output labels what it scanned. To verify the final tailored CV, pass `--cv` (the `pdf` mode does this against the generated HTML).
+By default this scans the base `cv.md` — read it as a **pre-tailoring gap list** (which JD keywords to weave in while tailoring), not a verdict on the document you will send; the output labels what it scanned. To verify the final tailored CV, add `"cv": "{path}"` to the JSON file (the `pdf` mode does this against the generated HTML).
 
 **Diagnostic only:** it flags missing/thin keywords so the user can decide what to reinforce. Never fabricate — add a keyword only if it reflects the user's real experience (see `modes/_shared.md`).
 
