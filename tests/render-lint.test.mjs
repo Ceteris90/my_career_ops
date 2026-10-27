@@ -39,8 +39,10 @@ const CASES = [
   },
   {
     id: 'script-url',
-    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="java&Tab;script:alert(1)">x</a>', '<a href="java&NewLine;script:alert(1)">x</a>', '<a href="java\nscript:alert(1)">x</a>', '<a href="java\tscript:alert(1)">x</a>'],
-    miss: ['<img src="data:image/png;base64,AAAA">', '<style>@font-face{src:url("data:font/woff2;base64,AAAA")}</style>', '<a href="{{LINKEDIN_URL}}">x</a>'],
+    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="java&Tab;script:alert(1)">x</a>', '<a href="java&NewLine;script:alert(1)">x</a>', '<a href="java\nscript:alert(1)">x</a>', '<a href="java\tscript:alert(1)">x</a>', '<a href="&#1;javascript:alert(1)">x</a>', '<a href="&#31; javascript:alert(1)">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="JAVASCRIPT:alert(1)">x</a>', '<a href="JaVaScRiPt:alert(1)">x</a>', '<a href="javascript:alert(1)&#1;">x</a>', '<a href="&#1;DATA:text/html,<b>x</b>">x</a>', '<img src="&#1;&#2;java\nscript:x">'],
+    // Probed: Chromium writes a /URI action into the PDF for each of the hit forms (JavaScript off), and for a leading DEL it
+    // resolves a file path instead, so only C0 controls, space, tab, LF and CR are ignored, as the URL parser does.
+    miss: ['<a href="&#127;javascript:alert(1)">x</a>', '<a href="java script:alert(1)">x</a>', '<a href="&#0;javascript:alert(1)">x</a>', '<p>javascript:alert(1)</p>', '<img src="data:image/png;base64,AAAA">', '<style>@font-face{src:url("data:font/woff2;base64,AAAA")}</style>', '<a href="{{LINKEDIN_URL}}">x</a>'],
   },
   {
     id: 'meta-refresh',
@@ -163,6 +165,47 @@ const CASES = [
       '<link rel="alternate stylesheet" href="https://example.com/a.css">',
       '<link rel="preload" as="image" href="https://example.com/a.png">',
       '<link rel="prefetch" href="https://example.com/a.html">',
+      // Any scheme with an authority is aborted by the route, not just the special ones (probed).
+      '<img src="gopher://example.com/a.png">',
+      '<img src="foo://example.com/a.png">',
+      '<img src="chrome-extension://example.com/a.png">',
+      '<img src="intent://example.com/a">',
+      '<style>.a{background:url(foo://example.com/a.png)}</style>',
+      // With no remote base the document is a file: URL, so `//host` is file://host/..., which does not load (probed).
+      '<img src="file://example.com/a.png">',
+      '<img src="\\\\example.com\\a.png">',
+      // Foreign content: svg title/desc/foreignObject are HTML integration points, a breakout tag leaves svg,
+      // and a script in svg is markup, not raw text (probed).
+      '<svg><title><img src="https://example.com/a.png"></title></svg>',
+      '<svg><desc><img src="https://example.com/a.png"></desc></svg>',
+      '<svg><textarea><img src="https://example.com/a.png"></textarea></svg>',
+      '<svg><foreignObject><img src="https://example.com/a.png"></foreignObject></svg>',
+      '<svg><iframe><img src="https://example.com/a.png"></iframe></svg>',
+      '<svg><xmp><img src="https://example.com/a.png"></xmp></svg>',
+      '<svg><noscript><img src="https://example.com/a.png"></noscript></svg>',
+      '<svg><script>var s="<img src=\'https://example.com/a.png\'>";</script></svg>',
+      '<svg><foreignObject><div></div></foreignObject><textarea><img src="https://example.com/a.png"></textarea></svg>',
+      '<svg><g/><img src="https://example.com/a.png"></svg>',
+      '<svg/><img src="https://example.com/a.png">',
+      '<p><svg><p><img src="https://example.com/a.png"></svg>',
+      '<math><annotation-xml encoding="x"><textarea><img src="https://example.com/a.png"></textarea></annotation-xml></math>',
+      // Tokenizer corner cases (probed): the end tag wins over comment and string syntax inside raw text.
+      '<template><script>var a="</template>";</script></template><img src="https://example.com/a.png">',
+      '<textarea><!-- </textarea><img src="https://example.com/a.png"> -->',
+      '<script><!-- var a = "</script><img src=\'https://example.com/a.png\'>";</script>',
+      '<style>/* </style><img src="https://example.com/a.png"> */</style>',
+      '<template><svg><title></template><img src="https://example.com/a.png"></title></svg></template>',
+      // CSS preprocessing turns CR, FF and CRLF into LF: a string ends at a CR and a backslash-CRLF continues it (probed).
+      '<style>.x{content:"x\r;background:url(https://example.com/a.png)}</style>',
+      '<style>.x{content:"x\f;background:url(https://example.com/a.png)}</style>',
+      '<style>.x{background:url("htt\\\r\nps://example.com/a.png")}</style>',
+      '<style>.x{background:url("htt\\\rps://example.com/a.png")}</style>',
+      // A trailing slash closes only svg, math and foreign children; <picture/> still opens a picture (probed).
+      '<picture/><source srcset="https://example.com/a.png"><img src="data:image/png;base64,AA"></picture>',
+      // HTML whitespace is TAB, LF, FF, CR and space: NBSP belongs to the tag name, so this is not a <template> (probed).
+      '<template\u00A0><img src="https://example.com/a.png">',
+      '<script></script ><img src="https://example.com/a.png">',
+      '<style type="TEXT/CSS">.x{background:url(https://example.com/a.png)}</style>',
       // CSS escapes are decoded before the URL is classified.
       '<style>@import "\\68 ttps://example.com/a.css";</style>',
       '<style>@import url("\\68 ttps://example.com/a.css");</style>',
@@ -244,6 +287,42 @@ const CASES = [
       '<link rel="apple-touch-icon" href="https://example.com/a.png">',
       '<link rel="preload" href="https://example.com/a.png">',
       '<link rel="x-stylesheet" href="https://example.com/a.css">',
+      // No authority, no request: Chromium never issues these (probed), so they are not flagged.
+      '<img src="urn:example">',
+      '<img src="cid:logo@example">',
+      '<img src="blob:https://example.com/x">',
+      '<img src="about:blank">',
+      '<img src="chrome://example.com/a.png">',
+      '<img src="file://localhost/tmp/a.png">',
+      '<img src="file:///tmp/a.png">',
+      // Raw text, RCDATA and template content inside foreign content and its HTML integration points (probed).
+      '<svg><foreignObject><textarea><img src="https://example.com/a.png"></textarea></foreignObject></svg>',
+      '<svg><foreignObject><title><img src="https://example.com/a.png"></title></foreignObject></svg>',
+      '<svg><desc><textarea><img src="https://example.com/a.png"></textarea></desc></svg>',
+      '<svg><title><textarea><img src="https://example.com/a.png"></textarea></title></svg>',
+      '<math><mtext><textarea><img src="https://example.com/a.png"></textarea></mtext></math>',
+      '<math><mi><title><img src="https://example.com/a.png"></title></mi></math>',
+      '<math><annotation-xml encoding="text/html"><textarea><img src="https://example.com/a.png"></textarea></annotation-xml></math>',
+      '<math><annotation-xml encoding="application/xhtml+xml"><textarea><img src="https://example.com/a.png"></textarea></annotation-xml></math>',
+      '<svg><p></p><textarea><img src="https://example.com/a.png"></textarea></svg>',
+      '<svg></svg><textarea><img src="https://example.com/a.png"></textarea>',
+      '<svg><script><![CDATA[var s="<img src=\'https://example.com/a.png\'>";]]></script></svg>',
+      '<template><textarea></template><img src="https://example.com/a.png"></textarea></template>',
+      '<template><script>var a="</template>";</script><img src="https://example.com/a.png"></template>',
+      '<template><template></template><img src="https://example.com/a.png"></template>',
+      '<template><template><img src="https://example.com/a.png"></template></template>',
+      '<template><style>.a{background:url(https://example.com/a.png)}</style></template>',
+      // <template/> opens a template, </script\u00A0> does not end a script, an unmatched </math> leaves svg alone (probed).
+      '<template/><img src="https://example.com/a.png">',
+      '<script></script\u00A0><img src="https://example.com/a.png">',
+      '<svg><g></math><text><![CDATA[<x><image href="https://example.com/a.png"/>]]></text></svg>',
+      // Attribute values compare exactly: no trimming and no NBSP (probed).
+      '<style type=" text/css">.x{background:url(https://example.com/a.png)}</style>',
+      '<meta http-equiv=" refresh" content="0;url=https://example.com/a.png">',
+      '<meta http-equiv="refresh" content="\u00A00;url=https://example.com/a.png">',
+      '<input type=" image" src="https://example.com/a.png">',
+      '<link rel="stylesheet\u00A0" href="https://example.com/a.css">',
+      '<link rel="\u00A0stylesheet" href="https://example.com/a.css">',
       // A host the URL parser rejects is not requested.
       '<img src="https://exa%00mple.test/a.png">',
       '<img src="https://exa&#0;mple.test/a.png">',
@@ -277,6 +356,145 @@ for (const { id, hit, miss } of CASES) {
   });
 }
 
+// Which URL-bearing attributes Chromium really requests, probed in ONE run with JavaScript off and a route() that
+// logs every request and aborts all but file: and data:. `true` means the URL reached route(). The markup is the
+// probe's own; `@@` stands for a host. remote-subresource must flag exactly the `true` rows. Rows worth noting:
+// legacy background on body/table/thead/tbody/tfoot/tr/td/th is requested (div is not); iframe/embed/object/frame
+// src and data are requested (a frame only inside a frameset, an iframe src not when srcdoc is present); a link
+// preloads through href or imagesrcset; svg image/feImage hrefs and the url() of fill, stroke, marker-*, clip-path,
+// mask and cursor are requested, an external <use>/<pattern>/<linearGradient>/<textPath>/<mpath> href and a
+// filter url() are not; cite, ping, action, formaction, longdesc, lowsrc, usemap, codebase, archive, classid,
+// manifest, profile, track and a script src are not; a refresh navigates to its url.
+const FETCHERS = [
+  ['a href', '<a href="https://@@/a.png">x</a>', false],
+  ['a ping', '<a href="a.html" ping="https://@@/a.png">x</a>', false],
+  ['area href', '<map name="m"><area shape="rect" coords="0,0,5,5" href="https://@@/a.png"></map>', false],
+  ['area ping', '<map name="m2"><area shape="rect" coords="0,0,5,5" href="a.html" ping="https://@@/a.png"></map>', false],
+  ['blockquote cite', '<blockquote cite="https://@@/a.png">x</blockquote>', false],
+  ['q cite', '<q cite="https://@@/a.png">x</q>', false],
+  ['del cite', '<del cite="https://@@/a.png">x</del>', false],
+  ['ins cite', '<ins cite="https://@@/a.png">x</ins>', false],
+  ['form action', '<form action="https://@@/a.png"><input type="text"></form>', false],
+  ['button formaction', '<form><button formaction="https://@@/a.png">b</button></form>', false],
+  ['input formaction', '<form><input type="submit" formaction="https://@@/a.png"></form>', false],
+  ['img src', '<img src="https://@@/a.png">', true],
+  ['img srcset', '<img srcset="https://@@/a.png 1x">', true],
+  ['img longdesc', '<img src="a.png" longdesc="https://@@/a.png">', false],
+  ['img lowsrc', '<img src="a.png" lowsrc="https://@@/a.png">', false],
+  ['img usemap', '<img src="a.png" usemap="https://@@/a.png">', false],
+  ['img dynsrc', '<img src="a.png" dynsrc="https://@@/a.png">', false],
+  ['iframe src', '<iframe src="https://@@/a.png"></iframe>', true],
+  ['iframe srcdoc+src', '<iframe srcdoc="<p>x</p>" src="https://@@/a.png"></iframe>', false],
+  ['embed src', '<embed src="https://@@/a.png">', true],
+  ['embed pluginspage', '<embed src="a.png" pluginspage="https://@@/a.png">', false],
+  ['object data', '<object data="https://@@/a.png"></object>', true],
+  ['object data typed', '<object data="https://@@/a.png" type="image/png"></object>', true],
+  ['object codebase', '<object data="a.png" codebase="https://@@/a.png"></object>', false],
+  ['object archive', '<object data="a.png" archive="https://@@/a.png"></object>', false],
+  ['object classid', '<object classid="https://@@/a.png"></object>', false],
+  ['applet archive', '<applet archive="https://@@/a.png" code="X"></applet>', false],
+  ['applet codebase', '<applet codebase="https://@@/a.png" code="X"></applet>', false],
+  ['param value', '<object data="a.png"><param name="movie" value="https://@@/a.png"></object>', false],
+  ['video src', '<video src="https://@@/a.png"></video>', true],
+  ['video poster', '<video poster="https://@@/a.png"></video>', true],
+  ['audio src', '<audio src="https://@@/a.png"></audio>', true],
+  ['video>source src', '<video><source src="https://@@/a.png"></video>', true],
+  ['audio>source src', '<audio><source src="https://@@/a.png"></audio>', true],
+  ['video>source srcset', '<video><source srcset="https://@@/a.png"></video>', false],
+  ['picture>source srcset', '<picture><source srcset="https://@@/a.png"><img alt=""></picture>', true],
+  ['picture>source src', '<picture><source src="https://@@/a.png"><img alt=""></picture>', false],
+  ['source src bare', '<source src="https://@@/a.png">', false],
+  ['track src', '<video><track src="https://@@/a.png" kind="subtitles" default></video>', false],
+  ['input[image] src', '<input type="image" src="https://@@/a.png">', true],
+  ['input[text] src', '<input type="text" src="https://@@/a.png">', false],
+  ['input[image] formaction', '<form><input type="image" src="a.png" formaction="https://@@/a.png"></form>', false],
+  ['script src', '<script src="https://@@/a.png"></script>', false],
+  ['script type=module src', '<script type="module" src="https://@@/a.png"></script>', false],
+  ['link stylesheet', '<link rel="stylesheet" href="https://@@/a.png">', true],
+  ['link preload as=image', '<link rel="preload" as="image" href="https://@@/a.png">', true],
+  ['link preload as=font', '<link rel="preload" as="font" crossorigin href="https://@@/a.png">', true],
+  ['link preload (no as)', '<link rel="preload" href="https://@@/a.png">', false],
+  ['link preload imagesrcset', '<link rel="preload" as="image" imagesrcset="https://@@/a.png 1x">', true],
+  ['link prefetch', '<link rel="prefetch" href="https://@@/a.png">', true],
+  ['link modulepreload', '<link rel="modulepreload" href="https://@@/a.png">', false],
+  ['link icon', '<link rel="icon" href="https://@@/a.png">', false],
+  ['link manifest', '<link rel="manifest" href="https://@@/a.png">', false],
+  ['link prerender', '<link rel="prerender" href="https://@@/a.png">', false],
+  ['link dns-prefetch', '<link rel="dns-prefetch" href="https://@@/a.png">', false],
+  ['link preconnect', '<link rel="preconnect" href="https://@@/a.png">', false],
+  ['link canonical', '<link rel="canonical" href="https://@@/a.png">', false],
+  ['link alternate', '<link rel="alternate" href="https://@@/a.png">', false],
+  ['link alternate stylesheet', '<link rel="alternate stylesheet" href="https://@@/a.png">', true],
+  ['table background', '<table background="https://@@/a.png"><tr><td>x</td></tr></table>', true],
+  ['td background', '<table><tr><td background="https://@@/a.png">x</td></tr></table>', true],
+  ['th background', '<table><tr><th background="https://@@/a.png">x</th></tr></table>', true],
+  ['tr background', '<table><tr background="https://@@/a.png"><td>x</td></tr></table>', true],
+  ['thead background', '<table><thead background="https://@@/a.png"><tr><td>x</td></tr></thead></table>', true],
+  ['tbody background', '<table><tbody background="https://@@/a.png"><tr><td>x</td></tr></tbody></table>', true],
+  ['tfoot background', '<table><tfoot background="https://@@/a.png"><tr><td>x</td></tr></tfoot></table>', true],
+  ['div background', '<div background="https://@@/a.png">x</div>', false],
+  ['meta refresh url', '<meta http-equiv="refresh" content="0;url=https://@@/a.png">', true],
+  ['meta http-equiv=link', '<meta http-equiv="link" content="https://@@/a.png">', false],
+  ['meta content', '<meta name="x" content="https://@@/a.png">', false],
+  ['svg image href', '<svg width=10 height=10><image href="https://@@/a.png" width=10 height=10/></svg>', true],
+  ['svg image xlink:href', '<svg width=10 height=10><image xlink:href="https://@@/a.png" width=10 height=10/></svg>', true],
+  ['svg feImage href', '<svg width=10 height=10><filter id="f1"><feImage href="https://@@/a.png"/></filter><rect width=10 height=10 filter="url(#f1)"/></svg>', true],
+  ['svg feImage xlink:href', '<svg width=10 height=10><filter id="f2"><feImage xlink:href="https://@@/a.png"/></filter><rect width=10 height=10 filter="url(#f2)"/></svg>', true],
+  ['svg use href', '<svg width=10 height=10><use href="https://@@/a.png#a"/></svg>', false],
+  ['svg use xlink:href', '<svg width=10 height=10><use xlink:href="https://@@/a.png#a"/></svg>', false],
+  ['svg script href', '<svg><script href="https://@@/a.png"></script></svg>', false],
+  ['svg a href', '<svg width=10 height=10><a href="https://@@/a.png"><rect width=10 height=10/></a></svg>', false],
+  ['svg pattern href', '<svg width=10 height=10><pattern id="p1" href="https://@@/a.png#a"/><rect width=10 height=10 fill="url(#p1)"/></svg>', false],
+  ['svg linearGradient href', '<svg width=10 height=10><linearGradient id="g1" href="https://@@/a.png#a"/><rect width=10 height=10 fill="url(#g1)"/></svg>', false],
+  ['svg textPath href', '<svg width=100 height=100><path id="tp" d="M0 50 H100"/><text><textPath href="https://@@/a.png#a">x</textPath></text></svg>', false],
+  ['svg mpath href', '<svg width=10 height=10><rect width=10 height=10><animateMotion><mpath href="https://@@/a.png#a"/></animateMotion></rect></svg>', false],
+  ['svg style attr url', '<svg width=10 height=10><rect width=10 height=10 style="fill:url(https://@@/a.png#a)"/></svg>', true],
+  ['svg filter attr url', '<svg width=10 height=10><rect width=10 height=10 filter="url(https://@@/a.png#f)"/></svg>', false],
+  ['svg marker-start', '<svg width=10 height=10><path d="M0 0 L5 5" marker-start="url(https://@@/a.png#m)"/></svg>', true],
+  ['math href', '<math href="https://@@/a.png"><mi>x</mi></math>', false],
+  ['math mglyph src', '<math><mglyph src="https://@@/a.png"/></math>', false],
+  ['body style bg url', '<div style="background:url(https://@@/a.png)">x</div>', true],
+  ['style @import', '<style>@import "https://@@/a.png";</style>', true],
+  ['style @font-face', '<style>@font-face{font-family:f;src:url(https://@@/a.png)} p{font-family:f}</style><p>x</p>', true],
+  ['video>track(captions)', '<video controls><track src="https://@@/a.png" kind="captions" default></video>', false],
+  ['image (html) src', '<image src="https://@@/a.png">', true],
+  ['bgsound src', '<bgsound src="https://@@/a.png">', false],
+  ['frame (in body)', '<frame src="https://@@/a.png">', false],
+  ['isindex action', '<isindex action="https://@@/a.png">', false],
+  ['menuitem icon', '<menu type="context"><menuitem icon="https://@@/a.png" label="x"></menuitem></menu>', false],
+  ['img ping', '<img src="a.png" ping="https://@@/a.png">', false],
+  ['svg fill attr', '<svg width=10 height=10><rect width=10 height=10 fill="url(https://@@/a.png#a)"/></svg>', true],
+  ['svg stroke attr', '<svg width=10 height=10><rect width=10 height=10 stroke="url(https://@@/a.png#a)"/></svg>', true],
+  ['svg marker-mid attr', '<svg width=10 height=10><path d="M0 0 L5 5 L9 9" marker-mid="url(https://@@/a.png#m)"/></svg>', true],
+  ['svg marker-end attr', '<svg width=10 height=10><path d="M0 0 L5 5" marker-end="url(https://@@/a.png#m)"/></svg>', true],
+  ['svg clip-path attr', '<svg width=10 height=10><rect width=10 height=10 clip-path="url(https://@@/a.png#c)"/></svg>', true],
+  ['svg mask attr', '<svg width=10 height=10><rect width=10 height=10 mask="url(https://@@/a.png#c)"/></svg>', true],
+  ['svg cursor attr', '<svg width=10 height=10><rect width=10 height=10 cursor="url(https://@@/a.png), auto"/></svg>', true],
+  ['svg style filter', '<svg width=10 height=10><rect width=10 height=10 style="filter:url(https://@@/a.png#f)"/></svg>', false],
+  ['html style filter', '<div style="filter:url(https://@@/a.png#f)">x</div>', false],
+  ['html style cursor', '<div style="cursor:url(https://@@/a.png), auto">x</div>', true],
+  ['html list-style-image', '<ul style="list-style-image:url(https://@@/a.png)"><li>x</li></ul>', true],
+  ['html border-image', '<div style="border:5px solid;border-image:url(https://@@/a.png) 5">x</div>', true],
+  ['html mask-image', '<div style="mask-image:url(https://@@/a.png);width:9px;height:9px">x</div>', true],
+  ['html content url', '<style>.cu::before{content:url(https://@@/a.png)}</style><div class="cu">x</div>', true],
+  ['details/summary', '<details><summary>x</summary></details>', false],
+  ['body background', '<!doctype html><html><head></head><body background="https://@@/a.png">x</body></html>', true],
+  ['html manifest', '<!doctype html><html manifest="https://@@/a.png"><head></head><body>x</body></html>', false],
+  ['frameset>frame src', '<!doctype html><html><head></head><frameset><frame src="https://@@/a.png"></frameset></html>', true],
+  ['frameset>frame longdesc', '<!doctype html><html><head></head><frameset><frame src="a.html" longdesc="https://@@/a.png"></frameset></html>', false],
+  ['head profile', '<!doctype html><html><head profile="https://@@/a.png"></head><body>x</body></html>', false],
+  ['base href + img', '<!doctype html><html><head><base href="https://@@/a.png"></head><body><img src="rel.png"></body></html>', true],
+];
+
+test('remote-subresource flags exactly what Chromium requests (probed table)', () => {
+  const wrong = [];
+  for (const [name, markup, requested] of FETCHERS) {
+    const html = markup.replaceAll('@@', 'example.com');
+    if (ids(lint(html)).includes('remote-subresource') !== requested) wrong.push(`${name} (${requested ? 'requested' : 'not requested'}): ${html}`);
+  }
+  assert.deepEqual(wrong, []);
+});
+
 test('srcdoc nested past the cap is surfaced by a depth-limit finding, never silently passed', () => {
   const nest = (inner, levels) => {
     let html = inner;
@@ -292,6 +510,25 @@ test('srcdoc nested past the cap is surfaced by a depth-limit finding, never sil
   assert.ok(ids(past).includes('srcdoc-depth-limit'), 'a remote request past the cap still fails through the depth-limit finding');
   assert.ok(!ids(past).includes('remote-subresource'), 'the capped iframe is not labelled a remote subresource');
   assert.ok(ids(lint(nest(local, 40))).includes('srcdoc-depth-limit'), 'content past the cap cannot be proven local, so it is reported too');
+});
+
+test('the meta-refresh text says what a refresh does (probed: a local target replaces the printed document, a remote one is aborted)', () => {
+  const [f] = lint('<meta http-equiv="refresh" content="0;url=a.html">').findings;
+  assert.equal(f.id, 'meta-refresh');
+  assert.match(f.rule, /navigates the page/);
+  assert.match(f.rule, /replaces the document/);
+  assert.match(f.rule, /aborted/);
+  assert.doesNotMatch(f.rule, /not followed/);
+});
+
+test('the depth-limit text says the srcdoc could not be checked, not that it fetches something', () => {
+  let html = '<img src="a.png">';
+  for (let i = 0; i < 20; i++) html = `<iframe srcdoc="${html.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}"></iframe>`;
+  const f = lint(html).findings.find((x) => x.id === 'srcdoc-depth-limit');
+  assert.ok(f);
+  assert.match(f.rule, /could not be checked/);
+  assert.match(f.rule, /deeper than 16 levels/);
+  assert.doesNotMatch(f.rule, /request|fetch/);
 });
 
 test('every finding is a warning with a rule text and a detail', () => {
