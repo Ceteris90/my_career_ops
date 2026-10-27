@@ -18,6 +18,8 @@ import { startRouteProgress } from "@/components/route-progress";
 import { sortRows } from "@/lib/core/pipeline-sort.mjs";
 import { PageFrame } from "@/components/page-frame";
 import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-navigation.mjs";
+import { queryWithLiveSearch } from "@/lib/list-search-sync.mjs";
+import { useListSearch } from "@/lib/use-list-search";
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
@@ -62,28 +64,13 @@ export function PipelineView({
   const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "score";
   const sort = { key: sortKey, dir: (params.get("dir") === "1" ? 1 : -1) as 1 | -1 };
 
-  // Search stays LOCAL for snappy typing; seeded from the URL and re-synced only
-  // when the URL's q changes (i.e. the assistant set it) — never per keystroke.
-  const [q, setQ] = useState(params.get("q") ?? "");
-  // Typing stays local, so include it explicitly when leaving the list.
-  const detailQuery = pipelineQuery(params.toString(), q);
-  const lastUrlQ = useRef(params.get("q") ?? "");
-  useEffect(() => {
-    const urlQ = params.get("q") ?? "";
-    if (urlQ !== lastUrlQ.current) {
-      lastUrlQ.current = urlQ;
-      setQ(urlQ);
-    }
-  }, [params]);
-
+  // Search filters locally. The URL catches up once typing pauses, so a
+  // reload or the browser Back button still has it. Tab changes include the
+  // typed value immediately, before that pause.
+  const qRef = useRef(params.get("q") ?? "");
   const setParams = useCallback(
     (updates: Record<string, string | number | null>) => {
-      const sp = new URLSearchParams(params.toString());
-      for (const [k, v] of Object.entries(updates)) {
-        if (v == null || v === "") sp.delete(k);
-        else sp.set(k, String(v));
-      }
-      const qs = sp.toString();
+      const qs = queryWithLiveSearch(params.toString(), updates, qRef.current);
       if (qs === params.toString()) return;
       if (Object.prototype.hasOwnProperty.call(updates, "tab")) {
         const nextTab = String(updates.tab ?? "INBOX").toUpperCase();
@@ -96,6 +83,9 @@ export function PipelineView({
     },
     [params, router, pathname, startNavigation],
   );
+  const { q, setQ } = useListSearch(params, setParams, qRef);
+  // Typing stays local until the URL catches up, so include it when leaving.
+  const detailQuery = pipelineQuery(params.toString(), q);
 
   useEffect(() => {
     if (!isPending) setPendingTab(null);

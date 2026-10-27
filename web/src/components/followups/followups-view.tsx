@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { queryWithLiveSearch } from "@/lib/list-search-sync.mjs";
+import { useListSearch } from "@/lib/use-list-search";
 import { CalendarClock, ChevronDown, ChevronRight, Loader2, Pin, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
@@ -112,24 +114,10 @@ export function FollowupsView() {
   const sortKey: SortKey | null = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : null;
   const dir = (params.get("dir") === "-1" ? -1 : 1) as 1 | -1;
 
-  const [q, setQ] = useState(params.get("q") ?? "");
-  const lastUrlQ = useRef(params.get("q") ?? "");
-  useEffect(() => {
-    const urlQ = params.get("q") ?? "";
-    if (urlQ !== lastUrlQ.current) {
-      lastUrlQ.current = urlQ;
-      setQ(urlQ);
-    }
-  }, [params]);
-
+  const qRef = useRef(params.get("q") ?? "");
   const setParams = useCallback(
     (updates: Record<string, string | number | null>) => {
-      const sp = new URLSearchParams(params.toString());
-      for (const [k, v] of Object.entries(updates)) {
-        if (v == null || v === "") sp.delete(k);
-        else sp.set(k, String(v));
-      }
-      const qs = sp.toString();
+      const qs = queryWithLiveSearch(params.toString(), updates, qRef.current);
       if (qs === params.toString()) return;
       startRouteProgress();
       startTransition(() => {
@@ -138,6 +126,7 @@ export function FollowupsView() {
     },
     [params, router, pathname, startTransition],
   );
+  const { q, setQ } = useListSearch(params, setParams, qRef);
 
   const entries = useMemo(() => (data?.available ? data.entries : []), [data]);
   const upcoming = useMemo(() => {
