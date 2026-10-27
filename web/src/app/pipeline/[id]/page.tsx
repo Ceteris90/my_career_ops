@@ -7,6 +7,7 @@ import { ReportView } from "@/components/report-view";
 import { pipelineQuery } from "@/lib/pipeline-navigation.mjs";
 import { reportNumberFor } from "@/lib/apply-checklist.mjs";
 import { tailoredCvOnDisk } from "@/lib/tailored-cv-ready.mjs";
+import { parseReport } from "@/lib/format";
 
 function outputPdfNames(): string[] {
   try {
@@ -34,10 +35,12 @@ export default async function ReportPage({ params, searchParams }: {
   // offer's cover.
   const coverReady = (await resolveTailoredCover(app?.company, id)) !== null;
   const indexReady = await pdfReadyForReport(id);
+  // Same name the View link puts in ?company=, so a slug match here is the file that link would open.
+  const companyName = app?.company || parseReport(report?.content ?? "").title || "";
   const pdfFileReady = tailoredCvOnDisk({
     indexReady,
     filenames: outputPdfNames(),
-    company: app?.company ?? "",
+    company: companyName,
   });
   return (
     <ReportView
