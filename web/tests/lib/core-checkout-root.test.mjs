@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -20,7 +20,7 @@ import { listTree } from "../../../lib/walk-tree.mjs";
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../src");
 const read = (rel) => readFileSync(join(SRC, rel), "utf8");
 
-const sources = listTree(SRC, { match: /\.(ts|tsx|mjs)$/ }).map((p) => ({ rel: relative(SRC, p), src: readFileSync(p, "utf8") }));
+const sources = listTree(SRC, { match: /\.(ts|tsx|mjs)$/ }).map((p) => ({ rel: relative(SRC, p).split(sep).join("/"), src: readFileSync(p, "utf8") }));
 
 test("rootScript resolves against the code checkout, not the data root", () => {
   const src = read("lib/career-ops.ts");

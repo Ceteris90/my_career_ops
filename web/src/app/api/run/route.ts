@@ -142,7 +142,8 @@ export async function POST(req: Request) {
   // (#4034). Only pdf fills a template, so nothing else pays for the lookup.
   // The root is passed, not re-derived: a relative CAREER_OPS_PROFILE resolves
   // against it, and `process.cwd()` here is `<core>/web` (see cv-template.mjs).
-  const cvTemplate = kind === "pdf" ? await resolveCvTemplate(resolveCodeRoot(process.cwd(), process.env)) : undefined;
+  const codeRoot = resolveCodeRoot(process.cwd(), process.env);
+  const cvTemplate = kind === "pdf" ? await resolveCvTemplate(codeRoot) : undefined;
   const prompt = buildPrompt({
     kind,
     input,
@@ -151,6 +152,8 @@ export async function POST(req: Request) {
     postedAt,
     lang,
     cvTemplate,
+    // The worker's cwd is the data root; the template lives in the checkout.
+    templateRoot: codeRoot,
     reportFile: pdfPaths?.reportFile ?? (coverRequest?.ok ? coverRequest.reportFile : undefined),
     coverBrief: coverRequest?.ok ? coverRequest.brief : undefined,
     profile: profileRef(careerOpsRoot()),

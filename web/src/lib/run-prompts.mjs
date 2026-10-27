@@ -104,7 +104,21 @@ function safeCvTemplate(value) {
     : BASE_CV_TEMPLATE;
 }
 
-export function buildPrompt({ kind, input, memory, today, postedAt, lang, cvTemplate, reportFile, coverBrief, profile = DEFAULT_PROFILE_REF }) {
+/**
+ * The path the worker is told to fill. `templateRoot` is the code checkout the
+ * template lives in: the worker's cwd is the DATA root, which on a split-layout
+ * install has no templates/, so the checkout-relative path from resolveCvTemplate
+ * must be anchored to the checkout or the worker looks in the wrong tree. Absent
+ * (single-root layout) the relative path is already right.
+ */
+function templateFile(value, templateRoot) {
+  const rel = safeCvTemplate(value);
+  return typeof templateRoot === "string" && templateRoot
+    ? JSON.stringify(`${templateRoot.replace(/[\\/]+$/, "")}/${rel}`)
+    : rel;
+}
+
+export function buildPrompt({ kind, input, memory, today, postedAt, lang, cvTemplate, templateRoot, reportFile, coverBrief, profile = DEFAULT_PROFILE_REF }) {
   const profileLine = profileNote(profile);
   // AGENTS.md's "Output Language vs Market Modes" composition rule. The CLI
   // picks this up by reading AGENTS.md interactively; a one-shot headless
@@ -165,7 +179,7 @@ Target: ${input}`;
     return `${profileLine}You are tailoring the user's ATS-optimized CV for application #${input}, headless, on their machine. Run the REAL career-ops "pdf" mode's CONTENT step: follow modes/pdf.md's TAILORING rules exactly (do not improvise your own scoring or format). Apply its CONTENT rules — keyword injection, ordering, the competency grid, project selection, and its never-invent-a-skill rule. Its steps that shell out (the jd-skill-gap.mjs check) and its build/save/render steps are NOT performed on web runs; the platform handles output itself.
 1. Read modes/pdf.md, cv.md, ${profile}, and the evaluation report at ${JSON.stringify(reportFile ?? `reports/${input}-*.md`)} (for the JD keywords + analysis).
 2. Tailor the CV per modes/pdf.md: inject the JD's keywords into the summary + first bullets, reorder experience by relevance, build the competency grid, pick the top 3–4 projects. NEVER invent skills — only reword REAL experience using the JD's vocabulary.
-3. Fill ${safeCvTemplate(cvTemplate)}'s {{...}} placeholders with the tailored content. Use that exact file: the platform already resolved it from cv.template through cv-templates.mjs, so do NOT run modes/pdf.md's own template-resolution step. ${CV_ENVELOPE_INSTRUCTION}
+3. Fill ${templateFile(cvTemplate, templateRoot)}'s {{...}} placeholders with the tailored content. Use that exact file: the platform already resolved it from cv.template through cv-templates.mjs, so do NOT run modes/pdf.md's own template-resolution step. ${CV_ENVELOPE_INSTRUCTION}
 4. Emit the envelope EXACTLY ONCE. The platform writes the HTML, renders the PDF, and updates the tracker's PDF column itself, only after a confirmed successful render. Do not submit anything anywhere.
 
 After the envelope, end with EXACTLY one final line: VERDICT: {5 if the complete HTML envelope was emitted, else 1}/5 — {a one-line summary, ≤12 words}`;

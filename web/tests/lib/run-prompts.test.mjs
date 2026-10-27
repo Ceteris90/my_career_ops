@@ -410,6 +410,15 @@ test("PDF tailoring reads the resolved report even when the application number d
   assert.ok(!prompt.includes("reports/018-"), "the exact unpadded filename must be retained");
 });
 
+test("buildPrompt: the pdf prompt anchors the template to the checkout when given its root", () => {
+  // The worker's cwd is the data root; on a split layout templates/ is only in the checkout.
+  const prompt = buildPrompt({ kind: "pdf", ...ARGS, cvTemplate: "templates/cv-template.mine.html", templateRoot: "/opt/career-ops/" });
+  assert.match(prompt, /"\/opt\/career-ops\/templates\/cv-template\.mine\.html"/);
+  // An unsafe template still falls back to the base template, anchored the same way
+  const bad = buildPrompt({ kind: "pdf", ...ARGS, cvTemplate: "../../etc/passwd", templateRoot: "/opt/career-ops" });
+  assert.match(bad, /"\/opt\/career-ops\/templates\/cv-template\.html"/);
+});
+
 test("buildPrompt: the pdf prompt fills the template the caller resolved", () => {
   // Given a user whose config/profile.yml selects a non-base CV template. The
   // route resolves it through cv-templates.mjs and hands the path in; the worker
