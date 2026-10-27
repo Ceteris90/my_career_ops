@@ -328,7 +328,8 @@ html {
    section expanded and lets wide tables wrap to the page width. */
 @media print {
   details::details-content { content-visibility: visible; display: block; }
-  .report-prose table { display: table; width: 100%; max-width: none; overflow: visible; }
+  .report-prose table { display: table; width: 100%; max-width: none; overflow: visible; table-layout: fixed; }
+  .report-prose :is(td, th) { overflow-wrap: anywhere; }
   .report-prose table:has(tr > *:nth-child(6)) :is(td, th) { min-width: 0; }
   .report-prose tr, summary { break-inside: avoid; }
   .report-prose :is(h1, h2, h3, h4), summary { break-after: avoid; }

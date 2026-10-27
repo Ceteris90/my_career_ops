@@ -54,6 +54,10 @@ test("A printed report shows its content without app chrome in either theme", { 
     }
     assert.deepEqual(shown, [], `${theme}: no buttons or selects print`);
 
+    const backLinks = page.locator("main a[href^='/pipeline']", { hasText: "Pipeline" });
+    assert.ok(await backLinks.count() > 0, `${theme}: Pipeline back link is rendered`);
+    assert.equal(await backLinks.first().isVisible(), false, `${theme}: Pipeline back link does not print`);
+
     const sections = await page.locator("main details").evaluateAll((all) =>
       all
         .filter((d) => d.getClientRects().length > 0)
