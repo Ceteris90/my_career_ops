@@ -996,9 +996,6 @@ export function analyzeFromContent(trackerContent, followupsContent = '', { enab
     });
   }
 
-  // Sort by urgency priority: urgent > overdue > waiting > cold, then most
-  // overdue (or soonest due) first. Consumers show this order as-is, so it
-  // is the one answer to "who do I chase first".
   const urgencyOrder = { urgent: 0, overdue: 1, waiting: 2, cold: 3 };
   const byPressure = (a, b) =>
     (urgencyOrder[a.urgency] ?? 9) - (urgencyOrder[b.urgency] ?? 9)

@@ -1,14 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * followup-cadence.mjs lists the most pressing follow-up first inside each
- * urgency bucket, not in tracker order. The web follow-ups page shows this
- * order as-is, so a tracker-ordered overdue bucket put a 15-day-overdue row
- * above an 80-day-overdue one.
- *
- * Run: node test-all.mjs --only followup-cadence-order
- */
-
 import { execFileSync } from 'child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -21,16 +12,14 @@ console.log('\nfollowup-cadence.mjs — entries ordered most overdue first withi
 const DEFAULT_CADENCE_PROFILE = join(ROOT, 'tests', 'fixtures', 'profile-default-cadence.yml');
 const NOW = '2026-08-20T12:00:00Z';
 
-// Default cadence: an Applied row is due 7 days after its date; a Responded
-// row with no follow-up logged is urgent for its first day.
 const ROWS = [
-  [1, '2026-08-05', 'Acme', 'Applied'],       // due 08-12, 8 days overdue
-  [2, '2026-06-01', 'Globex', 'Applied'],     // due 06-08, 73 days overdue
-  [3, '2026-08-19', 'Wonka', 'Applied'],      // due 08-26, waiting 6 days
-  [4, '2026-08-20', 'Initech', 'Responded'],  // urgent
-  [5, '2026-07-10', 'Umbrella', 'Applied'],   // due 07-17, 34 days overdue
-  [6, '2026-08-17', 'Hooli', 'Applied'],      // due 08-24, waiting 4 days
-  [7, '2026-07-25', 'Vandelay', 'Applied'],   // due 08-01, 19 days overdue
+  [1, '2026-08-05', 'Acme', 'Applied', -8],
+  [2, '2026-06-01', 'Globex', 'Applied', -73],
+  [3, '2026-08-19', 'Wonka', 'Applied', 6],
+  [4, '2026-08-20', 'Initech', 'Responded', 1],
+  [5, '2026-07-10', 'Umbrella', 'Applied', -34],
+  [6, '2026-08-17', 'Hooli', 'Applied', 4],
+  [7, '2026-07-25', 'Vandelay', 'Applied', -19],
 ];
 const EXPECTED = [
   'Initech',
@@ -77,6 +66,12 @@ try {
 
   if (result.metadata?.analysisDate === '2026-08-20') pass('the engine ran at the frozen date');
   else fail(`the engine did not run at the frozen date: analysisDate ${result.metadata?.analysisDate}`);
+
+  const days = Object.fromEntries(result.entries.map(e => [e.company, e.daysUntilNext]));
+  const wrongDays = ROWS.filter(([, , company, , want]) => days[company] !== want)
+    .map(([, , company, , want]) => `${company} ${days[company]} (want ${want})`);
+  if (wrongDays.length === 0) pass('each entry is due on the expected day');
+  else fail(`days until next: ${wrongDays.join(', ')}`);
 
   const got = result.entries.map(e => e.company);
   if (JSON.stringify(got) === JSON.stringify(EXPECTED)) {
