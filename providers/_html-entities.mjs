@@ -132,9 +132,12 @@ const LEGACY_MAX = 6;
 
 /**
  * @param {string} s
- * @param {{bareNumeric?: boolean}} [opts]
+ * @param {{bareNumeric?: boolean, text?: boolean}} [opts] `text` reads the
+ *   references the way the tokenizer's data state does: with `bareNumeric`, a
+ *   legacy name with no semicolon decodes whatever follows it (`&quothttps` is
+ *   `"https`), where an attribute value keeps it as written.
  */
-export function decodeEntities(s, { bareNumeric = false } = {}) {
+export function decodeEntities(s, { bareNumeric = false, text = false } = {}) {
   if (bareNumeric) return s.replace(ATTRIBUTE_REF, (m, numeric, name, semi, at) => {
     if (numeric === undefined) {
       if (semi && Object.hasOwn(ENTITIES, name)) return ENTITIES[name];
@@ -142,6 +145,7 @@ export function decodeEntities(s, { bareNumeric = false } = {}) {
         const head = name.slice(0, n);
         if (!LEGACY_NAMES.has(head)) continue;
         const next = n < name.length ? name[n] : s[at + m.length];
+        if (text) return ENTITIES[head] + name.slice(n) + semi;
         return next !== undefined && /[A-Za-z0-9=]/.test(next) ? m : ENTITIES[head];
       }
       return m;
