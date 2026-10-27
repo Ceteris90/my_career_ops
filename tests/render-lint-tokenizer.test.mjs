@@ -142,6 +142,16 @@ test('an attribute value of character references decodes to what Chromium makes 
   assert.equal(wrong.length, 0);
 });
 
+// Probed: the textContent Chromium gives an svg <style> holding each value.
+test('text decodes character references the way the data state does', () => {
+  const probed = [
+    ['&quothttps', '"https'], ['&notit;', '\u00acit;'], ['&amp=1', '&=1'], ['&ampx', '&x'],
+    ['&#58//x', '://x'], ['&#x3a;', ':'], ['&colon;', ':'], ['&colon', '&colon'], ['&lt', '<'],
+    ['&AMP;', '&'], ['&nosuch;', '&nosuch;'], ['&#0;', '\ufffd'], ['&#x80;', '\u20ac'], ['a&b', 'a&b'],
+  ];
+  for (const [value, decoded] of probed) assert.equal(decodeEntities(value, { bareNumeric: true, text: true }), decoded, value);
+});
+
 // `--!>` ends a comment but not script-data escaping: after `<!--<script>` inside a
 // script, Chromium keeps reading script text through `--!></script>`, so the img is
 // text. Each count was probed with JavaScript-off Chromium.
