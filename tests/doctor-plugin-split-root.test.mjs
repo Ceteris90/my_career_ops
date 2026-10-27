@@ -53,7 +53,7 @@ test('a switched-on plugin in a data-only root is reported from the checkout', (
     const human = runDoctor(dir, []);
     const text = `${human.stdout}\n${human.stderr}`;
     assert.match(text, /notion \(missing NOTION_ACCESS_TOKEN, NOTION_PARENT_PAGE_ID\)/);
-    assert.match(text, /Doctor cannot create/);
+    assert.match(text, /notion: add NOTION_ACCESS_TOKEN, NOTION_PARENT_PAGE_ID to \.env/);
     assert.doesNotMatch(text, /Plugins: none installed/);
 
     const json = runDoctor(dir, ['--json']);
@@ -64,7 +64,6 @@ test('a switched-on plugin in a data-only root is reported from the checkout', (
     assert.equal(notion.enabled, false);
     assert.ok(notion.missingEnv.includes('NOTION_ACCESS_TOKEN'));
     assert.equal(state.pluginConfigError, undefined);
-    assert.match((state.warnings || []).join('\n'), /Doctor cannot create/);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
   }
@@ -76,7 +75,7 @@ test('--target still diagnoses the directory it was given', () => {
     const human = runDoctor(dir, ['--target', dir]);
     const text = `${human.stdout}\n${human.stderr}`;
     assert.match(text, /Plugins: none installed/);
-    assert.doesNotMatch(text, /Doctor cannot create/);
+    assert.doesNotMatch(text, /notion: add NOTION_ACCESS_TOKEN/);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
   }
@@ -88,7 +87,7 @@ test('a plugin that is off does not get a missing-key warning', () => {
     const human = runDoctor(dir, []);
     const text = `${human.stdout}\n${human.stderr}`;
     assert.match(text, /notion \(off\)/);
-    assert.doesNotMatch(text, /Doctor cannot create/);
+    assert.doesNotMatch(text, /notion: add NOTION_ACCESS_TOKEN/);
 
     const json = runDoctor(dir, ['--json']);
     assert.equal(json.status, 0, describeSpawn(json, 'json off'));
@@ -96,7 +95,6 @@ test('a plugin that is off does not get a missing-key warning', () => {
     const notion = (state.plugins || []).find((p) => p.id === 'notion');
     assert.ok(notion, 'plugins did not include notion');
     assert.equal(notion.enabled, false);
-    assert.doesNotMatch((state.warnings || []).join('\n'), /Doctor cannot create/);
     assert.equal(state.pluginConfigError, undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10 });

@@ -1104,22 +1104,14 @@ function readPluginConfigSync(root) {
   }
 }
 
-// Keys live in the user's .env. Doctor can name them. It cannot mint them.
-function pluginEnvFix(id, missingEnv) {
-  const listed = missingEnv.join(', ');
-  const be = missingEnv.length === 1 ? 'is' : 'are';
-  const them = missingEnv.length === 1 ? 'it' : 'them';
-  return `${id} is switched on, but ${listed} ${be} missing from .env. Doctor cannot create ${them}. Run \`node plugins.mjs skill ${id}\` for where they come from, then copy the names from .env.example.`;
-}
-
 // Plugin layer health: list discovered plugins + whether each enabled one's keys
 // are present. WARN-not-FAIL so a half-configured plugin never blocks setup.
 function checkPlugins(root) {
   let manifests;
   // Plugin files live in the code checkout. config/plugins.yml lives in the
   // data root. Reading plugins from the data root reports "none installed"
-  // while `node plugins.mjs list` shows them (#3867). --target sets codeRoot
-  // to that checkout, so a targeted run still diagnoses the tree it was given.
+  // while `node plugins.mjs list` on the same install lists them. --target
+  // sets codeRoot to the directory it was given.
   try { manifests = discoverPlugins(pluginRoots(codeRoot)); } catch { return { pass: true, label: 'Plugins: none' }; }
   if (manifests.length === 0) return { pass: true, label: 'Plugins: none installed' };
   const { cfg, error: cfgError } = readPluginConfigSync(root);
@@ -1138,7 +1130,7 @@ function checkPlugins(root) {
   for (const m of manifests) {
     const s = pluginStatus(m, cfg);
     lines.push(`${m.id} (${s.enabled ? 'enabled' : s.configured ? `missing ${s.missingEnv.join(', ')}` : 'off'})`);
-    if (s.configured && s.missingEnv.length) fixes.push(pluginEnvFix(m.id, s.missingEnv));
+    if (s.configured && s.missingEnv.length) fixes.push(`${m.id}: add ${s.missingEnv.join(', ')} to .env`);
   }
   const label = `Plugins: ${lines.join(', ')}`;
   return fixes.length ? { warn: true, label, fix: fixes } : { pass: true, label };
@@ -1571,10 +1563,6 @@ function onboardingState(root) {
     pluginConfigError = error;
     plugins = discoverPlugins(pluginRoots(codeRoot)).map((m) => {
       const s = pluginStatus(m, cfg);
-      // Same sentence as the human checklist. Only a plugin the user switched
-      // on, and only when the config actually parsed (an empty cfg would call
-      // every plugin off and then scold them for keys they never asked for).
-      if (!error && s.configured && s.missingEnv.length) warnings.push(pluginEnvFix(m.id, s.missingEnv));
       return { id: m.id, hooks: m.hooks, enabled: s.enabled, missingEnv: s.missingEnv };
     });
   } catch { plugins = []; }
