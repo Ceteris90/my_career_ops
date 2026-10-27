@@ -971,7 +971,7 @@ export function scanHtml(html) {
     } else {
       if (!/[a-zA-Z]/.test(next === '/' ? html[i + 2] ?? '' : next ?? '')) { i++; continue; }
       const token = tokenizeTag(html, i);
-      if (!token) break; // the input ends inside the tag, and the parser drops it
+      if (!token) { text(pending, at); pending = html.length; break; } // the input ends inside the tag, and the parser drops it
       text(pending, at);
       i = pending = token.end;
       let { name } = token;
@@ -1035,13 +1035,15 @@ export function scanHtml(html) {
       if (ns === 'html' && name === 'frameset') { e.frameset = true; framesets++; }
       if (ns === 'html' && MEDIA.has(name)) { e.media = true; media.push(name); }
       // A foreign <style> is read for its CSS, and its children are markup.
-      if (ns !== 'html' && name === 'style' && !inert) {
+      // Only an svg <style> is a stylesheet: Chromium applies no CSS from a math <style> (probed).
+      if (ns === 'svg' && name === 'style' && !inert) {
         e.sheet = { tag: token.raw, body: '' };
         styles.push(e.sheet);
       }
       stack.push(e);
     }
   }
+  text(pending, html.length); // an element left open at the end still holds its text
   return { tags, styles };
 }
 

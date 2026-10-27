@@ -725,3 +725,16 @@ test('a srcdoc is read only on an HTML iframe', () => {
   }
   assert.deepEqual(ids(lint('<svg><meta http-equiv="refresh" content="0;url=a.html"></svg>')), ['meta-refresh']);
 });
+
+// An svg <style> is a stylesheet; a math <style> is not, and Chromium requests nothing
+// for its CSS. An svg <style> left open at the end of the input, or cut off by an
+// unfinished tag, is still applied (probed with JavaScript-off Chromium).
+test('svg style CSS is read to the end of the input; math style CSS is not a stylesheet', () => {
+  const css = '.s{background:url(https://example.com/a.png)}';
+  for (const html of [`<svg><style>${css}`, `<svg><style>${css}<b`, `<svg><style>${css}</style></svg>`]) {
+    assert.deepEqual(ids(lint(html)), ['remote-subresource'], html);
+  }
+  for (const html of [`<math><style>${css}`, `<math><style>${css}</style></math>`]) {
+    assert.deepEqual(ids(lint(html)), [], html);
+  }
+});
