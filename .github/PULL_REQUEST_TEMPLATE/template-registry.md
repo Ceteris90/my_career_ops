@@ -31,7 +31,7 @@ Paste the registry entry (one object), pinned to the exact reviewed commit:
 - [ ] MIT-compatible LICENSE; attribution kept for any ported design; no personal data in the repo
 - [ ] Every template is placeholder-complete for its kind
 - [ ] A pack that claims `ats: true` passes `atsLint`; a design-forward layout carries an `atsRisk` note
-- [ ] No `<script>`, `<iframe>`, `<object>`, `<embed>`, `on*` handlers, `javascript:` URLs or remote subresources (`node validate-template-pack.mjs <pack-dir>` passes on a checkout of the pinned `sha`; `cv-templates.mjs lint` resolves a name from this install's own templates, not from the pack)
+- [ ] No `<script>`, `<iframe>`, `<object>`, `<embed>`, `on*` handlers, `javascript:` URLs or remote subresources (`node validate-template-pack.mjs <pack-dir>` passes on a checkout of the pinned `sha`, which covers all of these except an `<iframe srcdoc>`: the validator lints the srcdoc markup but lets the iframe itself through, so look for one by hand. `cv-templates.mjs lint` resolves a name from this install's own templates, not from the pack)
 - [ ] Every `src`, `href` and `url()` resolves inside the pack; fonts and images are shipped or inlined
 - [ ] No commercial / hosted-service / monetization wording (the project is free and local-first)
 - [ ] `sha` is pinned to the exact reviewed commit

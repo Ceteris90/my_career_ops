@@ -213,6 +213,25 @@ test('remove never follows a lock path out of templates/<id>/', () => {
   assert.equal(existsSync(victim), true);
 });
 
+test('a forced reinstall refuses, before deleting anything, when it cannot back up a locked file', (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('chmod 000 does not block reads here');
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const f = join(r, 'templates/demo/cv-template.plain.html');
+  const other = join(r, 'templates/demo/cover-letter-template.plain.html');
+  chmodSync(f, 0o000);
+  try {
+    assert.throws(
+      () => installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(() => packDir(manifest({ version: '0.2.0' }))), force: true }),
+      /cannot back up[\s\S]*cv-template\.plain\.html/,
+    );
+    assert.equal(existsSync(f), true);
+    assert.equal(existsSync(other), true);
+  } finally {
+    chmodSync(f, 0o644);
+  }
+});
+
 test('remove treats a locked file it cannot read as modified', (t) => {
   if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('chmod 000 does not block reads here');
   const r = root();
