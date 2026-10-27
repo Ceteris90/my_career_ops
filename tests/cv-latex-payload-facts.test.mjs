@@ -125,3 +125,20 @@ test('a malformed policy fails closed before writing', t => {
   assert.equal(result.report.factCheck.verdict, 'block');
   assert.equal(existsSync(result.output), false);
 });
+
+test('literal TeX document boundaries cannot hide unsupported awards', t => {
+  const result = build(t, {
+    ...job({ bullets: [String.raw`\begin{document}No claims\end{document}`] }),
+    awards: [{ title: 'Author — RFC 9999, Example Benchmarking Terminology' }],
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(result.report.factCheck.verdict, 'block');
+  assert.match(result.report.factCheck.reason, /award=author/);
+  assert.equal(existsSync(result.output), false);
+});
+test('literal TeX subheadings cannot add fake structured fields', () => {
+  const html = latexPayloadFactHtml({ ...TRUE,
+    ...job({ bullets: [String.raw`\resumeSubheading{Globex}{2019}{Director}{Remote}`] }),
+  }, '{{EXPERIENCE}}');
+  assert.equal(structuredFieldClaims(html).some(f => f.kind === 'organization'), false);
+});
