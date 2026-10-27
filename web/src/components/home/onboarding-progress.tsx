@@ -61,13 +61,18 @@ export function OnboardingProgress({ compact = false }: { compact?: boolean }) {
   const missing = new Set(doctor.missing);
   const generic = sections.filter((s) => s.state !== "filled");
   const prereqDone = PREREQS.filter((p) => !missing.has(p.key)).length;
-  const total = PREREQS.length + sections.length;
-  const done = prereqDone + (sections.length - generic.length);
+  // First-run home passes compact and leads with the four setup files.
+  // The eight evaluation sections stay on the full Today checklist.
+  const showSections = !compact;
+  const sectionTotal = showSections ? sections.length : 0;
+  const sectionDone = showSections ? sections.length - generic.length : 0;
+  const total = PREREQS.length + sectionTotal;
+  const done = prereqDone + sectionDone;
   if (done === total) return null; // fully personalized: the panel has done its job
 
   const asks = [
     ...PREREQS.filter((p) => missing.has(p.key)).flatMap((p) => (p.ask ? [p.ask] : [])),
-    ...(generic.length ? [`my personalization (${generic.map((s) => s.heading.replace(/^## Your /, "").toLowerCase()).join(", ")})`] : []),
+    ...(showSections && generic.length ? [`my personalization (${generic.map((s) => s.heading.replace(/^## Your /, "").toLowerCase()).join(", ")})`] : []),
   ];
   const kickoff = `Let's finish setting me up. Still to do: ${asks.join("; ")}. Walk me through it like a recruiter building my brief — one or two things at a time, propose what you infer from my CV, and let me confirm each piece. Don't ask for anything already on file.`;
 
@@ -85,8 +90,10 @@ export function OnboardingProgress({ compact = false }: { compact?: boolean }) {
         {PREREQS.map((p) => (
           <Row key={p.key} state={missing.has(p.key) ? "missing" : "filled"} label={p.label} />
         ))}
-        <li className="pt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-faint">personalization — what evaluations score against</li>
-        {sections.map((s) => (
+        {showSections && (
+          <li className="pt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-faint">personalization — what evaluations score against</li>
+        )}
+        {showSections && sections.map((s) => (
           <Row key={s.id} state={s.state} label={s.heading.replace(/^## Your /, "")} />
         ))}
       </ul>

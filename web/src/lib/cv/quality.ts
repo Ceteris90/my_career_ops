@@ -9,7 +9,8 @@ export function cvReadiness(md: string): CvReadiness {
   const words = text ? text.split(/\s+/).length : 0;
   const hasExperience = /(^|\n)#{1,3}\s*(experience|work|employment|empleo|experiencia)/i.test(text) || /\b(20\d\d)\s*[-–—]\s*(20\d\d|present|now|actualidad)/i.test(text);
   const hasSkills = /(^|\n)#{1,3}\s*(skills|technologies|competenc|habilidad)/i.test(text);
-  const scoreable = words >= 80 && (hasExperience || hasSkills || words >= 200);
+  // A role heading or a year range is enough to match. Length only gates a paste with no role.
+  const scoreable = hasExperience || (words >= 80 && (hasSkills || words >= 200));
   let hint: string | undefined;
   if (!scoreable) hint = words < 40 ? "That's very short — add your experience for real matches (you can save anyway)." : "Looks thin — add a role or two for better matches (you can save anyway).";
   return { scoreable, words, hasExperience, hasSkills, hint };
