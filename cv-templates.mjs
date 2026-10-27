@@ -671,8 +671,8 @@ function decodeCssEscapes(css) {
 // Reads attributes by walking the tag, so a quoted value that happens to
 // contain `src=x` is a value and not a second attribute.
 const attrMatches = (tag) => {
-  const body = tag.replace(/^<[^\s>/]+/, '').replace(/\/?>$/, '');
-  return body.matchAll(/([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g);
+  const body = tag.replace(/^<[^\t\n\f\r />]+/, '').replace(/\/?>$/, '');
+  return body.matchAll(/([^\t\n\f\r "'<>/=]+)(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"([^"]*)"|'([^']*)'|([^\t\n\f\r "'=<>`]+)))?/g);
 };
 
 // Names only, from the same walk: `<svg/onload=x>` and `<img src="a"onerror=x>`
@@ -693,9 +693,12 @@ function attrValue(tag, name) {
 // is remote. Only the URL consumers strip: `rel`, `type` and `http-equiv` need
 // the raw value. srcset is not stripped: tab, LF and CR are whitespace there, so
 // they end a candidate URL instead of sitting inside one.
+// Leading and trailing C0 controls and spaces go too (`&#1;javascript:` is `javascript:`),
+// but not DEL or U+FFFD, which the URL parser keeps.
+const normalizeUrl = (v) => v.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '').replace(/[\t\n\r]/g, '');
 const urlValue = (tag, name) => {
   const v = attrValue(tag, name);
-  return v === null ? null : v.replace(/[\t\n\r]/g, '');
+  return v === null ? null : normalizeUrl(v);
 };
 
 // The URL of every srcset candidate, since a remote one can follow a local one.
@@ -706,9 +709,9 @@ function srcsetUrls(v) {
   const out = [];
   let i = 0;
   while (i < v.length) {
-    while (i < v.length && /[\s,]/.test(v[i])) i++;
+    while (i < v.length && /[\t\n\f\r ,]/.test(v[i])) i++;
     const start = i;
-    while (i < v.length && !/\s/.test(v[i])) i++;
+    while (i < v.length && !/[\t\n\f\r ]/.test(v[i])) i++;
     const token = v.slice(start, i);
     if (token === '') break;
     const url = token.replace(/,+$/, '');
@@ -750,10 +753,11 @@ function scanHtml(html) {
   const tags = [];
   const styles = [];
   const media = [];
-  const TAG = /<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/y;
+  const TAG = /<(\/?)([a-zA-Z][^\t\n\f\r />]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/y;
   const context = [];
   const foreign = () => context.at(-1) === 'svg' || context.at(-1) === 'math';
   let template = 0;
+  let frameset = 0;
   let i = 0;
   while ((i = html.indexOf('<', i)) !== -1) {
     const next = html[i + 1];
@@ -775,21 +779,25 @@ function scanHtml(html) {
       if (!m) { i++; continue; }
       i = TAG.lastIndex;
       const name = m[2].toLowerCase();
-      const selfClosing = /\/\s*$/.test(m[3]);
       if (m[1]) {
         if (name === 'template' && template) template--;
+        else if (name === 'frameset' && frameset) frameset--;
         else if (context.includes(name)) while (context.pop() !== name);
         else if (media.at(-1) === name) media.pop();
         continue;
       }
-      if (foreign() && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && /\s(?:color|face|size)\s*=/i.test(m[3])))) {
+      if (foreign() && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && /[\t\n\f\r /](?:color|face|size)[\t\n\f\r ]*=/i.test(m[3])))) {
         while (foreign()) context.pop();
       }
       // Decided before the element opens its own context: an svg <title> is not RCDATA, only its HTML children are.
       const inForeign = foreign();
+      // A trailing slash closes a tag only where the HTML parser honours it: svg, math and
+      // what sits in foreign content. <picture/> and <template/> still open an element.
+      const selfClosing = /\/$/.test(m[3]) && (name === 'svg' || name === 'math' || inForeign);
       const inert = template > 0;
-      if (!inert) tags.push({ raw: m[0], name, media: media.at(-1) ?? null });
+      if (!inert) tags.push({ raw: m[0], name, media: media.at(-1) ?? null, svg: name === 'svg' || context.at(-1) === 'svg', frameset: frameset > 0 });
       if (name === 'template') template++;
+      if (name === 'frameset') frameset++;
       if (MEDIA.has(name) && !selfClosing) media.push(name);
       if (!selfClosing) {
         const top = context.at(-1);
@@ -800,7 +808,7 @@ function scanHtml(html) {
       }
       // In foreign content only style keeps raw text: a script there is markup, as are title, textarea and the rest.
       if (RAW_TEXT.has(name) && (!inForeign || name === 'style')) {
-        const end = name === 'plaintext' ? null : new RegExp(`</${name}(?=[\\s/>])`, 'gi');
+        const end = name === 'plaintext' ? null : new RegExp(`</${name}(?=[\\t\\n\\f\\r />])`, 'gi');
         if (end) end.lastIndex = i;
         const found = end?.exec(html);
         const stop = end ? (found ? found.index : html.length) : html.length;
@@ -818,13 +826,21 @@ function scanHtml(html) {
 // only inside url(), image-set() or right after @import. @namespace takes a
 // namespace name, not a resource. Escapes are decoded in names and values.
 const CSS_IDENT = /(?:[a-zA-Z0-9_-]|[^\x00-\x7f]|\\(?:[0-9a-fA-F]{1,6}(?:\r\n|[ \t\n\r\f])?|[^\n\r\f]))+/y;
-function cssRequestUrls(css) {
+function cssRequestUrls(source) {
+  // Input preprocessing: CRLF, CR and FF are LF, so a string ends at a CR and a
+  // backslash-CRLF is one line continuation.
+  const css = source.replace(/\r\n?|\f/g, '\n');
   const urls = [];
   const open = [];
   let atRule = null;
   let atFirst = false;
+  let word = null; // the last bare identifier, so `filter:` can be told from a selector
+  let property = null;
   let i = 0;
   const ident = (at) => { CSS_IDENT.lastIndex = at; const m = CSS_IDENT.exec(css); return m ? m[0] : null; };
+  const isSpace = (c) => c === ' ' || c === '\t' || c === '\n';
+  // A filter reference to an external document is not requested (probed); every other url() is.
+  const wanted = () => atRule !== 'namespace' && property !== 'filter' && property !== '-webkit-filter';
   while (i < css.length) {
     const c = css[i];
     if (c === '/' && css[i + 1] === '*') {
@@ -835,35 +851,78 @@ function cssRequestUrls(css) {
       while (j < css.length && css[j] !== c && css[j] !== '\n') j += css[j] === '\\' ? 2 : 1;
       const value = decodeCssEscapes(css.slice(i + 1, Math.min(j, css.length)));
       const top = open.at(-1);
-      if (atRule !== 'namespace' && (top === 'url' || top === 'image-set' || top === '-webkit-image-set' || (atRule === 'import' && atFirst && !open.length))) urls.push(value);
+      if (wanted() && (top === 'url' || top === 'image-set' || top === '-webkit-image-set' || (atRule === 'import' && atFirst && !open.length))) urls.push(value);
       atFirst = false;
       i = css[j] === c ? j + 1 : j;
     } else {
-      const word = c === '@' ? ident(i + 1) : ident(i);
-      if (word && c === '@') {
-        atRule = decodeCssEscapes(word).toLowerCase();
+      const name = ident(c === '@' ? i + 1 : i);
+      if (name && c === '@') {
+        atRule = decodeCssEscapes(name).toLowerCase();
         atFirst = true;
-        i += 1 + word.length;
-      } else if (word) {
+        i += 1 + name.length;
+      } else if (name) {
         atFirst = false;
-        i += word.length;
-        if (css[i] !== '(') continue;
+        i += name.length;
+        if (css[i] !== '(') { word = decodeCssEscapes(name).toLowerCase(); continue; }
         i++;
-        const name = decodeCssEscapes(word).toLowerCase();
-        while (name === 'url' && /\s/.test(css[i] ?? '')) i++;
-        if (name !== 'url' || css[i] === '"' || css[i] === "'") { open.push(name); continue; }
+        const fn = decodeCssEscapes(name).toLowerCase();
+        while (fn === 'url' && isSpace(css[i] ?? '')) i++;
+        if (fn !== 'url' || css[i] === '"' || css[i] === "'") { open.push(fn); continue; }
         let j = i;
         while (j < css.length && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
-        if (atRule !== 'namespace') urls.push(decodeCssEscapes(css.slice(i, j).trim()));
+        if (wanted()) urls.push(decodeCssEscapes(css.slice(i, j).replace(/^[ \t\n]+|[ \t\n]+$/g, '')));
         i = j + 1;
       } else {
         if (c === '(') open.push('(');
         else if (c === ')') open.pop();
-        else if (c === ';' || c === '{') atRule = null;
-        if (!/\s/.test(c)) atFirst = false;
+        else if (c === ':') property = word;
+        else if (c === ';' || c === '{' || c === '}') { property = null; if (c !== '}') atRule = null; }
+        if (!isSpace(c)) atFirst = false;
         i++;
       }
     }
+  }
+  return urls;
+}
+
+// The URLs a tag makes Chromium request, as probed with JavaScript off and a route()
+// that logs every request (see FETCHERS in tests/render-lint.test.mjs, which pins the
+// whole probe). Requested: img/image/feImage, video and audio src, a video poster, a
+// source src in video/audio and srcset in picture, an input type=image src, embed src,
+// object data, iframe src (not under srcdoc), frame src (inside a frameset), link href
+// for stylesheet/prefetch/preload-with-as and its imagesrcset, the legacy background of
+// body, table, thead, tbody, tfoot, tr, td and th, the url() of the svg fill, stroke,
+// marker-*, clip-path, mask and cursor attributes, and the target of a refresh.
+// Not requested: a, area, cite, ping, action, formaction, longdesc, lowsrc, usemap,
+// codebase, archive, track, script src, use/pattern/textPath hrefs, icons, manifest.
+const BACKGROUND_TAGS = new Set(['body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th']);
+const SVG_URL_ATTRS = ['fill', 'stroke', 'marker-start', 'marker-mid', 'marker-end', 'clip-path', 'mask', 'cursor'];
+const REFRESH_RE = /^[\t\n\f\r ]*[0-9.]/;
+function fetchedUrls({ raw, name, media, svg, frameset }) {
+  const urls = [];
+  const one = (...attrs) => { for (const a of attrs) urls.push(urlValue(raw, a) ?? ''); };
+  if (['img', 'video', 'audio', 'embed'].includes(name)) one('src');
+  if (name === 'iframe' && attrValue(raw, 'srcdoc') === null) one('src');
+  if (name === 'frame' && frameset) one('src');
+  if (name === 'object') one('data');
+  if (name === 'input' && attrValue(raw, 'type')?.toLowerCase() === 'image') one('src');
+  if (name === 'source' && (media === 'video' || media === 'audio')) one('src');
+  if (name === 'img' || (name === 'source' && media === 'picture')) urls.push(...srcsetUrls(attrValue(raw, 'srcset') ?? ''));
+  if (name === 'video') one('poster');
+  if (name === 'image') one('src', 'href', 'xlink:href');
+  if (name === 'feimage') one('href', 'xlink:href');
+  if (BACKGROUND_TAGS.has(name)) one('background');
+  if (name === 'link') {
+    const rel = (attrValue(raw, 'rel') ?? '').toLowerCase().split(/[\t\n\f\r ]+/);
+    const as = attrValue(raw, 'as') ?? '';
+    if (rel.includes('stylesheet') || rel.includes('prefetch') || (rel.includes('preload') && as !== '')) one('href');
+    if (rel.includes('preload') && as.toLowerCase() === 'image') urls.push(...srcsetUrls(attrValue(raw, 'imagesrcset') ?? ''));
+  }
+  // url(#id) in a presentation attribute is a same-document reference, never a request.
+  if (svg) for (const a of SVG_URL_ATTRS) urls.push(...cssRequestUrls(`${a}:${attrValue(raw, a) ?? ''}`).filter((u) => !normalizeUrl(u).startsWith('#')));
+  if (name === 'meta' && /^refresh$/i.test(attrValue(raw, 'http-equiv') ?? '')) {
+    const target = /^[\t\n\f\r ]*[0-9.]+[\t\n\f\r ]*(?:[;,][\t\n\f\r ]*|[\t\n\f\r ]+)?(?:url[\t\n\f\r ]*=[\t\n\f\r ]*)?(?:"([^"]*)"|'([^']*)'|(.*))$/is.exec(attrValue(raw, 'content') ?? '');
+    if (target) urls.push((target[1] ?? target[2] ?? target[3] ?? '').trim());
   }
   return urls;
 }
@@ -893,7 +952,7 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
   // no authority (`urn:`, `blob:`, `about:`, `data:`) is never requested.
   // A URL the parser rejects is not requested.
   const isRemote = (u, { sameDocFragment = false } = {}) => {
-    const v = u.trim();
+    const v = normalizeUrl(u);
     if (v === '' || v.startsWith('{{')) return false;
     // A fragment-only URL is a resource request that resolves against the base
     // (`<img src="#logo">`), but a same-document reference in `<use>` and CSS
@@ -907,7 +966,8 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
       return false;
     }
   };
-  for (const { raw, name, media } of doc.tags) {
+  for (const tagInfo of doc.tags) {
+    const { raw, name, media } = tagInfo;
     if (name === 'iframe') {
       const srcdoc = attrValue(raw, 'srcdoc');
       if (srcdoc !== null) {
@@ -922,31 +982,13 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
         }
       }
     }
-    // What the renderer fetches, probed with a JavaScript-off context: an input
-    // src only for type=image, a source src only in video/audio and its srcset
-    // only in picture, never a track, and for <link> only stylesheet, prefetch
-    // and a preload that names its `as`. Icons and modulepreload are not requested.
-    const attrs = [];
-    if (['img', 'video', 'audio'].includes(name)) attrs.push('src');
-    if (name === 'input' && (attrValue(raw, 'type') ?? '').trim().toLowerCase() === 'image') attrs.push('src');
-    if (name === 'source' && (media === 'video' || media === 'audio')) attrs.push('src');
-    if (name === 'img' || (name === 'source' && media === 'picture')) attrs.push('srcset');
-    if (name === 'video') attrs.push('poster');
-    if (name === 'image') attrs.push('src', 'href', 'xlink:href');
-    if (name === 'use' || name === 'feimage') attrs.push('href', 'xlink:href');
-    if (name === 'link') {
-      const rel = (attrValue(raw, 'rel') ?? '').toLowerCase().split(/\s+/);
-      if (rel.includes('stylesheet') || rel.includes('prefetch') || (rel.includes('preload') && (attrValue(raw, 'as') ?? '').trim() !== '')) attrs.push('href');
-    }
-    const sameDocFragment = name === 'use';
-    const urls = attrs.flatMap((a) => (a === 'srcset' ? srcsetUrls(attrValue(raw, a) ?? '') : [urlValue(raw, a) ?? '']));
-    if (urls.some((u) => isRemote(u, { sameDocFragment }))) remote.push(excerpt(raw));
+    if (fetchedUrls(tagInfo).some((u) => isRemote(u))) remote.push(excerpt(raw));
   }
   // Only CSS-bearing content: <style> bodies and style="" values. A title or
   // visible text that happens to contain url(...) is prose, not a request.
   const sources = doc.styles
     // A style element with another type is not CSS; browsers ignore it.
-    .filter(({ tag }) => /^\s*(?:text\/css)?\s*$/i.test(attrValue(tag, 'type') ?? ''))
+    .filter(({ tag }) => /^(?:text\/css)?$/i.test(attrValue(tag, 'type') ?? ''))
     .map(({ body }) => body);
   for (const { raw } of doc.tags) {
     const inline = attrValue(raw, 'style');
@@ -986,7 +1028,7 @@ const RENDER_RULES = [
     id: 'script-url',
     rule: 'A javascript: or data:text/html URL is never followed.',
     detect: (doc) => doc.tags
-      .filter((t) => ['href', 'src', 'xlink:href'].some((a) => /^\s*(?:javascript:|data:text\/html)/i.test(urlValue(t.raw, a) ?? '')))
+      .filter((t) => ['href', 'src', 'xlink:href'].some((a) => /^(?:javascript:|data:text\/html)/i.test(urlValue(t.raw, a) ?? '')))
       .map((t) => excerpt(t.raw)),
   },
   {
@@ -995,7 +1037,7 @@ const RENDER_RULES = [
     rule: 'A <meta http-equiv="refresh"> navigates the page after its delay: a local target replaces the document being printed, and a remote one is aborted and leaves an error page.',
     // A refresh with no content, or content that does not start with a time, does nothing.
     detect: (doc) => doc.tags
-      .filter((t) => t.name === 'meta' && /^\s*refresh\s*$/i.test(attrValue(t.raw, 'http-equiv') ?? '') && /^\s*[0-9.]/.test(attrValue(t.raw, 'content') ?? ''))
+      .filter((t) => t.name === 'meta' && /^refresh$/i.test(attrValue(t.raw, 'http-equiv') ?? '') && REFRESH_RE.test(attrValue(t.raw, 'content') ?? ''))
       .map((t) => excerpt(t.raw)),
   },
   {
