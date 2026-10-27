@@ -10,10 +10,10 @@ import { pipelineQuery } from "@/lib/pipeline-navigation.mjs";
 // digest is the only detail worth showing: it matches the server log line.
 export default function ReportError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   const { id } = useParams<{ id: string }>();
   const query = pipelineQuery(useSearchParams().toString());
@@ -36,7 +36,7 @@ export default function ReportError({
           {error.digest && <p className="mt-3 font-mono text-xs text-faint">Error digest {error.digest}</p>}
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={() => retry()}
             className="mt-4 inline-flex items-center justify-center rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand max-sm:min-h-[44px]"
           >
             Try again
