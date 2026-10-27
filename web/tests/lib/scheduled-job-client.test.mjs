@@ -6,7 +6,7 @@ import path from "node:path";
 import { cadenceMinimum, cadenceValueForUnit, createScheduledJobRequest, MIN_SCHEDULE_MINUTES, updateScheduledJobRequest } from "../../src/lib/scheduled-job-client.mjs";
 import { runStatusTone } from "../../src/lib/scheduled-run-status.mjs";
 import { isSchedulerStatusPayload } from "../../src/lib/scheduled-scheduler-status.mjs";
-import { cycleFocusIndex } from "../../src/lib/scheduled-overlay-focus.mjs";
+import { cycleFocusIndex } from "../../src/lib/modal-focus.mjs";
 import { scheduledRunnerResourcePath, scheduledStorePath } from "../../src/lib/scheduled-runner-path.mjs";
 
 test("scheduled-job client keeps one cadence minimum and preserves payload", async () => {
