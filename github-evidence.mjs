@@ -162,7 +162,7 @@ function recentTitles(prs, max) {
  * @returns {{text: string, truncated: boolean}}
  */
 export function cleanReadme(raw) {
-  const text = String(raw ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
+  const text = String(raw ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, '').trim();
   return text.length > MAX_README_LENGTH
     ? { text: `${text.slice(0, MAX_README_LENGTH - 1)}…`, truncated: true }
     : { text, truncated: false };

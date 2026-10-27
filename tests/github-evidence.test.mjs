@@ -364,6 +364,8 @@ function readmeFixture() {
 const README_ALLOW = new Set(['clientco/app', 'jane-doe/side-project', 'forker/widgets-fork', 'ghostco/deleted', 'jane-doe/no-readme']);
 
 check(cleanReadme('a\r\nb\u0000c\td').text === 'a\nbc\td', 'cleanReadme folds CRLF and drops control characters, keeping tab and newline');
+check(cleanReadme(`before${Array.from({ length: 32 }, (_, i) => String.fromCharCode(0x80 + i)).join('')}after`).text === 'beforeafter',
+  'cleanReadme drops the full C1 control range, including the terminal CSI character');
 {
   const long = cleanReadme('z'.repeat(MAX_README_LENGTH + 1));
   check(long.truncated && long.text.length === MAX_README_LENGTH, 'cleanReadme caps length and flags truncation');
