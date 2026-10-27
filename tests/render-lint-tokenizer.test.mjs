@@ -141,3 +141,19 @@ test('an attribute value of character references decodes to what Chromium makes 
   assert.deepEqual(wrong.slice(0, 3), []);
   assert.equal(wrong.length, 0);
 });
+
+// `--!>` ends a comment but not script-data escaping: after `<!--<script>` inside a
+// script, Chromium keeps reading script text through `--!></script>`, so the img is
+// text. Each count was probed with JavaScript-off Chromium.
+test('--!> ends a comment but not escaped script data', () => {
+  const img = 'img src="https://e.example/a.png"';
+  const cases = [
+    [`<script><!--<script>--!></script><${img}></script><p>`, 0],
+    [`<script><!--<script>--></script><${img}></script><p>`, 1],
+    [`<script><!--<script></script><${img}></script><p>`, 0],
+    [`<p><!-- x --!><${img}><p>`, 1],
+  ];
+  for (const [html, n] of cases) {
+    assert.equal(scanHtml(html).tags.filter((t) => t.name === 'img').length, n, html);
+  }
+});
