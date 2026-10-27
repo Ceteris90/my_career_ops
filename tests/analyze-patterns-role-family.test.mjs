@@ -94,3 +94,11 @@ try {
 // --- analyze(entries) with supplied entries reads nothing from disk ----------
 const supplied = analyze([{ num: 1, role: 'Data Analyst', status: 'Applied', report: null }], {});
 check(supplied.error !== undefined || supplied.roleFamilyYield !== undefined, 'analyze: supplied entries run without loading the ledger or profile');
+
+// --- the 2x gap compares exact ratios, not the rounded display rate ----------
+// 2 of 23 is 8.696% (shown 8.7%); 100 of 2299 overall is 4.350%, so 2x is 8.699%.
+// Rounded, 8.7 clears the bar; exact, it falls just short.
+nextNum = 1;
+const nearMiss = [...rows('Near', 23, 2), ...rows('Rest', 2276, 98)];
+const nm = buildRoleFamilyYield(nearMiss);
+check(nm.families.find(f => f.family === 'Near').rate === 8.7 && nm.suggestion === null, 'gap: 8.696% against a 8.699% bar is not suggested although it displays as 8.7%');

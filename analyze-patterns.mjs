@@ -471,7 +471,7 @@ export function buildRoleFamilyYield(enriched, { ledger = [], families = {}, min
   // named; a 0% overall rate has no gap to measure.
   const best = overallRate > 0
     ? rows
-        .filter(r => r.sufficientSample && r.interviewed > 0 && r.rate / 100 >= minGap * overallRate)
+        .filter(r => r.sufficientSample && r.interviewed > 0 && r.interviewed / r.applied >= minGap * overallRate)
         .sort((a, b) => b.rate - a.rate || b.applied - a.applied)[0] || null
     : null;
   return {
