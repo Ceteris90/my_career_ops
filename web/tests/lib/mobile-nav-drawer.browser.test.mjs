@@ -69,6 +69,8 @@ test("mobile navigation drawer stays out of the viewport until opened", { skip: 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.waitForFunction(() => document.body.style.overflow !== "hidden");
   assert.equal(await page.locator("body").evaluate((el) => el.style.overflow), "", "widening to desktop releases the scroll lock");
-  assert.equal(await opener.getAttribute("aria-expanded"), "false");
+  // At desktop width the opener is md:hidden, so it is out of the accessibility tree.
+  const hiddenOpener = page.getByRole("button", { name: "Open menu", exact: true, includeHidden: true });
+  assert.equal(await hiddenOpener.getAttribute("aria-expanded"), "false");
   assert.deepEqual(errors, []);
 });
