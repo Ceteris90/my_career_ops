@@ -184,3 +184,13 @@ test('an empty tracker is still handled by the existing no-data path', () => {
   assert.equal(out.noData, true);
   assert.ok(!('roleFamilyInterviewRate' in out));
 });
+
+test('an archetype that normalizes to Unclassified is never suggested', () => {
+  const hot = rows('Greeter', 20, (i) => (i < 10 ? 'interview' : 'applied'), 'unclassified');
+  const cold = rows('Data Analyst', 60);
+  const r = buildRoleFamilyInterviewRate([...hot, ...cold]);
+  const f = family(r, 'unclassified');
+  assert.equal(f.sufficientSample, true);
+  assert.notEqual(f.verdict, 'suggest');
+  assert.deepEqual(r.suggestions, []);
+});

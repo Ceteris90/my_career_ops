@@ -1389,6 +1389,8 @@ const ROLE_FAMILY_KEYWORDS = Object.freeze([
   ['Software engineering', /\b(software|engineer\w*|developer|devops|programmer)\b/i],
 ]);
 const UNCLASSIFIED_FAMILY = 'Unclassified';
+const familyKey = (name) => name.normalize('NFKC').toLowerCase();
+const UNCLASSIFIED_KEY = familyKey(UNCLASSIFIED_FAMILY);
 // A suggestion needs at least this many applications in the family AND a rate
 // at least this multiple of the overall rate. Below either, only counts print.
 let MIN_FAMILY_N = 20;
@@ -1439,7 +1441,7 @@ export function buildRoleFamilyInterviewRate(enriched, statusLogContent = '', { 
     const rank = reached.get(e.num) || 0;
     if (rank < 1) continue;
     const family = roleFamilyOf(e);
-    const key = family.normalize('NFKC').toLowerCase();
+    const key = familyKey(family);
     if (!groups.has(key)) groups.set(key, { family, applied: 0, interviews: 0 });
     const g = groups.get(key);
     g.applied++;
@@ -1447,11 +1449,11 @@ export function buildRoleFamilyInterviewRate(enriched, statusLogContent = '', { 
     if (rank >= 4) { g.interviews++; interviews++; }
   }
 
-  const families = [...groups.values()].map(g => {
+  const families = [...groups.entries()].map(([key, g]) => {
     const sufficientSample = g.applied >= minFamilyN;
     const lifts = interviews > 0 && g.interviews > 0
       && g.interviews * applied >= MIN_FAMILY_LIFT * interviews * g.applied;
-    const suggest = g.family !== UNCLASSIFIED_FAMILY && sufficientSample && lifts;
+    const suggest = key !== UNCLASSIFIED_KEY && sufficientSample && lifts;
     return {
       family: g.family,
       applied: g.applied,
@@ -1969,7 +1971,7 @@ if (isMainModule(import.meta.url)) {
 
   if (hasFlag(args, '--min-family-n')) {
     const rawMinFamilyN = flagValue(args, '--min-family-n');
-    if (rawMinFamilyN === undefined || !/^d+$/.test(String(rawMinFamilyN)) ||
+    if (rawMinFamilyN === undefined || !/^\d+$/.test(String(rawMinFamilyN)) ||
         !Number.isSafeInteger(Number(rawMinFamilyN)) || Number(rawMinFamilyN) < 1) {
       console.error(`Error: --min-family-n requires a positive integer, got "${rawMinFamilyN ?? ''}"`);
       process.exit(1);
