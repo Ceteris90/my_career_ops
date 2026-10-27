@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Undo2 } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
@@ -9,7 +9,7 @@ import type { AtsSource } from "@/lib/explore";
 import { ATS_SOURCES } from "@/lib/explore";
 import { daysSince, seniorityFromTitle, sourceFromUrl, SENIORITY_ORDER, type Seniority } from "@/lib/inbox";
 import { cursorAfterRemoval, inboxCommand, moveCursor, typingFromTarget } from "@/lib/inbox-keys.mjs";
-import { inboxScoreTarget } from "@/lib/inbox-score-target.mjs";
+import { inboxScoreTarget, skippableJobs } from "@/lib/inbox-score-target.mjs";
 import { FacetChips } from "./facet-chips";
 import { TriageRow, type RowScore } from "./triage-row";
 import { ShortlistTray, type ShortItem } from "./shortlist-tray";
@@ -271,14 +271,16 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     });
   };
   const skipSelected = () => {
-    const jobs = enriched.filter((e) => selected.has(e.job.url)).map((e) => e.job);
+    const jobs = skippableJobs(enriched.filter((e) => selected.has(e.job.url)).map((e) => e.job), scoreByUrl);
     skipUrls(jobs, `Skipped ${jobs.length}`);
   };
 
   const keyActions = useRef({
     save, skip, skipSelected, selectedSize: selected.size, visible, cursor, capped, orderedLength: ordered.length, scoreByUrl,
   });
-  keyActions.current = { save, skip, skipSelected, selectedSize: selected.size, visible, cursor, capped, orderedLength: ordered.length, scoreByUrl };
+  useLayoutEffect(() => {
+    keyActions.current = { save, skip, skipSelected, selectedSize: selected.size, visible, cursor, capped, orderedLength: ordered.length, scoreByUrl };
+  });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target;
