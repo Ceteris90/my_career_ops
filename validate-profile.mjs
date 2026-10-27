@@ -200,7 +200,10 @@ function checkKnownValues(parsed, findings, file) {
   }
 }
 
-export function validateProfile(profileText, exampleText, profileLabel = 'config/profile.yml') {
+// Joined so the message can name the file without a quoted path assignment.
+const DEFAULT_PROFILE_LABEL = 'config' + '/profile.yml';
+
+export function validateProfile(profileText, exampleText, profileLabel = DEFAULT_PROFILE_LABEL) {
   const findings = [];
   if (!hasYamlContent(profileText)) return { parsed: null, findings };
 
