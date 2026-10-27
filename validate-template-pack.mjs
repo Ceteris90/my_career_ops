@@ -17,7 +17,7 @@ import path from 'node:path';
 import { atsLint, renderLint, validateTemplate } from './cv-templates.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
-const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+export const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const NAME_PREFIX = 'career-ops-template-';
 const KINDS = new Set(['cv', 'cover', 'both']);
 const ATS_RISKS = new Set(['none', 'design-forward']);

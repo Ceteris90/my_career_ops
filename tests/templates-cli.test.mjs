@@ -213,6 +213,25 @@ test('remove never follows a lock path out of templates/<id>/', () => {
   assert.equal(existsSync(victim), true);
 });
 
+test('remove refuses a pack id that is not a pack id, before reading any path', () => {
+  // A lock entry keyed `..` would make templates/.. the pack directory, so
+  // root/victim.txt would pass the templates/<id>/ bounds check.
+  for (const id of ['..', '.', 'a/../..', '../x', 'Demo', '', 'a\\b']) {
+    const r = root();
+    const victim = join(r, 'victim.txt');
+    writeFileSync(victim, 'keep');
+    writeFileSync(join(r, 'templates.lock'), JSON.stringify({ lockfileVersion: 1, packs: { [id]: { files: { 'victim.txt': 'sha256-x' } } } }));
+    assert.throws(() => removePack(r, id, { force: true }), /invalid pack id/, JSON.stringify(id));
+    assert.equal(readFileSync(victim, 'utf-8'), 'keep', JSON.stringify(id));
+  }
+  assert.throws(() => removePack(root(), 7), /invalid pack id/);
+});
+
+test('remove of a name only Object.prototype has is "not installed"', () => {
+  // `constructor` is a valid pack id, and lock.packs inherits it.
+  assert.throws(() => removePack(root(), 'constructor'), /not installed/);
+});
+
 test('remove never deletes through a symlinked templates/<id>', (t) => {
   const r = root();
   installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
