@@ -1146,6 +1146,7 @@ node tracker.mjs query --company acme --json
 node tracker.mjs query --since 2026-09-01 --csv > output/tracker.csv  # open in a spreadsheet
 node tracker.mjs query --status Evaluated --min-score 4  # scored 4.0/5 or higher, not yet applied to
 node tracker.mjs history --id 42          # status transitions from status-log.tsv (Applied → Interview → ...)
+node tracker.mjs history 42               # same read as --id 42
 node tracker.mjs export                   # inverse: index → markdown table on stdout
 node tracker.mjs export --out repaired.md # write to a file (existing file backed up to .bak first)
 node tracker.mjs export --out repaired.md --force  # write even when columns would be dropped
