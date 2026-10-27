@@ -738,3 +738,21 @@ test('svg style CSS is read to the end of the input; math style CSS is not a sty
     assert.deepEqual(ids(lint(html)), [], html);
   }
 });
+
+// SVG reads href and ignores xlink:href when both are present, on <image> and
+// <feImage> alike. A <base> inside svg or math still sets the base Chromium resolves
+// a later <img> against, so it is not excluded. Probed with JavaScript-off Chromium.
+test('an svg image fetches href over xlink:href, and a foreign <base> still counts', () => {
+  const X = 'xmlns:xlink="http://www.w3.org/1999/xlink"';
+  const remote = 'https://example.com/a.png';
+  const cases = [
+    [`<svg ${X}><image href="local.png" xlink:href="${remote}"/></svg>`, []],
+    [`<svg ${X}><image xlink:href="${remote}"/></svg>`, ['remote-subresource']],
+    [`<svg ${X}><image href="${remote}" xlink:href="local.png"/></svg>`, ['remote-subresource']],
+    [`<svg ${X}><filter id=f><feImage href="local.png" xlink:href="${remote}"/></filter></svg>`, []],
+    [`<svg ${X}><filter id=f><feImage xlink:href="${remote}"/></filter></svg>`, ['remote-subresource']],
+    ['<svg><base href="https://example.com/"></base></svg><img src="logo.png">', ['remote-subresource']],
+    ['<math><base href="https://example.com/"></base></math><img src="logo.png">', ['remote-subresource']],
+  ];
+  for (const [html, want] of cases) assert.deepEqual(ids(lint(html)), want, html);
+});
