@@ -74,7 +74,7 @@ ok('forty same-company rows with distinct report URLs build each key once and re
   assert.strictEqual(stats.normalizes, 40, `company keys built ${stats.normalizes} times, want 40`);
   assert.strictEqual(stats.urlKeys, 40, `posting keys built ${stats.urlKeys} times, want 40`);
   assert.strictEqual(stats.pairs, 780, `pairs compared ${stats.pairs}, want 780`);
-  assert.match(stdout, /0 duplicates removed/);
+  assert.match(stdout, /📊 0 duplicates removed/);
 });
 
 ok('two rows that name one posting still merge, and each key is built once', () => {
@@ -89,7 +89,7 @@ ok('two rows that name one posting still merge, and each key is built once', () 
   assert.strictEqual(stats.normalizes, 2, `company keys built ${stats.normalizes} times, want 2`);
   assert.strictEqual(stats.urlKeys, 2, `posting keys built ${stats.urlKeys} times, want 2`);
   assert.strictEqual(stats.pairs, 1, `pairs compared ${stats.pairs}, want 1`);
-  assert.match(stdout, /1 duplicates removed/);
+  assert.match(stdout, /📊 1 duplicates removed/);
 });
 
 ok('a row that never meets another does not read a posting key', () => {
@@ -100,7 +100,7 @@ ok('a row that never meets another does not read a posting key', () => {
   assert.strictEqual(stats.normalizes, 1, `company keys built ${stats.normalizes} times, want 1`);
   assert.strictEqual(stats.urlKeys, 0, `posting keys built ${stats.urlKeys} times, want 0`);
   assert.strictEqual(stats.pairs, 0, `pairs compared ${stats.pairs}, want 0`);
-  assert.match(stdout, /0 duplicates removed/);
+  assert.match(stdout, /📊 0 duplicates removed/);
 });
 
 if (localFailed > 0) process.exitCode = 1;
