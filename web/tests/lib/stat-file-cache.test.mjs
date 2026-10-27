@@ -87,6 +87,12 @@ test("an unchanged tracker is not read again, and an edited row is", () => {
     writeFileSync(file, origRead(file, "utf8").replace("Applied", "Interview"));
     assert.equal(readApplications()[0].status, "Interview");
     assert.ok(counted("applications.md") > afterFirst);
+
+    const current = origRead(file, "utf8");
+    const sameSize = current.replace("Interview", "Evaluated");
+    assert.equal(Buffer.byteLength(sameSize), Buffer.byteLength(current));
+    writeFileSync(file, sameSize);
+    assert.equal(readApplications()[0].status, "Evaluated");
   });
 });
 
