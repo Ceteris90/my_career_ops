@@ -8,8 +8,19 @@ import { listTree } from "../../../lib/walk-tree.mjs";
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC = join(WEB, "src");
-const THEME = readFileSync(createRequire(import.meta.url).resolve("tailwindcss/theme.css"), "utf8");
 const GLOBALS = readFileSync(join(SRC, "app", "globals.css"), "utf8");
+
+function loadTheme() {
+  try {
+    return readFileSync(createRequire(import.meta.url).resolve("tailwindcss/theme.css"), "utf8");
+  } catch (err) {
+    if (err?.code === "MODULE_NOT_FOUND") return null;
+    throw err;
+  }
+}
+
+const THEME = loadTheme();
+const needsTheme = THEME ? false : "tailwindcss is not installed";
 
 const FAMILIES = ["emerald", "amber", "red"];
 const UNPREFIXED_TONE_TEXT_CLASS = /(?<![\w:/-])text-(emerald|amber|red)-(\d{3})(?:\/(\d+))?(?![\w-])/g;
@@ -81,7 +92,7 @@ test("the source scan finds the status tone classes it is meant to check", () =>
   assert.deepEqual([...families].sort(), [...FAMILIES].sort());
 });
 
-test("light-mode status text reaches 4.5:1 on the page and on its own tinted chip", () => {
+test("light-mode status text reaches 4.5:1 on the page and on its own tinted chip", { skip: needsTheme }, () => {
   const bg = themeColor(":root", "bg");
   const failures = [];
   for (const u of sourceUses()) {
@@ -95,7 +106,7 @@ test("light-mode status text reaches 4.5:1 on the page and on its own tinted chi
   assert.deepEqual(failures, []);
 });
 
-test("status text without a dark: partner stays readable on the dark page and surface", () => {
+test("status text without a dark: partner stays readable on the dark page and surface", { skip: needsTheme }, () => {
   const surfaces = { page: themeColor(".dark", "bg"), surface: themeColor(".dark", "surface") };
   const failures = [];
   for (const u of sourceUses().filter((u) => !u.darkPartner)) {
