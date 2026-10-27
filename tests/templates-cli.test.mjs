@@ -204,11 +204,12 @@ test('remove of an unknown pack is refused', () => {
   assert.throws(() => removePack(root(), 'ghost'), /not installed/);
 });
 
-test('a relative data root works: lock paths are checked against the resolved templates directory', () => {
+test('a relative data root works: lock paths are checked against the resolved templates directory', (t) => {
   const r = root();
-  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  // A temp directory on another drive than the checkout (C: and D: on Windows CI) has no relative path.
   const rel = relative(process.cwd(), r);
-  assert.ok(!isAbsolute(rel), 'the test needs a relative root');
+  if (isAbsolute(rel)) return t.skip(`no relative path from ${process.cwd()} to ${r}`);
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
   const res = installPack(rel, { entry: reg({ version: '0.2.0' }), clone: cloner(() => packDir(manifest({ version: '0.2.0' }))), force: true });
   assert.equal(res.version, '0.2.0');
   removePack(rel, 'demo');
