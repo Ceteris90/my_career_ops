@@ -7,9 +7,7 @@ import { fileURLToPath } from "node:url";
 const SRC = fileURLToPath(new URL("../../src/", import.meta.url));
 const GLOBALS = path.join(SRC, "app/globals.css");
 
-// `text-brand-text` and `text-brand-foreground` are the text tokens; the bare
-// `text-brand` utility (any variant prefix, any `/opacity`) paints the fill color.
-const RAW_BRAND_TEXT_CLASS = /(?<![\w-])text-brand(?![\w-])/;
+const RAW_BRAND_FILL_AS_TEXT = /(?<![\w-])text-brand(?![\w-])/;
 const RAW_BRAND_TEXT_CSS = /(?<![\w-])color:\s*var\(--color-brand\)/;
 
 async function sourceFiles(dir) {
@@ -22,7 +20,7 @@ async function sourceFiles(dir) {
 async function rawBrandTextUses() {
   const hits = [];
   for (const file of await sourceFiles(SRC)) {
-    const pattern = file.endsWith(".css") ? RAW_BRAND_TEXT_CSS : RAW_BRAND_TEXT_CLASS;
+    const pattern = file.endsWith(".css") ? RAW_BRAND_TEXT_CSS : RAW_BRAND_FILL_AS_TEXT;
     const lines = (await readFile(file, "utf8")).split("\n");
     lines.forEach((line, i) => {
       if (pattern.test(line)) hits.push(`${path.relative(SRC, file)}:${i + 1}: ${line.trim().slice(0, 120)}`);
