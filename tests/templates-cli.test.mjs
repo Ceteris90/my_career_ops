@@ -2,7 +2,7 @@
 // (#5951). The clone is injected, so nothing here touches the network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -211,6 +211,27 @@ test('remove never follows a lock path out of templates/<id>/', () => {
   writeFileSync(join(r, 'templates.lock'), JSON.stringify({ lockfileVersion: 1, packs: { demo: { files: { '../victim.txt': 'sha256-x' } } } }));
   assert.throws(() => removePack(r, 'demo', { force: true }), /outside/);
   assert.equal(existsSync(victim), true);
+});
+
+test('remove treats a locked file it cannot read as modified', (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) return t.skip('chmod 000 does not block reads here');
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const f = join(r, 'templates/demo/cv-template.plain.html');
+  chmodSync(f, 0o000);
+  try {
+    assert.throws(() => removePack(r, 'demo'), /modified[\s\S]*cv-template\.plain\.html/);
+    assert.equal(existsSync(f), true);
+  } finally {
+    chmodSync(f, 0o644);
+  }
+});
+
+test('remove does not count a locked file that is already gone as modified', () => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  rmSync(join(r, 'templates/demo/cv-template.plain.html'));
+  assert.equal(removePack(r, 'demo').id, 'demo');
 });
 
 test('remove refuses a pack id that is not a pack id, before reading any path', () => {
