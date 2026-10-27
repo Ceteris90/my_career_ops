@@ -131,10 +131,10 @@ try {
     check(capped.json?.newMergedPrsTruncated === true && /100\+ merged PRs since/.test(capped.json?.notice ?? ''),
       'a full search page is reported as "100+", not as an exact count');
 
-    const tuned = sandbox({ freshness: { min_new_merged_prs: 100 } });
+    const tuned = sandbox({ freshness: { enabled: true, min_new_merged_prs: 100 } });
     scanFile(tuned, '2026-10-15', { writtenAt: new Date(2026, 9, 15, 9, 0, 0) });
     const raised = cli(tuned, fakeGh(ok(prs(79))).runner);
-    check(raised.json?.stale === false && raised.json?.thresholds?.minNewMergedPrs === 100,
+    check(raised.json?.status === 'ok' && raised.json?.stale === false && raised.json?.thresholds?.minNewMergedPrs === 100,
       'evidence_freshness.min_new_merged_prs in the profile replaces the default');
   }
 
@@ -157,9 +157,11 @@ try {
     check(/9 merged PRs since the last scan/.test(both.json?.reason ?? '') && /51 days ago/.test(both.json?.reason ?? ''),
       'stale by both rules -> the reason names both');
 
-    const longer = sandbox({ freshness: { max_age_days: 60 } });
+    const longer = sandbox({ freshness: { enabled: true, max_age_days: 60 } });
     scanFile(longer, '2026-09-01', { writtenAt: new Date(2026, 8, 1, 10, 0, 0) });
-    check(cli(longer, fakeGh(ok([])).runner).json?.stale === false, 'evidence_freshness.max_age_days in the profile replaces the default');
+    const extended = cli(longer, fakeGh(ok([])).runner);
+    check(extended.json?.status === 'ok' && extended.json?.stale === false && extended.json?.thresholds?.maxAgeDays === 60,
+      'evidence_freshness.max_age_days in the profile replaces the default');
   }
 
   // ── 5. gh unavailable or failing ───────────────────────────────────
