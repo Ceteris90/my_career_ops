@@ -69,12 +69,12 @@ function runShapeStep({ baseHasValidator }) {
   return readFileSync(log, 'utf8').trim().split('\n');
 }
 
-test('runs the base validator against the PR checkout', () => {
+test('runs the base validator against the PR checkout', { skip: process.platform === 'win32' && 'the step runs in bash on ubuntu-latest; this replays it under a POSIX shell' }, () => {
   assert.ok(shapeStep, 'a step runs validate-template-registry.mjs');
   assert.deepEqual(runShapeStep({ baseHasValidator: true }), ['base/validate-template-registry.mjs --root .']);
 });
 
-test('runs the PR copy only while the base branch has no validator yet', () => {
+test('runs the PR copy only while the base branch has no validator yet', { skip: process.platform === 'win32' && 'the step runs in bash on ubuntu-latest; this replays it under a POSIX shell' }, () => {
   // The PR that first adds the validator has no trusted copy to run. A PR cannot
   // delete the file from the base branch, so this branch is never reachable once
   // the validator has merged.
