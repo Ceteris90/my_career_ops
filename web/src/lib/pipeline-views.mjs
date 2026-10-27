@@ -46,7 +46,7 @@ export function parseViews(raw) {
   return out;
 }
 
-/** @param {ReturnType<typeof normalizeView>[]} views @param {unknown} input */
+/** @param {NonNullable<ReturnType<typeof normalizeView>>[]} views @param {unknown} input */
 export function upsertView(views, input) {
   const view = normalizeView(input);
   if (!view) return views;
@@ -56,7 +56,7 @@ export function upsertView(views, input) {
   return [...rest, view];
 }
 
-/** @param {ReturnType<typeof normalizeView>[]} views @param {string} name */
+/** @param {NonNullable<ReturnType<typeof normalizeView>>[]} views @param {string} name */
 export function removeView(views, name) {
   return views.filter((view) => view.name !== name);
 }

@@ -24,7 +24,7 @@ import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
 import { SCORE_FLOORS, normalizeView, parseViews, removeView, upsertView, viewUpdates } from "@/lib/pipeline-views.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
-type SavedView = { name: string; tab: string; q: string; min: number | null; sort: string; dir: 1 | -1 };
+type SavedView = NonNullable<ReturnType<typeof normalizeView>>;
 
 const SORT_KEYS = ["tracker", "company", "role", "score", "status", "date"] as const;
 const VIEWS_KEY = "career-ops:pipeline-views";
@@ -111,7 +111,7 @@ export function PipelineView({
 
   useEffect(() => {
     try {
-      setViews(parseViews(localStorage.getItem(VIEWS_KEY) || "[]") as SavedView[]);
+      setViews(parseViews(localStorage.getItem(VIEWS_KEY) || "[]"));
     } catch {
       setViews([]);
     }
@@ -132,7 +132,7 @@ export function PipelineView({
       setViewError("Name the view first.");
       return;
     }
-    const next = upsertView(views, view) as SavedView[];
+    const next = upsertView(views, view);
     const added = views.some((item) => item.name === view.name) || next.length > views.length;
     if (!added) {
       setViewError("Remove a view first.");
@@ -276,7 +276,7 @@ export function PipelineView({
               <button type="button" onClick={() => applySaved(view)} className="px-2.5 py-1 text-xs font-medium text-foreground">
                 {view.name}
               </button>
-              <button type="button" aria-label={`Remove view ${view.name}`} onClick={() => setViews(removeView(views, view.name) as SavedView[])} className="px-1.5 text-xs text-faint hover:text-foreground">
+              <button type="button" aria-label={`Remove view ${view.name}`} onClick={() => setViews(removeView(views, view.name))} className="px-1.5 text-xs text-faint hover:text-foreground">
                 ×
               </button>
             </span>
