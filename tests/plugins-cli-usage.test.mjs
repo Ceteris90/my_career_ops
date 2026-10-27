@@ -101,29 +101,39 @@ test('install with no name is the add command, not an unknown command', () => {
   assert.doesNotMatch(r.stderr, /\[list \| available/);
 });
 
-test('the registry name reaches an installed plugin', { skip: linkedInInstalled }, () => {
+test('the registry name reaches an installed plugin', { skip: linkedInInstalled }, (t) => {
   const dir = LOCAL_LINKEDIN;
   const localRoot = join(ROOT, 'plugins.local');
   const createdLocalRoot = !existsSync(localRoot);
   const data = mkdtempSync(join(tmpdir(), 'co-plugin-name-'));
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
-    id: 'linkedin-alerts',
-    name: 'Job alerts',
-    version: '0.0.0',
-    apiVersion: 1,
-    description: 'Fixture plugin for the registry-name command.',
-    hooks: ['ingest'],
-    humanInTheLoop: true,
-  }));
-  writeFileSync(join(dir, 'index.mjs'), 'export default { async ingest() { return []; } };\n');
+  let createdDir = false;
   try {
+    mkdirSync(localRoot, { recursive: true });
+    try {
+      mkdirSync(dir);
+      createdDir = true;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      t.skip('plugins.local/linkedin-alerts appeared before setup');
+      return;
+    }
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
+      id: 'linkedin-alerts',
+      name: 'Job alerts',
+      version: '0.0.0',
+      apiVersion: 1,
+      description: 'Fixture plugin for the registry-name command.',
+      hooks: ['ingest'],
+      humanInTheLoop: true,
+    }));
+    writeFileSync(join(dir, 'index.mjs'), 'export default { async ingest() { return []; } };\n');
     const r = run(['skill', 'career-ops-plugin-linkedin-alerts'], { CAREER_OPS_ROOT: data });
     assert.equal(r.status, 1, describeSpawn(r, 'installed long name'));
     assert.match(r.stderr, /ships no skill/);
     assert.doesNotMatch(`${r.stdout}\n${r.stderr}`, /Unknown plugin|not installed/);
   } finally {
-    rmSync(createdLocalRoot ? localRoot : dir, { recursive: true, force: true, maxRetries: 10 });
+    if (createdLocalRoot) rmSync(localRoot, { recursive: true, force: true, maxRetries: 10 });
+    else if (createdDir) rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
     rmSync(data, { recursive: true, force: true, maxRetries: 10 });
   }
 });
