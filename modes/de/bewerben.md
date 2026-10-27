@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. Firmennamen und Rollentitel von der Seite extrahieren
 2. In `reports/` per Grep (case-insensitive) nach dem Firmennamen suchen
-3. Bei Treffer → vollständigen Report laden
+3. Bei Treffer → von jedem passenden Report nur den Kopf lesen (Unternehmen, Rolle, `**URL:**`) und den wählen, dessen URL oder Req-ID diese Stelle ist; bei Unklarheit den Kandidaten fragen. Den vollständigen Report und Punkt 4 erst laden, wenn die **Posting identity** gilt (`modes/apply.md` → Step 5); bei einer anderen Stelle ohne Laden zu **Evaluate as new** oder **Draft without saving**
 4. Wenn `## Application Answers` vorhanden ist → die abgeschickten Antworten als Basis laden; sonst, wenn Block H vorhanden ist, die früheren Draft-Antworten. Gibt es beide, hat `## Application Answers` Vorrang
 5. Wenn KEIN Treffer → den Kandidaten warnen und eine schnelle Auto-Pipeline anbieten
 

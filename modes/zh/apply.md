@@ -42,7 +42,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. 提取屏幕或输入信息中的公司名称与职位名称。
 2. 在 `reports/` 目录下搜索对应的评估报告文件（执行大小写不敏感的模糊检索）。
-3. 如果匹配成功，载入完整的评估报告内容。
+3. 如果匹配成功，先只读取每份匹配报告的开头信息（公司、职位、`**URL:**`），选出 URL 或 req ID 与本职位一致的那一份；不确定时询问候选人。只有在 **Posting identity** 成立之后（`modes/apply.md` → Step 5），才载入完整报告和第 4 项；若是不同职位，则不载入，改走 **Evaluate as new** 或 **Draft without saving**。
 4. 如果报告中有 `## Application Answers` 部分 → 以实际提交过的回答作为基础；否则，如果有“维度 H (开放性问题拟答草稿)”，将其作为回答的基础模板。两者都有时，`## Application Answers` 优先。
 5. 如果未匹配到任何历史报告，告知候选人，并询问是否需要针对此链接快速运行一次 `auto-pipeline` 自动评估流程。
 

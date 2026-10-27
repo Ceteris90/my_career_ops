@@ -42,7 +42,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. 從畫面或輸入的資訊中擷取公司名稱與職缺名稱。
 2. 在 `reports/` 目錄下搜尋對應的評估報告檔案（執行不分大小寫的模糊搜尋）。
-3. 若比對成功，載入完整的評估報告內容。
+3. 若比對成功，先只讀取每份相符報告的開頭資訊（公司、職缺、`**URL:**`），選出 URL 或 req ID 與本職缺一致的那一份；不確定時詢問求職者。只有在 **Posting identity** 成立之後（`modes/apply.md` → Step 5），才載入完整報告和第 4 項；若是不同職缺，則不載入，改走 **Evaluate as new** 或 **Draft without saving**。
 4. 若報告中有 `## Application Answers` 區段 → 以實際送出過的回答作為基礎；否則，若有「維度 H（開放式問題擬答草稿）」，以它作為回答的基礎模板。兩者皆有時，`## Application Answers` 優先。
 5. 若找不到任何歷史報告，告知求職者，並詢問是否要針對這個連結快速執行一次 `auto-pipeline` 自動評估流程。
 

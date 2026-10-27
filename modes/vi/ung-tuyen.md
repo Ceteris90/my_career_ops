@@ -101,7 +101,7 @@ Chức danh không thuộc danh tính. Tin được đổi tên sau khi đánh g
 
 1. Trích tên công ty và chức danh từ trang
 2. Tìm trong `reports/` theo tên công ty (grep không phân biệt hoa thường)
-3. Nếu khớp → nạp báo cáo đầy đủ. Nếu nhiều báo cáo khớp công ty, trước hết so URL hoặc req ID của tin với `**URL:**` của từng báo cáo. Báo cáo có tin khớp là báo cáo đúng, kể cả khi vai trò đã lưu khác: tin có thể đã được đổi tên, và Bước 3 xử lý việc đó. Chỉ dùng vai trò để thu hẹp các báo cáo mà URL hoặc req ID không phân định được. Nếu vẫn còn nhiều hơn một, hỏi ứng viên báo cáo nào thuộc về form này trước khi nạp: Bước 8 ghi vào báo cáo được nạp ở đây.
+3. Nếu khớp → nạp báo cáo đầy đủ. Nếu nhiều báo cáo khớp công ty, trước hết so URL hoặc req ID của tin với `**URL:**` của từng báo cáo. Báo cáo có tin khớp là báo cáo đúng, kể cả khi vai trò đã lưu khác: tin có thể đã được đổi tên, và Bước 3 xử lý việc đó. Chỉ dùng vai trò để thu hẹp các báo cáo mà URL hoặc req ID không phân định được. Nếu vẫn còn nhiều hơn một, hỏi ứng viên báo cáo nào thuộc về form này trước khi nạp: Bước 8 ghi vào báo cáo được nạp ở đây. Cho đến khi Bước 5 xác nhận **Posting identity**, chỉ đọc báo cáo để so sánh: câu trả lời (mục 4) và Block H chỉ được khôi phục cho tin này. Với tin khác, Bước 5 đưa ra **Evaluate as new** hoặc **Draft without saving**, và không dùng gì từ báo cáo này.
 4. Nếu có mục `## Application Answers` → khôi phục bằng bộ đọc nghiêm ngặt, không bao giờ bằng cách đọc lại markdown đã render như văn xuôi:
 
    ```bash

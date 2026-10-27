@@ -33,7 +33,7 @@ Aday bir başvuru formunu doldururken çalışan etkileşimli mod. Ekrandakileri
 
 1. Sayfadan şirket adını ve rol başlığını çıkar
 2. `reports/` klasöründe şirket adına göre Grep yap (büyük/küçük harf duyarsız)
-3. Eşleşme bulunursa → tam raporu yükle
+3. Eşleşme bulunursa → eşleşen her raporun yalnızca başlığını oku (şirket, rol, `**URL:**`) ve URL'si veya req ID'si bu ilan olanı seç; belirsizse adaya sor. Tam raporu ve 4. maddeyi ancak **Posting identity** doğrulandıktan sonra yükle (`modes/apply.md` → Step 5); başka bir ilan için yüklemeden **Evaluate as new** veya **Draft without saving**'e geç
 4. Blok H (taslak yanıtlar) veya `## Application Answers` varsa → önceki yanıtları temel olarak al
 5. Eşleşme bulunamazsa → adayı bilgilendirip hızlı auto-pipeline öner
 

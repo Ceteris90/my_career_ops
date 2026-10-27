@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. Wyciągnij nazwę firmy i tytuł stanowiska ze strony
 2. Wyszukaj w `reports/` po nazwie firmy (Grep case-insensitive)
-3. Jeśli dopasowanie -> załaduj pełny report
+3. Jeśli dopasowanie -> przeczytaj tylko nagłówek każdego pasującego reportu (firma, rola, `**URL:**`) i wybierz ten, którego URL lub req ID to ta oferta; gdy nie jest to jasne, zapytaj kandydata. Pełny report i punkt 4 ładuj dopiero, gdy **Posting identity** się zgadza (`modes/apply.md` → Step 5); przy innej ofercie przejdź do **Evaluate as new** albo **Draft without saving** bez ładowania go
 4. Jeśli `## Application Answers` istnieje -> załaduj wysłane odpowiedzi jako bazę; w przeciwnym razie, jeśli jest Blok H, poprzednie szkice. Gdy są oba, pierwszeństwo ma `## Application Answers`
 5. Jeśli BRAK dopasowania -> ostrzeż kandydata i zaproponuj szybki auto-pipeline
 

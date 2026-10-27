@@ -109,7 +109,9 @@ function choiceBlocks(lines) {
     if (!CHOICES.some(c => line.includes(`**${c}**`))) return;
     const bullet = line.match(/^(\s+)- /);
     if (!bullet) {
-      blocks.set(i, [...line.matchAll(/\*\*([^*]+)\*\*/g)].map(m => m[1]).filter(l => !RULE_NAMES.has(l)));
+      // A code span holds a field name such as `**URL:**`, never a choice.
+      const prose = line.replace(/`[^`]*`/g, '');
+      blocks.set(i, [...prose.matchAll(/\*\*([^*]+)\*\*/g)].map(m => m[1]).filter(l => !RULE_NAMES.has(l)));
       return;
     }
     const sibling = (l) => l.startsWith(`${bullet[1]}- `);
@@ -132,6 +134,37 @@ function assertChoices(text) {
 }
 
 ok('apply.md offers a different posting only the two choices', () => assertChoices(apply));
+
+// Step 2 loaded the matched report's answers before anything checked that it
+// was this posting's report, so a sibling posting's answers reached the context
+// first. In every mode the list item that confirms the posting identity, and
+// names the choices for a different posting, now comes before the item that
+// loads `## Application Answers`.
+function assertIdentityBeforeLoad(text) {
+  // The workflow overview sits in a code fence and names the load step too.
+  let fenced = false;
+  const lines = text.split('\n').map(l => {
+    if (/^\s*```/.test(l)) { fenced = !fenced; return ''; }
+    return fenced ? '' : l;
+  });
+  const item = (pred) => lines.findIndex(l => /^\d+\.\s/.test(l) && pred(l));
+  const gate = item(l => l.includes(`**${IDENTITY}**`));
+  const load = item(l => l.includes('## Application Answers'));
+  assert.ok(gate !== -1, 'no list item confirms the posting identity');
+  assert.ok(load !== -1, 'no list item loads ## Application Answers');
+  assert.ok(gate < load, `answers are loaded (line ${load + 1}) before the posting identity is confirmed (line ${gate + 1})`);
+}
+
+// apply.md, modes/ja and modes/vi print Step 5 above Step 2, so a file-wide
+// order would pass on the preflight alone: those three are read inside Step 2.
+const searchStep = {
+  'modes/apply.md': '## Step 2 — ',
+  'modes/ja/oubo.md': '## Step 2 -- ',
+  'modes/vi/ung-tuyen.md': '## Bước 2 — ',
+};
+const searchText = (file, text) => (searchStep[file] ? step(text, searchStep[file]) : text);
+
+ok('apply.md confirms the posting before loading the report\'s answers', () => assertIdentityBeforeLoad(searchText('modes/apply.md', apply)));
 
 // The modes that carry the canonical Steps 6 and 7 read the report there, far
 // below the preflight, so the unsaved path has to be restated where it is read.
@@ -168,6 +201,8 @@ for (const file of localized) {
   const lines = read(file).split('\n');
 
   ok(`${file}: a different posting is offered only the two choices`, () => assertChoices(lines.join('\n')));
+
+  ok(`${file}: the posting is confirmed before the report's answers are loaded`, () => assertIdentityBeforeLoad(searchText(file, lines.join('\n'))));
 
   ok(`${file}: the role-change step points at the posting identity`, () => {
     const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));

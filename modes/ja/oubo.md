@@ -64,7 +64,7 @@ Application answers を生成する前に、form が意図した active job を�
 
 1. Page から company name と role title を抽出
 2. `reports/` を company name で検索（case-insensitive grep）
-3. Match があれば full report を load
+3. Match があれば、各 matching report の header（company、role、`**URL:**`）だけを読み、URL か req ID がこの posting と一致する report を選ぶ。はっきりしなければ候補者に確認する。Full report と 4 は Step 5 で **Posting identity** が成り立ってから load する。別の posting なら load せずに **Evaluate as new** か **Draft without saving** に進む
 4. Section H（draft answers）か `## Application Answers` があれば、それを base として load
 5. Match がなければ notify し、quick auto-pipeline の実行を提案
 

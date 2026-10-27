@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. Page से company name और job title extract करें
 2. Company name से `reports/` में search करें (Grep case-insensitive)
-3. Match मिले → पूरा report load करें
+3. Match मिले → हर matching report का सिर्फ़ header पढ़ें (company, role, `**URL:**`) और वह report चुनें जिसका URL या req ID यही posting है; साफ़ न हो तो candidate से पूछें। पूरा report और item 4 तभी load करें जब **Posting identity** सही हो (`modes/apply.md` → Step 5); दूसरी posting हो तो उसे load किए बिना **Evaluate as new** या **Draft without saving** पर जाएँ
 4. `## Application Answers` मौजूद हो → submit किए गए responses को base के रूप में load करें; नहीं तो Block H मौजूद हो तो previous draft responses। दोनों हों तो `## Application Answers` पहले
 5. Match नहीं मिला → candidate को alert करें और quick auto-pipeline का सुझाव दें
 

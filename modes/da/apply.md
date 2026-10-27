@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. Udtræk virksomhedens navn og stillingstitlen fra siden
 2. Søg i `reports/` efter virksomhedsnavn (Grep case-insensitive)
-3. Hvis match -> indlæs den fulde report
+3. Hvis match -> læs kun hovedet af hver matchende report (virksomhed, rolle, `**URL:**`), og vælg den, hvis URL eller req-ID er dette opslag; spørg kandidaten, hvis det er uklart. Indlæs først den fulde report og punkt 4, når **Posting identity** holder (`modes/apply.md` -> Step 5); ved et andet opslag går du til **Evaluate as new** eller **Draft without saving** uden at indlæse den
 4. Hvis `## Application Answers` findes -> indlæs de svar, der blev sendt, som grundlag; ellers, hvis Blok H findes, de tidligere svar-udkast. Findes begge, går `## Application Answers` forud
 5. Hvis INTET match -> advar kandidaten og foreslå en hurtig auto-pipeline
 

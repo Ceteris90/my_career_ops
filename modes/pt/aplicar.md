@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. Extrair nome da empresa e título da vaga da página
 2. Buscar em `reports/` pelo nome da empresa (Grep case-insensitive)
-3. Se houver match → carregar o report completo
+3. Se houver match → ler só o cabeçalho de cada report correspondente (empresa, função, `**URL:**`) e pegar aquele cuja URL ou req ID seja esta vaga; perguntar ao candidato se não estiver claro. Carregar o report completo e o item 4 só quando a **Posting identity** se confirmar (`modes/apply.md` → Step 5); para outra vaga, ir para **Evaluate as new** ou **Draft without saving** sem carregá-lo
 4. Se houver `## Application Answers` → carregar as respostas enviadas como base; senão, se houver Bloco H, os rascunhos anteriores. Se existirem os dois, `## Application Answers` tem prioridade
 5. Se NÃO houver match → avisar e oferecer executar auto-pipeline rápida
 

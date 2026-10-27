@@ -33,7 +33,7 @@ Modalità interattiva per quando il candidato compila un modulo di candidatura (
 
 1. Estrarre il nome dell'azienda e il titolo del ruolo dalla pagina.
 2. Cercare in `reports/` per nome azienda (Grep case-insensitive).
-3. Se c'è corrispondenza -> caricare il report completo.
+3. Se c'è corrispondenza -> leggere solo l'intestazione di ogni report corrispondente (azienda, ruolo, `**URL:**`) e prendere quello il cui URL o req ID è questo annuncio; chiedere al candidato se non è chiaro. Caricare il report completo e il punto 4 solo quando la **Posting identity** è confermata (`modes/apply.md` → Step 5); per un altro annuncio, passare a **Evaluate as new** o **Draft without saving** senza caricarlo.
 4. Se `## Application Answers` è presente -> usare le risposte inviate come base; altrimenti, se il Blocco H è presente, le bozze precedenti. Se esistono entrambi, prevale `## Application Answers`.
 5. Se NON c'è corrispondenza -> avvisare il candidato e proporre un auto-pipeline rapido.
 

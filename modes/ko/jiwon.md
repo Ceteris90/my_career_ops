@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. 페이지에서 회사명과 역할명을 추출합니다.
 2. `reports/`에서 회사명으로 검색합니다 (case-insensitive grep).
-3. 매칭되는 report가 있으면 전체 report를 불러옵니다.
+3. 매칭되는 report가 있으면 각 report의 머리말(회사, 역할, `**URL:**`)만 읽고, URL이나 req ID가 이 공고인 report를 고릅니다. 불분명하면 후보자에게 물어봅니다. 전체 report와 4번 항목은 **Posting identity**가 성립한 뒤에만 불러옵니다 (`modes/apply.md` → Step 5). 다른 공고라면 불러오지 않고 **Evaluate as new** 또는 **Draft without saving**으로 갑니다.
 4. `## Application Answers`가 있으면 제출한 답변을 base로 불러옵니다. 없고 블록 H가 있으면 이전 답변 초안을 불러옵니다. 둘 다 있으면 `## Application Answers`를 우선합니다.
 5. 매칭되는 report가 없으면 후보자에게 알리고 빠른 auto-pipeline 실행을 제안합니다.
 

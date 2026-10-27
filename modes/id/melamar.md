@@ -38,7 +38,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 1. Ekstrak nama perusahaan dan jabatan dari halaman
 2. Cari di `reports/` berdasarkan nama perusahaan (Grep case-insensitive)
-3. Jika cocok -> muat report lengkap
+3. Jika cocok -> baca hanya kepala setiap report yang cocok (perusahaan, role, `**URL:**`) dan pilih yang URL atau req ID-nya adalah lowongan ini; tanyakan kandidat jika belum jelas. Muat report lengkap dan butir 4 hanya setelah **Posting identity** terpenuhi (`modes/apply.md` → Step 5); untuk lowongan lain, lanjut ke **Evaluate as new** atau **Draft without saving** tanpa memuatnya
 4. Jika ada `## Application Answers` -> muat jawaban yang sudah dikirim sebagai dasar; jika tidak, dan ada Blok H, draft jawaban sebelumnya. Jika keduanya ada, `## Application Answers` didahulukan
 5. Jika TIDAK cocok -> beri peringatan kepada kandidat dan tawarkan auto-pipeline cepat
 
