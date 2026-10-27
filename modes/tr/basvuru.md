@@ -51,6 +51,8 @@ Ekrandaki rol önceki değerlendirmedekinden farklıysa:
 
 ## Adım 4 — Form Alanlarını Analiz Et
 
+**Draft without saving** seçildiğinde bu adım ne eşleşen raporu ne onun `## Application Answers` bölümünü ne de Blok H'yi kullanır: her soruyu yeni say ve görünen ilandan, `cv.md`'den ve profilden çalış.
+
 Görünen tüm alanları tespit et:
 - Serbest metin (ön yazı, "neden bu rol?", motivasyon vb.)
 - Açılır menüler (nereden duydunuz, çalışma izni vb.)
@@ -63,6 +65,8 @@ Her soruyu sınıflandır:
 - **Yeni soru** → rapor + `cv.md`'den yanıt üret
 
 ## Adım 5 — Yanıtları Üret
+
+**Draft without saving** seçildiğinde bu adım ne eşleşen raporu ne onun `## Application Answers` bölümünü ne de Blok H'yi kullanır: her soruyu yeni say ve görünen ilandan, `cv.md`'den ve profilden çalış.
 
 Her soru için yanıtı şu şemaya göre oluştur:
 

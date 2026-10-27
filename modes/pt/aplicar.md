@@ -56,6 +56,8 @@ Se a vaga na tela difere da avaliada:
 
 ## Passo 4 -- Analisar perguntas do formulário
 
+Com **Draft without saving**, este passo não usa o report encontrado nem suas `## Application Answers` nem o Bloco H: tratar cada pergunta como nova e trabalhar a partir da vaga visível, do `cv.md` e do perfil.
+
 Identificar TODAS as perguntas visíveis:
 - Campos de texto livre (carta de apresentação, por que essa vaga, motivação, etc.)
 - Dropdowns (como ficou sabendo da vaga, autorização de trabalho, etc.)
@@ -68,6 +70,8 @@ Classificar cada pergunta:
 - **Pergunta nova** → gerar resposta a partir do report + `cv.md`
 
 ## Passo 5 -- Gerar respostas
+
+Com **Draft without saving**, este passo não usa o report encontrado nem suas `## Application Answers` nem o Bloco H: tratar cada pergunta como nova e trabalhar a partir da vaga visível, do `cv.md` e do perfil.
 
 Para cada pergunta, gerar a resposta seguindo:
 

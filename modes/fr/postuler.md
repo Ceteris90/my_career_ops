@@ -56,6 +56,8 @@ Si le role a l'ecran differe de celui evalue :
 
 ## Etape 4 -- Analyser les questions du formulaire
 
+Avec **Draft without saving**, cette etape n'utilise ni le report trouve, ni ses `## Application Answers`, ni le Bloc H : traiter chaque question comme nouvelle et travailler a partir de l'offre visible, de `cv.md` et du profil.
+
 Identifier TOUTES les questions visibles :
 - Champs de texte libre (lettre de motivation, "pourquoi ce poste", motivation, etc.)
 - Listes deroulantes (comment avez-vous connu l'entreprise, autorisation de travail, etc.)
@@ -68,6 +70,8 @@ Classifier chaque question :
 - **Nouvelle question** -> generer la reponse depuis le report + `cv.md`
 
 ## Etape 5 -- Generer les reponses
+
+Avec **Draft without saving**, cette etape n'utilise ni le report trouve, ni ses `## Application Answers`, ni le Bloc H : traiter chaque question comme nouvelle et travailler a partir de l'offre visible, de `cv.md` et du profil.
 
 Pour chaque question, construire la reponse selon ce schema :
 

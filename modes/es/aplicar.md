@@ -56,6 +56,8 @@ Si el rol en pantalla difiere del evaluado:
 
 ## Paso 4 -- Analizar las preguntas del formulario
 
+Con **Draft without saving**, este paso no usa el report encontrado ni sus `## Application Answers` ni el Bloque H: tratar cada pregunta como nueva y trabajar a partir de la oferta visible, `cv.md` y el perfil.
+
 Identificar TODAS las preguntas visibles:
 - Campos de texto libre (carta de presentación, "¿por qué este puesto?", motivación, etc.)
 - Listas desplegables (cómo conociste la empresa, permiso de trabajo, etc.)
@@ -68,6 +70,8 @@ Clasificar cada pregunta:
 - **Pregunta nueva** -> generar la respuesta desde el report + `cv.md`
 
 ## Paso 5 -- Generar las respuestas
+
+Con **Draft without saving**, este paso no usa el report encontrado ni sus `## Application Answers` ni el Bloque H: tratar cada pregunta como nueva y trabajar a partir de la oferta visible, `cv.md` y el perfil.
 
 Para cada pregunta, construir la respuesta según este esquema:
 

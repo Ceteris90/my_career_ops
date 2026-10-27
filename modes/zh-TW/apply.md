@@ -64,6 +64,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## 步驟 4 — 分析表單問答框
 
+選擇 **Draft without saving** 時，本步驟不使用比對到的報告、其中的 `## Application Answers` 或維度 H：把每個問題都當成新問題，只根據目前看到的職缺、`cv.md` 和個人檔案處理。
+
 定位並解析當前頁面上所有的表單輸入項目：
 - 開放式問答框（如「你為什麼想加入我們？」、「描述一次你解決棘手技術問題的經驗」等）。
 - 下拉選單（如求職管道、是否需要工作簽證支援等）。
@@ -78,6 +80,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ---
 
 ## 步驟 5 — 產生客製答案
+
+選擇 **Draft without saving** 時，本步驟第 1 項的報告背景同樣不使用：比對到的報告屬於另一個職缺，只根據目前看到的職缺、`cv.md` 和個人檔案撰寫。
 
 產生每個問題的回答草稿時，必須嚴格遵守以下原則：
 

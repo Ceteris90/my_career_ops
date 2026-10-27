@@ -56,6 +56,8 @@ Jeśli rola na ekranie różni się od ocenionej:
 
 ## Krok 4 -- Przeanalizuj pytania formularza
 
+Przy **Draft without saving** ten krok nie korzysta ani z dopasowanego reportu, ani z jego `## Application Answers`, ani z Bloku H: traktuj każde pytanie jako nowe i pracuj na podstawie widocznej oferty, `cv.md` i profilu.
+
 Zidentyfikuj WSZYSTKIE widoczne pytania:
 - Pola tekstu otwartego (list motywacyjny, "dlaczego to stanowisko", motywacja itp.)
 - Listy rozwijane (skąd dowiedziałeś się o firmie, pozwolenie na pracę itp.)
@@ -68,6 +70,8 @@ Sklasyfikuj każde pytanie:
 - **Nowe pytanie** -> wygeneruj odpowiedź z reportu + `cv.md`
 
 ## Krok 5 -- Wygeneruj odpowiedzi
+
+Przy **Draft without saving** ten krok nie korzysta ani z dopasowanego reportu, ani z jego `## Application Answers`, ani z Bloku H: traktuj każde pytanie jako nowe i pracuj na podstawie widocznej oferty, `cv.md` i profilu.
 
 Dla każdego pytania zbuduj odpowiedź według tego schematu:
 

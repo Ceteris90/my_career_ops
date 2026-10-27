@@ -56,6 +56,8 @@ Hvis rollen på skærmen afviger fra den evaluerede:
 
 ## Trin 4 -- Analysér formularens spørgsmål
 
+Ved **Draft without saving** bruger dette trin hverken den matchede report, dens `## Application Answers` eller Blok H: behandl alle spørgsmål som nye, og arbejd ud fra det synlige opslag, `cv.md` og profilen.
+
 Identificér ALLE synlige spørgsmål:
 - Fritekstfelter (følgebrev, "hvorfor denne stilling", motivation, osv.)
 - Dropdowns (hvordan hørte du om virksomheden, arbejdstilladelse, osv.)
@@ -68,6 +70,8 @@ Klassificér hvert spørgsmål:
 - **Nyt spørgsmål** -> generér svaret fra report + `cv.md`
 
 ## Trin 5 -- Generér svarene
+
+Ved **Draft without saving** bruger dette trin hverken den matchede report, dens `## Application Answers` eller Blok H: behandl alle spørgsmål som nye, og arbejd ud fra det synlige opslag, `cv.md` og profilen.
 
 For hvert spørgsmål, byg svaret efter dette skema:
 

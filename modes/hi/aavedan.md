@@ -56,6 +56,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Step 4 -- Form Questions Analyze करें
 
+**Draft without saving** में यह step न matched report, न उसके `## Application Answers`, न Block H इस्तेमाल करता है: हर question को नया मानें और दिख रही posting, `cv.md` और profile से काम करें।
+
 सभी visible questions identify करें:
 - Free text fields (cover letter, "यह role क्यों चाहते हैं", motivation, आदि)
 - Dropdowns (आपको यह job कैसे पता चला, work authorization, आदि)
@@ -68,6 +70,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 - **नया question** → report + `cv.md` से response generate करें
 
 ## Step 5 -- Responses Generate करें
+
+**Draft without saving** में यह step न matched report, न उसके `## Application Answers`, न Block H इस्तेमाल करता है: हर question को नया मानें और दिख रही posting, `cv.md` और profile से काम करें।
 
 हर question के लिए इस schema से response बनाएं:
 

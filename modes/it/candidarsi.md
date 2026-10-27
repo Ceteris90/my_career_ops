@@ -51,6 +51,8 @@ Se il ruolo a schermo differisce da quello valutato:
 
 ## Fase 4 -- Analizzare le domande del modulo
 
+Con **Draft without saving**, questa fase non usa né il report trovato né le sue `## Application Answers` né il Blocco H: trattare ogni domanda come nuova e lavorare dall'annuncio visibile, da `cv.md` e dal profilo.
+
 Identificare tutte le domande visibili a schermo:
 - Campi di testo libero (lettera di presentazione, "perché questa posizione", motivazione, ecc.)
 - Elenchi a discesa (come hai conosciuto l'azienda, permessi di lavoro, ecc.)
@@ -63,6 +65,8 @@ Classificare ogni domanda:
 - **Nuova domanda:** generare la risposta partendo dal report e da `cv.md`
 
 ## Fase 5 -- Generare le risposte
+
+Con **Draft without saving**, questa fase non usa né il report trovato né le sue `## Application Answers` né il Blocco H: trattare ogni domanda come nuova e lavorare dall'annuncio visibile, da `cv.md` e dal profilo.
 
 Per ogni domanda, costruire la risposta seguendo questo schema:
 

@@ -64,6 +64,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## 步骤 4 — 分析表单问答框
 
+选择 **Draft without saving** 时，本步骤不使用匹配到的报告、其中的 `## Application Answers` 或维度 H：把每个问题都当作新问题，只根据当前可见的职位、`cv.md` 和个人档案处理。
+
 定位并解析当前页面上所有的表单输入项：
 - 开放性问答框（如“你为什么想加入我们？”、“描述一次你解决棘手技术问题的经历”等）。
 - 下拉选择框（如求职渠道、是否需要工作签证支持等）。
@@ -78,6 +80,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 ---
 
 ## 步骤 5 — 生成定制答案
+
+选择 **Draft without saving** 时，本步骤第 1 项的报告背景同样不使用：匹配到的报告属于另一个职位，只根据当前可见的职位、`cv.md` 和个人档案撰写。
 
 在生成每个问题的回答草稿时，必须严格遵守以下原则：
 

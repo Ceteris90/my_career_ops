@@ -56,6 +56,8 @@ Jika role di layar berbeda dari yang dievaluasi:
 
 ## Langkah 4 -- Analisis pertanyaan formulir
 
+Untuk **Draft without saving**, langkah ini tidak memakai report yang cocok, `## Application Answers`-nya, maupun Blok H: perlakukan setiap pertanyaan sebagai baru dan bekerja dari lowongan yang terlihat, `cv.md`, dan profil.
+
 Identifikasi SEMUA pertanyaan yang terlihat:
 - Kolom teks bebas (cover letter, "kenapa posisi ini", motivasi, dll.)
 - Dropdown (dari mana tahu perusahaan, izin kerja, dll.)
@@ -68,6 +70,8 @@ Klasifikasikan tiap pertanyaan:
 - **Pertanyaan baru** -> hasilkan jawaban dari report + `cv.md`
 
 ## Langkah 5 -- Hasilkan jawaban
+
+Untuk **Draft without saving**, langkah ini tidak memakai report yang cocok, `## Application Answers`-nya, maupun Blok H: perlakukan setiap pertanyaan sebagai baru dan bekerja dari lowongan yang terlihat, `cv.md`, dan profil.
 
 Untuk tiap pertanyaan, susun jawaban mengikuti skema ini:
 

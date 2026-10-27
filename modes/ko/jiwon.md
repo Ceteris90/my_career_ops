@@ -56,6 +56,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Step 4 -- 지원서 질문 분석
 
+**Draft without saving**에서는 이 단계에서 일치한 report, 그 `## Application Answers`, 블록 H를 쓰지 않습니다: 모든 질문을 새 질문으로 보고 보이는 공고, `cv.md`, 프로필로 작업하세요.
+
 화면에 보이는 모든 질문을 식별합니다.
 - 자유 입력 필드 (커버레터, "왜 이 역할인가요", 지원 동기 등)
 - 드롭다운 (어디서 공고를 봤는지, 근무 자격 등)
@@ -68,6 +70,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 - **새 질문** -> report + `cv.md`를 바탕으로 답변 생성
 
 ## Step 5 -- 답변 생성
+
+**Draft without saving**에서는 이 단계에서 일치한 report, 그 `## Application Answers`, 블록 H를 쓰지 않습니다: 모든 질문을 새 질문으로 보고 보이는 공고, `cv.md`, 프로필로 작업하세요.
 
 각 질문에 대해 다음 구조로 답변을 만듭니다.
 

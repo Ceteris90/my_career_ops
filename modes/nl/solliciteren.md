@@ -55,6 +55,8 @@ Als de rol op het scherm afwijkt van de geëvalueerde rol:
 
 ## Stap 4 -- Analyseer de formuliervragen
 
+Bij **Draft without saving** gebruikt deze stap het gevonden rapport niet, en ook niet de `## Application Answers` of blok H ervan: behandel elke vraag als nieuw en werk vanuit de zichtbare vacature, `cv.md` en het profiel.
+
 Identificeer ALLE zichtbare vragen:
 - Vrije tekstvelden (sollicitatiebrief, "waarom deze functie", motivatie, etc.)
 - Keuzelijsten (hoe kende u het bedrijf, werkvergunning, etc.)
@@ -67,6 +69,8 @@ Classificeer elke vraag:
 - **Nieuwe vraag** -> genereer het antwoord uit het rapport + `cv.md`
 
 ## Stap 5 -- Genereer de antwoorden
+
+Bij **Draft without saving** gebruikt deze stap het gevonden rapport niet, en ook niet de `## Application Answers` of blok H ervan: behandel elke vraag als nieuw en werk vanuit de zichtbare vacature, `cv.md` en het profiel.
 
 **Scorecontrole:** Als het geladen rapport lager dan 4,0/5 scoort, raad de kandidaat nadrukkelijk af om te solliciteren en stop vóór het genereren van antwoorden. Ga alleen verder nadat de kandidaat expliciet aangeeft de aanbeveling om een specifieke reden te willen negeren; zonder die expliciete bevestiging worden geen antwoorden gegenereerd. Bij een score van 4,0/5 of hoger gaat de normale werkstroom verder.
 

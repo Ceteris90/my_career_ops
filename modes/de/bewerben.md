@@ -56,6 +56,8 @@ Wenn die Rolle auf dem Bildschirm von der bewerteten abweicht:
 
 ## Schritt 4 — Fragen des Formulars analysieren
 
+Bei **Draft without saving** nutzt dieser Schritt weder den gefundenen Report noch dessen `## Application Answers` oder Block H: alle Fragen als neu behandeln und aus der sichtbaren Stelle, `cv.md` und dem Profil arbeiten.
+
 ALLE sichtbaren Fragen identifizieren:
 - Freitextfelder (Anschreiben, "Warum diese Rolle", Motivation, etc.)
 - Dropdowns (Wie haben Sie von uns erfahren, Arbeitserlaubnis, etc.)
@@ -68,6 +70,8 @@ Jede Frage klassifizieren:
 - **Neue Frage** → Antwort aus dem Report + `cv.md` generieren
 
 ## Schritt 5 — Antworten erzeugen
+
+Bei **Draft without saving** nutzt dieser Schritt weder den gefundenen Report noch dessen `## Application Answers` oder Block H: alle Fragen als neu behandeln und aus der sichtbaren Stelle, `cv.md` und dem Profil arbeiten.
 
 Für jede Frage die Antwort nach folgendem Schema bauen:
 

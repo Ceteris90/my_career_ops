@@ -63,6 +63,8 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Шаг 5 — Генерировать ответы
 
+При **Draft without saving** этот шаг не использует ни найденный отчёт, ни его `## Application Answers`, ни блок H: считать каждый вопрос новым и работать по видимой вакансии, `cv.md` и профилю.
+
 Для каждого вопроса:
 
 1. **Контекст отчёта**: Proof points из блока B, истории STAR из блока F

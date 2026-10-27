@@ -240,6 +240,21 @@ ok('the localized apply modes are found', () => {
   assert.ok(localized.length >= 19, `only ${localized.length} localized apply modes recognized: ${localized.join(', ')}`);
 });
 
+/** The `## ` steps between the role change and post-apply whose lists read `## Application Answers`. */
+function answerReadingSections(lines) {
+  const role = lines.findIndex(isRolePrompt);
+  const applied = lines.findIndex(l => l.includes('set-status.mjs') && l.includes('Applied'));
+  const heads = lines.map((l, i) => (/^## /.test(l) ? i : -1)).filter(i => i !== -1);
+  const found = [];
+  heads.forEach((start, k) => {
+    const end = heads[k + 1] ?? lines.length;
+    if (start <= role || start > applied || (start < applied && applied < end)) return;
+    const body = lines.slice(start, end);
+    if (body.some(l => /^\s*(\d+\.|-)\s/.test(l) && l.includes('Application Answers'))) found.push({ heading: lines[start], body: body.join('\n') });
+  });
+  return found;
+}
+
 for (const file of localized) {
   const lines = read(file).split('\n');
 
@@ -248,6 +263,18 @@ for (const file of localized) {
   ok(`${file}: the posting is confirmed before the report's answers are loaded`, () => assertIdentityBeforeLoad(searchText(file, lines.join('\n'))));
 
   ok(`${file}: the workflow LOAD line waits for the posting identity`, () => assertWorkflowLoadGated(lines.join('\n')));
+
+  ok(`${file}: every step that reads the report's answers skips them on an unsaved draft`, () => {
+    // The role-change step set the report aside on Draft without saving, but
+    // the question and generation steps below it still said to reuse its
+    // answers. Any step between the role change and post-apply whose list reads
+    // `## Application Answers` must restate the exclusion itself.
+    const sections = answerReadingSections(lines);
+    assert.ok(sections.length > 0, 'no step reads the report\'s answers: the recognizer found nothing to check');
+    for (const { heading, body } of sections) {
+      assert.ok(body.includes('**Draft without saving**'), `"${heading}" reuses the report's answers with no unsaved-draft exclusion`);
+    }
+  });
 
   ok(`${file}: the role-change step points at the posting identity`, () => {
     const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));
@@ -329,6 +356,13 @@ for (const [file, expect] of Object.entries(zhModes)) {
     // would otherwise be used without any check.
     const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));
     assert.ok(roleChange.includes(expect.everyForm), 'the role-change step does not run the check on every form');
+  });
+
+  ok(`${file}: the generation step drafts without the report on an unsaved draft`, () => {
+    // Its item 1 builds on the report's blocks rather than its answers, so the
+    // check for answer-reading steps does not reach it.
+    const generate = sectionAt(lines, lines.findIndex(l => /^## 步[骤驟] 5 /.test(l)));
+    assert.ok(generate.includes('**Draft without saving**'), 'the generation step has no unsaved-draft exclusion');
   });
 
   ok(`${file}: the post-apply step rechecks the posting before each write`, () => {
