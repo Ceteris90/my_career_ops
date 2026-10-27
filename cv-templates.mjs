@@ -668,25 +668,89 @@ function decodeCssEscapes(css) {
   });
 }
 
-// Reads attributes by walking the tag, so a quoted value that happens to
-// contain `src=x` is a value and not a second attribute.
-const attrMatches = (tag) => {
-  const body = tag.replace(/^<[^\t\n\f\r />]+/, '').replace(/\/?>$/, '');
-  return body.matchAll(/([^\t\n\f\r "'<>/=]+)(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"([^"]*)"|'([^']*)'|([^\t\n\f\r "'=<>`]+)))?/g);
-};
-
-// Names only, from the same walk: `<svg/onload=x>` and `<img src="a"onerror=x>`
-// have no whitespace before the handler, and a quoted value is never a name.
-const attrNames = (tag) => [...attrMatches(tag)].map((m) => m[1].toLowerCase());
-
-function attrValue(tag, name) {
-  for (const m of attrMatches(tag)) {
-    // The browser decodes character references in attribute values, so the
-    // lint must too: `https&#58;//x` is a remote URL, and so is `https&#58//x`
-    // (a numeric reference decodes without its semicolon in an attribute).
-    if (m[1].toLowerCase() === name) return decodeEntities(m[2] ?? m[3] ?? m[4] ?? '', { bareNumeric: true });
+// One start or end tag, read with the HTML tokenizer's own states: tag name, before
+// attribute name, attribute name, after attribute name, before attribute value, the
+// three value states, and the self-closing solidus. A quote opens a value only right
+// after `=`, so `alt=Jane's` is one unquoted value, and `"`, `'`, `<` and `=` inside
+// a name are name characters. One pass, no backtracking. The first of two attributes
+// with the same name wins. Returns null when the input ends inside the tag, which
+// the parser drops. `at` is the index of `<`, followed by an ASCII letter or `/`.
+const isHtmlSpace = (c) => c === ' ' || c === '\n' || c === '\t' || c === '\f' || c === '\r';
+const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+const cleanName = (s) => asciiLower(s).replace(/\0/g, '�');
+function tokenizeTag(html, at) {
+  const n = html.length;
+  let i = at + 1;
+  const closing = html[i] === '/';
+  if (closing) i++;
+  const nameStart = i;
+  while (i < n && !isHtmlSpace(html[i]) && html[i] !== '/' && html[i] !== '>') i++;
+  const name = cleanName(html.slice(nameStart, i));
+  const attrs = [];
+  const seen = new Set();
+  let selfClosing = false;
+  for (;;) {
+    while (i < n && isHtmlSpace(html[i])) i++;
+    if (i >= n) return null;
+    if (html[i] === '>') { i++; break; }
+    if (html[i] === '/') {
+      i++;
+      if (html[i] === '>') { selfClosing = true; i++; break; }
+      continue;
+    }
+    // attribute name: a leading `=` belongs to the name
+    const nameAt = i;
+    if (html[i] === '=') i++;
+    while (i < n && !isHtmlSpace(html[i]) && html[i] !== '/' && html[i] !== '>' && html[i] !== '=') i++;
+    if (i >= n) return null;
+    const attrName = cleanName(html.slice(nameAt, i));
+    let value = '';
+    let j = i;
+    while (j < n && isHtmlSpace(html[j])) j++;
+    if (j >= n) return null;
+    if (html[j] === '=') {
+      i = j + 1;
+      while (i < n && isHtmlSpace(html[i])) i++;
+      if (i >= n) return null;
+      const q = html[i];
+      if (q === '"' || q === "'") {
+        const end = html.indexOf(q, i + 1);
+        if (end < 0) return null;
+        value = html.slice(i + 1, end);
+        i = end + 1;
+      } else if (q !== '>') {
+        const valueAt = i;
+        while (i < n && !isHtmlSpace(html[i]) && html[i] !== '>') i++;
+        if (i >= n) return null;
+        value = html.slice(valueAt, i);
+      }
+    } else {
+      i = j;
+    }
+    if (!seen.has(attrName)) {
+      seen.add(attrName);
+      attrs.push([attrName, value.replace(/\0/g, '�').replace(/\r\n?/g, '\n')]);
+    }
   }
-  return null;
+  return { raw: html.slice(at, i), name, closing, attrs, selfClosing, end: i };
+}
+
+// The attributes of one tag as [name, value] pairs, values with their character
+// references decoded the way a browser does: the lint must see `https&#58;//x` as
+// `https://x`, and a numeric reference decodes without its semicolon in an attribute.
+const attrCache = new Map();
+export function tagAttributes(tag) {
+  let attrs = attrCache.get(tag);
+  if (!attrs) {
+    attrs = (tokenizeTag(tag, 0)?.attrs ?? []).map(([k, v]) => [k, decodeEntities(v, { bareNumeric: true })]);
+    if (attrCache.size > 4096) attrCache.clear();
+    attrCache.set(tag, attrs);
+  }
+  return attrs;
+}
+const attrNames = (tag) => tagAttributes(tag).map(([k]) => k);
+function attrValue(tag, name) {
+  return tagAttributes(tag).find(([k]) => k === name)?.[1] ?? null;
 }
 
 // The URL parser drops tab, LF and CR from anywhere in a URL, so `ht&#9;tps://x`
@@ -749,11 +813,10 @@ const MEDIA = new Set(['video', 'audio', 'picture']);
 const FOREIGN_BREAKOUT = new Set(['b', 'big', 'blockquote', 'body', 'br', 'center', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'embed', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'hr', 'i', 'img', 'li', 'listing', 'menu', 'meta', 'nobr', 'ol', 'p', 'pre', 'ruby', 's', 'small', 'span', 'strong', 'strike', 'sub', 'sup', 'table', 'tt', 'u', 'ul', 'var']);
 const SVG_HTML_POINTS = new Set(['foreignobject', 'desc', 'title']);
 const MATH_HTML_POINTS = new Set(['mi', 'mo', 'mn', 'ms', 'mtext']);
-function scanHtml(html) {
+export function scanHtml(html) {
   const tags = [];
   const styles = [];
   const media = [];
-  const TAG = /<(\/?)([a-zA-Z][^\t\n\f\r />]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/y;
   const context = [];
   const foreign = () => context.at(-1) === 'svg' || context.at(-1) === 'math';
   let template = 0;
@@ -774,34 +837,34 @@ function scanHtml(html) {
       const end = html.indexOf('>', i);
       i = end < 0 ? html.length : end + 1;
     } else {
-      TAG.lastIndex = i;
-      const m = TAG.exec(html);
-      if (!m) { i++; continue; }
-      i = TAG.lastIndex;
-      const name = m[2].toLowerCase();
-      if (m[1]) {
+      if (!/[a-zA-Z]/.test(next === '/' ? html[i + 2] ?? '' : next ?? '')) { i++; continue; }
+      const token = tokenizeTag(html, i);
+      if (!token) break; // the input ends inside the tag, and the parser drops it
+      i = token.end;
+      const { name } = token;
+      if (token.closing) {
         if (name === 'template' && template) template--;
         else if (name === 'frameset' && frameset) frameset--;
         else if (context.includes(name)) while (context.pop() !== name);
         else if (media.at(-1) === name) media.pop();
         continue;
       }
-      if (foreign() && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && /[\t\n\f\r /](?:color|face|size)[\t\n\f\r ]*=/i.test(m[3])))) {
+      if (foreign() && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && token.attrs.some(([k]) => k === 'color' || k === 'face' || k === 'size')))) {
         while (foreign()) context.pop();
       }
       // Decided before the element opens its own context: an svg <title> is not RCDATA, only its HTML children are.
       const inForeign = foreign();
       // A trailing slash closes a tag only where the HTML parser honours it: svg, math and
       // what sits in foreign content. <picture/> and <template/> still open an element.
-      const selfClosing = /\/$/.test(m[3]) && (name === 'svg' || name === 'math' || inForeign);
+      const selfClosing = token.selfClosing && (name === 'svg' || name === 'math' || inForeign);
       const inert = template > 0;
-      if (!inert) tags.push({ raw: m[0], name, media: media.at(-1) ?? null, svg: name === 'svg' || context.at(-1) === 'svg', frameset: frameset > 0 });
+      if (!inert) tags.push({ raw: token.raw, name, media: media.at(-1) ?? null, svg: name === 'svg' || context.at(-1) === 'svg', frameset: frameset > 0 });
       if (name === 'template') template++;
       if (name === 'frameset') frameset++;
       if (MEDIA.has(name) && !selfClosing) media.push(name);
       if (!selfClosing) {
         const top = context.at(-1);
-        const encoding = name === 'annotation-xml' ? attrValue(m[0], 'encoding') ?? '' : '';
+        const encoding = name === 'annotation-xml' ? attrValue(token.raw, 'encoding') ?? '' : '';
         if (name === 'svg' || name === 'math'
           || (top === 'svg' && SVG_HTML_POINTS.has(name))
           || (top === 'math' && (MATH_HTML_POINTS.has(name) || /^(?:text\/html|application\/xhtml\+xml)$/i.test(encoding)))) context.push(name);
@@ -812,7 +875,7 @@ function scanHtml(html) {
         if (end) end.lastIndex = i;
         const found = end?.exec(html);
         const stop = end ? (found ? found.index : html.length) : html.length;
-        if (name === 'style' && !inert) styles.push({ tag: m[0], body: html.slice(i, stop).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, inForeign ? '$1' : '$&') });
+        if (name === 'style' && !inert) styles.push({ tag: token.raw, body: html.slice(i, stop).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, inForeign ? '$1' : '$&') });
         i = stop;
       }
     }
@@ -1276,3 +1339,4 @@ if (isMain) {
     process.exit(1);
   }
 }
+

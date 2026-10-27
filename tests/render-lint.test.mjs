@@ -146,6 +146,13 @@ const CASES = [
       '<style>.x{background-image:image-set("https://example.com/a.png" 1x)}</style>',
       '<style>.x{background-image:-webkit-image-set(\'https:example.com/a.png\' 1x)}</style>',
       '<base href="https://cdn.example/"><style>.x{background-image:image-set("a.png" 1x)}</style>',
+      // A quote opens a value only right after `=`: these tags have an unquoted alt, and the src after it is live (probed).
+      "<img alt=Jane's src=https://example.com/a.png>",
+      '<img alt=say"hi src=https://example.com/a.png>',
+      '<img alt=a<b src=https://example.com/a.png>',
+      '<img src="https://example.com/a.png"alt=x>',
+      '<img src=https://example.com/a.png/>',
+      '<img alt =x src= https://example.com/a.png>',
       // Attribute and element forms the HTML parser accepts.
       '<img/src=https://example.com/a.png>',
       '<svg><defs><filter id="f"><feImage href="https://example.com/a.png"/></filter></defs></svg>',
@@ -281,6 +288,11 @@ const CASES = [
       '<video><source srcset="https://example.com/a.png"></video>',
       '<track src="https://example.com/a.vtt">',
       '<video><track src="https://example.com/a.vtt" kind="subtitles" default></video>',
+      // A tag the input ends inside is dropped by the parser, so nothing is requested (probed).
+      '<img src="https://example.com/a.png"',
+      '<img src=https://example.com/a.png',
+      // The second quote closes alt, so the URL is an attribute name, not a src.
+      '<img alt="a src="https://example.com/a.png">',
       // Never requested with JavaScript off: icons, a preload with no `as`, a rel that only contains a fetching word.
       '<link rel="icon" href="https://example.com/favicon.ico">',
       '<link rel="shortcut icon" href="https://example.com/favicon.ico">',
