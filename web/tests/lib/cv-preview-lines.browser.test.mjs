@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { liveServerSkip } from "../helpers/live-server.mjs";
 
 const url = process.env.CV_PREVIEW_LINES_TEST_URL;
-const markdown = "# CV -- Riley Quinn\n\n**Location:** Portland, OR\n**Email:** riley@quinn.example\n\n- First bullet\n- Second bullet\n";
+const markdown = "# CV -- Sample Candidate\n\n**Location:** Portland, OR\n**Phone:** on request\n\n- First bullet\n- Second bullet\n";
 
 test("CV preview keeps one header field per line without blank lines between blocks", { skip: liveServerSkip("CV_PREVIEW_LINES_TEST_URL"), timeout: 120_000 }, async (t) => {
   const origin = new URL(url);
@@ -22,13 +22,13 @@ test("CV preview keeps one header field per line without blank lines between blo
   await page.goto(`${origin.origin}/cv`);
   await page.locator("textarea").first().fill(markdown);
   const preview = page.locator("article.report-prose");
-  await preview.getByText("riley@quinn.example").waitFor();
+  await preview.getByText("on request").waitFor();
 
   const box = async (locator) => (await locator.boundingBox()) ?? assert.fail("element is laid out");
   const location = await box(preview.locator("strong", { hasText: "Location:" }));
-  const email = await box(preview.locator("strong", { hasText: "Email:" }));
+  const email = await box(preview.locator("strong", { hasText: "Phone:" }));
   const lineHeight = await preview.locator("p", { hasText: "Location:" }).evaluate((p) => parseFloat(getComputedStyle(p).lineHeight));
-  assert.ok(email.y - location.y >= lineHeight / 2, `Email starts on a line below Location (Location top ${location.y}, Email top ${email.y}, line height ${lineHeight})`);
+  assert.ok(email.y - location.y >= lineHeight / 2, `Phone starts on a line below Location (Location top ${location.y}, Phone top ${email.y}, line height ${lineHeight})`);
 
   const items = preview.locator("li");
   const first = await box(items.nth(0));
