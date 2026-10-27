@@ -16,7 +16,7 @@
 2. IDENTIFY    → Extract company + role from the page
 3. SEARCH      → Match against existing reports in reports/
 4. LOAD        → Read full report + Section H / `## Application Answers` (if they exist) — **Posting identity** が成り立ってから
-5. PREFLIGHT   → Confirm posting liveness + that the form is the report's posting before drafting
+5. PREFLIGHT   → Confirm posting liveness + that the form is the report's posting (**Posting identity**) before drafting
 6. ANALYZE     → Identify ALL visible form questions
 7. GENERATE    → For each question, generate a personalized response
 8. PRESENT     → Show formatted responses for copy-paste

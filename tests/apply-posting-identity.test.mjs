@@ -179,6 +179,17 @@ function assertWorkflowLoadGated(text) {
 
 ok('apply.md: the workflow LOAD line waits for the posting identity', () => assertWorkflowLoadGated(apply));
 
+// apply.md, modes/ja and modes/vi have a PREFLIGHT line in the overview. In vi
+// it still asked for "company/role match", which stops a retitled posting that
+// Step 3 would adapt; the line names the posting identity instead.
+for (const file of ['modes/apply.md', 'modes/ja/oubo.md', 'modes/vi/ung-tuyen.md']) {
+  ok(`${file}: the workflow PREFLIGHT line checks the posting identity, not the role`, () => {
+    const line = read(file).split('\n').find(l => /^5\.\s+PREFLIGHT/.test(l));
+    assert.ok(line, 'no PREFLIGHT line in the workflow overview');
+    assert.ok(line.includes(`**${IDENTITY}**`), `the PREFLIGHT line does not check the posting identity: ${line}`);
+  });
+}
+
 // apply.md, modes/ja and modes/vi compare the report in Step 5, after Step 2
 // has picked it. "Load the full report, but read it only to compare" still put
 // the other posting's answers in context, so Step 2 reads the header alone.

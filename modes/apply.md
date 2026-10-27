@@ -31,7 +31,7 @@ Do not submit the form. Stop before Submit, Send, or Apply. Continue only after 
 3. SEARCH      → Match against existing reports in reports/
 4. LOAD        → Read the matched reports' headers; the full report + Section H / Application Answers (if they exist) once **Posting identity** holds
 4b. TAILORED   → Resolve the tailored CV for that report once its posting is confirmed; it, not cv.md, sources experience fields
-5. PREFLIGHT   → Confirm posting liveness + that the form is the report's posting before drafting
+5. PREFLIGHT   → Confirm posting liveness + that the form is the report's posting (**Posting identity**) before drafting
 5b. PRE-SCAN   → Scan page for knock-out questions (degree, experience, work authorization/visa, sponsorship, salary floors)
 5d. STATUS     → Warn if a form question screens for a specific immigration status rather than work authorization (warn-only; candidate decides)
 

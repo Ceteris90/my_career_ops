@@ -19,7 +19,7 @@ Mode tương tác dành cho lúc ứng viên đang điền form ứng tuyển tr
 3. SEARCH      → Đối chiếu với các báo cáo hiện có trong reports/
 4. LOAD        → Đọc báo cáo đầy đủ + Block H / Application Answers (nếu có), sau khi **Posting identity** được xác nhận
 4b. TAILORED   → Xác định CV đã điều chỉnh cho báo cáo đó; nó, không phải cv.md, là nguồn cho các trường kinh nghiệm
-5. PREFLIGHT   → Xác nhận tin còn mở + công ty/vai trò khớp trước khi soạn
+5. PREFLIGHT   → Xác nhận tin còn mở + form là tin của báo cáo (**Posting identity**: cùng nhà tuyển dụng, cùng tin; chức danh đổi thì sang Bước 3) trước khi soạn
 5b. PRE-SCAN   → Quét trang tìm câu hỏi loại trực tiếp (bằng cấp, kinh nghiệm, quyền làm việc/visa, bảo lãnh, mức lương sàn)
 6. ANALYZE     → Xác định MỌI câu hỏi đang hiển thị trong form
 7. GENERATE    → Với mỗi câu hỏi, tạo câu trả lời cá nhân hóa
