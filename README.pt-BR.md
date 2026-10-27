@@ -28,7 +28,7 @@
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Criado por <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Criado por <a href="https://github.com/santifer"><strong>@santifer</strong></a>, com&nbsp;<a href="https://github.com/vliggio"><img src="https://github.com/vliggio.png?size=48" width="24" height="24" align="middle" alt="vliggio"></a><a href="https://github.com/abankar1"><img src="https://github.com/abankar1.png?size=48" width="24" height="24" align="middle" alt="abankar1"></a><a href="https://github.com/mbrow190"><img src="https://github.com/mbrow190.png?size=48" width="24" height="24" align="middle" alt="mbrow190"></a><a href="https://github.com/Schlaflied"><img src="https://github.com/Schlaflied.png?size=48" width="24" height="24" align="middle" alt="Schlaflied"></a><a href="https://github.com/rubicon"><img src="https://github.com/rubicon.png?size=48" width="24" height="24" align="middle" alt="rubicon"></a>&nbsp;<a href="#builders">700+ contribuidores</a></p>
 
 <p align="center">
 <strong>Meses mandando currículos para o&nbsp;silêncio.</strong><br>
@@ -125,6 +125,8 @@ O silêncio depois de clicar em enviar não é sobre você. Gente suficiente viu
 <br>
 
 A contratação não vai se consertar sozinha. As pessoas que passam por ela podem, e já estão na sala, comparando anotações e consertando o setup umas das outras.
+
+<a id="builders"></a>
 
 <p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=pt-BR" alt="Mural animado com os avatares do GitHub de quem contribui, preenchido por ordem de chegada desde abril de 2026, com o próximo quadrado deixado livre." width="100%"></a></p>
 

@@ -26,7 +26,7 @@
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Створено <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Створено <a href="https://github.com/santifer"><strong>@santifer</strong></a> за участі&nbsp;<a href="https://github.com/vliggio"><img src="https://github.com/vliggio.png?size=48" width="24" height="24" align="middle" alt="vliggio"></a><a href="https://github.com/abankar1"><img src="https://github.com/abankar1.png?size=48" width="24" height="24" align="middle" alt="abankar1"></a><a href="https://github.com/mbrow190"><img src="https://github.com/mbrow190.png?size=48" width="24" height="24" align="middle" alt="mbrow190"></a><a href="https://github.com/Schlaflied"><img src="https://github.com/Schlaflied.png?size=48" width="24" height="24" align="middle" alt="Schlaflied"></a><a href="https://github.com/rubicon"><img src="https://github.com/rubicon.png?size=48" width="24" height="24" align="middle" alt="rubicon"></a>&nbsp;<a href="#builders">700+ контриб'юторів</a></p>
 
 <p align="center">
 <strong>Місяці надсилання резюме в&nbsp;тишу.</strong><br>
@@ -123,6 +123,8 @@ npx @santifer/career-ops init
 <br>
 
 Найм сам себе не виправить. Люди, які через нього проходять, можуть, і вони вже в кімнаті: звіряють нотатки й лагодять одне одному налаштування.
+
+<a id="builders"></a>
 
 <p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=ua" alt="Анімована стіна з GitHub-аватарів учасників, що заповнюється в порядку приходу з квітень 2026 р.; наступна клітинка лишається вільною." width="100%"></a></p>
 

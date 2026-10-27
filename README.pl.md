@@ -26,7 +26,7 @@
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Stworzone przez <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Stworzone przez <a href="https://github.com/santifer"><strong>@santifer</strong></a>, z udziałem&nbsp;<a href="https://github.com/vliggio"><img src="https://github.com/vliggio.png?size=48" width="24" height="24" align="middle" alt="vliggio"></a><a href="https://github.com/abankar1"><img src="https://github.com/abankar1.png?size=48" width="24" height="24" align="middle" alt="abankar1"></a><a href="https://github.com/mbrow190"><img src="https://github.com/mbrow190.png?size=48" width="24" height="24" align="middle" alt="mbrow190"></a><a href="https://github.com/Schlaflied"><img src="https://github.com/Schlaflied.png?size=48" width="24" height="24" align="middle" alt="Schlaflied"></a><a href="https://github.com/rubicon"><img src="https://github.com/rubicon.png?size=48" width="24" height="24" align="middle" alt="rubicon"></a>&nbsp;<a href="#builders">700+ kontrybutorów</a></p>
 
 <p align="center">
 <strong>Miesiące wysyłania CV w&nbsp;ciszę.</strong><br>
@@ -123,6 +123,8 @@ Cisza po kliknięciu „wyślij” nie mówi nic o tobie. Dość ludzi zobaczył
 <br>
 
 Rekrutacja sama się nie naprawi. Ludzie, którzy przez nią przechodzą, mogą, i już są w pokoju: porównują notatki i naprawiają sobie nawzajem konfiguracje.
+
+<a id="builders"></a>
 
 <p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=pl" alt="Animowana ściana awatarów GitHub osób współtworzących projekt, wypełniana w kolejności dołączania od kwiecień 2026, z kolejnym polem pozostawionym wolnym." width="100%"></a></p>
 

@@ -28,7 +28,7 @@
 
 <!-- The non-breaking spaces (&nbsp;) and word joiners (&#8288;) below decide where each line wraps on a phone. Keep them when editing. -->
 
-<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Creado por <a href="https://github.com/santifer"><strong>@santifer</strong></a></p>
+<p align="center"><a href="https://github.com/santifer"><img src="docs/avatar-santifer.png" width="48" height="48" align="middle" alt="Santiago Fernández de Valderrama Aparicio"></a>&nbsp;&nbsp;Creado por <a href="https://github.com/santifer"><strong>@santifer</strong></a>, con&nbsp;<a href="https://github.com/vliggio"><img src="https://github.com/vliggio.png?size=48" width="24" height="24" align="middle" alt="vliggio"></a><a href="https://github.com/abankar1"><img src="https://github.com/abankar1.png?size=48" width="24" height="24" align="middle" alt="abankar1"></a><a href="https://github.com/mbrow190"><img src="https://github.com/mbrow190.png?size=48" width="24" height="24" align="middle" alt="mbrow190"></a><a href="https://github.com/Schlaflied"><img src="https://github.com/Schlaflied.png?size=48" width="24" height="24" align="middle" alt="Schlaflied"></a><a href="https://github.com/rubicon"><img src="https://github.com/rubicon.png?size=48" width="24" height="24" align="middle" alt="rubicon"></a>&nbsp;<a href="#builders">700+ contribuidores</a></p>
 
 <p align="center">
 <strong>Meses mandando CVs al&nbsp;silencio.</strong><br>
@@ -125,6 +125,8 @@ El silencio después de pulsar enviar no va contigo. Bastante gente vio lo mismo
 <br>
 
 La contratación no va a arreglarse sola. La gente que la sufre sí puede, y ya está en la sala, comparando notas y arreglándose los setups unos a otros.
+
+<a id="builders"></a>
 
 <p align="center"><a href="CONTRIBUTING.md"><img src="https://warpchart.dev/api/builders?lang=es" alt="Muro animado con los avatares de GitHub de quienes contribuyen, que se llena por orden de llegada desde abril de 2026 y deja libre la siguiente casilla." width="100%"></a></p>
 
