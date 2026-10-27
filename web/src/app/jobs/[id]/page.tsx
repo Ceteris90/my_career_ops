@@ -1,11 +1,11 @@
 "use client";
 
 import { use } from "react";
-import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, Loader2, Wrench, CircleDot, Check, X } from "lucide-react";
 import { useJobs } from "@/components/jobs/job-store";
+import { BackLink } from "@/components/back-link";
 import { HeroGlow } from "@/components/hero-glow";
 import { Badge } from "@/components/ui/badge";
 
@@ -17,9 +17,9 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   if (!job) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
+        <BackLink href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
           <ArrowLeft className="size-4" /> Pipeline
-        </Link>
+        </BackLink>
         <p className="mt-8 text-sm text-muted">
           This worker is no longer in memory (it finished earlier or the page was reloaded).
         </p>
@@ -29,9 +29,9 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
-      <Link href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
+      <BackLink href="/pipeline" className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-brand">
         <ArrowLeft className="size-4" /> Pipeline
-      </Link>
+      </BackLink>
 
       <section className="dot-bg relative mt-5 overflow-hidden rounded-2xl border border-border bg-surface/40 px-6 py-7">
         {job.status === "running" && <HeroGlow />}

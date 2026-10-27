@@ -276,7 +276,7 @@ export function PipelineView({
           </button>
           {selectedRows.length >= 2 && selectedRows.length <= COMPARE_MAX && (
             <Link
-              href={`/pipeline/compare?n=${selectedRows.map((r) => r.n).join(",")}`}
+              href={`/pipeline/compare?n=${selectedRows.map((r) => r.n).join(",")}${detailQuery ? `&${detailQuery}` : ""}`}
               className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:border-brand/40 hover:text-brand"
             >
               Compare
