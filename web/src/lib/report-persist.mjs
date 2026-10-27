@@ -187,10 +187,10 @@ function spawnScript({ spawnFn, execPath, root, script, args = [], input = null 
  * the sentinel. Never throws: the caller routes `{ok:false}` through the same
  * honesty gate as every other evaluate failure.
  *
- * @param {{spawnFn: Function, execPath: string, root: string, markdown: string, url: string, today: string, postedAt?: string}} args
+ * @param {{spawnFn: Function, execPath: string, root: string, coreRoot?: string, markdown: string, url: string, today: string, postedAt?: string}} args
  * @returns {Promise<{ok: true, num: string, reportFile: string, warnings: string[]} | {ok: false, error: string}>}
  */
-export async function persistEvaluation({ spawnFn, execPath, root, markdown, url, today, postedAt }) {
+export async function persistEvaluation({ spawnFn, execPath, root, coreRoot = root, markdown, url, today, postedAt }) {
   if (!ISO_DATE_RE.test(String(today ?? ""))) {
     return { ok: false, error: `Invalid evaluation date "${today}" — expected YYYY-MM-DD.` };
   }
@@ -198,7 +198,7 @@ export async function persistEvaluation({ spawnFn, execPath, root, markdown, url
   if (!meta.ok) return meta;
 
   const reserved = await spawnScript({
-    spawnFn, execPath, root, script: "reserve-report-num.mjs",
+    spawnFn, execPath, root: coreRoot, script: "reserve-report-num.mjs",
   });
   if (!reserved.ok) {
     return { ok: false, error: `Could not reserve a report number: ${reserved.stderr || "reserve-report-num.mjs failed"}.` };
@@ -209,7 +209,7 @@ export async function persistEvaluation({ spawnFn, execPath, root, markdown, url
   }
 
   const release = () => spawnScript({
-    spawnFn, execPath, root, script: "reserve-report-num.mjs", args: ["--release", num],
+    spawnFn, execPath, root: coreRoot, script: "reserve-report-num.mjs", args: ["--release", num],
   });
 
   // One release. A failed --release is not success: the sentinel would stay
@@ -258,7 +258,7 @@ export async function persistEvaluation({ spawnFn, execPath, root, markdown, url
   const notes = ISO_DATE_RE.test(String(postedAt ?? "")) ? `; posted: ${postedAt}` : "";
 
   const written = await spawnScript({
-    spawnFn, execPath, root,
+    spawnFn, execPath, root: coreRoot,
     script: "persist-evaluation-report.mjs",
     input: JSON.stringify({
       markdown,
@@ -278,7 +278,7 @@ export async function persistEvaluation({ spawnFn, execPath, root, markdown, url
   }
 
   const merged = await spawnScript({
-    spawnFn, execPath, root, script: "merge-tracker.mjs",
+    spawnFn, execPath, root: coreRoot, script: "merge-tracker.mjs",
   });
   if (!merged.ok) {
     return finish(`The report was saved but merge-tracker.mjs failed: ${merged.stderr || "non-zero exit"}.`);
@@ -295,7 +295,7 @@ export async function persistEvaluation({ spawnFn, execPath, root, markdown, url
   if (postingUrl && fs.existsSync(pipelinePath)) {
     try {
       const completed = await setInboxSkip(pipelinePath, postingUrl, true, {
-        lockModule: path.join(root, "pipeline-lock.mjs"),
+        lockModule: path.join(coreRoot, "pipeline-lock.mjs"),
       });
       if (!completed.ok && !["unmatched", "not-found"].includes(completed.error)) {
         warnings.push("Evaluation saved, but the inbox checkbox could not be updated.");
