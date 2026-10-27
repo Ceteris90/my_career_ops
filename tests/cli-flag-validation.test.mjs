@@ -250,6 +250,19 @@ for (const [form, args] of [
   });
 }
 
+for (const [form, args] of [
+  ['space-separated', ['--min-family-n', 'abc']],
+  ['zero', ['--min-family-n', '0']],
+  ['negative', ['--min-family-n=-1']],
+  ['decimal', ['--min-family-n=1.5']],
+]) {
+  test(`analyze-patterns rejects ${form} role-family sample values`, () => {
+    const r = runScript('analyze-patterns.mjs', ...args);
+    assert.equal(r.status, 1, describeSpawn(r, `exited ${r.status}, want 1`));
+    assert.match(r.all, /--min-family-n requires a positive integer, got/);
+  });
+}
+
 test('analyze-patterns rejects a trailing --min-threshold without an operand', () => {
   const r = runScript('analyze-patterns.mjs', '--min-threshold');
   assert.equal(r.status, 1, describeSpawn(r, `exited ${r.status}, want 1`));

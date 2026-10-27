@@ -10,6 +10,7 @@
  *      node analyze-patterns.mjs --summary (human-readable table)
  *      node analyze-patterns.mjs --min-threshold 3
  *      node analyze-patterns.mjs --min-vendor-n 8   (per-vendor sample floor)
+ *      node analyze-patterns.mjs --min-family-n 20  (per-role-family sample floor)
  *      node analyze-patterns.mjs --self-test
  */
 
@@ -24,6 +25,7 @@ import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerL
 import { atsVendorOf } from './ats-vendor.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
+import { parseStatusLogStages, recoverFunnelStages } from './funnel-stages.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
@@ -94,13 +96,14 @@ const MACHINE_SUMMARY_FIELDS = new Set([
 
 const args = process.argv.slice(2);
 
-const KNOWN_FLAGS = ['--min-threshold', '--min-vendor-n', '--self-test', '--summary', '--help', '-h'];
-const VALUE_FLAGS = ['--min-threshold', '--min-vendor-n'];
+const KNOWN_FLAGS = ['--min-threshold', '--min-vendor-n', '--min-family-n', '--self-test', '--summary', '--help', '-h'];
+const VALUE_FLAGS = ['--min-threshold', '--min-vendor-n', '--min-family-n'];
 const USAGE = `Usage:
   node analyze-patterns.mjs                       # analyze application patterns as JSON
   node analyze-patterns.mjs --summary             # print a human-readable summary
   node analyze-patterns.mjs --min-threshold <n>   # minimum submitted applications required (default: 5)
   node analyze-patterns.mjs --min-vendor-n <n>    # minimum sample per vendor/channel (default: 8)
+  node analyze-patterns.mjs --min-family-n <n>    # minimum applications per role family before a suggestion (default: 20)
   node analyze-patterns.mjs --self-test           # run the built-in consistency checks
   node analyze-patterns.mjs --help                # show this message`;
 
@@ -388,6 +391,99 @@ function buildViaChannelAnalysis(submitted, isAdvanced, minSample = MIN_VENDOR_N
     agencyAdvanceRate: rate(agencySubmitted),
     directAdvanceRate: rate(directSubmitted),
     breakdown,
+  };
+}
+
+// --- Role-family yield (#6028) ---
+// Which kinds of roles turn into interviews, so the next applications go where
+// replies actually come from. Counts "ever reached Interview" through the
+// status-log fold stats.mjs uses, so a row rejected after an interview still
+// counts; archetypeBreakdown reads the snapshot status and would call it a no.
+let FAMILY_MIN_N = 20;
+const FAMILY_MIN_GAP = 2;
+const FUNNEL_RANK_APPLIED = 1;
+const FUNNEL_RANK_INTERVIEW = 4;
+
+/** Wilson 95% interval for k of n, as whole percents. null when n is 0. */
+export function wilsonInterval(k, n, z = 1.96) {
+  if (!(n > 0)) return null;
+  const p = k / n;
+  const z2 = z * z;
+  const centre = (p + z2 / (2 * n)) / (1 + z2 / n);
+  const half = (z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))) / (1 + z2 / n);
+  return [Math.max(0, Math.round((centre - half) * 100)), Math.min(100, Math.round((centre + half) * 100))];
+}
+
+/** role_families from config/profile.yml: { family: [title keyword, ...] }. */
+export function loadRoleFamilies(file = join(CAREER_OPS, 'config', 'profile.yml')) {
+  const raw = readTextIfExists(file);
+  if (!raw) return {};
+  try {
+    const parsed = loadYaml(raw)?.role_families;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([family, words]) => [family, (Array.isArray(words) ? words : []).map(w => String(w).trim().toLowerCase()).filter(Boolean)])
+        .filter(([, words]) => words.length > 0)
+    );
+  } catch {
+    return {};
+  }
+}
+
+/** The report's archetype when it has one; else the first family whose keyword is in the title. */
+export function roleFamilyOf(entry, families = {}) {
+  const archetype = entry.report?.archetype;
+  if (archetype) return archetype;
+  const title = String(entry.role ?? '').toLowerCase();
+  for (const [family, words] of Object.entries(families)) {
+    if (words.some(w => title.includes(w))) return family;
+  }
+  return 'Unknown';
+}
+
+export function buildRoleFamilyYield(enriched, { ledger = [], families = {}, minN = FAMILY_MIN_N, minGap = FAMILY_MIN_GAP } = {}) {
+  const statusByNum = new Map(enriched.map(e => [e.num, e.normalizedStatus]));
+  const reached = recoverFunnelStages(statusByNum, ledger);
+  const groups = new Map();
+  let applied = 0;
+  let interviewed = 0;
+  for (const e of enriched) {
+    const rank = reached.get(e.num) || 0;
+    if (rank < FUNNEL_RANK_APPLIED) continue;
+    const family = roleFamilyOf(e, families);
+    if (!groups.has(family)) groups.set(family, { family, applied: 0, interviewed: 0 });
+    const g = groups.get(family);
+    g.applied++;
+    applied++;
+    if (rank >= FUNNEL_RANK_INTERVIEW) { g.interviewed++; interviewed++; }
+  }
+  const overallRate = applied > 0 ? interviewed / applied : null;
+  const rows = [...groups.values()]
+    .map(g => ({
+      ...g,
+      rate: Math.round((g.interviewed / g.applied) * 1000) / 10,
+      interval: wilsonInterval(g.interviewed, g.applied),
+      sufficientSample: g.applied >= minN,
+    }))
+    .sort((a, b) => b.applied - a.applied);
+  // Only a family with enough sends and a clear gap to the overall rate gets
+  // named; a 0% overall rate has no gap to measure.
+  const best = overallRate > 0
+    ? rows
+        .filter(r => r.sufficientSample && r.interviewed > 0 && r.rate / 100 >= minGap * overallRate)
+        .sort((a, b) => b.rate - a.rate || b.applied - a.applied)[0] || null
+    : null;
+  return {
+    minSampleForClaim: minN,
+    minGapToOverall: minGap,
+    applied,
+    interviewed,
+    overallRate: overallRate === null ? null : Math.round(overallRate * 1000) / 10,
+    families: rows,
+    suggestion: best
+      ? `Spend more applications on "${best.family}": ${best.interviewed} of ${best.applied} reached interview (${best.rate}%, 95% interval ${best.interval[0]}-${best.interval[1]}%) against ${Math.round(overallRate * 1000) / 10}% overall.`
+      : null,
   };
 }
 
@@ -880,6 +976,12 @@ function parseTracker() {
   return entries;
 }
 
+/** Transition ledger beside the tracker, as stats.mjs and funnel-velocity.mjs read it; [] when absent. */
+function loadStatusLedger() {
+  const file = join(dirname(APPS_FILE), 'status-log.tsv');
+  return existsSync(file) ? parseStatusLogStages(readFileSync(file, 'utf-8')) : [];
+}
+
 // Canonical reports-root containment. A tracker link resolves to a candidate
 // path; accept it only if it stays inside a reports/ directory (the data
 // root's by default; see REPORTS_ROOTS for the others). Two
@@ -1352,7 +1454,7 @@ function buildPatternSignals(enriched) {
 }
 
 // --- Main analysis ---
-export function analyze(entries = parseTracker()) {
+export function analyze(entries = parseTracker(), { ledger = loadStatusLedger(), families = loadRoleFamilies() } = {}) {
   if (entries.length === 0) {
     // noData marks this as the empty-tracker case rather than a failure, so the
     // exit status below does not have to match on the message text.
@@ -1441,6 +1543,7 @@ export function analyze(entries = parseTracker()) {
   );
 
   const archetypeBreakdown = breakdownBy(enriched, 'archetype', e => e.report?.archetype || 'Unknown');
+  const roleFamilyYield = buildRoleFamilyYield(enriched, { ledger, families, minN: FAMILY_MIN_N });
 
   // --- Blocker / discard-reason / technology analysis ---
   // Shared with --self-test so fixtures exercise the production aggregation.
@@ -1637,6 +1740,7 @@ export function analyze(entries = parseTracker()) {
     funnel,
     scoreComparison,
     archetypeBreakdown,
+    roleFamilyYield,
     blockerAnalysis,
     remotePolicy,
     companySizeBreakdown,
@@ -1695,6 +1799,18 @@ function printSummary(result) {
     for (const b of blockerAnalysis) {
       console.log(`  ${b.blocker.padEnd(20)} ${String(b.frequency).padStart(2)}x (${b.percentage}%)`);
     }
+  }
+
+  // Role-family yield
+  const fy = result.roleFamilyYield;
+  if (fy && fy.families.length > 0) {
+    console.log(`\nINTERVIEW RATE BY ROLE FAMILY (${fy.interviewed} of ${fy.applied} applied reached interview, ${fy.overallRate}% overall)`);
+    console.log('-'.repeat(40));
+    for (const f of fy.families) {
+      const verdict = f.sufficientSample ? `${f.rate}% (95% interval ${f.interval[0]}-${f.interval[1]}%)` : `not enough data (n<${fy.minSampleForClaim})`;
+      console.log(`  ${f.family.padEnd(28)} ${String(f.applied).padStart(3)} applied, ${String(f.interviewed).padStart(2)} interview: ${verdict}`);
+    }
+    if (fy.suggestion) console.log(`  -> ${fy.suggestion}`);
   }
 
   // Remote policy
@@ -1833,6 +1949,16 @@ if (isMainModule(import.meta.url)) {
       process.exit(1);
     }
     MIN_VENDOR_N = Number(rawMinVendorN);
+  }
+
+  const rawMinFamilyN = flagValue(args, '--min-family-n');
+  if (hasFlag(args, '--min-family-n')) {
+    if (rawMinFamilyN === undefined || !/^\d+$/.test(String(rawMinFamilyN)) ||
+        !Number.isSafeInteger(Number(rawMinFamilyN)) || Number(rawMinFamilyN) < 1) {
+      console.error(`Error: --min-family-n requires a positive integer, got "${rawMinFamilyN ?? ''}"`);
+      process.exit(1);
+    }
+    FAMILY_MIN_N = Number(rawMinFamilyN);
   }
 
   if (args.includes('--self-test')) {

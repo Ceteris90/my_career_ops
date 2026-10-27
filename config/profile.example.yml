@@ -49,6 +49,13 @@ target_roles:
       level: "Mid-Senior"
       fit: "adjacent"
 
+# Optional. `node analyze-patterns.mjs --summary` groups applications by the
+# archetype in each report; rows without a report fall back to these title
+# keywords (case-insensitive substring, first family that matches wins).
+# role_families:
+#   Data and reporting: ["data analyst", "reporting"]
+#   Learning and development: ["instructional design", "learning and development"]
+
 narrative:
   # Your professional headline (1 line)
   headline: "ML Engineer turned AI product builder"
