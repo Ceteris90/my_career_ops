@@ -1,3 +1,5 @@
+import { canonStatus } from "./status-alias.mjs";
+
 // Carry only the list's own filters through a report URL. Return destinations
 // remain fixed to /pipeline; no arbitrary "returnTo" URL or browser storage.
 const FILTER_KEYS = ["tab", "min", "sort", "dir", "q"];
@@ -36,7 +38,24 @@ export const PIPELINE_TABS = /** @type {const} */ ([
   "REJECTED",
   "DISCARDED",
   "SKIP",
+  "OTHER",
 ]);
+
+const RESIDUAL_TABS = new Set(["INBOX", "ALL", "OTHER"]);
+
+/**
+ * Stage tabs keep the substring test. OTHER is every status that matches none of them.
+ * @param {string} status
+ * @param {string} tab
+ * @returns {boolean}
+ */
+export function rowOnPipelineTab(status, tab) {
+  const token = canonStatus(status);
+  if (tab === "OTHER") {
+    return PIPELINE_TABS.filter((stage) => !RESIDUAL_TABS.has(stage)).every((stage) => !token.includes(stage));
+  }
+  return token.includes(tab);
+}
 
 /**
  * The tab a `?tab=` value selects. The server page and the client view both
