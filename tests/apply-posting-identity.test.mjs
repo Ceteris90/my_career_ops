@@ -206,20 +206,71 @@ ok('modes/nl/solliciteren.md finds the report by employer, not by title', () => 
   assert.match(nl, /functietitel alleen om rapporten te beperken/);
 });
 
-for (const file of ['modes/zh/apply.md', 'modes/zh-TW/apply.md']) {
+// These modes are checked in their own words: each clause below is one branch of
+// the decision, matched in order inside the line or paragraph that holds it.
+const inOrder = (text, parts, what) => {
+  let at = 0;
+  for (const part of parts) {
+    const next = text.indexOf(part, at);
+    assert.ok(next !== -1, `${what}: missing or out of order: "${part}"`);
+    at = next + part.length;
+  }
+};
+
+const zhModes = {
+  'modes/zh/apply.md': {
+    // The upload reminder: only for a confirmed report of this posting; on the
+    // unsaved path or with no report, say none was selected and recommend none.
+    reminder: ['仅当已确认报告对应当前可见的职位时', '上传为该职位定制的简历 PDF', '**Draft without saving**', '没有与当前职位对应的报告', '尚未选定匹配的定制简历', '不要推荐为其他职位定制的简历'],
+    everyForm: '即使职位名称没有变化、且只有一份报告与该公司匹配，也要对每个表单做这项检查',
+    recheck: '以及在下面每一次写入（状态和回答）之前，都要再次确认',
+  },
+  'modes/zh-TW/apply.md': {
+    reminder: ['僅當已確認報告對應目前看到的職缺時', '上傳為該職缺客製的履歷 PDF', '**Draft without saving**', '沒有與目前職缺對應的報告', '尚未選定相符的客製履歷', '不要推薦為其他職缺客製的履歷'],
+    everyForm: '即使職缺名稱沒有變動、且只有一份報告與該公司相符，也要對每個表單做這項檢查',
+    recheck: '以及在下面每一次寫入（狀態和回答）之前，都要再次確認',
+  },
+};
+
+for (const [file, expect] of Object.entries(zhModes)) {
+  const text = read(file);
+  const lines = text.split('\n');
+
   ok(`${file}: the output template recommends a tailored CV only for this posting`, () => {
     // The template told the candidate to upload "the previously tailored CV"
     // even on an unsaved draft for another posting, whose CV Step 3 sets aside.
-    const reminder = read(file).split('\n').find(l => /^- \[/.test(l) && l.includes("PDF"));
+    const reminder = lines.find(l => /^- \[/.test(l) && l.includes('PDF'));
     assert.ok(reminder, 'no CV upload reminder in the output template');
-    assert.ok(reminder.includes('**Draft without saving**'), 'the CV upload reminder does not handle the unsaved path');
+    inOrder(reminder, expect.reminder, 'the CV upload reminder');
+  });
+
+  ok(`${file}: the identity check runs on every form, not only on a changed title`, () => {
+    // A single same-employer report for a sibling posting with the same title
+    // would otherwise be used without any check.
+    const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));
+    assert.ok(roleChange.includes(expect.everyForm), 'the role-change step does not run the check on every form');
+  });
+
+  ok(`${file}: the post-apply step rechecks the posting before each write`, () => {
+    const postApply = sectionAt(lines, lines.findIndex(l => l.includes('set-status.mjs') && l.includes('Applied')));
+    assert.ok(postApply.includes(expect.recheck), 'the post-apply step checks only once before both writes');
   });
 }
 
 ok('modes/nl/solliciteren.md asks before rejecting a report on a URL mismatch alone', () => {
   // An application form often sits on another ATS host than the posting. With no
   // requisition ID, the URL alone cannot reject the employer's report: the
-  // canonical identity lets the candidate confirm it.
-  const nl = read('modes/nl/solliciteren.md');
-  assert.match(nl, /vraag de kandidaat dan of het rapport van deze werkgever bij dit formulier hoort/);
+  // canonical identity lets the candidate confirm it. The question belongs to
+  // that branch of Stap 2, and the confirmation makes the match validated.
+  const lines = read('modes/nl/solliciteren.md').split('\n');
+  const branch = lines.find(l => /^3\. Bevestig de match/.test(l));
+  assert.ok(branch, 'no Stap 2 confirmation item');
+  inOrder(branch, ['Wijkt de URL af', 'is er geen requisition-ID', 'vraag de kandidaat dan of het rapport van deze werkgever bij dit formulier hoort', 'voordat je het als ongevalideerd behandelt', 'bevestigt de kandidaat dat, dan is het een gevalideerde match'], 'Stap 2 item 3');
+  assert.ok(lines.some(l => /^6\. Alleen indien er GEEN gevalideerde match is/.test(l)), 'the auto-pipeline is no longer limited to an unvalidated match');
+});
+
+ok('modes/nl/solliciteren.md rechecks the posting before each post-apply write', () => {
+  const lines = read('modes/nl/solliciteren.md').split('\n');
+  const postApply = sectionAt(lines, lines.findIndex(l => l.includes('set-status.mjs') && l.includes('Applied')));
+  assert.ok(postApply.includes('en opnieuw vlak voor elke schrijfstap hieronder (status en antwoorden)'), 'the post-apply step checks only once before both writes');
 });

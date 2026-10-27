@@ -50,7 +50,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## 步驟 3 — 檢核職缺一致性
 
-本步驟僅在表單仍是該報告對應的職缺時適用：同一雇主、同一職缺（`modes/apply.md` → Step 5 → **Posting identity**）；職缺名稱不列入判斷。若有多份報告與該公司相符，先選 URL 或 req ID 與本職缺一致的那一份，不確定時詢問求職者。不同雇主，或同一雇主的另一個職缺，不屬於職缺變更：絕不要把該報告的回答改寫套用到它上面。應改為選擇 **Evaluate as new**（當成新職缺評估：auto-pipeline，產生獨立報告）或 **Draft without saving**（只草擬回答，不儲存到任何報告）。選擇 **Draft without saving** 時，把比對到的報告、其中的回答和客製履歷都放到一邊，只根據目前看到的職缺、`cv.md` 和個人檔案撰寫；下文中讀取報告的步驟此時不適用。
+本步驟僅在表單仍是該報告對應的職缺時適用：同一雇主、同一職缺（`modes/apply.md` → Step 5 → **Posting identity**）；職缺名稱不列入判斷。即使職缺名稱沒有變動、且只有一份報告與該公司相符，也要對每個表單做這項檢查：另一個職缺可能使用相同的名稱，此時不得使用該報告。若有多份報告與該公司相符，先選 URL 或 req ID 與本職缺一致的那一份，不確定時詢問求職者。不同雇主，或同一雇主的另一個職缺，不屬於職缺變更：絕不要把該報告的回答改寫套用到它上面。應改為選擇 **Evaluate as new**（當成新職缺評估：auto-pipeline，產生獨立報告）或 **Draft without saving**（只草擬回答，不儲存到任何報告）。選擇 **Draft without saving** 時，把比對到的報告、其中的回答和客製履歷都放到一邊，只根據目前看到的職缺、`cv.md` 和個人檔案撰寫；下文中讀取報告的步驟此時不適用。
 
 如果表單上顯示的職缺細節（如職級、所屬部門）與歷史報告有出入：
 - **向求職者提出提示**：例如：「偵測到當前的職缺已從 [X] 變成 [Y]。需要我重新做一次快速評估，還是直接在現有話術的基礎上微調，適配新職缺？」
@@ -114,7 +114,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## 步驟 6 — 投遞後動作
 
-儲存任何內容之前，先確認表單仍是該報告對應的職缺（`modes/apply.md` → Step 8 → **Write only to the report of this posting**）。同一雇主、同一職缺 → 以下步驟都作用於這份報告，微調適配新職缺名稱或重新評估之後也一樣。不同雇主或不同職缺 → 絕不寫入這份報告：使用為新職缺產生的報告；若沒有，不設定任何狀態、不儲存回答，並告知求職者這次應徵尚未被記錄。
+儲存任何內容之前，以及在下面每一次寫入（狀態和回答）之前，都要再次確認表單仍是該報告對應的職缺（`modes/apply.md` → Step 8 → **Write only to the report of this posting**）。同一雇主、同一職缺 → 以下步驟都作用於這份報告，微調適配新職缺名稱或重新評估之後也一樣。不同雇主或不同職缺 → 絕不寫入這份報告：使用為新職缺產生的報告；若沒有，不設定任何狀態、不儲存回答，並告知求職者這次應徵尚未被記錄。
 
 當求職者確認已經成功按下「送出應徵／投遞」後，執行以下收尾與建檔工作：
 1. 使用規範的 CLI 將該職缺狀態更新為 `Applied`：`node set-status.mjs --report <report#> Applied`（不要手動編輯 `data/applications.md` 表格）。

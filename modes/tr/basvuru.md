@@ -39,7 +39,7 @@ Aday bir başvuru formunu doldururken çalışan etkileşimli mod. Ekrandakileri
 
 ## Adım 3 — Rol Değişikliğini Tespit Et
 
-Bu adım yalnızca form hâlâ raporun ilanıysa geçerlidir: aynı işveren ve aynı ilan (`modes/apply.md` → Step 5 → **Posting identity**); başlık sayılmaz. Şirketle birden çok rapor eşleşirse önce URL'si veya req ID'si bu ilan olan raporu al, belirsizse adaya sor. Başka bir işveren ya da aynı işverenin başka bir ilanı rol değişikliği değildir: raporun yanıtlarını asla ona uyarlama. Bunun yerine **Evaluate as new** (yeni bir ilan olarak değerlendir: auto-pipeline, kendi raporu) ya da **Draft without saving** (yanıtları hiçbir rapora kaydetmeden taslak olarak hazırla) seç. **Draft without saving** seçildiğinde eşleşen raporu, yanıtlarını ve uyarlanmış CV'sini bir kenara bırak; yalnızca görünen ilandan, `cv.md`'den ve profilden yaz. Raporu okuyan aşağıdaki adımlar o zaman uygulanmaz.
+Bu adım yalnızca form hâlâ raporun ilanıysa geçerlidir: aynı işveren ve aynı ilan (`modes/apply.md` → Step 5 → **Posting identity**); başlık sayılmaz. Bunu her formda kontrol et; başlık değişmemiş ve şirketle tek bir rapor eşleşmiş olsa bile: başka bir ilan aynı başlığı taşıyabilir ve o durumda rapor kullanılmamalıdır. Şirketle birden çok rapor eşleşirse önce URL'si veya req ID'si bu ilan olan raporu al, belirsizse adaya sor. Başka bir işveren ya da aynı işverenin başka bir ilanı rol değişikliği değildir: raporun yanıtlarını asla ona uyarlama. Bunun yerine **Evaluate as new** (yeni bir ilan olarak değerlendir: auto-pipeline, kendi raporu) ya da **Draft without saving** (yanıtları hiçbir rapora kaydetmeden taslak olarak hazırla) seç. **Draft without saving** seçildiğinde eşleşen raporu, yanıtlarını ve uyarlanmış CV'sini bir kenara bırak; yalnızca görünen ilandan, `cv.md`'den ve profilden yaz. Raporu okuyan aşağıdaki adımlar o zaman uygulanmaz.
 
 Ekrandaki rol önceki değerlendirmedekinden farklıysa:
 - **Adayı uyar:** "Rol [X]'den [Y]'ye değişmiş görünüyor. Yeniden değerlendireyim mi, yoksa yanıtları yeni başlığa uyarlayayım mı?"
@@ -106,7 +106,7 @@ Notlar:
 
 ## Adım 6 — Başvuru Sonrası (isteğe bağlı)
 
-Herhangi bir şey kaydetmeden önce formun hâlâ raporun ilanı olduğunu kontrol et (`modes/apply.md` → Step 8 → **Write only to the report of this posting**). Aynı işveren ve aynı ilan → aşağıdaki adımlar bu rapora uygulanır; yeni başlığa uyarlamadan veya yeniden değerlendirmeden sonra da. Başka işveren veya başka ilan → asla bu rapor değil: yeni ilan için yazılan raporu kullan; yoksa durum ayarlama, yanıt kaydetme ve adaya başvurunun henüz takip edilmediğini söyle.
+Herhangi bir şey kaydetmeden önce ve aşağıdaki her yazmadan (durum ve yanıtlar) hemen önce yeniden, formun hâlâ raporun ilanı olduğunu kontrol et (`modes/apply.md` → Step 8 → **Write only to the report of this posting**). Aynı işveren ve aynı ilan → aşağıdaki adımlar bu rapora uygulanır; yeni başlığa uyarlamadan veya yeniden değerlendirmeden sonra da. Başka işveren veya başka ilan → asla bu rapor değil: yeni ilan için yazılan raporu kullan; yoksa durum ayarlama, yanıt kaydetme ve adaya başvurunun henüz takip edilmediğini söyle.
 
 Aday başvuruyu gönderdiğini onaylarsa:
 1. Durumu kanonik CLI ile `Applied` yap: `node set-status.mjs --report <report#> Applied` (`applications.md` tablosunu elle düzenleme)
