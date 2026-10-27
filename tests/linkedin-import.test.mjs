@@ -1,5 +1,3 @@
-// Pasting a LinkedIn job alert adds canonical job URLs and skips ones already
-// in the pipeline or the tracker. No network, no Google account.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

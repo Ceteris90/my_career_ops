@@ -1,8 +1,5 @@
 #!/usr/bin/env node
 
-// Paste a LinkedIn job alert into data/pipeline.md.
-// No Google Cloud project and no Gmail token. See docs/LINKEDIN_JOBS.md.
-
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
