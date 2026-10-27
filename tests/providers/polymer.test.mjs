@@ -177,8 +177,8 @@ const ctxOf = (fetchJson) => ({ sleep: async () => {}, fetchJson });
   let calls = 0;
   const jobs = await polymer.fetch({ name: 'Acme', careers_url: BOARD }, ctxOf(async () => {
     calls++;
-    if (calls === 1) return page([row(1), row(2)], { is_last: false, next_page: 2, count: 2, total: 1 });
-    return { items: [], meta: { is_last: false, next_page: 3, count: 2, total: 1, page: 2 } };
+    if (calls === 1) return page([row(1), row(2)], { is_last: false, next_page: 2, count: 1, total: 1 });
+    return { items: [], meta: { is_last: false, next_page: 3, count: 1, total: 1, page: 2 } };
   }));
   if (jobs.length === 2 && calls === 2 && !jobs.polymerTruncated) {
     pass('polymer.fetch() stops on an empty page even when is_last is false and next_page is set');
