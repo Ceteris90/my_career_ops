@@ -373,11 +373,13 @@ export function pluginConfigListError(raw, file = 'config/plugins.yml') {
 function readPluginConfigListError(root) {
   const rel = 'config/plugins.yml';
   const file = path.join(root, rel);
-  if (!existsSync(file)) return null;
+  // Read first and treat only ENOENT as absent. existsSync says false for a
+  // file in a config/ this user cannot search, which would list every plugin as off.
   let raw;
   try {
     raw = readFileSync(file, 'utf8');
   } catch (err) {
+    if (err?.code === 'ENOENT') return null;
     return `${rel} could not be read (${err.message}). Fix the file, then run: node plugins.mjs list`;
   }
   return pluginConfigListError(raw, rel);

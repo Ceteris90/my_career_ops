@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -79,6 +79,20 @@ test('list still works when plugins.yml is absent', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Discovered plugins/);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('list exits 1 when config/ cannot be searched, instead of calling every plugin off', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, () => {
+  const root = dataRoot('plugins:\n  notion:\n    enabled: true\n');
+  chmodSync(join(root, 'config'), 0o600);
+  try {
+    const result = run(root, ['list']);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /config\/plugins\.yml could not be read/);
+    assert.doesNotMatch(result.stdout, /disabled/);
+  } finally {
+    chmodSync(join(root, 'config'), 0o700);
     rmSync(root, { recursive: true, force: true });
   }
 });
