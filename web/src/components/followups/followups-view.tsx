@@ -25,6 +25,7 @@ import { cn } from "@/lib/cn";
 import { FollowupsTableRowsSkeleton } from "@/components/page-loading-skeletons";
 import { startRouteProgress } from "@/components/route-progress";
 import { selectUpcomingFollowups } from "@/lib/core/followup-view.mjs";
+import { followupsSummarySlot } from "@/lib/followups-summary-slot.mjs";
 
 // The /followups tracker: WHO needs a nudge today, HOW urgent, WHEN the next
 // touch is due, and the permanent history of every follow-up sent. The verdict
@@ -228,7 +229,12 @@ export function FollowupsView() {
         </div>
       </div>
 
-      {!data && !filtering ? (
+      {followupsSummarySlot({
+        pending: !data,
+        filtering,
+        hasSummary: Boolean(meta),
+        due: (meta?.overdue ?? 0) + (meta?.urgent ?? 0),
+      }) === "reserved" ? (
         <div className="mt-5 rounded-xl border border-transparent px-4 py-3 text-sm leading-5" aria-hidden="true">
           <div className="h-10" />
         </div>
