@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { liveServerSkip } from "../helpers/live-server.mjs";
+import { TRACKER_ROW_PX } from "../../src/lib/tracker-window.mjs";
 
 const url = process.env.PIPELINE_WINDOW_TEST_URL;
 const root = process.env.PIPELINE_WINDOW_TEST_ROOT;
@@ -31,12 +32,16 @@ test("the pipeline table mounts a window of a long tracker", { skip: liveServerS
   assert.ok(firstPaint < 40, `first paint mounted ${firstPaint} rows`);
   assert.ok(firstPaint > 5, `first paint mounted ${firstPaint} rows`);
   await page.getByText("120 tracked").waitFor();
+  const heights = await page.locator("[data-application-key]").evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
+  assert.ok(heights.every((h) => Math.abs(h - TRACKER_ROW_PX) < 1), `row heights ${heights.join(", ")} differ from ${TRACKER_ROW_PX}`);
+  assert.equal(await page.locator("table[aria-rowcount]").getAttribute("aria-rowcount"), "121");
 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.getByRole("link", { name: "#120", exact: true }).waitFor();
   const scrolled = await mounted();
   assert.ok(scrolled < 40, `scrolled paint mounted ${scrolled} rows`);
   assert.equal(await page.getByRole("link", { name: "#1", exact: true }).count(), 0);
+  assert.equal(await page.locator("tr", { has: page.getByRole("link", { name: "#120", exact: true }) }).getAttribute("aria-rowindex"), "121");
   await page.getByPlaceholder("Search company or role…").fill("Zulu");
   await page.getByRole("link", { name: "Fixture Zulu", exact: true }).waitFor();
   assert.equal(await mounted(), 1);
