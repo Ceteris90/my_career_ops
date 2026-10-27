@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { liveServerSkip } from "../helpers/live-server.mjs";
-import { TRACKER_ROW_PX } from "../../src/lib/tracker-window.mjs";
 
 const url = process.env.PIPELINE_WINDOW_TEST_URL;
 const root = process.env.PIPELINE_WINDOW_TEST_ROOT;
@@ -33,7 +32,9 @@ test("the pipeline table mounts a window of a long tracker", { skip: liveServerS
   assert.ok(firstPaint > 5, `first paint mounted ${firstPaint} rows`);
   await page.getByText("120 tracked").waitFor();
   const heights = await page.locator("[data-application-key]").evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height));
-  assert.ok(heights.every((h) => Math.abs(h - TRACKER_ROW_PX) < 1), `row heights ${heights.join(", ")} differ from ${TRACKER_ROW_PX}`);
+  assert.ok(heights.every((h) => Math.abs(h - heights[1]) < 1), `mounted rows differ in height: ${heights.join(", ")}`);
+  const bodyHeight = await page.locator("tbody", { has: page.locator("[data-application-key]") }).evaluate((body) => body.getBoundingClientRect().height);
+  assert.ok(Math.abs(bodyHeight - 120 * heights[1]) < heights[1], `table body is ${bodyHeight}px for 120 rows of ${heights[1]}px`);
   assert.equal(await page.locator("table[aria-rowcount]").getAttribute("aria-rowcount"), "121");
 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
