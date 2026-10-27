@@ -68,3 +68,14 @@ test("the detect effect only keeps the restored id while its CLI is installed", 
     "an unchecked prev keeps a stale id selected and save() writes it back",
   );
 });
+
+// A setState updater runs while React renders ConfigForm. persistCliId fires
+// the config-changed event, AssistantConsole sets state from it, and React
+// logs "Cannot update a component while rendering a different component" on
+// every first visit to Config, which `npm run ui` shows as a red issue badge.
+test("the setCliId updater in the detect effect writes nothing", () => {
+  const start = src.indexOf("setCliId((prev) =>");
+  assert.notEqual(start, -1, "could not locate the setCliId updater");
+  const updater = src.slice(start, src.indexOf("});", start));
+  assert.doesNotMatch(updater, /persistCliId\(|writeConfig\(|dispatchEvent\(/);
+});
