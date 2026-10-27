@@ -41,7 +41,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname, relative } from 'path';
+import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { hasYamlContent, loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot, getProfilePath } from './path-resolver.mjs';
@@ -202,8 +202,8 @@ function checkKnownValues(parsed, findings, file) {
 
 // The CLI passes the real path. Library callers (doctor) get the resolved
 // profile relative to the data root, so an overridden profile path is named
-// as it is, not as the default.
-const DEFAULT_PROFILE_LABEL = relative(getCareerOpsRoot(), DEFAULT_PROFILE_PATH) || DEFAULT_PROFILE_PATH;
+// as it is, not as the default. Forward slashes on every platform.
+const DEFAULT_PROFILE_LABEL = relative(getCareerOpsRoot(), DEFAULT_PROFILE_PATH).split(sep).join('/') || DEFAULT_PROFILE_PATH;
 
 export function validateProfile(profileText, exampleText, profileLabel = DEFAULT_PROFILE_LABEL) {
   const findings = [];
