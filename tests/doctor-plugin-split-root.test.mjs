@@ -100,3 +100,23 @@ test('a plugin that is off does not get a missing-key warning', () => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
   }
 });
+
+test('keys in the data root .env count when --cli picks the CLI', () => {
+  const dir = dataRootWith('plugins:\n  notion:\n    enabled: true\n');
+  writeFileSync(join(dir, '.env'), 'NOTION_ACCESS_TOKEN=fixture-token\nNOTION_PARENT_PAGE_ID=fixture-page\n');
+  try {
+    const human = runDoctor(dir, ['--cli', 'claude']);
+    const text = `${human.stdout}\n${human.stderr}`;
+    assert.doesNotMatch(text, /missing NOTION_ACCESS_TOKEN/);
+    assert.doesNotMatch(text, /notion: add NOTION_ACCESS_TOKEN/);
+
+    const json = runDoctor(dir, ['--json', '--cli', 'claude']);
+    assert.equal(json.status, 0, describeSpawn(json, 'json cli'));
+    const notion = (JSON.parse(json.stdout).plugins || []).find((p) => p.id === 'notion');
+    assert.ok(notion, 'plugins did not include notion');
+    assert.deepEqual(notion.missingEnv, []);
+    assert.equal(notion.enabled, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
+  }
+});
