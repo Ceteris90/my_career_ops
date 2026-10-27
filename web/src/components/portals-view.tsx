@@ -7,6 +7,7 @@ import { CompanyLogo } from "@/components/company-logo";
 import { useJobs, type Job } from "@/components/jobs/job-store";
 import { cn } from "@/lib/cn";
 import type { WatchedCompany } from "@/lib/portals-config.mjs";
+import { showPortalsSetup } from "@/lib/portals-setup.mjs";
 
 type Company = { name: string; status: string; detail: string };
 type Result = { available: boolean; configured: boolean; companies: Company[]; error?: string };
@@ -19,7 +20,15 @@ const TONE: Record<string, { dot: string; label: string; chip: string }> = {
 };
 const ORDER: Record<string, number> = { broken: 0, empty: 1, live: 2, skipped: 3 };
 
-export function PortalsView({ watched, missing = false }: { watched: WatchedCompany[]; missing?: boolean }) {
+export function PortalsView({
+  watched,
+  missing = false,
+  target = "portals.yml",
+}: {
+  watched: WatchedCompany[];
+  missing?: boolean;
+  target?: string;
+}) {
   const [res, setRes] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
   const { jobs, startJob } = useJobs();
@@ -79,11 +88,11 @@ export function PortalsView({ watched, missing = false }: { watched: WatchedComp
           <code className="break-all font-mono text-xs text-faint">{res.error}</code>
         </p>
       )}
-      {((missing && !res) || (res?.available && !res.configured)) && (
+      {showPortalsSetup(missing, res) && (
         <p className="mt-4 rounded-xl border border-dashed border-border bg-surface/30 p-4 text-sm text-muted">
-          No <code className="text-foreground">portals.yml</code> yet. Copy{" "}
+          No <code className="break-all text-foreground">{target}</code> yet. Copy{" "}
           <code className="text-foreground">templates/portals.example.yml</code> to{" "}
-          <code className="text-foreground">portals.yml</code> and list the companies to watch. A health check does not create that file.
+          <code className="break-all text-foreground">{target}</code> and list the companies to watch. A health check does not create that file.
         </p>
       )}
 
