@@ -8,6 +8,8 @@ import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_SOURCES } from "@/lib/explore";
 import { daysSince, seniorityFromTitle, sourceFromUrl, SENIORITY_ORDER, type Seniority } from "@/lib/inbox";
+import { cursorAfterRemoval, inboxCommand, moveCursor, typingFromTarget } from "@/lib/inbox-keys.mjs";
+import { inboxScoreTarget } from "@/lib/inbox-score-target.mjs";
 import { FacetChips } from "./facet-chips";
 import { TriageRow, type RowScore } from "./triage-row";
 import { ShortlistTray, type ShortItem } from "./shortlist-tray";
@@ -45,6 +47,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const [shortlist, setShortlist] = useState<ShortItem[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [cursor, setCursor] = useState(-1);
   const [undo, setUndo] = useState<UndoNotice | null>(null);
   const [writeError, setWriteError] = useState("");
   const [restoring, setRestoring] = useState(false);
@@ -169,6 +172,14 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const visible = capped ? ordered.slice(0, BATCH) : ordered;
   const hiddenCount = hidden.length;
 
+  useEffect(() => {
+    setCursor((index) => (visible.length === 0 ? -1 : index < 0 ? index : Math.min(index, visible.length - 1)));
+  }, [visible.length]);
+  useEffect(() => {
+    if (cursor < 0) return;
+    document.querySelector(`[data-triage-index="${cursor}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [cursor]);
+
   const isShortlisted = (url: string) => shortlist.some((s) => s.url === url);
 
   const persistSkip = async (url: string, done: boolean) => {
@@ -241,6 +252,86 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     if (add.length) setShortlist((s) => [...s, ...add]);
     setSelected(new Set());
   };
+  const skipUrls = (jobs: InboxJob[], label: string) => {
+    const urls = [...new Set(jobs.map((job) => job.url))];
+    if (urls.length === 0) return;
+    setWriteError("");
+    setHidden((h) => [...h, ...urls.filter((url) => !h.includes(url))]);
+    setSelected(new Set());
+    const notice: UndoNotice = {
+      label,
+      fn: async () => {
+        await Promise.all(urls.map((url) => persistSkip(url, false)));
+        setHidden((h) => h.filter((url) => !urls.includes(url)));
+      },
+    };
+    setUndo(notice);
+    void Promise.all(urls.map((url) => persistSkip(url, true))).catch(() => {
+      setUndo((current) => current?.fn === notice.fn ? { ...current, error: "Could not skip every selected role." } : current);
+    });
+  };
+  const skipSelected = () => {
+    const jobs = enriched.filter((e) => selected.has(e.job.url)).map((e) => e.job);
+    skipUrls(jobs, `Skipped ${jobs.length}`);
+  };
+
+  const keyActions = useRef({
+    save, skip, skipSelected, selectedSize: selected.size, visible, cursor, capped, orderedLength: ordered.length, scoreByUrl,
+  });
+  keyActions.current = { save, skip, skipSelected, selectedSize: selected.size, visible, cursor, capped, orderedLength: ordered.length, scoreByUrl };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      const typing = typingFromTarget(target instanceof Element ? {
+        tagName: target.tagName,
+        isContentEditable: target instanceof HTMLElement && target.isContentEditable,
+        closestDialog: Boolean(target.closest("dialog, [role='dialog']")),
+      } : null);
+      const current = keyActions.current;
+      const command = inboxCommand({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        typing,
+        composing: event.isComposing || event.key === "Process",
+        selected: current.selectedSize,
+      });
+      if (!command) return;
+      if (command === "next" || command === "prev") {
+        event.preventDefault();
+        const delta = command === "next" ? 1 : -1;
+        if (command === "next" && current.capped && current.cursor >= current.visible.length - 1 && current.orderedLength > current.visible.length) {
+          setShowAll(true);
+          return;
+        }
+        setCursor((index) => moveCursor(index, current.visible.length, delta));
+        return;
+      }
+      if (command === "skip-selected") {
+        event.preventDefault();
+        current.skipSelected();
+        return;
+      }
+      const index = current.cursor < 0 ? 0 : current.cursor;
+      const row = current.visible[index];
+      if (!row || inboxScoreTarget(current.scoreByUrl.get(row.job.url)).evaluated) return;
+      event.preventDefault();
+      if (current.cursor < 0) setCursor(0);
+      if (command === "save") {
+        current.save(row.job);
+        setCursor(moveCursor(index, current.visible.length, 1));
+        return;
+      }
+      if (command === "skip") {
+        current.skip(row.job);
+        setCursor(cursorAfterRemoval(index, index));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const estimate = useMemo(() => {
     if (shortlist.length === 0) return {};
@@ -284,12 +375,20 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
         <p className="text-sm font-medium text-foreground">
           {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
         </p>
-        {hiddenCount > 0 && (
-          <button type="button" onClick={() => void restoreHidden()} disabled={restoring} aria-busy={restoring} className="text-xs text-faint transition-colors hover:text-foreground disabled:opacity-50 max-sm:min-h-[44px]">
-            {hiddenCount} hidden · {restoring ? "restoring…" : "restore"}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {visible.length > 0 && (
+            <button type="button" onClick={() => setSelected(new Set(visible.map((e) => e.job.url)))} className="text-xs text-muted transition-colors hover:text-foreground">
+              Select shown
+            </button>
+          )}
+          {hiddenCount > 0 && (
+            <button type="button" onClick={() => void restoreHidden()} disabled={restoring} aria-busy={restoring} className="text-xs text-faint transition-colors hover:text-foreground disabled:opacity-50 max-sm:min-h-[44px]">
+              {hiddenCount} hidden · {restoring ? "restoring…" : "restore"}
+            </button>
+          )}
+        </div>
       </div>
+      <p className="mt-1 text-xs text-faint">j and k move. s saves. x skips. Shift+X skips the checked rows.</p>
 
       {/* multi-select action bar */}
       {selected.size > 0 && (
@@ -297,6 +396,9 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
           <span className="font-medium text-brand tabular-nums">{selected.size} selected</span>
           <button type="button" onClick={saveSelected} className="rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-brand-foreground max-sm:min-h-[44px]">
             Save to shortlist
+          </button>
+          <button type="button" onClick={skipSelected} className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:border-brand/40 max-sm:min-h-[44px]">
+            Skip selected
           </button>
           <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-muted hover:text-foreground max-sm:min-h-[44px]">
             Clear
@@ -306,9 +408,11 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
 
       {visible.length > 0 ? (
         <ul className="mt-3 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface/40">
-          {visible.map((e) => (
+          {visible.map((e, index) => (
             <TriageRow
               key={e.job.url}
+              index={index}
+              cursor={cursor === index}
               job={e.job}
               source={e.source}
               age={e.age}
