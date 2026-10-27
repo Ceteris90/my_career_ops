@@ -180,7 +180,10 @@ if (guardErr && /cannot derive the client name/.test(guardErr.message) && guardC
   let sleeps = 0;
   const jobs = await trakstar.fetch({ name: 'Acme', careers_url: BOARD }, {
     sleep: async () => { sleeps++; },
-    fetchJson: async () => page(many(++calls * 10, calls === 1 ? 100 : 20), 500),
+    fetchJson: async () => {
+      calls++;
+      return page(many(calls === 1 ? 1 : 500, calls === 1 ? 100 : 20), 500);
+    },
   });
   if (jobs.length === 120 && calls === 2 && sleeps === 1 && !jobs.trakstarTruncated) {
     pass('trakstar.fetch() stops on a short page and sleeps only between pages');
