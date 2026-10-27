@@ -74,6 +74,9 @@ const NAMED_ENTITIES = {
   lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201C', rdquo: '\u201D', middot: '·', euro: '€',
 };
 
+// HTML maps the numeric references 0x80-0x9F to windows-1252; five of them have no mapping and stay C1 controls.
+const WINDOWS_1252_C1 = '\u20ac\u0081\u201a\u0192\u201e\u2026\u2020\u2021\u02c6\u2030\u0160\u2039\u0152\u008d\u017d\u008f\u0090\u2018\u2019\u201c\u201d\u2022\u2013\u2014\u02dc\u2122\u0161\u203a\u0153\u009d\u017e\u0178';
+const ATTRIBUTE_UPPER_NAMES = { AMP: '&', LT: '<', GT: '>', QUOT: '"' };
 const CASE_INSENSITIVE_NAMES = new Set(['amp', 'lt', 'gt', 'quot', 'apos', 'nbsp']);
 
 /**
@@ -120,7 +123,9 @@ function isEmittableCodePoint(code) {
 // attribute needs `bareNumeric`. Named references still require the semicolon
 // there, and the decimal and hex forms stay separate alternatives.
 const STRICT_REF = /&(#[xX][0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g;
-const BARE_NUMERIC_REF = /&(#[xX][0-9a-fA-F]+;?|#[0-9]+;?|[a-zA-Z]+;)/g;
+// In an attribute value the legacy names amp, lt, gt, quot and nbsp also decode with no
+// semicolon, unless an alphanumeric or `=` follows (`&amp=1` and `&ampx` stay as written).
+const BARE_NUMERIC_REF = /&(#[xX][0-9a-fA-F]+;?|#[0-9]+;?|[a-zA-Z]+;|(?:amp|AMP|lt|LT|gt|GT|quot|QUOT|nbsp)(?![A-Za-z0-9=]))/g;
 
 /**
  * @param {string} s
@@ -135,7 +140,10 @@ export function decodeEntities(s, { bareNumeric = false } = {}) {
       // An attribute caller sees what the browser sees: NUL, a surrogate and a
       // code point past U+10FFFF become U+FFFD, and every other reference
       // decodes, a leading C0 control included (the URL parser strips it).
-      if (bareNumeric) return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? '\ufffd' : String.fromCodePoint(code);
+      if (bareNumeric) {
+        if (code >= 0x80 && code <= 0x9f) return WINDOWS_1252_C1[code - 0x80];
+        return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? '\ufffd' : String.fromCodePoint(code);
+      }
       // Anything outside the emittable set is left exactly as written. Raw
       // `&#0;` in a title is visible and inert; a decoded NUL is neither.
       return isEmittableCodePoint(code) ? String.fromCodePoint(code) : m;
@@ -145,6 +153,14 @@ export function decodeEntities(s, { bareNumeric = false } = {}) {
     // silently decode `&Eacute;` to the lowercase letter. Only the XML five and
     // nbsp are matched case-insensitively, which is where legacy pages really do
     // write `&AMP;`.
+    // An attribute caller follows the HTML tables exactly: names are case-sensitive except
+    // AMP, LT, GT and QUOT, and &nbsp; stays U+00A0, which no URL rule strips (the title
+    // decoders fold it to a space).
+    if (bareNumeric) {
+      if (body === 'nbsp') return '\u00A0';
+      if (ATTRIBUTE_UPPER_NAMES[body]) return ATTRIBUTE_UPPER_NAMES[body];
+      return Object.hasOwn(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : m;
+    }
     if (Object.hasOwn(NAMED_ENTITIES, body)) return NAMED_ENTITIES[body];
     const lower = body.toLowerCase();
     return CASE_INSENSITIVE_NAMES.has(lower) ? NAMED_ENTITIES[lower] : m;
