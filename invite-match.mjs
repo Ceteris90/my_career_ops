@@ -881,10 +881,11 @@ function extractContactName(text) {
     return safeName(t, 40)?.split(/\s+/)[0] ?? null;
   };
   const from = text.match(/^\s*from\s*:\s*([^\n<]+?)\s*(?:<[^>\n]*>)?\s*$/im);
-  if (from) return firstName(from[1]);
+  const fromName = from ? firstName(from[1]) : null;
+  if (fromName) return fromName;
+  // A rejected From: label (e.g. a team) falls through to the sign-off.
   const sign = text.match(/\n\s*(?:best(?: regards)?|kind regards|regards|thanks|thank you|sincerely|cheers)\s*,?\s*\n\s*([^\n]+)\s*(?:\n|$)/i);
-  if (sign) return firstName(sign[1]);
-  return null;
+  return sign ? firstName(sign[1]) : null;
 }
 
 // The report cell is a markdown link; resolve it against each root in turn.

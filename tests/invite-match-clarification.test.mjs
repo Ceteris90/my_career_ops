@@ -132,6 +132,13 @@ check('team or organisation sender labels fall back to a plain greeting; a surna
   assert.match(draftOf(`${INVITE}\nBest regards,\nSam Link`, [row()]).body, /^Hello Sam,/);
 });
 
+check('a team From: label falls through to a named sign-off; no usable name keeps the plain greeting', () => {
+  assert.match(draftOf(`From: Acme Careers\n${INVITE}\nBest regards,\nPat Example`, [row()]).body, /^Hello Pat,/);
+  assert.match(draftOf(`From: Acme Careers\n${INVITE}\nBest regards,\nRecruiting Team`, [row()]).body, /^Hello,/);
+  assert.match(draftOf(`From: Acme Careers\n${INVITE}\nBest regards,\nPat Example http://bad.example`, [row()]).body, /^Hello,/);
+  assert.match(draftOf(`From: Acme Careers\n${INVITE}\nBest regards,\npat@acme.example`, [row()]).body, /^Hello,/);
+});
+
 check('--no-clarification-draft equivalent (options.clarificationDraft false) yields null', () => {
   assert.equal(analyzeInvite(INVITE, [row()], { clarificationDraft: false, readReport: noReport }).clarificationDraft, null);
 });
