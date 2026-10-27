@@ -528,7 +528,8 @@ career-ops/
 ├── config/
 │   └── profile.example.yml      # Template for your profile
 ├── modes/                       # Skill modes
-│   ├── _shared.md               # Shared context (customize this)
+│   ├── _shared.md               # Shared context (system file, replaced on update)
+│   ├── _profile.md              # Your archetypes and framing (customize this)
 │   ├── oferta.md                # Single evaluation
 │   ├── pdf.md                   # PDF generation
 │   ├── cover.md                 # Cover letter generation
