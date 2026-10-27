@@ -1,9 +1,4 @@
-/**
- * What an empty tracker table should tell the user, from the filters that
- * emptied it. Plain .mjs so `node:test` can assert it without the view.
- *
- * @typedef {{ kind: "empty-tab" } | { kind: "elsewhere", count: number } | { kind: "no-match" } | { kind: "below-min" }} TrackerEmptyState
- */
+/** @typedef {{ kind: "empty-tab" } | { kind: "elsewhere", count: number } | { kind: "no-match" } | { kind: "below-min" }} TrackerEmptyState */
 
 /**
  * @param {{ tabLabel: string | null, query: string, minScore: number | null, matchesInAll: number }} facts
