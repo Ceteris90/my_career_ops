@@ -10,13 +10,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describeSpawn } from './helpers/describe-spawn.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 const CLI = join(ROOT, 'plugins.mjs');
+const LOCAL_LINKEDIN = join(ROOT, 'plugins.local', 'linkedin-alerts');
+// plugins.mjs reads plugins from the checkout it runs from. The cases below
+// need linkedin-alerts absent there, and the fixture must never overwrite or
+// delete a real install.
+const linkedInInstalled = existsSync(LOCAL_LINKEDIN) && 'plugins.local/linkedin-alerts is installed in this checkout';
 
 function run(args, env = {}) {
   const r = spawnSync(process.execPath, [CLI, ...args], {
@@ -67,7 +72,7 @@ test('--sha with no value is an error, not a clone', () => {
   assert.doesNotMatch(`${r.stdout}\n${r.stderr}`, /Cloning/);
 });
 
-test('an approved plugin that is not installed tells you the add command', () => {
+test('an approved plugin that is not installed tells you the add command', { skip: linkedInInstalled }, () => {
   const r = run(['skill', 'career-ops-plugin-linkedin-alerts']);
   assert.equal(r.status, 1, describeSpawn(r, 'skill long name'));
   assert.match(r.stderr, /approved but not installed/);
@@ -75,7 +80,7 @@ test('an approved plugin that is not installed tells you the add command', () =>
   assert.doesNotMatch(r.stderr, /Unknown plugin/);
 });
 
-test('the short id of a plugin that is not installed says the same thing', () => {
+test('the short id of a plugin that is not installed says the same thing', { skip: linkedInInstalled }, () => {
   const r = run(['skill', 'linkedin-alerts']);
   assert.equal(r.status, 1, describeSpawn(r, 'skill short id'));
   assert.match(r.stderr, /approved but not installed/);
@@ -96,8 +101,10 @@ test('install with no name is the add command, not an unknown command', () => {
   assert.doesNotMatch(r.stderr, /\[list \| available/);
 });
 
-test('the registry name reaches an installed plugin', () => {
-  const dir = join(ROOT, 'plugins.local', 'linkedin-alerts');
+test('the registry name reaches an installed plugin', { skip: linkedInInstalled }, () => {
+  const dir = LOCAL_LINKEDIN;
+  const localRoot = join(ROOT, 'plugins.local');
+  const createdLocalRoot = !existsSync(localRoot);
   const data = mkdtempSync(join(tmpdir(), 'co-plugin-name-'));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
@@ -116,7 +123,7 @@ test('the registry name reaches an installed plugin', () => {
     assert.match(r.stderr, /ships no skill/);
     assert.doesNotMatch(`${r.stdout}\n${r.stderr}`, /Unknown plugin|not installed/);
   } finally {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
+    rmSync(createdLocalRoot ? localRoot : dir, { recursive: true, force: true, maxRetries: 10 });
     rmSync(data, { recursive: true, force: true, maxRetries: 10 });
   }
 });
