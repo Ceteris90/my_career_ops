@@ -7,7 +7,7 @@ import { pass, fail, NODE, ROOT } from './helpers.mjs';
 import { execFileSync } from 'child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { delimiter, join } from 'path';
 
 console.log('\ndoctor.mjs — CLI-aware Playwright MCP detection');
 
@@ -35,15 +35,29 @@ const EMPTY_HOME_DIR = mkdtempSync(join(tmpdir(), 'co-mcp-emptyhome-'));
 // the CLAUDE_CONFIG_DIR pinning and as the CAREER_OPS_CLI delete in
 // doctor-cli-resolution.test.mjs. Scenarios that WANT any of these values
 // pass them explicitly via env.
+// The default scenarios assert cli_source=default means claude. That is only
+// true when no other agent CLI is executable on PATH. A developer machine
+// with one installed would otherwise decide those results. Node's own
+// directory is not a safe pin: the binary often shares a directory with
+// another CLI. git lives in the system directories this keeps.
+function hermeticPath() {
+  if (process.platform === 'win32') {
+    const sys = process.env.SystemRoot || 'C:\\Windows';
+    return join(sys, 'System32');
+  }
+  return ['/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(delimiter);
+}
+
 function hostEnv() {
   const {
     OPENCODE: _openCodeMarker,
     OPENCODE_CONFIG: _openCodeConfig,
     OPENCODE_CONFIG_DIR: _openCodeConfigDir,
     XDG_CONFIG_HOME: _xdgConfigHome,
+    PATH: _path,
     ...rest
   } = process.env;
-  return rest;
+  return { ...rest, PATH: hermeticPath() };
 }
 
 function runDoctor(cwd, args, env, { executionCwd = cwd } = {}) {
