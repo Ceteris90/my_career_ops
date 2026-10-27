@@ -651,13 +651,8 @@ export function atsLint(path, kind, opts = {}) {
 // posture as atsLint: warnings only, never throws, never blocks a render.
 // The rules live here rather than in templates/ats-rules.yml because they
 // describe the renderer, not modes/pdf.md.
-// The schemes the URL Standard calls special. Chromium routes (and the renderer
-// aborts) a request to any of them, with or without `//` after the colon.
-const REMOTE_PROTOCOLS = new Set(['http:', 'https:', 'ftp:', 'ws:', 'wss:']);
 // Stands in for the template's own file: URL when there is no remote <base>.
 const DOCUMENT_URL = 'file:///template/';
-// A URL starting with two slashes, in either direction, names a host.
-const SCHEME_RELATIVE_RE = /^[\\/]{2}/;
 // How many levels of iframe srcdoc markup are read; what lies deeper is reported, not skipped.
 const MAX_SRCDOC_DEPTH = 16;
 
@@ -745,13 +740,20 @@ const excerpt = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
 // off a <noscript> is ordinary markup, so it is scanned like any other.
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext']);
 const MEDIA = new Set(['video', 'audio', 'picture']);
+// Foreign content (svg, math) is tokenized differently from HTML: these start
+// tags leave it, and title/desc/foreignObject (svg) and mi/mo/mn/ms/mtext and a
+// text/html annotation-xml (math) are integration points whose children are HTML again.
+const FOREIGN_BREAKOUT = new Set(['b', 'big', 'blockquote', 'body', 'br', 'center', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'embed', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'hr', 'i', 'img', 'li', 'listing', 'menu', 'meta', 'nobr', 'ol', 'p', 'pre', 'ruby', 's', 'small', 'span', 'strong', 'strike', 'sub', 'sup', 'table', 'tt', 'u', 'ul', 'var']);
+const SVG_HTML_POINTS = new Set(['foreignobject', 'desc', 'title']);
+const MATH_HTML_POINTS = new Set(['mi', 'mo', 'mn', 'ms', 'mtext']);
 function scanHtml(html) {
   const tags = [];
   const styles = [];
   const media = [];
   const TAG = /<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/y;
+  const context = [];
+  const foreign = () => context.at(-1) === 'svg' || context.at(-1) === 'math';
   let template = 0;
-  let foreign = 0;
   let i = 0;
   while ((i = html.indexOf('<', i)) !== -1) {
     const next = html[i + 1];
@@ -761,7 +763,7 @@ function scanHtml(html) {
       close.lastIndex = i + 4;
       const end = abrupt ? null : close.exec(html);
       i = abrupt ? i + abrupt[0].length : end ? end.index + end[0].length : html.length;
-    } else if (foreign && html.startsWith('<![CDATA[', i)) {
+    } else if (foreign() && html.startsWith('<![CDATA[', i)) {
       const end = html.indexOf(']]>', i);
       i = end < 0 ? html.length : end + 3;
     } else if (next === '!' || next === '?' || (next === '/' && !/[a-zA-Z]/.test(html[i + 2] ?? ''))) {
@@ -776,22 +778,33 @@ function scanHtml(html) {
       const selfClosing = /\/\s*$/.test(m[3]);
       if (m[1]) {
         if (name === 'template' && template) template--;
-        else if ((name === 'svg' || name === 'math') && foreign) foreign--;
+        else if (context.includes(name)) while (context.pop() !== name);
         else if (media.at(-1) === name) media.pop();
         continue;
       }
+      if (foreign() && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && /\s(?:color|face|size)\s*=/i.test(m[3])))) {
+        while (foreign()) context.pop();
+      }
+      // Decided before the element opens its own context: an svg <title> is not RCDATA, only its HTML children are.
+      const inForeign = foreign();
       const inert = template > 0;
       if (!inert) tags.push({ raw: m[0], name, media: media.at(-1) ?? null });
       if (name === 'template') template++;
-      if ((name === 'svg' || name === 'math') && !selfClosing) foreign++;
       if (MEDIA.has(name) && !selfClosing) media.push(name);
-      // In svg only script and style keep raw text; title and friends are markup there.
-      if (RAW_TEXT.has(name) && (!foreign || name === 'script' || name === 'style')) {
+      if (!selfClosing) {
+        const top = context.at(-1);
+        const encoding = name === 'annotation-xml' ? attrValue(m[0], 'encoding') ?? '' : '';
+        if (name === 'svg' || name === 'math'
+          || (top === 'svg' && SVG_HTML_POINTS.has(name))
+          || (top === 'math' && (MATH_HTML_POINTS.has(name) || /^(?:text\/html|application\/xhtml\+xml)$/i.test(encoding)))) context.push(name);
+      }
+      // In foreign content only style keeps raw text: a script there is markup, as are title, textarea and the rest.
+      if (RAW_TEXT.has(name) && (!inForeign || name === 'style')) {
         const end = name === 'plaintext' ? null : new RegExp(`</${name}(?=[\\s/>])`, 'gi');
         if (end) end.lastIndex = i;
         const found = end?.exec(html);
         const stop = end ? (found ? found.index : html.length) : html.length;
-        if (name === 'style' && !inert) styles.push({ tag: m[0], body: html.slice(i, stop).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, foreign ? '$1' : '$&') });
+        if (name === 'style' && !inert) styles.push({ tag: m[0], body: html.slice(i, stop).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, inForeign ? '$1' : '$&') });
         i = stop;
       }
     }
@@ -874,18 +887,22 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
   }
   // Classify the resolved URL rather than pattern-match the text, so every
   // spelling the URL parser accepts counts: `https:example.com`, `https:/x`,
-  // `https:\\x`. `//host` and its backslash forms name a host whatever the base.
+  // `https:\\x`, `//host`. Probed in Chromium with JavaScript off: a URL with an
+  // authority is aborted by the route whatever its scheme (http, ftp, ws, gopher,
+  // a custom one), a file: URL naming another host fails to load, and a URL with
+  // no authority (`urn:`, `blob:`, `about:`, `data:`) is never requested.
   // A URL the parser rejects is not requested.
   const isRemote = (u, { sameDocFragment = false } = {}) => {
     const v = u.trim();
     if (v === '' || v.startsWith('{{')) return false;
-    if (SCHEME_RELATIVE_RE.test(v)) return true;
     // A fragment-only URL is a resource request that resolves against the base
     // (`<img src="#logo">`), but a same-document reference in `<use>` and CSS
     // `url(#id)`, which is never fetched.
     if (sameDocFragment && v.startsWith('#')) return false;
     try {
-      return REMOTE_PROTOCOLS.has(new URL(v, base).protocol);
+      const url = new URL(v, base);
+      if (url.protocol === 'chrome:') return false; // blocked before the route sees it (probed)
+      return url.protocol === 'file:' ? url.host !== '' && url.host !== 'localhost' : url.host !== '';
     } catch {
       return false;
     }
@@ -974,7 +991,8 @@ const RENDER_RULES = [
   },
   {
     id: 'meta-refresh',
-    rule: 'A <meta http-equiv="refresh"> redirect is not followed in a PDF render.',
+    // Probed: the refresh fires after its delay; a local target replaces the printed page, a remote one is aborted and leaves an error page.
+    rule: 'A <meta http-equiv="refresh"> navigates the page after its delay: a local target replaces the document being printed, and a remote one is aborted and leaves an error page.',
     // A refresh with no content, or content that does not start with a time, does nothing.
     detect: (doc) => doc.tags
       .filter((t) => t.name === 'meta' && /^\s*refresh\s*$/i.test(attrValue(t.raw, 'http-equiv') ?? '') && /^\s*[0-9.]/.test(attrValue(t.raw, 'content') ?? ''))
@@ -982,12 +1000,12 @@ const RENDER_RULES = [
   },
   {
     id: 'remote-subresource',
-    rule: 'Every request that is not file: or data: is aborted, so a remote image, stylesheet or font is dropped without a message.',
+    rule: 'Every request that is not file: or data: is aborted, and a file: URL that names another host does not load, so a remote image, stylesheet or font is dropped without a message.',
     detect: (doc) => scanRequests(doc).remote,
   },
   {
     id: 'srcdoc-depth-limit',
-    rule: `An iframe srcdoc nested deeper than ${MAX_SRCDOC_DEPTH} levels is not inspected, so what it requests is unknown.`,
+    rule: `An iframe srcdoc nested deeper than ${MAX_SRCDOC_DEPTH} levels could not be checked.`,
     detect: (doc) => scanRequests(doc).capped,
   },
 ];

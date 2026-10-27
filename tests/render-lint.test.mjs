@@ -163,6 +163,36 @@ const CASES = [
       '<link rel="alternate stylesheet" href="https://example.com/a.css">',
       '<link rel="preload" as="image" href="https://example.com/a.png">',
       '<link rel="prefetch" href="https://example.com/a.html">',
+      // Any scheme with an authority is aborted by the route, not just the special ones (probed).
+      '<img src="gopher://example.com/a.png">',
+      '<img src="foo://example.com/a.png">',
+      '<img src="chrome-extension://example.com/a.png">',
+      '<img src="intent://example.com/a">',
+      '<style>.a{background:url(foo://example.com/a.png)}</style>',
+      // With no remote base the document is a file: URL, so `//host` is file://host/..., which does not load (probed).
+      '<img src="file://example.com/a.png">',
+      '<img src="\\\\example.com\\a.png">',
+      // Foreign content: svg title/desc/foreignObject are HTML integration points, a breakout tag leaves svg,
+      // and a script in svg is markup, not raw text (probed).
+      '<svg><title><img src="https://example.com/a.png"></title></svg>',
+      '<svg><desc><img src="https://example.com/a.png"></desc></svg>',
+      '<svg><textarea><img src="https://example.com/a.png"></textarea></svg>',
+      '<svg><foreignObject><img src="https://example.com/a.png"></foreignObject></svg>',
+      '<svg><iframe><img src="https://example.com/a.png"></iframe></svg>',
+      '<svg><xmp><img src="https://example.com/a.png"></xmp></svg>',
+      '<svg><noscript><img src="https://example.com/a.png"></noscript></svg>',
+      '<svg><script>var s="<img src=\'https://example.com/a.png\'>";</script></svg>',
+      '<svg><foreignObject><div></div></foreignObject><textarea><img src="https://example.com/a.png"></textarea></svg>',
+      '<svg><g/><img src="https://example.com/a.png"></svg>',
+      '<svg/><img src="https://example.com/a.png">',
+      '<p><svg><p><img src="https://example.com/a.png"></svg>',
+      '<math><annotation-xml encoding="x"><textarea><img src="https://example.com/a.png"></textarea></annotation-xml></math>',
+      // Tokenizer corner cases (probed): the end tag wins over comment and string syntax inside raw text.
+      '<template><script>var a="</template>";</script></template><img src="https://example.com/a.png">',
+      '<textarea><!-- </textarea><img src="https://example.com/a.png"> -->',
+      '<script><!-- var a = "</script><img src=\'https://example.com/a.png\'>";</script>',
+      '<style>/* </style><img src="https://example.com/a.png"> */</style>',
+      '<template><svg><title></template><img src="https://example.com/a.png"></title></svg></template>',
       // CSS escapes are decoded before the URL is classified.
       '<style>@import "\\68 ttps://example.com/a.css";</style>',
       '<style>@import url("\\68 ttps://example.com/a.css");</style>',
@@ -244,6 +274,31 @@ const CASES = [
       '<link rel="apple-touch-icon" href="https://example.com/a.png">',
       '<link rel="preload" href="https://example.com/a.png">',
       '<link rel="x-stylesheet" href="https://example.com/a.css">',
+      // No authority, no request: Chromium never issues these (probed), so they are not flagged.
+      '<img src="urn:example">',
+      '<img src="cid:logo@example">',
+      '<img src="blob:https://example.com/x">',
+      '<img src="about:blank">',
+      '<img src="chrome://example.com/a.png">',
+      '<img src="file://localhost/tmp/a.png">',
+      '<img src="file:///tmp/a.png">',
+      // Raw text, RCDATA and template content inside foreign content and its HTML integration points (probed).
+      '<svg><foreignObject><textarea><img src="https://example.com/a.png"></textarea></foreignObject></svg>',
+      '<svg><foreignObject><title><img src="https://example.com/a.png"></title></foreignObject></svg>',
+      '<svg><desc><textarea><img src="https://example.com/a.png"></textarea></desc></svg>',
+      '<svg><title><textarea><img src="https://example.com/a.png"></textarea></title></svg>',
+      '<math><mtext><textarea><img src="https://example.com/a.png"></textarea></mtext></math>',
+      '<math><mi><title><img src="https://example.com/a.png"></title></mi></math>',
+      '<math><annotation-xml encoding="text/html"><textarea><img src="https://example.com/a.png"></textarea></annotation-xml></math>',
+      '<math><annotation-xml encoding="application/xhtml+xml"><textarea><img src="https://example.com/a.png"></textarea></annotation-xml></math>',
+      '<svg><p></p><textarea><img src="https://example.com/a.png"></textarea></svg>',
+      '<svg></svg><textarea><img src="https://example.com/a.png"></textarea>',
+      '<svg><script><![CDATA[var s="<img src=\'https://example.com/a.png\'>";]]></script></svg>',
+      '<template><textarea></template><img src="https://example.com/a.png"></textarea></template>',
+      '<template><script>var a="</template>";</script><img src="https://example.com/a.png"></template>',
+      '<template><template></template><img src="https://example.com/a.png"></template>',
+      '<template><template><img src="https://example.com/a.png"></template></template>',
+      '<template><style>.a{background:url(https://example.com/a.png)}</style></template>',
       // A host the URL parser rejects is not requested.
       '<img src="https://exa%00mple.test/a.png">',
       '<img src="https://exa&#0;mple.test/a.png">',
@@ -292,6 +347,25 @@ test('srcdoc nested past the cap is surfaced by a depth-limit finding, never sil
   assert.ok(ids(past).includes('srcdoc-depth-limit'), 'a remote request past the cap still fails through the depth-limit finding');
   assert.ok(!ids(past).includes('remote-subresource'), 'the capped iframe is not labelled a remote subresource');
   assert.ok(ids(lint(nest(local, 40))).includes('srcdoc-depth-limit'), 'content past the cap cannot be proven local, so it is reported too');
+});
+
+test('the meta-refresh text says what a refresh does (probed: a local target replaces the printed document, a remote one is aborted)', () => {
+  const [f] = lint('<meta http-equiv="refresh" content="0;url=a.html">').findings;
+  assert.equal(f.id, 'meta-refresh');
+  assert.match(f.rule, /navigates the page/);
+  assert.match(f.rule, /replaces the document/);
+  assert.match(f.rule, /aborted/);
+  assert.doesNotMatch(f.rule, /not followed/);
+});
+
+test('the depth-limit text says the srcdoc could not be checked, not that it fetches something', () => {
+  let html = '<img src="a.png">';
+  for (let i = 0; i < 20; i++) html = `<iframe srcdoc="${html.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}"></iframe>`;
+  const f = lint(html).findings.find((x) => x.id === 'srcdoc-depth-limit');
+  assert.ok(f);
+  assert.match(f.rule, /could not be checked/);
+  assert.match(f.rule, /deeper than 16 levels/);
+  assert.doesNotMatch(f.rule, /request|fetch/);
 });
 
 test('every finding is a warning with a rule text and a detail', () => {
