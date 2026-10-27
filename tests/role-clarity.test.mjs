@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,7 +103,7 @@ test('evidence is capped for a single very long line and stays a substring', () 
 test('three-missing threshold: two missing does not ask, three does', () => {
   // Present: supervisor, scope, deliverables, success. Missing: coordination, cadence.
   const twoMissing = analyzeRoleClarity([
-    'Reports to the Head of Operations.',
+    'Reports to the Head of Operations in the Operations Department.',
     'You will own the intake process.',
     'You will lead the review of every submission.',
     'Deliverables: a policy document and a training guide.',
@@ -113,7 +113,7 @@ test('three-missing threshold: two missing does not ask, three does', () => {
   assert.equal(twoMissing.askBeforeYouCommit, false);
 
   const threeMissing = analyzeRoleClarity([
-    'Reports to the Head of Operations.',
+    'Reports to the Head of Operations in the Operations Department.',
     'You will own the intake process.',
     'You will lead the review of every submission.',
     'Deliverables: a policy document and a training guide.',
@@ -167,5 +167,83 @@ test('CLI: JSON, --summary, --help, unknown flag, missing file, --self-test', ()
     assert.equal(readFileSync(file, 'utf-8'), VAGUE, 'input file must not be modified');
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- review follow-ups ------------------------------------------------------
+
+test('long segment: the quote keeps the matching words, wherever they sit', () => {
+  const filler = 'quarterly planning and coordination of many assorted things '.repeat(10);
+  const text = `${filler}and we also ask you to participate in the rollout.`;
+  const r = analyzeRoleClarity(text);
+  const hit = r.softVerbs.hits.find((h) => h.label === 'participate in');
+  assert.ok(hit, 'hit expected');
+  assert.ok(hit.evidence.length <= 240);
+  assert.ok(text.includes(hit.evidence));
+  assert.match(hit.evidence, /participate in/);
+
+  const cadenceText = `${'plain filler words without any rhythm '.repeat(10)}Updates are delivered weekly.`;
+  const c = analyzeRoleClarity(cadenceText).points.find((p) => p.id === 'cadence');
+  assert.equal(c.status, 'present');
+  assert.match(c.evidence[0], /weekly/);
+  assert.ok(cadenceText.includes(c.evidence[0]));
+});
+
+test('supervisor: present only with a named department; incomplete text is not evidence', () => {
+  assert.equal(status(analyzeRoleClarity('Reports to the Director.'), 'supervisor'), 'partial');
+  assert.equal(status(analyzeRoleClarity('Reports to the Director of Learning in the Education Department.'), 'supervisor'), 'present');
+  assert.equal(status(analyzeRoleClarity('Reports to the Director.\nBased in the Finance Department.'), 'supervisor'), 'present');
+  const incomplete = analyzeRoleClarity('Reports to the.');
+  assert.notEqual(status(incomplete, 'supervisor'), 'present');
+  assert.deepEqual(incomplete.points.find((p) => p.id === 'supervisor').evidence, []);
+});
+
+test('success: a measure and a horizon in unrelated sentences are only partial', () => {
+  const unrelated = analyzeRoleClarity('The first 90 days are onboarding. Annual KPIs determine bonuses.');
+  assert.equal(status(unrelated, 'success'), 'partial');
+  const linked = analyzeRoleClarity('Success is measured by ticket turnaround within the first 90 days.');
+  assert.equal(status(linked, 'success'), 'present');
+});
+
+test('soft verbs: every occurrence counts, supplied /g and /y patterns are not mutated', () => {
+  const three = analyzeRoleClarity('You will support the team, support the staff and support our clients.');
+  assert.equal(three.softVerbs.hits.filter((h) => h.label === 'support').length, 3);
+  assert.equal(three.softVerbs.heavy, true);
+
+  const g = /\bkudos\b/g;
+  const y = /\bpraise\b/y;
+  const r = analyzeRoleClarity('kudos kudos\nkudos\npraise praise', {
+    extraSoftVerbs: [{ label: 'g', pattern: g }, { label: 'y', pattern: y }],
+  });
+  assert.equal(r.softVerbs.hits.filter((h) => h.label === 'g').length, 3);
+  assert.ok(r.softVerbs.hits.filter((h) => h.label === 'y').length >= 1);
+  assert.equal(g.lastIndex, 0);
+  assert.equal(y.lastIndex, 0);
+});
+
+test('CLI: a relative posting path resolves under CAREER_OPS_ROOT, not the working directory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'co-role-clarity-root-'));
+  const elsewhere = mkdtempSync(join(tmpdir(), 'co-role-clarity-cwd-'));
+  try {
+    mkdirSync(join(root, 'jds'));
+    writeFileSync(join(root, 'jds', 'x.md'), VAGUE);
+    // A decoy with the same relative name in the working directory.
+    mkdirSync(join(elsewhere, 'jds'));
+    writeFileSync(join(elsewhere, 'jds', 'x.md'), CLEAR);
+    const env = { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '' };
+    const run = (...a) => spawnSync(process.execPath, [join(ROOT, 'role-clarity.mjs'), ...a], { encoding: 'utf-8', cwd: elsewhere, env });
+
+    const ok = run('jds/x.md');
+    assert.equal(ok.status, 0, ok.stderr);
+    assert.equal(JSON.parse(ok.stdout).askBeforeYouCommit, true, 'must read the data-root file, not the cwd decoy');
+
+    // No data/ directory exists under the root: still fine.
+    const missing = run('jds/none.md');
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /Usage:/);
+    assert.equal(run(root).status, 1, 'a directory is not a posting');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(elsewhere, { recursive: true, force: true });
   }
 });

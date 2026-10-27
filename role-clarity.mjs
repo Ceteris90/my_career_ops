@@ -43,9 +43,11 @@
  * Issue #6091 — github.com/career-ops-hq/career-ops
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
+import { isAbsolute, resolve } from 'path';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 /** Three or more `missing` points trigger the "ask before you commit" list. */
 export const MISSING_THRESHOLD = 3;
@@ -125,15 +127,30 @@ export function segmentText(text) {
   return segments;
 }
 
-function quote(segment) {
-  return segment.length > MAX_EVIDENCE_CHARS ? segment.slice(0, MAX_EVIDENCE_CHARS) : segment;
+/**
+ * Cap a segment to MAX_EVIDENCE_CHARS. When it is cut, the window is placed
+ * around `index` (the start of the match) so the quote still shows the words
+ * that matched. The result is always an exact substring of the segment.
+ */
+function quote(segment, index = 0, matchLength = 0) {
+  if (segment.length <= MAX_EVIDENCE_CHARS) return segment;
+  const room = Math.max(0, MAX_EVIDENCE_CHARS - Math.min(matchLength, MAX_EVIDENCE_CHARS));
+  const start = Math.min(Math.max(0, index - Math.floor(room / 2)), segment.length - MAX_EVIDENCE_CHARS);
+  return segment.slice(start, start + MAX_EVIDENCE_CHARS);
 }
 
-function firstMatches(segments, test, limit = 2) {
+function quoteAround(segment, focus) {
+  const m = focus instanceof RegExp ? focus.exec(segment) : null;
+  return m ? quote(segment, m.index, m[0].length) : quote(segment);
+}
+
+// `focus` (a non-global RegExp) says which words to keep in view when a long
+// segment has to be cut for the quote.
+function firstMatches(segments, test, limit = 2, focus = null) {
   const out = [];
   for (const seg of segments) {
     if (test(seg)) {
-      out.push(quote(seg));
+      out.push(quoteAround(seg, focus));
       if (out.length >= limit) break;
     }
   }
@@ -143,18 +160,28 @@ function firstMatches(segments, test, limit = 2) {
 // --- per-point detectors ----------------------------------------------------
 // Each returns { status: 'present' | 'partial' | 'missing', evidence: string[] }.
 
-const REPORTS_TO = /\b(?:reports?|reporting)\s+(?:directly\s+)?to\s+(?:the\s+|our\s+|a\s+|an\s+)?[A-Za-z][\w&/'-]*/i;
+// The title after "reports to" must be a real word, not just an article ("Reports to the.").
+const REPORTS_TO = /\b(?:reports?|reporting)\s+(?:directly\s+)?to\s+(?:(?:the|our|a|an)\s+)?(?!(?:the|our|a|an)\b)[A-Za-z][\w&/'-]*/i;
+// A named department or team: "in the Education Department", "Department of Finance", "Student Services Team".
+const NAMED_DEPARTMENT = /\b(?:in|within|of|for|from)\s+(?:the\s+)?[\w&\s-]{2,40}?\b(?:department|division|team|group|office|unit)\b|\b[A-Z][\w&-]+\s+(?:Department|Division|Team|Group|Office|Unit)\b|\b(?:department|division)\s+of\s+[A-Z]\w+/i;
 const SUPERVISOR_WORD = /\b(?:supervisor|line\s+manager|manager|director|head\s+of|team\s+lead|lead)\b/i;
 const DEPARTMENT_WORD = /\b(?:department|division|team|group|office|unit)\b/i;
 
 function detectSupervisor(segments) {
-  const strong = firstMatches(segments, (s) => REPORTS_TO.test(s));
-  if (strong.length) return { status: 'present', evidence: strong };
+  const strong = firstMatches(segments, (s) => REPORTS_TO.test(s), 1, REPORTS_TO);
+  if (strong.length) {
+    // Both halves of the point must be evidenced: who, and in which department.
+    const dept = firstMatches(segments, (s) => NAMED_DEPARTMENT.test(s), 1, NAMED_DEPARTMENT);
+    if (dept.length) return { status: 'present', evidence: dept[0] === strong[0] ? strong : [...strong, ...dept] };
+    return { status: 'partial', evidence: strong };
+  }
   const weak = firstMatches(
     segments,
     (s) => SUPERVISOR_WORD.test(s) && /\b(?:under|with|alongside|led\s+by|guidance\s+of|direction\s+of|join(?:ing)?)\b/i.test(s)
       || /\b(?:join|within|part\s+of)\s+(?:the|our)\s+[\w&\s-]{2,40}\b(?:department|division|team|group|office|unit)\b/i.test(s)
       || (DEPARTMENT_WORD.test(s) && /\b[A-Z][\w&-]+\s+(?:Department|Division|Team|Group|Office)\b/.test(s)),
+    2,
+    DEPARTMENT_WORD,
   );
   return weak.length ? { status: 'partial', evidence: weak } : { status: 'missing', evidence: [] };
 }
@@ -163,7 +190,7 @@ const OWNED_ACTION = /\b(?:responsible\s+for|accountable\s+for|you\s+will\s+(?:o
 const RESPONSIBILITY_HEADING = /^(?:#+\s*)?(?:key\s+|main\s+|core\s+)?(?:responsibilities|duties|what\s+you(?:'|’)?ll\s+do|what\s+you\s+will\s+do|the\s+role|scope(?:\s+of\s+work)?|about\s+the\s+role)\s*:?\s*$/i;
 
 function detectScope(segments) {
-  const owned = firstMatches(segments, (s) => OWNED_ACTION.test(s), 3);
+  const owned = firstMatches(segments, (s) => OWNED_ACTION.test(s), 3, OWNED_ACTION);
   const headingIdx = segments.findIndex((s) => RESPONSIBILITY_HEADING.test(s));
   if (owned.length >= 2) return { status: 'present', evidence: owned.slice(0, 2) };
   if (owned.length === 1) return { status: 'partial', evidence: owned };
@@ -180,9 +207,9 @@ const DELIVERABLE_WORD = /\b(?:deliverables?|outputs?|you\s+will\s+(?:produce|de
 const FORMAT_NOUN = /\b(?:reports?|dashboards?|curricul(?:um|a)|courses?|documents?|documentation|plans?|roadmaps?|modules?|manuals?|guides?|presentations?|policies|policy|prototypes?|releases?|pipelines?|datasets?|playbooks?|runbooks?|proposals?|specs?|specifications?|training\s+materials?|workshops?|handbooks?)\b/i;
 
 function detectDeliverables(segments) {
-  const both = firstMatches(segments, (s) => DELIVERABLE_WORD.test(s) && FORMAT_NOUN.test(s));
+  const both = firstMatches(segments, (s) => DELIVERABLE_WORD.test(s) && FORMAT_NOUN.test(s), 2, DELIVERABLE_WORD);
   if (both.length) return { status: 'present', evidence: both };
-  const word = firstMatches(segments, (s) => DELIVERABLE_WORD.test(s));
+  const word = firstMatches(segments, (s) => DELIVERABLE_WORD.test(s), 2, DELIVERABLE_WORD);
   return word.length ? { status: 'partial', evidence: word } : { status: 'missing', evidence: [] };
 }
 
@@ -190,13 +217,13 @@ const MEASURE_TERM = /\b(?:success\s+(?:is|will\s+be|looks\s+like|means|measure)
 const HORIZON_TERM = /\b(?:first|initial)\s+(?:30|60|90|three|six|3|6)\b|\bwithin\s+(?:the\s+first\s+)?(?:\d+|three|six|a\s+few)\s+(?:days|weeks|months)\b|\b(?:30|60|90)[-\s]day\b|\bby\s+the\s+end\s+of\s+(?:the\s+)?(?:first\s+)?(?:quarter|term|semester|\d+\s+months)\b|\bfirst\s+(?:quarter|year|term|semester)\b/i;
 
 function detectSuccess(segments) {
-  const measure = firstMatches(segments, (s) => MEASURE_TERM.test(s), 1);
-  const horizon = firstMatches(segments, (s) => HORIZON_TERM.test(s), 1);
-  if (measure.length && horizon.length) {
-    // One segment can hold both; do not list the same quote twice.
-    const evidence = measure[0] === horizon[0] ? measure : [...measure, ...horizon];
-    return { status: 'present', evidence };
-  }
+  // `present` only when ONE segment ties a measure to the initial period. A
+  // measure and a horizon in unrelated sentences ("The first 90 days are
+  // onboarding. Annual KPIs decide bonuses.") is `partial`.
+  const linked = firstMatches(segments, (s) => MEASURE_TERM.test(s) && HORIZON_TERM.test(s), 1, MEASURE_TERM);
+  if (linked.length) return { status: 'present', evidence: linked };
+  const measure = firstMatches(segments, (s) => MEASURE_TERM.test(s), 1, MEASURE_TERM);
+  const horizon = firstMatches(segments, (s) => HORIZON_TERM.test(s), 1, HORIZON_TERM);
   const either = [...measure, ...horizon];
   return either.length ? { status: 'partial', evidence: either } : { status: 'missing', evidence: [] };
 }
@@ -213,7 +240,7 @@ function detectCoordination(segments) {
     },
   );
   if (named.length) return { status: 'present', evidence: named };
-  const verbOnly = firstMatches(segments, (s) => COORD_VERB.test(s));
+  const verbOnly = firstMatches(segments, (s) => COORD_VERB.test(s), 2, COORD_VERB);
   return verbOnly.length ? { status: 'partial', evidence: verbOnly } : { status: 'missing', evidence: [] };
 }
 
@@ -222,9 +249,9 @@ const DELIVERY_CONTEXT = /\b(?:deliver\w*|release\w*|ship\w*|updates?|report\w*|
 const VAGUE_CADENCE = /\b(?:regular(?:ly)?|ongoing|periodic(?:ally)?|timely|tight\s+deadlines?|deadlines?|fast-paced)\b/i;
 
 function detectCadence(segments) {
-  const strong = firstMatches(segments, (s) => CADENCE_TERM.test(s) && DELIVERY_CONTEXT.test(s));
+  const strong = firstMatches(segments, (s) => CADENCE_TERM.test(s) && DELIVERY_CONTEXT.test(s), 2, CADENCE_TERM);
   if (strong.length) return { status: 'present', evidence: strong };
-  const weak = firstMatches(segments, (s) => CADENCE_TERM.test(s) || VAGUE_CADENCE.test(s));
+  const weak = firstMatches(segments, (s) => CADENCE_TERM.test(s) || VAGUE_CADENCE.test(s), 2, CADENCE_TERM);
   return weak.length ? { status: 'partial', evidence: weak } : { status: 'missing', evidence: [] };
 }
 
@@ -247,7 +274,13 @@ function detectSoftVerbs(segments, extraSoftVerbs) {
   const hits = [];
   for (const seg of segments) {
     for (const { label, pattern } of patterns) {
-      if (pattern.test(seg)) hits.push({ label, evidence: quote(seg) });
+      // A fresh, global copy per check: a supplied /g or /y pattern is never
+      // mutated (no shared lastIndex), and every occurrence counts as a hit.
+      const scan = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, '') + 'g');
+      for (const m of seg.matchAll(scan)) {
+        if (m[0] === '') continue;
+        hits.push({ label, evidence: quote(seg, m.index, m[0].length) });
+      }
     }
   }
   return {
@@ -378,11 +411,23 @@ if (isMainModule(import.meta.url)) {
     runSelfTest();
   } else {
     const jdPath = args.find((a) => !a.startsWith('-'));
-    if (!jdPath || !existsSync(jdPath)) {
+    // A relative path (jds/{slug}.md) is a user-layer file: resolve it under the
+    // data root (CAREER_OPS_ROOT), never the process working directory. An
+    // absolute path is used as given. Nothing under data/ is required.
+    let resolvedPath = null;
+    if (jdPath) {
+      try {
+        resolvedPath = isAbsolute(jdPath) ? jdPath : resolve(getCareerOpsRoot(), jdPath);
+      } catch (err) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+    }
+    if (!resolvedPath || !existsSync(resolvedPath) || !statSync(resolvedPath).isFile()) {
       console.error(USAGE);
       process.exit(1);
     }
-    const result = analyzeRoleClarity(readFileSync(jdPath, 'utf-8'));
+    const result = analyzeRoleClarity(readFileSync(resolvedPath, 'utf-8'));
     console.log(args.includes('--summary') ? formatSummary(result) : JSON.stringify(result, null, 2));
   }
 }
