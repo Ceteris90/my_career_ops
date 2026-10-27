@@ -82,6 +82,22 @@ test("an empty install does not claim the CV had no recognised skills", () => {
   assert.equal(empty.caveats.find((x) => x.kind === "no-known-skills"), undefined);
 });
 
+test("gaps with no knownSkillCount are not a CV that had zero skills", () => {
+  // knownSkillCount absent is not the number 0. A check on gaps.length alone,
+  // or num() which turns a missing field into 0, would flag this map.
+  const uncounted = skillGapModel({
+    available: true,
+    data: {
+      metadata: { reportsRead: 9, reportsWithMachineSummary: 5 },
+      gaps: [
+        { skill: "Kubernetes", reports: 4, lowFitReports: 2, weightedScore: 3.5, tier: "High", sources: [2, 3] },
+      ],
+    },
+  });
+  assert.equal(uncounted.gaps.length, 1);
+  assert.equal(uncounted.caveats.find((x) => x.kind === "no-known-skills"), undefined);
+});
+
 test("malformed gaps cannot reach the panel", () => {
   const m = skillGapModel(payload({}, [
     { skill: "Kubernetes", weightedScore: 3.5 },
