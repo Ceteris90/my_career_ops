@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -177,4 +177,30 @@ test('batch runner shares one PDF browser across offers', () => {
   const skipped = runOneOffer(true);
   assert.equal(skipped.status, 0, skipped.stderr || skipped.stdout);
   assert.equal(skipped.recorded, 'unset');
+});
+
+test('the painter socket sits in a directory only this user can open', { skip: process.platform === 'win32' && 'named pipes, no socket directory' }, async () => {
+  const serverMod = await import(new URL('../lib/pdf-server.mjs', import.meta.url));
+  const base = mkdtempSync(join(tmpdir(), 'career-ops-pdf-dir-'));
+  const saved = { TMPDIR: process.env.TMPDIR, SOCKET: process.env.CAREER_OPS_PDF_SOCKET };
+  process.env.TMPDIR = base;
+  delete process.env.CAREER_OPS_PDF_SOCKET;
+  try {
+    const socketPath = serverMod.sharedPdfSocketPath('/example/career-ops');
+    assert.ok(socketPath.startsWith(base), socketPath);
+    // A unix socket path is capped near 104 bytes and the macOS temp dir is about 50.
+    assert.ok(socketPath.length - base.length <= 40, `name under the temp dir is short: ${socketPath.slice(base.length)}`);
+    const dir = statSync(dirname(socketPath));
+    assert.equal(dir.mode & 0o077, 0, 'no group or other access');
+    assert.equal(dir.uid, process.getuid());
+
+    // A directory another user could write (or pre-create) is refused, so the
+    // CV HTML never goes to a socket someone else planted there.
+    chmodSync(dirname(socketPath), 0o777);
+    assert.throws(() => serverMod.sharedPdfSocketPath('/example/career-ops'), (err) => err.code === 'PDF_SERVER_UNAVAILABLE');
+  } finally {
+    if (saved.TMPDIR === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = saved.TMPDIR;
+    if (saved.SOCKET !== undefined) process.env.CAREER_OPS_PDF_SOCKET = saved.SOCKET;
+    rmSync(base, { recursive: true, force: true });
+  }
 });
