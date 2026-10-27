@@ -61,12 +61,11 @@ try {
     `https://www.${PLACEHOLDERS.linkedin} | ${PLACEHOLDERS.github}</p>`;
   const back = restoreIfEnabled(model, PROFILE_ON);
   check(back.includes('<h1>Jane Doe</h1>'), 'restore puts the real name back');
-  check(back.includes('jane.doe@example.org') && back.includes('+91 98765 43210'), 'restore puts email and phone back');
-  // Whole-string comparison, not a URL substring check: restore must emit exactly the configured URL once.
+  // Whole-string comparison instead of domain substring checks to satisfy CodeQL:
   const expectedBack = '<h1>Jane Doe</h1><p>jane.doe@example.org | +91 98765 43210 | ' +
     'https://www.linkedin.com/in/janedoe | github.com/janedoe</p>';
   check(back === expectedBack, 'restore emits the configured URLs exactly, without doubling the URL prefix');
-  check(!back.includes('Candidate Name') && !back.includes('example.com') && !back.includes('/candidate'), 'no placeholder survives restore');
+  check(!/Candidate Name|candidate@|\/candidate/.test(back), 'no placeholder survives restore');
   check(restoreIfEnabled(model, PROFILE_OFF) === model, 'restoreIfEnabled is a no-op when off');
   check(restoreCandidatePII('Cost: $& $1', PROFILE_ON) === 'Cost: $& $1', 'restore leaves unrelated text untouched');
 
@@ -78,7 +77,7 @@ try {
   check(ctx.cv === CV, 'anonymizeContext does not mutate its input');
   check(isRedactionEnabled(anon.profile), 'redacted profile still parses and keeps the privacy flag');
 
-  // ── Review follow-ups ────────────────────────────────────────────────────
+  // ── Multi-email and review follow-ups ────────────────────────────────────
   const altProfile = (altBlock) => `
 candidate:
   full_name: "Jane Doe"
@@ -98,7 +97,15 @@ privacy:
     });
     check(!/work\.example|home\.example|jane\.doe@/i.test(out.cv), `alternate_emails (${label}) are redacted through anonymizeContext`);
   }
-  check(restoreCandidatePII(PLACEHOLDERS.email, PROFILE_ALT) === 'jane.doe@example.org', 'placeholder restores to the primary email, not an alternate');
+
+  // Two-address round trip: distinct reversible placeholders preserve each address
+  const CV_TWO_EMAILS = `Email: jane.doe@example.org | Work: jane@work.example`;
+  const redTwo = redactIfEnabled(CV_TWO_EMAILS, PROFILE_ALT);
+  check(!/jane\.doe@|jane@work/i.test(redTwo), 'both primary and alternate emails are redacted');
+  check(redTwo.includes(PLACEHOLDERS.email) && redTwo.includes('candidate-alt1@example.com'),
+    'each email receives a distinct placeholder');
+  const restoredTwo = restoreIfEnabled(redTwo, PROFILE_ALT);
+  check(restoredTwo === CV_TWO_EMAILS, 'two-address round trip preserves both primary and alternate email');
 
   const urlOut = redactCandidatePII(
     'See https://www.linkedin.com/in/janedoe/?utm_source=share#about and linkedin.com/in/janedoe?trk=x.', PROFILE_ALT);
@@ -118,6 +125,29 @@ privacy:
   check(!/555/.test(redactCandidatePII('Call 415 555 2671 or +1 (415) 555-2671', WITH_EXT)),
     'phone extension digits stay out of the number matcher');
   check(restoreCandidatePII(PLACEHOLDERS.phone, WITH_EXT) === '+1 415 555 2671 ext 123', 'restore keeps the configured phone including its extension');
+
+  // National phone number with trunk prefix (e.g. 09876543210 for +91 98765 43210)
+  const cvTrunkPhone = 'Call 09876543210 or 098-765-43210';
+  const redTrunk = redactCandidatePII(cvTrunkPhone, PROFILE_ON);
+  check(!/98765/.test(redTrunk), 'national trunk-prefixed phone (09876543210) is redacted for +91 profile');
+
+  // Identity-bearing portfolio and social URLs
+  const PROFILE_PORTFOLIO = `
+candidate:
+  full_name: "Jane Smith"
+  email: "jane@example.com"
+  portfolio_url: "https://janesmith.dev"
+  twitter: "https://x.com/janesmith"
+privacy:
+  redact_contact_info: true
+`;
+  const cvPortfolio = 'Portfolio at https://janesmith.dev?view=full and janesmith.dev. Twitter: https://x.com/janesmith.';
+  const redPortfolio = redactCandidatePII(cvPortfolio, PROFILE_PORTFOLIO);
+  check(!/janesmith\.dev|x\.com\/janesmith/.test(redPortfolio), 'portfolio and twitter URLs are redacted');
+  check(redPortfolio.endsWith('.'), 'sentence punctuation after social URL is kept');
+  const restoredPortfolio = restoreCandidatePII(redPortfolio, PROFILE_PORTFOLIO);
+  check(restoredPortfolio.includes('https://janesmith.dev') && restoredPortfolio.includes('https://x.com/janesmith'),
+    'portfolio and twitter URLs are restored correctly');
 
   const EMPTY_URL = 'candidate:\n  full_name: "Jane Doe"\n  linkedin: "https://"\n  github: "www."\n';
   check(redactCandidatePII('Plain text with no profile links', EMPTY_URL) === 'Plain text with no profile links',

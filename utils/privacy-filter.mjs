@@ -2,8 +2,8 @@
  * utils/privacy-filter.mjs — opt-in contact-detail redaction for career-ops
  *
  * Keeps the candidate's name and contact details (email, phone, LinkedIn,
- * GitHub) out of the prompts that gemini-eval, openai-tailor and
- * openrouter-runner send to a hosted model.
+ * GitHub, portfolio, socials) out of the prompts that gemini-eval,
+ * openai-tailor and openrouter-runner send to a hosted model.
  *
  * Opt-in: nothing is redacted unless config/profile.yml sets
  *
@@ -24,14 +24,19 @@ export const PLACEHOLDERS = Object.freeze({
   phone: '+00-0000000000',
   linkedin: 'linkedin.com/in/candidate',
   github: 'github.com/candidate',
+  portfolio_url: 'candidate.example',
+  portfolio: 'candidate.example',
+  twitter: 'x.com/candidate',
 });
+
+const URL_KINDS = Object.freeze(['linkedin', 'github', 'portfolio_url', 'portfolio', 'twitter']);
 
 const MIN_TEXT_LEN = 3;
 const MIN_PHONE_DIGITS = 7;
 const URL_PREFIX = '(?:https?:\\/\\/)?(?:www\\.)?';
 
 function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(s).replace(/[\\^$*+?.()|[\]{}/-]/g, (m) => '\\' + m);
 }
 
 function parseProfile(profileYmlText) {
@@ -78,19 +83,23 @@ function buildRules(profileYmlText) {
   // email rule could match it.
   const name = cleanString(candidate.full_name);
 
-  // Primary first: it is the address restored from the placeholder. Alternates
-  // (a list, or a name -> address mapping) are redacted to the same placeholder.
+  // Primary first, then alternates. Each distinct email address gets its own
+  // unique placeholder (e.g. candidate@example.com, candidate-alt1@example.com)
+  // so restoreCandidatePII preserves every address across the round trip.
   const alternates = candidate.alternate_emails;
   const altList = Array.isArray(alternates) ? alternates
     : (alternates && typeof alternates === 'object' ? Object.values(alternates) : []);
   const emails = [candidate.email, ...altList].map(cleanString).filter(Boolean);
-  for (const email of [...new Set(emails)]) {
+  const uniqueEmails = [...new Set(emails)];
+  uniqueEmails.forEach((email, idx) => {
+    const placeholder = idx === 0 ? PLACEHOLDERS.email : `candidate-alt${idx}@example.com`;
     rules.push({
       kind: 'email',
+      placeholder,
       original: email,
       find: new RegExp(`(?<![\\w.+-])${escapeRegex(email)}(?![\\w-])`, 'gi'),
     });
-  }
+  });
 
   const phone = cleanString(candidate.phone);
   // Match the number itself: an extension ("ext 123", "x123", "#123") is not part
@@ -99,27 +108,43 @@ function buildRules(profileYmlText) {
   const digits = phoneBase.replace(/\D/g, '');
   if (digits.length >= MIN_PHONE_DIGITS) {
     // Match the number however it is spaced or punctuated, and also without
-    // its country code (the CV may write "98765 43210" for "+91 98765 43210").
-    const variants = [digits];
-    if (digits.length > 10) variants.push(digits.slice(-10));
+    // its country code (e.g. "+91 98765 43210" -> "98765 43210") or with a
+    // national trunk prefix (e.g. "09876543210" for India +91 / UK +44 / France +33).
+    const variants = new Set([digits]);
+    if (digits.length > 10) {
+      const national = digits.slice(-10);
+      variants.add(national);
+      variants.add('0' + national);
+    } else if (digits.length === 10) {
+      variants.add('0' + digits);
+    } else if (digits.startsWith('0') && digits.length >= 8) {
+      variants.add(digits.slice(1));
+    }
     for (const v of variants) {
       const body = v.split('').join('[\\s().-]*');
       rules.push({
         kind: 'phone',
+        placeholder: PLACEHOLDERS.phone,
         original: phone,
         find: new RegExp(`(?<![\\d])(?:\\+\\s*)?${body}(?!\\d)`, 'g'),
       });
     }
   }
 
-  for (const kind of ['linkedin', 'github']) {
+  for (const kind of URL_KINDS) {
     const url = cleanString(candidate[kind]);
     if (!url || !normalizeUrl(url)) continue; // e.g. "https://": an empty pattern would match everywhere
     rules.push({
       kind,
+      placeholder: PLACEHOLDERS[kind] || 'candidate.example',
       original: url,
       // Canonical profile path, plus any ?query / #fragment that follows it in the text.
-      find: new RegExp(`${URL_PREFIX}${escapeRegex(normalizeUrl(url))}(?![\\w-])\\/?(?:[?#][^\\s)\\]>"']*?(?=[.,;:!]*(?:[\\s)\\]>"']|$)))?`, 'gi'),
+      // Uses disjoint character classes for query chars vs trailing sentence punctuation
+      // to avoid catastrophic / polynomial ReDoS (CodeQL js/polynomial-redos).
+      find: new RegExp(
+        `${URL_PREFIX}${escapeRegex(normalizeUrl(url))}(?![\\w-])\\/?(?:[?#][^\\s)\\]>"'.,;:!?]+(?:[.,;:!?]+[^\\s)\\]>"'.,;:!?]+)*)?`,
+        'gi'
+      ),
     });
   }
 
@@ -127,6 +152,7 @@ function buildRules(profileYmlText) {
     const parts = name.split(/\s+/).map(escapeRegex).join('\\s+');
     rules.push({
       kind: 'name',
+      placeholder: PLACEHOLDERS.name,
       original: name,
       find: new RegExp(`(?<![\\p{L}\\p{N}])${parts}(?![\\p{L}\\p{N}])`, 'giu'),
     });
@@ -136,9 +162,9 @@ function buildRules(profileYmlText) {
 }
 
 /**
- * Replace the candidate's name, email, phone, LinkedIn and GitHub in `text`
- * with neutral placeholders. Unconditional: callers that honour the profile
- * toggle should use `redactIfEnabled` / `anonymizeContext`.
+ * Replace the candidate's name, email, phone, LinkedIn, GitHub, portfolio and
+ * socials in `text` with neutral placeholders. Unconditional: callers that
+ * honour the profile toggle should use `redactIfEnabled` / `anonymizeContext`.
  *
  * @param {string} text
  * @param {string} profileYmlText - raw content of config/profile.yml
@@ -148,7 +174,7 @@ export function redactCandidatePII(text, profileYmlText) {
   if (!text || typeof text !== 'string') return text;
   let out = text;
   for (const rule of buildRules(profileYmlText)) {
-    out = out.replace(rule.find, PLACEHOLDERS[rule.kind]);
+    out = out.replace(rule.find, rule.placeholder || PLACEHOLDERS[rule.kind]);
   }
   return out;
 }
@@ -167,13 +193,14 @@ export function restoreCandidatePII(text, profileYmlText) {
   const seen = new Set();
   let out = text;
   for (const rule of buildRules(profileYmlText)) {
-    if (seen.has(rule.kind)) continue; // phone has two match variants, one placeholder
-    seen.add(rule.kind);
-    const isUrl = rule.kind === 'linkedin' || rule.kind === 'github';
-    const placeholder = escapeRegex(PLACEHOLDERS[rule.kind]);
+    const placeholder = rule.placeholder || PLACEHOLDERS[rule.kind];
+    if (seen.has(placeholder)) continue; // phone variants share one placeholder
+    seen.add(placeholder);
+    const isUrl = URL_KINDS.includes(rule.kind);
+    const escaped = escapeRegex(placeholder);
     const re = isUrl
-      ? new RegExp(`${URL_PREFIX}${placeholder}(?![\\w-])`, 'gi')
-      : new RegExp(placeholder, 'gi');
+      ? new RegExp(`${URL_PREFIX}${escaped}(?![\\w-])`, 'gi')
+      : new RegExp(escaped, 'gi');
     out = out.replace(re, () => rule.original);
   }
   return out;
