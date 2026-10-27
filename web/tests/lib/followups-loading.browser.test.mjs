@@ -49,7 +49,12 @@ test("Follow-ups holds the table's place while the cadence loads", {
     assert.equal(response.status(), 200);
     await visible(page.getByRole("heading", { name: "Follow-up Tracker", exact: true })).waitFor();
     await busyBody.waitFor({ timeout: 15_000 });
-    assert.ok(requested, "the cadence request was in flight while the busy table showed");
+    const started = Date.now();
+    while (!requested) {
+      if (Date.now() - started > 15_000) assert.fail("the cadence request never started");
+      await page.waitForTimeout(50);
+    }
+    assert.equal(await busyBody.count(), 1, "the busy table is still up once the cadence request is in flight");
     for (const name of ["Company", "Role", "Urgency", "Next follow-up"]) {
       assert.equal(await table.getByRole("columnheader", { name: new RegExp(`^${name}`) }).isVisible(), true, `${name} header visible while loading`);
     }
