@@ -1147,8 +1147,8 @@ function fetchedUrls({ raw, name, media, svg, ns, frameset }) {
       if (rel.includes('preload') && as.toLowerCase() === 'image') urls.push(...srcsetUrls(attrValue(raw, 'imagesrcset') ?? ''));
     }
   }
-  if (svg && name === 'image') one('href', 'xlink:href');
-  if (svg && name === 'feimage') one('href', 'xlink:href');
+  // SVG reads href and ignores xlink:href when both are present (probed on <image> and <feImage>).
+  if (svg && (name === 'image' || name === 'feimage')) one(attrValue(raw, 'href') !== null ? 'href' : 'xlink:href');
   // url(#id) in a presentation attribute is a same-document reference, never a request.
   if (svg) for (const a of SVG_URL_ATTRS) urls.push(...cssRequestUrls(`${a}:${attrValue(raw, a) ?? ''}`).filter((u) => !normalizeUrl(u).startsWith('#')));
   if (ns === 'html' && name === 'meta' && /^refresh$/i.test(attrValue(raw, 'http-equiv') ?? '')) {
