@@ -47,6 +47,15 @@ test("Unreadable and missing reports keep the app shell and a way back", { skip:
   assert.ok(await sidebar().isVisible(), "sidebar navigation stays on a missing report");
   assert.equal(await back().getAttribute("href"), `/pipeline?${query}`, "missing report preserves pipeline filters");
 
+  await page.goto(`${origin.origin}/pipeline/12`);
+  await main().getByRole("heading", { name: /#12\b/ }).waitFor({ timeout: 15_000 });
+  const broken = path.join(root, "reports/012-fixture-broken.md");
+  fs.rmdirSync(broken);
+  fs.writeFileSync(broken, "# Fixture Broken Co — Designer\n\n**URL:** https://jobs.fixture-broken.example/designer\n\nFictional browser test report.\n");
+  await main().getByRole("button", { name: "Try again" }).click();
+  await main().getByRole("heading", { name: "Fixture Broken Co", exact: true }).waitFor({ timeout: 15_000 });
+  assert.equal(await page.getByText("Report #12 could not be read").count(), 0, "Try again shows the repaired report");
+
   await page.goto(`${origin.origin}/pipeline/11`);
   await main().getByRole("heading", { name: "Fixture States Co", exact: true }).waitFor({ timeout: 15_000 });
   assert.equal(await main().getByRole("button", { name: "Try again" }).count(), 0, "a readable report renders normally");
