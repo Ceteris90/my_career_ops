@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { renderLint } from '../cv-templates.mjs';
+import { renderLint, atsLint } from '../cv-templates.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 const dir = mkdtempSync(join(tmpdir(), 'render-lint-'));
@@ -24,32 +24,37 @@ const ids = (r) => r.findings.map((f) => f.id);
 const CASES = [
   {
     id: 'script-element',
-    hit: ['<body><script>fetch("x")</script></body>', '<SCRIPT src="a.js"></SCRIPT>'],
-    miss: ['<p>Wrote a script for the pipeline</p>', '<noscript>Enable JS</noscript>', '<!-- <script>x</script> -->', '<img alt="<script>" src="a.png">', '<textarea><script>x</script></textarea>', '<template><script>x</script></template>', '<svg><text><![CDATA[<script>x</script>]]></text></svg>'],
+    hit: ['<body><script>fetch("x")</script></body>', '<SCRIPT src="a.js"></SCRIPT>',
+      // A srcdoc is a document of its own, printed with JavaScript off, so its script is as dead as one outside; svg/math <style> hold markup.
+      '<iframe srcdoc="<script>alert(1)</script>"></iframe>', '<iframe srcdoc="&lt;iframe srcdoc=&quot;&amp;lt;script&amp;gt;x&amp;lt;/script&amp;gt;&quot;&gt;&lt;/iframe&gt;"></iframe>',
+      '<svg><style><script>x()</script></style></svg>'],
+    miss: ['<p>Wrote a script for the pipeline</p>', '<noscript>Enable JS</noscript>', '<!-- <script>x</script> -->', '<img alt="<script>" src="a.png">', '<textarea><script>x</script></textarea>', '<template><script>x</script></template>', '<svg><text><![CDATA[<script>x</script>]]></text></svg>', '<iframe srcdoc="<p>script</p>"></iframe>', '<iframe srcdoc="<textarea><script>x</script></textarea>"></iframe>'],
   },
   {
     id: 'embedded-content',
-    hit: ['<iframe src="a.html"></iframe>', '<object data="a.pdf"></object>', '<embed src="a.svg">'],
-    miss: ['<img src="a.png">', '<svg><rect/></svg>', '<img alt="<iframe>" src="a.png">', '<iframe srcdoc="<p>Hello</p>"></iframe>', '<IFRAME SRCDOC=\'<p>Hello</p>\'></IFRAME>'],
+    hit: ['<iframe src="a.html"></iframe>', '<object data="a.pdf"></object>', '<embed src="a.svg">', '<iframe srcdoc="<iframe src=a.html></iframe>"></iframe>', '<svg><embed src="a.svg"></svg>'],
+    miss: ['<img src="a.png">', '<svg><rect/></svg>', '<img alt="<iframe>" src="a.png">', '<iframe srcdoc="<p>Hello</p>"></iframe>', '<IFRAME SRCDOC=\'<p>Hello</p>\'></IFRAME>',
+      // svg:iframe and svg:object are unknown svg elements: nothing loads (probed).
+      '<svg><iframe src="a.html"></iframe></svg>', '<svg><object data="a.pdf"></object></svg>', '<math><iframe src="a.html"></iframe></math>'],
   },
   {
     id: 'event-handler-attribute',
-    hit: ['<body onload="x()">', '<img src="a.png" onerror=x()>', '<a href="#" ONCLICK="x()">go</a>', '<svg/onload=x()>', '<img src="a.png"onerror=x()>', '<img src=\'a.png\'onerror=x()>'],
+    hit: ['<body onload="x()">', '<img src="a.png" onerror=x()>', '<a href="#" ONCLICK="x()">go</a>', '<svg/onload=x()>', '<img src="a.png"onerror=x()>', '<img src=\'a.png\'onerror=x()>', '<iframe srcdoc="<img src=a.png onerror=x()>"></iframe>', '<svg><style><img src="a.png" onerror="x()"></style></svg>'],
     miss: ['<p title="once=twice">x</p>', '<div data-onclick="x">x</div>', '<p>onload= in text</p>', '<a href=/onload=x>x</a>', '<a href=a/onclick=b>x</a>', '<img src="a.png" alt=x/onerror=y>', '<template><img src="a.png" onerror="x()"></template>', '<textarea><img onerror=x()></textarea>'],
   },
   {
     id: 'script-url',
-    hit: ['<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="java&Tab;script:alert(1)">x</a>', '<a href="java&NewLine;script:alert(1)">x</a>', '<a href="java\nscript:alert(1)">x</a>', '<a href="java\tscript:alert(1)">x</a>', '<a href="&#1;javascript:alert(1)">x</a>', '<a href="&#31; javascript:alert(1)">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="JAVASCRIPT:alert(1)">x</a>', '<a href="JaVaScRiPt:alert(1)">x</a>', '<a href="javascript:alert(1)&#1;">x</a>', '<a href="&#1;DATA:text/html,<b>x</b>">x</a>', '<img src="&#1;&#2;java\nscript:x">'],
+    hit: ['<iframe srcdoc="<a href=\'javascript:x()\'>y</a>"></iframe>', '<a href="&#106;avascript:alert(1)">x</a>', '<a href="javascript&#58;alert(1)">x</a>', '<a href="javascript:alert(1)">x</a>', '<a href="javascript&colon;alert(1)">x</a>', '<img src=" JavaScript:x()">', '<a href="data:text/html,<b>x</b>">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="java&Tab;script:alert(1)">x</a>', '<a href="java&NewLine;script:alert(1)">x</a>', '<a href="java\nscript:alert(1)">x</a>', '<a href="java\tscript:alert(1)">x</a>', '<a href="&#1;javascript:alert(1)">x</a>', '<a href="&#31; javascript:alert(1)">x</a>', '<a href="java&#9;script:alert(1)">x</a>', '<a href="JAVASCRIPT:alert(1)">x</a>', '<a href="JaVaScRiPt:alert(1)">x</a>', '<a href="javascript:alert(1)&#1;">x</a>', '<a href="&#1;DATA:text/html,<b>x</b>">x</a>', '<img src="&#1;&#2;java\nscript:x">'],
     // Probed: Chromium writes a /URI action into the PDF for each of the hit forms (JavaScript off), and for a leading DEL it
     // resolves a file path instead, so only C0 controls, space, tab, LF and CR are ignored, as the URL parser does.
     miss: ['<a href="&#127;javascript:alert(1)">x</a>', '<a href="java script:alert(1)">x</a>', '<a href="&#0;javascript:alert(1)">x</a>', '<p>javascript:alert(1)</p>', '<img src="data:image/png;base64,AAAA">', '<style>@font-face{src:url("data:font/woff2;base64,AAAA")}</style>', '<a href="{{LINKEDIN_URL}}">x</a>'],
   },
   {
     id: 'meta-refresh',
-    hit: ['<meta http-equiv="refresh" content="0;url=a.html">', '<meta http-equiv="refresh" content=" 3 ; url=a.html">', '<meta http-equiv="refresh" content="5">'],
+    hit: ['<iframe srcdoc="<meta http-equiv=refresh content=0>"></iframe>', '<meta http-equiv="refresh" content="0;url=a.html">', '<meta http-equiv="refresh" content=" 3 ; url=a.html">', '<meta http-equiv="refresh" content="5">'],
     // Chromium follows a refresh that parses to a time (the remote target is requested, then aborted)
     // and ignores one with no content, an empty one, or one whose content does not start with a number.
-    miss: ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width">', '<meta http-equiv="refresh">', '<meta http-equiv="refresh" content="">', '<meta http-equiv="refresh" content="x">', '<meta http-equiv="refresh" content="url=a.html">', '<template><meta http-equiv="refresh" content="0;url=a.html"></template>'],
+    miss: ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width">', '<meta http-equiv="refresh">', '<meta http-equiv="refresh" content="">', '<meta http-equiv="refresh" content="x">', '<meta http-equiv="refresh" content="url=a.html">', '<iframe srcdoc="<meta http-equiv=refresh content=x>"></iframe>', '<template><meta http-equiv="refresh" content="0;url=a.html"></template>'],
   },
   {
     id: 'remote-subresource',
@@ -230,6 +235,31 @@ const CASES = [
       '<style>.a{background:url("https://example.com/a\\2e png")}</style>',
       '<div style="background:url(&quot;\\68 ttps://example.com/a.png&quot;)"></div>',
       '<base href="https://cdn.example/"><style>.a{background:url("\\69 mg/a.png")}</style>',
+      // Character references that spell a URL: &bsol; is `\`, which the URL parser reads as `/`, so these are all
+      // `file://host/...` on the printed file: page (probed).
+      '<img src="&bsol;&bsol;example.com/a.png">',
+      '<img src="/&bsol;example.com/a.png">',
+      '<img src="&sol;&bsol;example.com/a.png">',
+      '<img src="&#92;&#92;example.com/a.png">',
+      '<iframe srcdoc="&lt;img src=&quot;&amp;bsol;&amp;bsol;example.com/a.png&quot;&gt;"></iframe>',
+      '<div style="background:url&lpar;https://example.com/a.png&rpar;"></div>',
+      '<img src="&Tab;&bsol;&bsol;example.com/a.png">',
+      // svg and math have no raw text, RCDATA or script data: a <style> or <script> there holds markup, self-closing or not,
+      // so an <img> in it leaves foreign content and is requested (probed).
+      '<svg><style><img src="https://example.com/a.png"></style></svg>',
+      '<math><style><img src="https://example.com/a.png"></style></math>',
+      '<svg><style/><img src="https://example.com/a.png"></svg>',
+      '<math><style/><img src="https://example.com/a.png"></math>',
+      '<svg><script/><img src="https://example.com/a.png"></svg>',
+      '<math><script/><img src="https://example.com/a.png"></math>',
+      '<svg><style><![CDATA[x]]><img src="https://example.com/a.png"></style></svg>',
+      '<svg><style>.s{background:url(https://example.com/a.png)}<g></g></style></svg>',
+      // In HTML an <image> is an <img>, srcset included; and an element name means what it means in its own namespace,
+      // so an HTML <video> in an svg <desc> is requested (probed).
+      '<image srcset="https://example.com/a.png 1x">',
+      '<svg><desc><image srcset="https://example.com/a.png 1x"></desc></svg>',
+      '<svg><desc><video src="https://example.com/a.mp4"></video></desc></svg>',
+      '<svg><image href="https://example.com/a.png" width="5" height="5"></svg>',
     ],
     miss: [
       '<a href="https://example.com/me">me</a>',
@@ -355,6 +385,22 @@ const CASES = [
       '<style>.a{background:url("\\70 hoto.png")}</style>',
       '<style>.a{content:"\\68 ttps://example.com/a.png"}</style>',
       '<style>.a{background:url("\\68  ttps://example.com/a.png")}</style>',
+      // svg:video, svg:link, svg:iframe, svg:object and math:td are unknown elements there, and an svg <image> takes href, not
+      // src or srcset (probed).
+      '<svg><image src="https://example.com/a.png" width="5" height="5"></svg>',
+      '<svg><image srcset="https://example.com/a.png 1x" width="5" height="5"></svg>',
+      '<math><image src="https://example.com/a.png"></math>',
+      '<math><image srcset="https://example.com/a.png 1x"></math>',
+      '<svg><video src="https://example.com/a.mp4"></video></svg>',
+      '<svg><link rel="stylesheet" href="https://example.com/a.css"></svg>',
+      '<svg><iframe src="https://example.com/a.html"></iframe></svg>',
+      '<svg><object data="https://example.com/a.pdf"></object></svg>',
+      '<svg><foreignObject><feImage href="https://example.com/a.png"/></foreignObject></svg>',
+      '<math><td background="https://example.com/a.png"></td></math>',
+      // A name outside the table, or a legacy name before a letter, stays as written: a local path (probed).
+      '<img src="&notit;//example.com/a.png">',
+      '<img src="https&colonx;//example.com/a.png">',
+      '<img src="&lpar;example.com/a.png">',
     ],
   },
 ];
@@ -471,6 +517,28 @@ const FETCHERS = [
   ['video>track(captions)', '<video controls><track src="https://@@/a.png" kind="captions" default></video>', false],
   ['image (html) src', '<image src="https://@@/a.png">', true],
   ['bgsound src', '<bgsound src="https://@@/a.png">', false],
+  ['image (html) srcset', '<image srcset="https://@@/a.png 1x">', true],
+  ['isindex src', '<isindex src="https://@@/a.png">', false],
+  ['svg image src', '<svg width=10 height=10><image src="https://@@/a.png" width=10 height=10></svg>', false],
+  ['svg image srcset', '<svg width=10 height=10><image srcset="https://@@/a.png 1x" width=10 height=10></svg>', false],
+  ['math image src', '<math><image src="https://@@/a.png"></math>', false],
+  ['svg video src', '<svg><video src="https://@@/a.png"></video></svg>', false],
+  ['svg audio src', '<svg><audio src="https://@@/a.png"></audio></svg>', false],
+  ['svg link stylesheet', '<svg><link rel="stylesheet" href="https://@@/a.png"></svg>', false],
+  ['svg iframe src', '<svg><iframe src="https://@@/a.png"></iframe></svg>', false],
+  ['svg object data', '<svg><object data="https://@@/a.png"></object></svg>', false],
+  ['svg embed src (embed leaves svg)', '<svg><embed src="https://@@/a.png"></svg>', true],
+  ['svg img src (img leaves svg)', '<svg><img src="https://@@/a.png"></svg>', true],
+  ['svg td background', '<svg><td background="https://@@/a.png"></td></svg>', false],
+  ['math td background', '<math><td background="https://@@/a.png"></td></math>', false],
+  ['svg desc video src', '<svg><desc><video src="https://@@/a.png"></video></desc></svg>', true],
+  ['svg desc image srcset', '<svg><desc><image srcset="https://@@/a.png 1x"></desc></svg>', true],
+  ['svg foreignObject feImage', '<svg><foreignObject><feImage href="https://@@/a.png"/></foreignObject></svg>', false],
+  ['svg style > img', '<svg><style><img src="https://@@/a.png"></style></svg>', true],
+  ['math style > img', '<math><style><img src="https://@@/a.png"></style></math>', true],
+  ['svg style/ then img', '<svg><style/><img src="https://@@/a.png"></svg>', true],
+  ['math style/ then img', '<math><style/><img src="https://@@/a.png"></math>', true],
+  ['svg script/ then img', '<svg><script/><img src="https://@@/a.png"></svg>', true],
   ['frame (in body)', '<frame src="https://@@/a.png">', false],
   ['isindex action', '<isindex action="https://@@/a.png">', false],
   ['menuitem icon', '<menu type="context"><menuitem icon="https://@@/a.png" label="x"></menuitem></menu>', false],
@@ -505,6 +573,34 @@ test('remote-subresource flags exactly what Chromium requests (probed table)', (
     if (ids(lint(html)).includes('remote-subresource') !== requested) wrong.push(`${name} (${requested ? 'requested' : 'not requested'}): ${html}`);
   }
   assert.deepEqual(wrong, []);
+});
+
+// A regex for a trailing run backtracks from every start inside a run that is not at the end, so each of these took
+// seconds at this size before the trims became index scans (a, then 100000 of the run, then b).
+test('trimming and scanning are linear: long runs inside a URL, a srcset, a style and a script', () => {
+  const n = 100000;
+  const started = Date.now();
+  for (const html of [
+    `<img src="a${' '.repeat(n)}b">`,
+    `<img src="a${'&#1;'.repeat(n / 4)}b">`,
+    `<img srcset="a${','.repeat(n)}b">`,
+    `<div style="background:url(a${' '.repeat(n)}b)">x</div>`,
+    `<style>.a{background:url(a${' '.repeat(n)}b)}</style>`,
+    `<script>${'-'.repeat(n)}</script><img src="a.png">`,
+    `<script>${'<!--'.repeat(n / 4)}</script>`,
+    `<meta http-equiv="refresh" content="1${' '.repeat(n)}x">`,
+  ]) lint(html);
+  assert.ok(Date.now() - started < 5000, `took ${Date.now() - started} ms`);
+});
+
+test('atsLint reads a long attribute run in <html> once, not from every position in it', () => {
+  const started = Date.now();
+  for (const run of ['a', 'section-title']) {
+    const p = join(dir, `ats${n++}.html`);
+    writeFileSync(p, `<html ${run.repeat(100000)}>`);
+    atsLint(p, 'cv');
+  }
+  assert.ok(Date.now() - started < 5000, `took ${Date.now() - started} ms`);
 });
 
 test('srcdoc nested past the cap is surfaced by a depth-limit finding, never silently passed', () => {

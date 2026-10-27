@@ -1,4 +1,4 @@
-{"about":"Chromium parse (JavaScript off, template.innerHTML) of each tag: element name, attributes in order, and whether the marker <i id=\"z\"> after it was reached. generated = generateTags(count, seed) from tests/render-lint-tag-grammar.mjs; explicit = hand-picked.","seed":7,"count":240,"generated":[
+{"about":"Chromium parse (JavaScript off, template.innerHTML) of each tag: element name, attributes in order, and whether the marker <i id=\"z\"> after it was reached. generated = generateTags(count, seed) from tests/render-lint-tag-grammar.mjs; explicit = EXPLICIT_TAGS there. Re-record: node tests/render-lint-record-fixture.mjs tags","seed":7,"count":240,"generated":[
 {"html":"<x <i id=\"z\"></i>","name":"x","attrs":[["<i",""],["id","z"]],"ended":false},
 {"html":"<x-y\nr<=/href =\"\r\n\" <i id=\"z\"></i>","name":"x-y","attrs":[["r<","/href"],["=\"",""],["\"",""],["<i",""],["id","z"]],"ended":false},
 {"html":"<X><i id=\"z\"></i>","name":"x","attrs":[],"ended":true},

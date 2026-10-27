@@ -508,7 +508,8 @@ function documentLanguage(html) {
   // `lang` appearing INSIDE another attribute's quoted value cannot be read as
   // the attribute itself. There is no HTML parser here by design, and a walker
   // is the smallest thing that gets quoting right.
-  const attr = /([a-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  // A name starts where a run of name characters does, so a long run with no `=` after it is read once, not from every position in it.
+  const attr = /(?<![\w:.-])([a-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
   let m;
   while ((m = attr.exec(open[1])) !== null) {
     if (m[1].toLowerCase() !== 'lang') continue;
@@ -759,7 +760,16 @@ function attrValue(tag, name) {
 // they end a candidate URL instead of sitting inside one.
 // Leading and trailing C0 controls and spaces go too (`&#1;javascript:` is `javascript:`),
 // but not DEL or U+FFFD, which the URL parser keeps.
-const normalizeUrl = (v) => v.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '').replace(/[\t\n\r]/g, '');
+// Trimmed with two index scans: a regex for a trailing run backtracks from every start inside a run
+// that is not at the end, which is quadratic on `a` + 100000 spaces + `b`.
+function trimWhile(s, drop) {
+  let a = 0;
+  let b = s.length;
+  while (a < b && drop(s.charCodeAt(a))) a++;
+  while (b > a && drop(s.charCodeAt(b - 1))) b--;
+  return s.slice(a, b);
+}
+const normalizeUrl = (v) => trimWhile(v, (c) => c <= 0x20).replace(/[\t\n\r]/g, '');
 const urlValue = (tag, name) => {
   const v = attrValue(tag, name);
   return v === null ? null : normalizeUrl(v);
@@ -778,7 +788,9 @@ function srcsetUrls(v) {
     while (i < v.length && !/[\t\n\f\r ]/.test(v[i])) i++;
     const token = v.slice(start, i);
     if (token === '') break;
-    const url = token.replace(/,+$/, '');
+    let end = token.length;
+    while (end > 0 && token[end - 1] === ',') end--;
+    const url = token.slice(0, end);
     if (url !== token) {
       // A trailing comma ends the candidate: there are no descriptors.
     } else {
@@ -803,81 +815,229 @@ const excerpt = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
 // comments, CDATA in svg/math, the bodies of raw-text and RCDATA elements, and
 // everything inside <template> are not markup and never become tags; a quoted
 // attribute value is part of its tag. Open tags come back with the video, audio
-// or picture they sit in, and <style> bodies come back whole. With JavaScript
-// off a <noscript> is ordinary markup, so it is scanned like any other.
+// or picture they sit in, their namespace, and <style> bodies come back whole.
+// With JavaScript off a <noscript> is ordinary markup, so it is scanned like any other.
+//
+// What the tokenizer does with the next characters depends on the tree builder, so the scan
+// keeps the stack of open elements and their namespaces (HTML Standard, "tree construction
+// dispatcher"): a start tag is read by the HTML rules when the current node is an HTML
+// element, an HTML integration point (svg foreignObject, desc, title; math annotation-xml with
+// an html encoding) or a MathML text integration point (mi, mo, mn, ms, mtext); anywhere else it
+// is foreign content, which has no raw text, RCDATA or script data at all.
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext']);
 const MEDIA = new Set(['video', 'audio', 'picture']);
-// Foreign content (svg, math) is tokenized differently from HTML: these start
-// tags leave it, and title/desc/foreignObject (svg) and mi/mo/mn/ms/mtext and a
-// text/html annotation-xml (math) are integration points whose children are HTML again.
+// These start tags leave foreign content (as does font with color, face or size, and the end tags br and p).
 const FOREIGN_BREAKOUT = new Set(['b', 'big', 'blockquote', 'body', 'br', 'center', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'embed', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'hr', 'i', 'img', 'li', 'listing', 'menu', 'meta', 'nobr', 'ol', 'p', 'pre', 'ruby', 's', 'small', 'span', 'strong', 'strike', 'sub', 'sup', 'table', 'tt', 'u', 'ul', 'var']);
 const SVG_HTML_POINTS = new Set(['foreignobject', 'desc', 'title']);
-const MATH_HTML_POINTS = new Set(['mi', 'mo', 'mn', 'ms', 'mtext']);
+const MATH_TEXT_POINTS = new Set(['mi', 'mo', 'mn', 'ms', 'mtext']);
+const HTML_VOID = new Set(['area', 'base', 'basefont', 'bgsound', 'br', 'col', 'embed', 'frame', 'hr', 'img', 'input', 'keygen', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+const HTML_SPECIAL = new Set(['address', 'applet', 'area', 'article', 'aside', 'base', 'basefont', 'bgsound', 'blockquote', 'body', 'br', 'button', 'caption', 'center', 'col', 'colgroup', 'dd', 'details', 'dir', 'div', 'dl', 'dt', 'embed', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'frame', 'frameset', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr', 'html', 'iframe', 'img', 'input', 'keygen', 'li', 'link', 'listing', 'main', 'marquee', 'menu', 'meta', 'nav', 'noembed', 'noframes', 'noscript', 'object', 'ol', 'p', 'param', 'plaintext', 'pre', 'script', 'search', 'section', 'select', 'source', 'style', 'summary', 'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'title', 'tr', 'track', 'ul', 'wbr', 'xmp']);
+const HTML_SCOPE = new Set(['applet', 'caption', 'html', 'table', 'td', 'th', 'marquee', 'object', 'template']);
+// End tags the HTML rules close only when the element is in scope; any other end tag closes its
+// element unless a special element sits above it. The formatting elements (the adoption agency's)
+// are taken to close everything above them too, which is what Chromium does to an open svg.
+const FORMATTING = new Set(['a', 'b', 'big', 'code', 'em', 'font', 'i', 'nobr', 's', 'small', 'strike', 'strong', 'tt', 'u']);
+const SCOPED_END = new Set(['address', 'article', 'aside', 'blockquote', 'button', 'center', 'details', 'dialog', 'dir', 'div', 'dl', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'header', 'hgroup', 'listing', 'main', 'menu', 'nav', 'ol', 'p', 'pre', 'search', 'section', 'summary', 'ul', 'li', 'dd', 'dt', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'applet', 'marquee', 'object', 'table', 'tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'caption', ...FORMATTING]);
+// Table parts are ignored outside a table, a form inside a form, and a select inside a select.
+const TABLE_PARTS = new Set(['caption', 'col', 'colgroup', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr']);
+// In svg content an end tag with one of these names is case-adjusted (`</foreignobject>` is `</foreignObject>`)
+// before any element is matched, so it closes the svg element and never an HTML element of that name (probed).
+const SVG_CAMEL = new Set(['altglyph', 'altglyphdef', 'altglyphitem', 'animatecolor', 'animatemotion', 'animatetransform', 'clippath', 'feblend', 'fecolormatrix', 'fecomponenttransfer', 'fecomposite', 'feconvolvematrix', 'fediffuselighting', 'fedisplacementmap', 'fedistantlight', 'fedropshadow', 'feflood', 'fefunca', 'fefuncb', 'fefuncg', 'fefuncr', 'fegaussianblur', 'feimage', 'femerge', 'femergenode', 'femorphology', 'feoffset', 'fepointlight', 'fespecularlighting', 'fespotlight', 'fetile', 'feturbulence', 'foreignobject', 'glyphref', 'lineargradient', 'radialgradient', 'textpath']);
+// HTML start tags that close an open <p> first, and the ones that close an open list item or definition.
+const CLOSES_P = new Set(['address', 'article', 'aside', 'blockquote', 'center', 'details', 'dialog', 'dir', 'div', 'dl', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup', 'hr', 'listing', 'main', 'menu', 'nav', 'ol', 'p', 'plaintext', 'pre', 'search', 'section', 'summary', 'ul', 'xmp', 'li', 'dd', 'dt']);
+// Chromium stops nesting at 512 open elements, and so does the end-tag search.
+const MAX_OPEN = 512;
+const isSpecial = (e) => (e.ns === 'html' ? HTML_SPECIAL.has(e.name) : e.ns === 'svg' ? SVG_HTML_POINTS.has(e.name) : MATH_TEXT_POINTS.has(e.name) || e.name === 'annotation-xml');
+const isScopeBarrier = (e) => (e.ns === 'html' ? HTML_SCOPE.has(e.name) : isSpecial(e));
+
+// Where script data ends. The tokenizer's escape states change what a `</script` means: after
+// `<!--` it is still script data, and after `<script` inside that it ends only the inner script.
+function scriptEnd(html, from) {
+  const marks = /<!--|-->|<\/?script(?=[\t\n\f\r />])/gi;
+  marks.lastIndex = from;
+  let state = 0; // 0 script data, 1 escaped, 2 double escaped
+  for (let m; (m = marks.exec(html));) {
+    const mark = m[0].toLowerCase();
+    if (mark === '<!--') {
+      if (state === 0) state = 1;
+      marks.lastIndex = m.index + 2; // its two dashes can open `-->`
+    } else if (mark[0] === '-') {
+      if (state !== 0) state = 0;
+    } else if (mark === '<script') {
+      if (state === 1) state = 2;
+    } else if (state === 2) {
+      state = 1;
+    } else {
+      return m.index;
+    }
+  }
+  return html.length;
+}
+
 export function scanHtml(html) {
   const tags = [];
   const styles = [];
   const media = [];
-  const context = [];
-  const foreign = () => context.at(-1) === 'svg' || context.at(-1) === 'math';
-  let template = 0;
-  let frameset = 0;
+  const stack = [];
+  let templates = 0;
+  let framesets = 0;
+  let pending = 0; // where the text since the last token starts
+  const popTo = (length) => {
+    while (stack.length > length) {
+      const e = stack.pop();
+      if (e.template) templates--;
+      if (e.frameset) framesets--;
+      if (e.media) media.pop();
+    }
+  };
+  // Text that is the child of a foreign <style> is its stylesheet.
+  const text = (from, to) => {
+    const sheet = stack.at(-1)?.sheet;
+    if (sheet) sheet.body += html.slice(from, to);
+  };
+  // Whether the HTML rules, not the foreign content rules, read a token about to be inserted.
+  const htmlRules = (name, end) => {
+    const cur = stack.at(-1);
+    return !cur || cur.ns === 'html' || cur.integration
+      ? true
+      : cur.ns === 'math' && !end && (MATH_TEXT_POINTS.has(cur.name) ? name !== 'mglyph' && name !== 'malignmark' : cur.name === 'annotation-xml' && name === 'svg');
+  };
+  const leaveForeign = () => {
+    while (stack.length && stack.at(-1).ns !== 'html' && !stack.at(-1).integration && !(stack.at(-1).ns === 'math' && MATH_TEXT_POINTS.has(stack.at(-1).name))) popTo(stack.length - 1);
+  };
+  // An end tag the HTML rules read ("any other end tag", and the scoped ones).
+  const htmlEnd = (name) => {
+    if (name === 'body' || name === 'html' || name === 'br') return;
+    const heading = /^h[1-6]$/.test(name);
+    const scoped = SCOPED_END.has(name);
+    // A form is taken off by its pointer, in a table too (not inside a template), and a select closes whatever it holds.
+    const unbounded = name === 'template' || name === 'select' || (name === 'form' && templates === 0);
+    for (let k = stack.length - 1; k >= 0 && k >= stack.length - MAX_OPEN; k--) {
+      const e = stack[k];
+      if (e.ns === 'html' && (heading ? /^h[1-6]$/.test(e.name) : e.name === name)) {
+        // `</form>` takes the form off the stack and leaves what it holds open.
+        if (name === 'form' && templates === 0) stack.splice(k, 1);
+        else popTo(k);
+        return;
+      }
+      if (unbounded ? false : scoped ? isScopeBarrier(e) : isSpecial(e)) return;
+    }
+  };
+  // The HTML rules close an open <p> before a block, and an open li, dd or dt before the next one.
+  const closeOpen = (name) => {
+    if (name === 'li' || name === 'dd' || name === 'dt') {
+      const items = name === 'li' ? ['li'] : ['dd', 'dt'];
+      for (let k = stack.length - 1; k >= 0 && k >= stack.length - MAX_OPEN; k--) {
+        const e = stack[k];
+        if (e.ns === 'html' && items.includes(e.name)) { popTo(k); break; }
+        if (isSpecial(e) && !(e.ns === 'html' && (e.name === 'address' || e.name === 'div' || e.name === 'p'))) break;
+      }
+    }
+    const top = stack.at(-1);
+    if (top && top.ns === 'html' && ((name === 'option' && top.name === 'option') || (name === 'optgroup' && (top.name === 'option' || top.name === 'optgroup')) || (/^h[1-6]$/.test(name) && /^h[1-6]$/.test(top.name)))) popTo(stack.length - 1);
+    if (!CLOSES_P.has(name)) return;
+    for (let k = stack.length - 1; k >= 0 && k >= stack.length - MAX_OPEN; k--) {
+      const e = stack[k];
+      if (e.ns === 'html' && e.name === 'p') { popTo(k); return; }
+      if (isScopeBarrier(e) || (e.ns === 'html' && e.name === 'button')) return;
+    }
+  };
   let i = 0;
   while ((i = html.indexOf('<', i)) !== -1) {
     const next = html[i + 1];
+    const cur = stack.at(-1);
+    const at = i;
     if (html.startsWith('<!--', i)) {
+      text(pending, at);
       const abrupt = /^<!---?>/.exec(html.slice(i, i + 6));
       const close = /--!?>/g;
       close.lastIndex = i + 4;
       const end = abrupt ? null : close.exec(html);
       i = abrupt ? i + abrupt[0].length : end ? end.index + end[0].length : html.length;
-    } else if (foreign() && html.startsWith('<![CDATA[', i)) {
+      pending = i;
+    } else if (cur && cur.ns !== 'html' && !cur.integration && !(cur.ns === 'math' && MATH_TEXT_POINTS.has(cur.name)) && html.startsWith('<![CDATA[', i)) {
+      text(pending, at);
       const end = html.indexOf(']]>', i);
+      text(i + 9, end < 0 ? html.length : end);
       i = end < 0 ? html.length : end + 3;
+      pending = i;
     } else if (next === '!' || next === '?' || (next === '/' && !/[a-zA-Z]/.test(html[i + 2] ?? ''))) {
+      text(pending, at);
       const end = html.indexOf('>', i);
       i = end < 0 ? html.length : end + 1;
+      pending = i;
     } else {
       if (!/[a-zA-Z]/.test(next === '/' ? html[i + 2] ?? '' : next ?? '')) { i++; continue; }
       const token = tokenizeTag(html, i);
       if (!token) break; // the input ends inside the tag, and the parser drops it
-      i = token.end;
-      const { name } = token;
+      text(pending, at);
+      i = pending = token.end;
+      let { name } = token;
       if (token.closing) {
-        if (name === 'template' && template) template--;
-        else if (name === 'frameset' && frameset) frameset--;
-        else if (context.includes(name)) while (context.pop() !== name);
-        else if (media.at(-1) === name) media.pop();
+        // The foreign content rules read an end tag unless the current node is an HTML element;
+        // br and p leave foreign content first, and any other name closes the nearest open
+        // element of that name, stopping at the first HTML element, which the HTML rules take over.
+        if (stack.length && stack.at(-1).ns !== 'html') {
+          if (name === 'br' || name === 'p') leaveForeign();
+          else {
+            let k = stack.length - 1;
+            while (k >= 0 && k >= stack.length - MAX_OPEN && stack[k].ns !== 'html' && stack[k].name !== name) k--;
+            if (k >= 0 && stack[k].ns !== 'html' && stack[k].name === name) { popTo(k); continue; }
+            if (stack.at(-1).ns === 'svg' && SVG_CAMEL.has(name)) continue;
+          }
+        }
+        htmlEnd(name);
         continue;
       }
-      if (foreign() && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && token.attrs.some(([k]) => k === 'color' || k === 'face' || k === 'size')))) {
-        while (foreign()) context.pop();
+      let useHtml = htmlRules(name, false);
+      if (!useHtml && (FOREIGN_BREAKOUT.has(name) || (name === 'font' && token.attrs.some(([k]) => k === 'color' || k === 'face' || k === 'size')))) {
+        leaveForeign();
+        useHtml = true;
       }
-      // Decided before the element opens its own context: an svg <title> is not RCDATA, only its HTML children are.
-      const inForeign = foreign();
-      // A trailing slash closes a tag only where the HTML parser honours it: svg, math and
-      // what sits in foreign content. <picture/> and <template/> still open an element.
-      const selfClosing = token.selfClosing && (name === 'svg' || name === 'math' || inForeign);
-      const inert = template > 0;
-      if (!inert) tags.push({ raw: token.raw, name, media: media.at(-1) ?? null, svg: name === 'svg' || context.at(-1) === 'svg', frameset: frameset > 0 });
-      if (name === 'template') template++;
-      if (name === 'frameset') frameset++;
-      if (MEDIA.has(name) && !selfClosing) media.push(name);
-      if (!selfClosing) {
-        const top = context.at(-1);
-        const encoding = name === 'annotation-xml' ? attrValue(token.raw, 'encoding') ?? '' : '';
-        if (name === 'svg' || name === 'math'
-          || (top === 'svg' && SVG_HTML_POINTS.has(name))
-          || (top === 'math' && (MATH_HTML_POINTS.has(name) || /^(?:text\/html|application\/xhtml\+xml)$/i.test(encoding)))) context.push(name);
+      const ns = useHtml ? (name === 'svg' || name === 'math' ? name : 'html') : stack.at(-1).ns;
+      // The HTML tree builder renames <image> to <img> (the svg element keeps its name).
+      if (ns === 'html' && name === 'image') name = 'img';
+      if (ns === 'html') {
+        // The tree builder drops these start tags, so they make no element and open nothing.
+        const open = (n) => stack.slice(-MAX_OPEN).some((e) => e.ns === 'html' && e.name === n);
+        // A table part closes an open select; outside a table it is dropped.
+        if ((TABLE_PARTS.has(name) || name === 'table') && open('select')) popTo(stack.findLastIndex((e) => e.ns === 'html' && e.name === 'select'));
+        if (TABLE_PARTS.has(name) && !open('table') && !open('template')) continue;
+        if (name === 'form' && open('form') && templates === 0) continue;
+        if (name === 'select' && open('select')) {
+          popTo(stack.findLastIndex((e) => e.ns === 'html' && e.name === 'select'));
+          continue;
+        }
+        closeOpen(name);
       }
-      // In foreign content only style keeps raw text: a script there is markup, as are title, textarea and the rest.
-      if (RAW_TEXT.has(name) && (!inForeign || name === 'style')) {
+      const inert = templates > 0;
+      if (!inert) tags.push({ raw: token.raw, name, media: media.at(-1) ?? null, svg: ns === 'svg', ns, frameset: framesets > 0 });
+      // A trailing slash closes a tag only where the HTML parser honours it: an element made in
+      // svg or math content. <picture/> and <template/> still open an element.
+      const selfClosing = token.selfClosing && ns !== 'html';
+      if (ns === 'html' && RAW_TEXT.has(name)) {
+        // The tokenizer reads the body as text up to the end tag; the element never stays open.
         const end = name === 'plaintext' ? null : new RegExp(`</${name}(?=[\\t\\n\\f\\r />])`, 'gi');
-        if (end) end.lastIndex = i;
-        const found = end?.exec(html);
-        const stop = end ? (found ? found.index : html.length) : html.length;
-        if (name === 'style' && !inert) styles.push({ tag: token.raw, body: html.slice(i, stop).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, inForeign ? '$1' : '$&') });
-        i = stop;
+        let stop = html.length;
+        if (name === 'script') stop = scriptEnd(html, i);
+        else if (end) { end.lastIndex = i; stop = end.exec(html)?.index ?? html.length; }
+        if (name === 'style' && !inert) styles.push({ tag: token.raw, body: html.slice(i, stop) });
+        i = pending = stop;
+        continue;
       }
+      if (selfClosing || (ns === 'html' && HTML_VOID.has(name))) continue;
+      const e = { name, ns, integration: false };
+      if (ns === 'svg') e.integration = SVG_HTML_POINTS.has(name);
+      else if (ns === 'math' && name === 'annotation-xml') e.integration = /^(?:text\/html|application\/xhtml\+xml)$/i.test(attrValue(token.raw, 'encoding') ?? '');
+      if (ns === 'html' && name === 'template') { e.template = true; templates++; }
+      if (ns === 'html' && name === 'frameset') { e.frameset = true; framesets++; }
+      if (ns === 'html' && MEDIA.has(name)) { e.media = true; media.push(name); }
+      // A foreign <style> is read for its CSS, and its children are markup.
+      if (ns !== 'html' && name === 'style' && !inert) {
+        e.sheet = { tag: token.raw, body: '' };
+        styles.push(e.sheet);
+      }
+      stack.push(e);
     }
   }
   return { tags, styles };
@@ -933,7 +1093,7 @@ function cssRequestUrls(source) {
         if (fn !== 'url' || css[i] === '"' || css[i] === "'") { open.push(fn); continue; }
         let j = i;
         while (j < css.length && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
-        if (wanted()) urls.push(decodeCssEscapes(css.slice(i, j).replace(/^[ \t\n]+|[ \t\n]+$/g, '')));
+        if (wanted()) urls.push(decodeCssEscapes(trimWhile(css.slice(i, j), (c) => c === 0x20 || c === 0x09 || c === 0x0a)));
         i = j + 1;
       } else {
         if (c === '(') open.push('(');
@@ -961,29 +1121,33 @@ function cssRequestUrls(source) {
 const BACKGROUND_TAGS = new Set(['body', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th']);
 const SVG_URL_ATTRS = ['fill', 'stroke', 'marker-start', 'marker-mid', 'marker-end', 'clip-path', 'mask', 'cursor'];
 const REFRESH_RE = /^[\t\n\f\r ]*[0-9.]/;
-function fetchedUrls({ raw, name, media, svg, frameset }) {
+function fetchedUrls({ raw, name, media, svg, ns, frameset }) {
   const urls = [];
   const one = (...attrs) => { for (const a of attrs) urls.push(urlValue(raw, a) ?? ''); };
-  if (['img', 'video', 'audio', 'embed'].includes(name)) one('src');
-  if (name === 'iframe' && attrValue(raw, 'srcdoc') === null) one('src');
-  if (name === 'frame' && frameset) one('src');
-  if (name === 'object') one('data');
-  if (name === 'input' && attrValue(raw, 'type')?.toLowerCase() === 'image') one('src');
-  if (name === 'source' && (media === 'video' || media === 'audio')) one('src');
-  if (name === 'img' || (name === 'source' && media === 'picture')) urls.push(...srcsetUrls(attrValue(raw, 'srcset') ?? ''));
-  if (name === 'video') one('poster');
-  if (name === 'image') one('src', 'href', 'xlink:href');
-  if (name === 'feimage') one('href', 'xlink:href');
-  if (BACKGROUND_TAGS.has(name)) one('background');
-  if (name === 'link') {
-    const rel = (attrValue(raw, 'rel') ?? '').toLowerCase().split(/[\t\n\f\r ]+/);
-    const as = attrValue(raw, 'as') ?? '';
-    if (rel.includes('stylesheet') || rel.includes('prefetch') || (rel.includes('preload') && as !== '')) one('href');
-    if (rel.includes('preload') && as.toLowerCase() === 'image') urls.push(...srcsetUrls(attrValue(raw, 'imagesrcset') ?? ''));
+  // An element name means what it means in its own namespace: svg:video, svg:link and math:td request
+  // nothing, an svg <image> takes href (not src), and an HTML <image> is already an <img> (probed).
+  if (ns === 'html') {
+    if (['img', 'video', 'audio', 'embed'].includes(name)) one('src');
+    if (name === 'iframe' && attrValue(raw, 'srcdoc') === null) one('src');
+    if (name === 'frame' && frameset) one('src');
+    if (name === 'object') one('data');
+    if (name === 'input' && attrValue(raw, 'type')?.toLowerCase() === 'image') one('src');
+    if (name === 'source' && (media === 'video' || media === 'audio')) one('src');
+    if (name === 'img' || (name === 'source' && media === 'picture')) urls.push(...srcsetUrls(attrValue(raw, 'srcset') ?? ''));
+    if (name === 'video') one('poster');
+    if (BACKGROUND_TAGS.has(name)) one('background');
+    if (name === 'link') {
+      const rel = (attrValue(raw, 'rel') ?? '').toLowerCase().split(/[\t\n\f\r ]+/);
+      const as = attrValue(raw, 'as') ?? '';
+      if (rel.includes('stylesheet') || rel.includes('prefetch') || (rel.includes('preload') && as !== '')) one('href');
+      if (rel.includes('preload') && as.toLowerCase() === 'image') urls.push(...srcsetUrls(attrValue(raw, 'imagesrcset') ?? ''));
+    }
   }
+  if (svg && name === 'image') one('href', 'xlink:href');
+  if (svg && name === 'feimage') one('href', 'xlink:href');
   // url(#id) in a presentation attribute is a same-document reference, never a request.
   if (svg) for (const a of SVG_URL_ATTRS) urls.push(...cssRequestUrls(`${a}:${attrValue(raw, a) ?? ''}`).filter((u) => !normalizeUrl(u).startsWith('#')));
-  if (name === 'meta' && /^refresh$/i.test(attrValue(raw, 'http-equiv') ?? '')) {
+  if (ns === 'html' && name === 'meta' && /^refresh$/i.test(attrValue(raw, 'http-equiv') ?? '')) {
     const target = /^[\t\n\f\r ]*[0-9.]+[\t\n\f\r ]*(?:[;,][\t\n\f\r ]*|[\t\n\f\r ]+)?(?:url[\t\n\f\r ]*=[\t\n\f\r ]*)?(?:"([^"]*)"|'([^']*)'|(.*))$/is.exec(attrValue(raw, 'content') ?? '');
     if (target) urls.push((target[1] ?? target[2] ?? target[3] ?? '').trim());
   }
@@ -1040,8 +1204,9 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
           remote.push(...inner.remote);
           capped.push(...inner.capped);
         } else {
-          const inner = scanRequests(scanHtml(srcdoc), depth + 1, base, true);
-          if (inner.remote.length || inner.capped.length) capped.push(excerpt(raw));
+          const innerDoc = scanHtml(srcdoc);
+          const inner = scanRequests(innerDoc, depth + 1, base, true);
+          if (inner.remote.length || inner.capped.length || LOCAL_RULES.some(({ detect }) => detect(innerDoc).length)) capped.push(excerpt(raw));
         }
       }
     }
@@ -1065,7 +1230,9 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
   return result;
 }
 
-const RENDER_RULES = [
+// These read one document's own tags. A template holds more than one document when an iframe has a srcdoc, and
+// each is printed with JavaScript off, so a script, handler, script URL or refresh in a srcdoc is as dead as one outside.
+const LOCAL_RULES = [
   {
     id: 'script-element',
     rule: 'A <script> never runs: the renderer disables JavaScript.',
@@ -1077,7 +1244,7 @@ const RENDER_RULES = [
     // An iframe with srcdoc carries its own static markup, which renders with
     // JavaScript off and needs no request.
     detect: (doc) => doc.tags
-      .filter((t) => ['iframe', 'object', 'embed'].includes(t.name) && !(t.name === 'iframe' && attrNames(t.raw).includes('srcdoc')))
+      .filter((t) => t.ns === 'html' && ['iframe', 'object', 'embed'].includes(t.name) && !(t.name === 'iframe' && attrNames(t.raw).includes('srcdoc')))
       .map((t) => excerpt(t.raw)),
   },
   {
@@ -1103,6 +1270,25 @@ const RENDER_RULES = [
       .filter((t) => t.name === 'meta' && /^refresh$/i.test(attrValue(t.raw, 'http-equiv') ?? '') && REFRESH_RE.test(attrValue(t.raw, 'content') ?? ''))
       .map((t) => excerpt(t.raw)),
   },
+];
+
+const nestedDocuments = new WeakMap();
+// The document and every iframe srcdoc in it, to the depth scanRequests reads in full.
+function documentsIn(doc, depth = 0) {
+  if (depth === 0 && nestedDocuments.has(doc)) return nestedDocuments.get(doc);
+  const docs = [doc];
+  if (depth < MAX_SRCDOC_DEPTH) {
+    for (const { raw, name } of doc.tags) {
+      const srcdoc = name === 'iframe' ? attrValue(raw, 'srcdoc') : null;
+      if (srcdoc !== null) docs.push(...documentsIn(scanHtml(srcdoc), depth + 1));
+    }
+  }
+  if (depth === 0) nestedDocuments.set(doc, docs);
+  return docs;
+}
+
+const RENDER_RULES = [
+  ...LOCAL_RULES.map((rule) => ({ ...rule, detect: (doc) => documentsIn(doc).flatMap((d) => rule.detect(d)) })),
   {
     id: 'remote-subresource',
     rule: 'Every request that is not file: or data: is aborted, and a file: URL that names another host does not load, so a remote image, stylesheet or font is dropped without a message.',
