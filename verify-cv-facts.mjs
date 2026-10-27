@@ -1254,7 +1254,9 @@ function sourceEducation(text) {
     // The flat convention used in examples/cv-example.md. A multiline or
     // table convention needs its own parser; don't infer a tuple from prose.
     const match = toPlainText(line).replace(/^\s*[-*+]\s+/, '').match(/^([^,]+),\s*(.+?)(?:\s*\(((?:19|20)\d{2})\))?\s*$/);
-    if (match) entries.push({ title: match[1].trim(), org: match[2].trim(), year: match[3] || '' });
+    // Extra comma-separated detail may be a location, GPA or part of the
+    // school name. It is not evidence of a different degree-school pair.
+    if (match && !match[2].includes(',')) entries.push({ title: match[1].trim(), org: match[2].trim(), year: match[3] || '' });
     else complete = false;
   }
   return { entries, complete };

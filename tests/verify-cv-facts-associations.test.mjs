@@ -173,3 +173,12 @@ test('mixed education conventions cannot establish a hard contradictory tuple', 
   assert.equal(result.verdict, 'warn');
   assert.equal(result.unsupportedFacts.some(f => f.kind === 'education-association'), false);
 });
+
+test('comma-delimited education details cannot turn a truthful pair into a block', () => {
+  const source = CV.replace('MS Data Science, Tech Institute (2017)',
+    'MS Data Science, State University, GPA 4.0 (2017)');
+  const result = check({ education: [{ title: 'MS Data Science', org: 'State University', year: '2017' }] }, source);
+  assert.equal(result.verdict, 'warn', JSON.stringify(result));
+  assert.equal(result.unsupportedFacts.some(f => f.kind === 'education-association'), false);
+  assert.ok(result.coverage?.message.includes('Education'));
+});
