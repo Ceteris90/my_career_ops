@@ -3,7 +3,7 @@
 // answers. The templates are copied line for line and only the answered
 // fields change, so every comment and every tracked company survives.
 
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { loadYaml } from './lib/yaml-document.mjs';
@@ -349,7 +349,24 @@ export function main(argv = process.argv.slice(2)) {
   planned.forEach((t, i) => {
     if (t.keep) return;
     mkdirSync(dirname(t.path), { recursive: true });
-    writeFileAtomic(t.path, texts[i]);
+    if (opts.force) {
+      writeFileAtomic(t.path, texts[i]);
+      return;
+    }
+    // Publish without replacing a config created since the planning check.
+    const stage = mkdtempSync(join(dirname(t.path), '.onboard-'));
+    try {
+      const source = join(stage, 'config.yml');
+      writeFileAtomic(source, texts[i]);
+      try {
+        copyFileSync(source, t.path, constants.COPYFILE_EXCL);
+      } catch (err) {
+        if (err.code !== 'EEXIST') throw err;
+        t.keep = true;
+      }
+    } finally {
+      rmSync(stage, { recursive: true, force: true });
+    }
   });
   console.log(JSON.stringify({
     written: planned.filter((t) => !t.keep).map((t) => t.rel),
