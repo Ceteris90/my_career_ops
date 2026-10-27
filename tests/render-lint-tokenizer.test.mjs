@@ -82,8 +82,11 @@ test('a start tag the input ends inside is dropped, as the parser drops it', () 
   assert.deepEqual(scanHtml('<p>x</p><img alt="a').tags.map((t) => t.name), ['p']);
 });
 
+// Each input is timed on its own. A quadratic path on any of them takes minutes,
+// while the linear ones together take under a second locally and several on a slow
+// Windows runner, so one budget for the whole set measured the runner, not the code.
 test('tokenizing is linear: long runs of quotes, equals signs and attributes finish at once', () => {
-  const started = Date.now();
+  const slow = [];
   for (const html of [
     `<x ${'a="b" '.repeat(100000)}>`,
     `<x ${'="'.repeat(100000)}`,
@@ -101,8 +104,13 @@ test('tokenizing is linear: long runs of quotes, equals signs and attributes fin
     `${'<p>'.repeat(50000)}${'<div>'.repeat(50000)}`,
     `${'<svg><style>'.repeat(20000)}`,
     `<script>${'<!--<script>'.repeat(20000)}`,
-  ]) scanHtml(html);
-  assert.ok(Date.now() - started < 5000, `took ${Date.now() - started} ms`);
+  ]) {
+    const started = Date.now();
+    scanHtml(html);
+    const took = Date.now() - started;
+    if (took >= 5000) slow.push(`${took} ms: ${html.slice(0, 40)}…`);
+  }
+  assert.deepEqual(slow, []);
 });
 
 // What the tree builder made of each tag, by data-n: [name, namespace]. Chromium names an svg element in
