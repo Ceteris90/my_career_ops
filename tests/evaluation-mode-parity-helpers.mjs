@@ -156,10 +156,11 @@ export function structuralGaps(text) {
 }
 
 /** Missing parts of the ATS keyword-coverage contract (modes/oferta.md step 1b).
- * The heading stays English in every locale, and the step's command names a
- * real report path, unlike the template's `<report>` placeholder. The step may
- * sit in prose or in its own fence (modes/oferta.md uses a bash fence), but not
- * in the report template, which is report output rather than an instruction.
+ * The heading stays English in every locale, and the step is the JSON-file
+ * command that starts keyword-match.mjs with the report path as its own
+ * argument (#5853); tests/mode-command-arguments.test.mjs pins its exact text.
+ * It must sit outside the report template, which is report output rather than
+ * an instruction.
  * @param {string} text Mode documentation.
  * @returns {string[]} Empty when the template and the step are both present.
  */
@@ -172,6 +173,6 @@ export function keywordCoverageGaps(text) {
   else if (count > 1) gaps.push('duplicate ## Keyword Coverage');
   const { blocks, visible } = fenceParts(withoutComments(text));
   const instructions = [...visible, ...blocks.filter(body => !isReportTemplate(fenceParts(body).visible))];
-  if (!instructions.join('\n').includes('keyword-match.mjs reports/')) gaps.push('keyword-match.mjs step');
+  if (!instructions.join('\n').includes('"keyword-match.mjs", p.report')) gaps.push('keyword-match.mjs step');
   return gaps;
 }

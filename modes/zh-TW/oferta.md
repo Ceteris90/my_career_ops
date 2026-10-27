@@ -306,7 +306,7 @@
 (列出 15–20 個從該 JD 中擷取的高頻核心技術／業務關鍵字，用於履歷最佳化)
 
 ## Keyword Coverage
-（由 `node keyword-match.mjs <report>` 產生——覆蓋率 %、present、thin、missing）
+（由 `keyword-match.mjs` (1b) 產生——覆蓋率 %、present、thin、missing）
 
 ## Job Description (archived verbatim)
 （職缺描述全文，逐字貼上——見下方要求）
@@ -332,7 +332,22 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 
 ### 1b. 嵌入 ATS 關鍵字覆蓋率
 
-儲存報告後執行 `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md`，把 `## Keyword Coverage` 區塊貼在 ATS 關鍵字擷取之下（標題維持英文）。僅供診斷：只有當關鍵字反映真實經驗時才補充。
+儲存報告後執行 `keyword-match.mjs` (下方命令)，把 `## Keyword Coverage` 區塊貼在 ATS 關鍵字擷取之下（標題維持英文）。僅供診斷：只有當關鍵字反映真實經驗時才補充。
+
+為此，把 `{"report": "reports/{###}-{company-slug}-{YYYY-MM-DD}.md"}` 寫入一個 JSON 檔（見上方 **命令參數**），然後執行：
+
+```bash
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
+const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
+const args = ["keyword-match.mjs", p.report];
+if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+' {json-file}
+```
 
 ### 2. 登錄到 Tracker 紀錄簿
 

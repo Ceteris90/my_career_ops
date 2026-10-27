@@ -32,11 +32,13 @@ console.log('\nMode command arguments: posting values stay out of shell text (#5
 const LOCALIZED_ARCHIVE = [
   'ar/fursah.md', 'da/oferta.md', 'de/angebot.md', 'es/oferta.md', 'fr/offre.md', 'hi/naukri.md',
   'id/lowongan.md', 'it/annuncio.md', 'ja/kyujin.md', 'ko/gonggo.md', 'nl/vacature.md', 'pl/oferta.md',
-  'pt/oferta.md', 'ru/oferta.md', 'ua/oferta.md', 'zh-TW/oferta.md', 'zh/oferta.md',
+  'pt/oferta.md', 'ru/oferta.md', 'tr/is-ilani.md', 'ua/oferta.md', 'zh-TW/oferta.md', 'zh/oferta.md',
 ];
 const LOCALIZED_KEYWORD = [
-  'da/oferta.md', 'de/angebot.md', 'fr/offre.md', 'hi/naukri.md', 'id/lowongan.md', 'it/annuncio.md',
-  'ko/gonggo.md', 'nl/vacature.md', 'pl/oferta.md', 'pt/oferta.md', 'ua/oferta.md', 'vi/tuyen-dung.md',
+  'ar/fursah.md', 'da/oferta.md', 'de/angebot.md', 'es/oferta.md', 'fr/offre.md', 'hi/naukri.md',
+  'id/lowongan.md', 'it/annuncio.md', 'ja/kyujin.md', 'ko/gonggo.md', 'nl/vacature.md', 'pl/oferta.md',
+  'pt/oferta.md', 'ru/oferta.md', 'tr/is-ilani.md', 'ua/oferta.md', 'vi/tuyen-dung.md', 'zh-TW/oferta.md',
+  'zh/oferta.md',
 ];
 const SHARED = ['modes/oferta.md', 'modes/pdf.md', 'batch/batch-prompt.md'];
 // A file listed here that loses its command fails, instead of silently leaving the check.

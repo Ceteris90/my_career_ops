@@ -262,7 +262,7 @@
 (قائمة تحتوي على 15-20 كلمة مفتاحية مستخرجة من الـ JD ومهمة لتحسين الـ ATS)
 
 ## Keyword Coverage
-(يُنشئه `node keyword-match.mjs <report>` — نسبة التغطية، present، thin، missing)
+(يُنشئه `keyword-match.mjs` (1b) — نسبة التغطية، present، thin، missing)
 
 ## Job Description (archived verbatim)
 (النص الكامل لإعلان الوظيفة، يُلصق حرفياً — انظر المتطلب أدناه)
@@ -288,7 +288,22 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 
 ### 1b. إدراج تغطية الكلمات المفتاحية لـ ATS
 
-بعد حفظ التقرير، شغّل `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md` والصق كتلة `## Keyword Coverage` أسفل الكلمات المفتاحية المستخرجة (يبقى العنوان بالإنجليزية). للتشخيص فقط: لا تُضف كلمة مفتاحية إلا إذا كانت تعكس خبرة حقيقية.
+بعد حفظ التقرير، شغّل `keyword-match.mjs` (الأمر أدناه) والصق كتلة `## Keyword Coverage` أسفل الكلمات المفتاحية المستخرجة (يبقى العنوان بالإنجليزية). للتشخيص فقط: لا تُضف كلمة مفتاحية إلا إذا كانت تعكس خبرة حقيقية.
+
+لذلك اكتب `{"report": "reports/{###}-{company-slug}-{YYYY-MM-DD}.md"}` في ملف JSON (انظر **وسائط الأوامر** أعلاه) وشغّل:
+
+```bash
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
+const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
+const args = ["keyword-match.mjs", p.report];
+if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+' {json-file}
+```
 
 ### 2. التسجيل في نظام التتبع
 

@@ -341,7 +341,7 @@ Full evaluation を `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` に保存す�
 (list of 15-20 keywords from the JD for ATS optimization)
 
 ## Keyword Coverage
-(`node keyword-match.mjs <report>` が生成 — coverage %、present、thin、missing)
+(`keyword-match.mjs` (1b) が生成 — coverage %、present、thin、missing)
 
 ## Job Description (archived verbatim)
 (posting の全文を verbatim で貼る — 下の要件を参照)
@@ -367,7 +367,22 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 
 ### 1b. ATS keyword coverage を埋め込む
 
-Report を保存したら `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md` を実行し、`## Keyword Coverage` block を `## Keywords extracted` の下に貼る（見出しは英語のまま）。診断用のみ：keyword は実際の経験を反映する場合だけ追加する。
+Report を保存したら `keyword-match.mjs` (下の command) を実行し、`## Keyword Coverage` block を `## Keywords extracted` の下に貼る（見出しは英語のまま）。診断用のみ：keyword は実際の経験を反映する場合だけ追加する。
+
+そのために `{"report": "reports/{###}-{company-slug}-{YYYY-MM-DD}.md"}` を JSON file に書き（上の **Command arguments** を参照）、次を実行する：
+
+```bash
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
+const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
+const args = ["keyword-match.mjs", p.report];
+if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+' {json-file}
+```
 
 ### 2. Record in tracker
 

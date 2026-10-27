@@ -290,7 +290,7 @@
 (列出 15-20 个从该 JD 中提取的高频核心技术/业务关键词，用于简历优化)
 
 ## Keyword Coverage
-（由 `node keyword-match.mjs <report>` 生成——覆盖率 %、present、thin、missing）
+（由 `keyword-match.mjs` (1b) 生成——覆盖率 %、present、thin、missing）
 
 ## Job Description (archived verbatim)
 （职位描述全文，逐字粘贴——见下方要求）
@@ -316,7 +316,22 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 
 ### 1b. 嵌入 ATS 关键词覆盖率
 
-保存报告后运行 `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md`，把 `## Keyword Coverage` 区块贴在 ATS 关键词提取之下（标题保持英文）。仅用于诊断：只有当关键词反映真实经验时才补充。
+保存报告后运行 `keyword-match.mjs` (下方命令)，把 `## Keyword Coverage` 区块贴在 ATS 关键词提取之下（标题保持英文）。仅用于诊断：只有当关键词反映真实经验时才补充。
+
+为此，把 `{"report": "reports/{###}-{company-slug}-{YYYY-MM-DD}.md"}` 写入一个 JSON 文件（见上方 **命令参数**），然后运行：
+
+```bash
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
+const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
+const args = ["keyword-match.mjs", p.report];
+if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+' {json-file}
+```
 
 ### 2. 登记到 Tracker 记录簿
 将此条记录登记到 tracker：写入 TSV 文件（`_shared.md` 的规则 9），再用 `node merge-tracker.mjs` 合并；严禁直接在 `data/applications.md` 中手动添加行。字段：

@@ -750,7 +750,7 @@ Importance измеряет, насколько требование весом�
 (список из 15-20 ключевых слов из вакансии для ATS-оптимизации)
 
 ## Keyword Coverage
-(генерируется `node keyword-match.mjs <report>` — покрытие в %, present, thin, missing)
+(генерируется `keyword-match.mjs` (1b) — покрытие в %, present, thin, missing)
 
 ## Job Description (archived verbatim)
 (полный текст вакансии, вставленный дословно — см. требование ниже)
@@ -778,7 +778,22 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 
 ### 1b. Вставить покрытие ATS-ключевых слов
 
-После сохранения отчёта выполнить `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md` и вставить блок `## Keyword Coverage` под извлечёнными ключевыми словами (заголовок остаётся на английском). Только для диагностики: добавлять ключевое слово, только если оно отражает реальный опыт.
+После сохранения отчёта выполнить `keyword-match.mjs` (команда ниже) и вставить блок `## Keyword Coverage` под извлечёнными ключевыми словами (заголовок остаётся на английском). Только для диагностики: добавлять ключевое слово, только если оно отражает реальный опыт.
+
+Для этого записать `{"report": "reports/{###}-{company-slug}-{YYYY-MM-DD}.md"}` в JSON-файл (см. **Аргументы команд** выше) и выполнить:
+
+```bash
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const p = JSON.parse(readFileSync(process.argv[1] ?? 0, "utf8"));
+const fail = msg => { console.error("keyword-match: " + msg); process.exit(1); };
+if (typeof p.report !== "string" || !/^reports\/[0-9]{3,}-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$/.test(p.report)) fail("report must be reports/{###}-{company-slug}-{YYYY-MM-DD}.md");
+const args = ["keyword-match.mjs", p.report];
+if (p.cv != null) { if (typeof p.cv !== "string" || p.cv === "" || p.cv.startsWith("-")) fail("cv must be a file path"); args.push("--cv", p.cv); }
+process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
+' {json-file}
+```
 
 ### 2. Зарегистрировать в трекере
 
