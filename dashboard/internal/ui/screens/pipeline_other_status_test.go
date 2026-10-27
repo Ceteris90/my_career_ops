@@ -47,6 +47,12 @@ func TestUnknownStatusGetsItsOwnTabAndMetric(t *testing.T) {
 	if !sawHold {
 		t.Fatal("hold is an evaluated alias and left the evaluated tab")
 	}
+
+	m.activeTab = tabIndexForFilter(t, filterOther)
+	m.applyFilterAndSort()
+	if len(m.filtered) != 1 || m.filtered[0].Company != "Contoso" {
+		t.Fatalf("other tab = %#v, want only the paused row", m.filtered)
+	}
 }
 
 func TestCleanTrackerHidesTheOtherTab(t *testing.T) {
