@@ -21,6 +21,7 @@ import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-naviga
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
+import { trackerEmptyMessage } from "@/lib/tracker-empty.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
 
@@ -31,10 +32,12 @@ export function PipelineView({
   applications,
   inbox,
   inboxCount,
+  trackerShape = "rows",
 }: {
   applications: Application[];
   inbox: InboxJob[] | null;
   inboxCount: number;
+  trackerShape?: "missing" | "empty" | "malformed" | "rows";
 }) {
   const params = useSearchParams();
   const router = useRouter();
@@ -430,12 +433,32 @@ export function PipelineView({
           </table>
         </div>
       ) : (
-        <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-12 text-center">
-          <p className="font-display text-lg">No matches</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">Try a different tab or clear the search.</p>
-        </div>
+        <EmptyTracker shape={trackerShape} query={deferredQ} min={minFilter} tab={tab} />
       )}
     </PageFrame>
+  );
+}
+
+function EmptyTracker({
+  shape,
+  query,
+  min,
+  tab,
+}: {
+  shape: string;
+  query: string;
+  min: number | null;
+  tab: string;
+}) {
+  const copy = trackerEmptyMessage({ shape, query, min, tab });
+  return (
+    <div
+      role={copy.kind === "malformed" ? "alert" : "status"}
+      className="mt-4 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-12 text-center"
+    >
+      <p className="font-display text-lg">{copy.title}</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{copy.detail}</p>
+    </div>
   );
 }
 
