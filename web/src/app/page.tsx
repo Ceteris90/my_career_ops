@@ -3,7 +3,7 @@ import { pickAwaitingDecision } from "@/lib/home/awaiting.mjs";
 import { cardReason } from "@/lib/machine-summary.mjs";
 import type { CardReason } from "@/lib/machine-summary.mjs";
 import { todaySnapshot } from "@/lib/home/today-snapshot.mjs";
-import { homeLead } from "@/lib/home/home-lead.mjs";
+import { homeLead, showFirstRunHome } from "@/lib/home/home-lead.mjs";
 import { scoreNum, parseReport } from "@/lib/format";
 import { OnboardingBanner } from "@/components/onboarding-banner";
 import { OnboardingProgress } from "@/components/home/onboarding-progress";
@@ -17,7 +17,7 @@ export default function Home() {
   const { phase, onboardingNeeded } = doctorState(snapshot);
   // First run (truly empty install): the CV-upload takeover IS the home — value
   // before commitment. The full dashboard returns once they have a CV or any data.
-  if (phase === "first-run") return <FirstRunHome />;
+  if (showFirstRunHome(phase, snapshot.inbox.length)) return <FirstRunHome />;
 
   const { inbox, applications } = todaySnapshot(snapshot, scoreNum);
   const reasons: Record<string, CardReason> = {};

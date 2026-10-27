@@ -9,3 +9,15 @@
 export function homeLead(hasWork) {
   return hasWork ? "queue" : "setup";
 }
+
+/**
+ * The CV takeover is only for an install with nothing in the inbox.
+ * Done rows are still rows. Today shows them instead of the empty screen.
+ *
+ * @param {string} phase
+ * @param {number} inboxCount
+ * @returns {boolean}
+ */
+export function showFirstRunHome(phase, inboxCount) {
+  return phase === "first-run" && inboxCount === 0;
+}
