@@ -164,6 +164,11 @@ const CASES = [
       '<svg><defs><filter id="f"><feImage xlink:href="https://example.com/a.png"/></filter></defs></svg>',
       '<svg><style><![CDATA[.s{background:url(https://example.com/a.png)}]]></style></svg>',
       '<svg><style>.s{background:url(https://example.com/a.png)}</style></svg>',
+      // svg has no raw text, so a character reference in its <style> is decoded before CSS reads it (probed).
+      '<svg><style>@import "https&#58;//example.com/a.css";</style></svg>',
+      '<svg><style>@import "https&colon;//example.com/a.css";</style></svg>',
+      // Text decodes a legacy name with no semicolon even before a letter, unlike an attribute value.
+      '<svg><style>@import &quothttps://example.com/a.css&quot;</style></svg>',
       // JavaScript is off, so <noscript> content is parsed as markup and requested.
       '<noscript><img src="https://example.com/a.png"></noscript>',
       '<template></template><img src="https://example.com/a.png">',
@@ -535,6 +540,10 @@ const FETCHERS = [
   ['svg desc image srcset', '<svg><desc><image srcset="https://@@/a.png 1x"></desc></svg>', true],
   ['svg foreignObject feImage', '<svg><foreignObject><feImage href="https://@@/a.png"/></foreignObject></svg>', false],
   ['svg style > img', '<svg><style><img src="https://@@/a.png"></style></svg>', true],
+  ['svg style encoded @import', '<svg><style>@import "https&#58;//@@/a.css";</style></svg>', true],
+  ['svg style legacy &quot before a letter', '<svg><style>@import &quothttps://@@/a.css&quot;</style></svg>', true],
+  ['svg style CDATA keeps references', '<svg><style><![CDATA[@import "https&#58;//@@/a.css";]]></style></svg>', false],
+  ['html style keeps references', '<style>@import "https&#58;//@@/a.css";</style>', false],
   ['math style > img', '<math><style><img src="https://@@/a.png"></style></math>', true],
   ['svg style/ then img', '<svg><style/><img src="https://@@/a.png"></svg>', true],
   ['math style/ then img', '<math><style/><img src="https://@@/a.png"></math>', true],

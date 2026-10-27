@@ -2,7 +2,7 @@
 // (#5951). The clone is injected, so nothing here touches the network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, chmodSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -288,6 +288,24 @@ test('remove never deletes through a symlinked templates/<id>', (t) => {
   assert.throws(() => removePack(r, 'demo', { force: true }), /symlink/);
   assert.equal(readFileSync(join(outside, 'cv-template.plain.html'), 'utf-8'), 'keep');
   assert.equal(readFileSync(join(outside, 'cover-letter-template.plain.html'), 'utf-8'), 'keep');
+});
+
+test('a forced reinstall never writes through a dangling symlink in place of a locked file', (t) => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const outside = join(mk('tpl-out-'), 'planted.html');
+  const locked = join(r, 'templates/demo/cv-template.plain.html');
+  rmSync(locked);
+  try {
+    symlinkSync(outside, locked);
+  } catch (err) {
+    if (err?.code === 'EPERM' || err?.code === 'EACCES') return t.skip(`cannot create symlinks here: ${err.code}`);
+    throw err;
+  }
+  installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(() => packDir(manifest({ version: '0.2.0' }))), force: true });
+  assert.equal(existsSync(outside), false, 'the install wrote outside the data root');
+  assert.equal(lstatSync(locked).isSymbolicLink(), false);
+  assert.equal(readFileSync(locked, 'utf-8'), CV);
 });
 
 test('a forced reinstall never overwrites a file in templates/<id>/ the lock does not own', () => {
