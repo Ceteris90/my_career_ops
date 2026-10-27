@@ -1,0 +1,64 @@
+import { spawn } from "node:child_process";
+import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const FAILED = {
+  added: 0,
+  already: 0,
+  found: 0,
+  message: "Could not add those jobs. Nothing was saved.",
+};
+
+type ImportPayload = {
+  added: number;
+  already: number;
+  found: number;
+  message: string;
+  error?: string;
+};
+
+function runImport(text: string): Promise<ImportPayload> {
+  const script = rootScript("linkedin-import");
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [script, "--json"], {
+      cwd: careerOpsRoot(),
+      env: process.env,
+      windowsHide: true,
+    });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      err += chunk.toString();
+    });
+    child.on("error", () => resolve({ ...FAILED, error: "spawn" }));
+    child.on("close", (code) => {
+      try {
+        const parsed = JSON.parse(out.trim().split("\n").pop() || "") as ImportPayload;
+        if (code !== 0 && !parsed.message) resolve({ ...FAILED, error: err || `exit ${code}` });
+        else resolve(parsed);
+      } catch {
+        resolve({ ...FAILED, error: err || `exit ${code}` });
+      }
+    });
+    child.stdin.write(text);
+    child.stdin.end();
+  });
+}
+
+export async function POST(req: Request) {
+  let text = "";
+  try {
+    const body = (await req.json()) as { text?: unknown };
+    text = typeof body?.text === "string" ? body.text : "";
+  } catch {
+    return Response.json({ ...FAILED, message: "No LinkedIn jobs found. Open a job alert email, select all, copy, and paste it here." }, { status: 400 });
+  }
+  const result = await runImport(text);
+  const status = result.error === "too-large" ? 413 : result.error ? 500 : 200;
+  return Response.json(result, { status });
+}

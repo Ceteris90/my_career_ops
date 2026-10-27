@@ -27,6 +27,7 @@ plugins:
     enabled: false
 
   # ── gmail (ingest) ── pull job leads from a Gmail label into your pipeline. (feature #810, ported from PR #1203)
+  # LinkedIn alerts do not need this. Paste the email: node linkedin-import.mjs (docs/LINKEDIN_JOBS.md).
   # Needs GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET + GMAIL_REFRESH_TOKEN in .env.
   # Run via `node plugins.mjs run gmail`.
   gmail:

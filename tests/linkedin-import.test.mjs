@@ -152,6 +152,18 @@ test('the CLI writes canonical rows and a second run does not duplicate them', (
   }
 });
 
+test('a root with no data directory still receives the jobs', () => {
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-import-empty-'));
+  try {
+    const result = runCli(root, ['--json'], `https://www.linkedin.com/jobs/view/${A}\n`);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
+    assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${A}`));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('dry-run prints the count and leaves the pipeline untouched', () => {
   const root = sandbox();
   try {
