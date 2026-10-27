@@ -72,7 +72,7 @@ const OPENROUTER_API_URL    = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const MAX_TOKENS            = 8192;
 const RATE_LIMIT_DELAY_MS   = 2500;  // pause between requests on free tier
-const MODEL_TIMEOUT_MS      = 15_000; // abort a single model call after 15 s
+const MODEL_TIMEOUT_MS      = 120_000; // abort a single model call after 120 s
 
 // Provider priority order — models are sorted by provider prefix, not hardcoded names.
 // Add, remove, or reorder providers here; model names are resolved at runtime from the API.
@@ -399,7 +399,7 @@ async function callOpenRouter(systemPrompt, userMessage) {
 
 // Exported so tests/openrouter-runner-429-reset.test.mjs can script fetch()
 // against the real rotation and blacklist logic without a network or a CLI run.
-export { callOpenRouter, rateLimitCounts, blacklistedModels };
+export { callOpenRouter, rateLimitCounts, blacklistedModels, MODEL_TIMEOUT_MS };
 
 // ---------------------------------------------------------------------------
 // Context loading
