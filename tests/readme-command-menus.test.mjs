@@ -1,8 +1,8 @@
 // README Usage and the skill discovery menu are the two lists a new user
 // sees. Both must name every router input except `inbox` (an alias of
-// agent-inbox). Oferta always writes blocks A-G. Block H is only above the
-// score threshold (modes/oferta.md). The README used to say "A to H" and the
-// discovery menu used to say "A-F".
+// agent-inbox). Oferta always writes blocks A-G. Block H is included when
+// the score is at or above 4.5 (modes/oferta.md). The README used to say
+// "A to H" and the discovery menu used to say "A-F".
 //
 // Run: node --test tests/readme-command-menus.test.mjs
 
@@ -56,7 +56,8 @@ test('both menus describe oferta as A-G plus a conditional Block H', () => {
     const line = menu.split('\n').find((row) => /\/career-ops\s+oferta\b/.test(row) && !/\bofertas\b/.test(row));
     assert.ok(line, `${label} lists oferta`);
     assert.match(line, /A-G/, label);
-    assert.match(line, /threshold/, label);
+    assert.match(line, /at or above 4\.5/, label);
+    assert.doesNotMatch(line, /only above/, label);
     assert.doesNotMatch(line, /A-F/, label);
     assert.doesNotMatch(line, /A to H/, label);
   }
