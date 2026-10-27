@@ -12,11 +12,27 @@ const STATUS_KEY = {
 /** @param {{ key?: string, metaKey?: boolean, ctrlKey?: boolean, altKey?: boolean, typing?: boolean, composing?: boolean }} input */
 export function trackerCommand(input) {
   if (!input || input.typing || input.composing || input.metaKey || input.ctrlKey || input.altKey) return null;
-  if (input.key === "j" || input.key === "ArrowDown") return { name: "next" };
-  if (input.key === "k" || input.key === "ArrowUp") return { name: "prev" };
+  // Arrow keys stay with the browser so the page still scrolls.
+  if (input.key === "j") return { name: "next" };
+  if (input.key === "k") return { name: "prev" };
   const status = STATUS_KEY[input.key];
   if (status) return { name: "status", status };
   return null;
+}
+
+const NOT_TYPING_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset"]);
+
+/**
+ * A text field, a select, or anything in a dialog takes the keys. A row
+ * checkbox does not: it keeps focus after a click, and the status key comes next.
+ * @param {{ tagName?: string, type?: string, isContentEditable?: boolean, closestDialog?: boolean } | null | undefined} target
+ */
+export function typingFromTarget(target) {
+  if (!target) return false;
+  if (target.closestDialog) return true;
+  const tag = String(target.tagName || "").toUpperCase();
+  if (tag === "INPUT") return !NOT_TYPING_INPUTS.has(String(target.type || "text").toLowerCase());
+  return tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable === true;
 }
 
 export function moveCursor(index, count, delta) {

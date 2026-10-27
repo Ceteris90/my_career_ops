@@ -21,7 +21,7 @@ import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-naviga
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
-import { moveCursor, rangeKeys, trackerCommand } from "@/lib/tracker-keys.mjs";
+import { moveCursor, rangeKeys, trackerCommand, typingFromTarget } from "@/lib/tracker-keys.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
 
@@ -140,9 +140,12 @@ export function PipelineView({
   const allSelected = filteredKeys.length > 0 && filteredKeys.every((k) => selected.has(k));
 
   function toggleRow(key: string, shift: boolean) {
+    // Read the anchor now. The updater runs later, after it moves to this row.
+    const from = anchor.current;
+    anchor.current = key;
     setSelected((prev) => {
-      if (shift && anchor.current) {
-        const range = rangeKeys(filteredKeys, anchor.current, key);
+      if (shift && from) {
+        const range = rangeKeys(filteredKeys, from, key);
         if (range) {
           const next = new Set(prev);
           for (const item of range) next.add(item);
@@ -154,7 +157,6 @@ export function PipelineView({
       else next.add(key);
       return next;
     });
-    anchor.current = key;
   }
 
   function downloadCsv() {
@@ -201,11 +203,12 @@ export function PipelineView({
       const state = keyState.current;
       if (state.visibleTab === "INBOX") return;
       const target = event.target;
-      const typing = target instanceof Element && (
-        target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" ||
-        (target instanceof HTMLElement && target.isContentEditable) ||
-        Boolean(target.closest("dialog, [role='dialog']"))
-      );
+      const typing = typingFromTarget(target instanceof Element ? {
+        tagName: target.tagName,
+        type: target instanceof HTMLInputElement ? target.type : undefined,
+        isContentEditable: target instanceof HTMLElement && target.isContentEditable,
+        closestDialog: Boolean(target.closest("dialog, [role='dialog']")),
+      } : null);
       const command = trackerCommand({
         key: event.key,
         typing,
@@ -440,11 +443,7 @@ export function PipelineView({
                         type="checkbox"
                         aria-label={`Select ${company.label}, ${r.role} (#${r.n})`}
                         checked={selected.has(key)}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          toggleRow(key, event.shiftKey);
-                        }}
-                        onChange={() => {}}
+                        onChange={(event) => toggleRow(key, (event.nativeEvent as MouseEvent).shiftKey === true)}
                       />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums">
