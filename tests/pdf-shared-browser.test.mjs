@@ -1,9 +1,3 @@
-// A batch paints one PDF per offer, and each offer is its own process.
-// Loading Playwright in every process, then launching Chromium again, is the
-// time that is not the model. These tests pin the two halves of the fix:
-// a process that only builds HTML never loads Playwright, and the processes
-// that do paint share one browser.
-
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';

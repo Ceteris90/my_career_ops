@@ -332,6 +332,14 @@ release_lock() {
   if [[ "${BASHPID:-$$}" != "$MAIN_PID" ]]; then
     return
   fi
+  # Stop the painter this run started. A copied runner in a fixture has no
+  # lib/pdf-server.mjs, and a run that never painted has no pid file. Either
+  # miss must not fail the batch.
+  if [[ "${PDF_SERVER_OWNER:-}" == "1" ]]; then
+    PDF_SERVER_MODULE="$PROJECT_DIR/lib/pdf-server.mjs" PDF_SERVER_ROOT="$PROJECT_DIR" \
+      node --input-type=module -e 'import { pathToFileURL } from "node:url"; const m = await import(pathToFileURL(process.env.PDF_SERVER_MODULE).href); await m.stopSharedPdfServer(process.env.PDF_SERVER_ROOT);' \
+      >/dev/null 2>&1 || true
+  fi
   rm -f "$LOCK_FILE"
 }
 
@@ -2150,6 +2158,14 @@ main() {
     echo ""
     echo "Would process $pending_count offers"
     exit 0
+  fi
+
+  # --skip-pdf must not start a painter, even when the parent shell already opted in.
+  if [[ "$SKIP_PDF" == "true" ]]; then
+    unset CAREER_OPS_PDF_SHARED
+  else
+    export CAREER_OPS_PDF_SHARED=1
+    PDF_SERVER_OWNER=1
   fi
 
   # Process offers
