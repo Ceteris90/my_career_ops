@@ -103,6 +103,39 @@ test('a title above the link is kept, and a slug fills in when the paste has no 
   assert.equal(offers[1].url, `https://www.linkedin.com/jobs/view/${B}`);
 });
 
+test('a Remote title stays a title, and Remote US or Remote Europe stays a place', () => {
+  const titled = [
+    'Remote Software Engineer',
+    'Northwind Market',
+    `https://www.linkedin.com/jobs/view/${A}`,
+  ].join('\n');
+  const titledOffers = linkedInOffers(linkedInJobsFromText(titled), titled);
+  assert.equal(titledOffers[0].title, 'Remote Software Engineer');
+  assert.equal(titledOffers[0].company, 'Northwind Market');
+
+  const placed = [
+    'Floor lead',
+    'Northwind Market',
+    'Remote US',
+    `https://www.linkedin.com/jobs/view/${A}`,
+    'Shift lead',
+    'Sundial Pharmacy',
+    'Remote Europe',
+    `https://www.linkedin.com/jobs/view/${B}`,
+    'Counter lead',
+    'Northwind Market',
+    'Remote',
+    `https://www.linkedin.com/jobs/view/${C}`,
+  ].join('\n');
+  const placedOffers = linkedInOffers(linkedInJobsFromText(placed), placed);
+  assert.equal(placedOffers[0].title, 'Floor lead');
+  assert.equal(placedOffers[0].company, 'Northwind Market');
+  assert.equal(placedOffers[1].title, 'Shift lead');
+  assert.equal(placedOffers[1].company, 'Sundial Pharmacy');
+  assert.equal(placedOffers[2].title, 'Counter lead');
+  assert.equal(placedOffers[2].company, 'Northwind Market');
+});
+
 test('the CLI writes the title from the line above the link', () => {
   const root = sandbox();
   try {
