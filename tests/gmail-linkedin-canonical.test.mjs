@@ -38,7 +38,7 @@ test('a LinkedIn alert in Gmail becomes a canonical jobs/view url', async () => 
       log() {},
       fetch: async (url) => {
         const target = String(url);
-        if (target.includes('oauth2.googleapis.com')) return jsonResponse({ access_token: 'token.example' });
+        if (new URL(target).hostname === 'oauth2.googleapis.com') return jsonResponse({ access_token: 'token.example' });
         if (target.includes('/messages?')) return jsonResponse({ messages: [{ id: 'm1' }] });
         if (target.includes('/messages/m1')) {
           return jsonResponse({
