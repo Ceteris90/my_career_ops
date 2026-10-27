@@ -167,8 +167,9 @@ const UNFILLED_TEMPLATE_PLACEHOLDER =
 const PLACEHOLDER_LINE_RE = /^[(（].*[)）]$/;
 
 // Whitespace-insensitive, so a placeholder re-wrapped or re-indented on paste
-// is still recognized.
-const normalizePlaceholder = (text) => text.replace(/\s+/g, ' ').trim();
+// is still recognized. Whitespace is removed, not collapsed to a space: a line
+// break between two CJK characters has no space to collapse to.
+const normalizePlaceholder = (text) => text.replace(/\s+/g, '');
 
 export function collectTemplatePlaceholders(modesDir) {
   const placeholders = new Set([normalizePlaceholder(UNFILLED_TEMPLATE_PLACEHOLDER)]);
@@ -779,6 +780,9 @@ function runSelfTest() {
     "## Job Description (archived verbatim)\n(the posting's full text,\n   pasted verbatim — see requirement below)\n\n## Machine Summary"),
     'hasEmbeddedJdArchive rejects the English placeholder when it was re-wrapped on paste');
   check(!hasEmbeddedJdArchive(
+    '## Job Description (archived verbatim)\nPosted: 2026-10-20 (shown as 1 week ago)\n（职位描述全文，\n逐字粘贴——见下方要求）\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive rejects a Chinese placeholder re-wrapped between two CJK characters, under a Posted line that lifts it past MIN_ARCHIVE_CHARS (CodeRabbit, PR #5926)');
+  check(!hasEmbeddedJdArchive(
     '## Job Description (archived verbatim)\n（职位描述全文，逐字粘贴——见下方要求）\n\n## Machine Summary'),
     'hasEmbeddedJdArchive rejects the unfilled modes/zh/oferta.md placeholder, read from the template itself (full-width parentheses)');
   check(!hasEmbeddedJdArchive(
@@ -805,9 +809,9 @@ function runSelfTest() {
       writeFileSync(join(modesDir, 'xx', 'guide.md'),
         '## Job Description (archived verbatim)\nThis heading is followed by prose, not a placeholder, so nothing is collected.\n');
       const found = collectTemplatePlaceholders(modesDir);
-      check(found.has('(ilanın tam metni, olduğu gibi yapıştırılır — aşağıdaki gereksinime bakın)'),
+      check(found.has(normalizePlaceholder('(ilanın tam metni, olduğu gibi yapıştırılır — aşağıdaki gereksinime bakın)')),
         'collectTemplatePlaceholders reads a Turkish placeholder from a modes/tr template');
-      check(found.has("(the posting's full text, pasted verbatim — see requirement below)"),
+      check(found.has(normalizePlaceholder("(the posting's full text, pasted verbatim — see requirement below)")),
         'collectTemplatePlaceholders always keeps the English placeholder');
       check(found.size === 2,
         'collectTemplatePlaceholders collects only parenthesized lines directly under the heading');
