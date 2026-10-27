@@ -25,8 +25,6 @@ export function Modal({
   overlayClassName?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  // Callers pass inline closures; keeping onClose out of the effect's deps stops
-  // every parent render from restoring and re-taking focus.
   const close = useEffectEvent(onClose);
   useEffect(() => {
     if (!isOpen) return;
