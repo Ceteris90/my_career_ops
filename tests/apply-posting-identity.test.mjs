@@ -187,6 +187,8 @@ for (const file of ['modes/apply.md', 'modes/ja/oubo.md', 'modes/vi/ung-tuyen.md
     const line = read(file).split('\n').find(l => /^5\.\s+PREFLIGHT/.test(l));
     assert.ok(line, 'no PREFLIGHT line in the workflow overview');
     assert.ok(line.includes(`**${IDENTITY}**`), `the PREFLIGHT line does not check the posting identity: ${line}`);
+    // vi spells out where a retitled posting goes, since its old line stopped it.
+    if (file === 'modes/vi/ung-tuyen.md') assert.ok(line.includes('chức danh đổi thì sang Bước 3'), 'the PREFLIGHT line does not send a changed title to Step 3');
   });
 }
 
