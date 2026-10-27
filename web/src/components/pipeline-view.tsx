@@ -21,7 +21,7 @@ import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-naviga
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
-import { trackerEmptyState, type TrackerEmptyState } from "@/lib/tracker-empty-state.mjs";
+import { trackerEmptyPresentation, trackerEmptyState, type TrackerEmptyState } from "@/lib/tracker-empty-state.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
 
@@ -61,7 +61,8 @@ export function PipelineView({
   const minFilter: number | null = Number.isFinite(pMin) ? pMin : null;
   const pSort = params.get("sort") ?? "";
   const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "score";
-  const sort = { key: sortKey, dir: (params.get("dir") === "1" ? 1 : -1) as 1 | -1 };
+  const sortDir: 1 | -1 = params.get("dir") === "1" ? 1 : -1;
+  const sort = { key: sortKey, dir: sortDir };
 
   // Search stays LOCAL for snappy typing; seeded from the URL and re-synced only
   // when the URL's q changes (i.e. the assistant set it) — never per keystroke.
@@ -115,9 +116,9 @@ export function PipelineView({
         const n = scoreNum(r.score);
         if (Number.isNaN(n) || n < minFilter) return false;
       }
-      return !query || companySearchText(r).toLowerCase().includes(deferredQ.toLowerCase());
+      return !query || companySearchText(r).toLowerCase().includes(query.toLowerCase());
     },
-    [minFilter, query, deferredQ],
+    [minFilter, query],
   );
 
   const tabRows = useMemo(() => {
@@ -132,11 +133,11 @@ export function PipelineView({
       // cells); sortRows takes it rather than keeping a second copy (#4333).
       sortRows(
         tabRows.filter(matchesFilters),
-        sort,
+        { key: sortKey, dir: sortDir },
         scoreNum,
         (row) => companyPresentation(row).label,
       ) as Application[],
-    [tabRows, matchesFilters, sort],
+    [tabRows, matchesFilters, sortKey, sortDir],
   );
 
   const filtering = query !== "" || minFilter != null;
@@ -526,27 +527,16 @@ function emptyStateView(
     clearMin: () => void;
   },
 ): { heading: string; actions: { label: string; run: () => void }[] } {
-  const clearSearch = { label: "Clear search", run: ctx.clearSearch };
-  switch (state.kind) {
-    case "empty-tab":
-      return { heading: ctx.tabLabel ? `No ${ctx.tabLabel} applications yet` : "No applications yet", actions: [] };
-    case "elsewhere":
-      return {
-        heading: `No matches for “${ctx.query}” in ${ctx.tabLabel}`,
-        actions: [{ label: `Show ${state.count} in All`, run: ctx.showAll }, clearSearch],
-      };
-    case "no-match":
-      return { heading: `No matches for “${ctx.query}”`, actions: [clearSearch] };
-    case "below-min":
-      return {
-        heading: `No ${ctx.tabLabel ? `${ctx.tabLabel} ` : ""}applications score ${ctx.minFilter?.toFixed(1)} or higher`,
-        actions: [{ label: "Clear score filter", run: ctx.clearMin }],
-      };
-    default: {
-      const unhandled: never = state;
-      return unhandled;
-    }
-  }
+  const copy = trackerEmptyPresentation(state, { tabLabel: ctx.tabLabel, query: ctx.query, minScore: ctx.minFilter });
+  const run = {
+    "show-all": ctx.showAll,
+    "clear-search": ctx.clearSearch,
+    "clear-min": ctx.clearMin,
+  };
+  return {
+    heading: copy.heading,
+    actions: copy.actions.map((action) => ({ label: action.label, run: run[action.id] })),
+  };
 }
 
 // Empty inbox. Self-sufficient for the mainstream user (a primary in-web action),
