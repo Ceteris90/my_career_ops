@@ -173,19 +173,26 @@ const normalizePlaceholder = (text) => text.replace(/\s+/g, ' ').trim();
 export function collectTemplatePlaceholders(modesDir) {
   const placeholders = new Set([normalizePlaceholder(UNFILLED_TEMPLATE_PLACEHOLDER)]);
   const files = [];
+  let entries;
   try {
-    for (const entry of readdirSync(modesDir, { withFileTypes: true })) {
-      const path = join(modesDir, entry.name);
-      if (entry.isFile() && entry.name.endsWith('.md')) {
-        files.push(path);
-      } else if (entry.isDirectory()) {
+    entries = readdirSync(modesDir, { withFileTypes: true });
+  } catch {
+    return placeholders;
+  }
+  for (const entry of entries) {
+    const path = join(modesDir, entry.name);
+    if (entry.isFile() && entry.name.endsWith('.md')) {
+      files.push(path);
+    } else if (entry.isDirectory()) {
+      // One unreadable locale directory must not drop every other locale.
+      try {
         for (const name of readdirSync(path)) {
           if (name.endsWith('.md')) files.push(join(path, name));
         }
+      } catch {
+        continue;
       }
     }
-  } catch {
-    return placeholders;
   }
   for (const file of files) {
     let lines;
@@ -204,10 +211,15 @@ export function collectTemplatePlaceholders(modesDir) {
   return placeholders;
 }
 
+// The templates require a leading "Posted: ..." line in the section
+// (modes/oferta.md), so an evaluator can fill that line in and leave the
+// placeholder under it. The line is dropped before the comparison, as
+// isPathOnlyPointer() does below.
 let templatePlaceholders = null;
 function isUnfilledTemplatePlaceholder(strippedSection) {
   templatePlaceholders ??= collectTemplatePlaceholders(join(CAREER_OPS, 'modes'));
-  return templatePlaceholders.has(normalizePlaceholder(strippedSection));
+  const withoutPostedLine = strippedSection.replace(POSTED_LINE_RE, '');
+  return templatePlaceholders.has(normalizePlaceholder(withoutPostedLine));
 }
 
 // modes/oferta.md documents a second legitimate shape for this section: a
@@ -772,6 +784,15 @@ function runSelfTest() {
   check(!hasEmbeddedJdArchive(
     '## Job Description (archived verbatim)\n(der vollständige Text der Stellenanzeige, wortgleich eingefügt — siehe Anforderung unten)\n\n## Machine Summary'),
     'hasEmbeddedJdArchive rejects the unfilled modes/de/angebot.md placeholder, read from the template itself');
+  check(!hasEmbeddedJdArchive(
+    '## Job Description (archived verbatim)\nPosted: 3 days ago\n(der vollständige Text der Stellenanzeige, wortgleich eingefügt — siehe Anforderung unten)\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive rejects a placeholder left under a filled-in "Posted:" line (CodeRabbit, PR #5926)');
+  check(!hasEmbeddedJdArchive(
+    "## Job Description (archived verbatim)\nPosted: not visible in source\n(the posting's full text, pasted verbatim — see requirement below)\n\n## Machine Summary"),
+    'hasEmbeddedJdArchive rejects the English placeholder under a "Posted: not visible in source" line');
+  check(hasEmbeddedJdArchive(
+    '## Job Description (archived verbatim)\nPosted: 3 days ago\nWe are looking for a Senior Widget Engineer to join our growing platform team.\n\n## Machine Summary'),
+    'hasEmbeddedJdArchive still credits real JD text under a "Posted:" line');
   {
     // A locale added after this checker was written is picked up from its
     // template alone: no list in the checker to update.
