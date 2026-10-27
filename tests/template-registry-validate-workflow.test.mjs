@@ -81,6 +81,55 @@ test('runs the PR copy only while the base branch has no validator yet', { skip:
   assert.deepEqual(runShapeStep({ baseHasValidator: false }), ['validate-template-registry.mjs --root .']);
 });
 
+// Replays the one-pack step against a real repository: a clone of a base
+// repository standing in for origin, with the PR's change committed on top.
+const onePackStep = runs.find(s => s.run.includes('CHANGED='));
+function runOnePackStep(change) {
+  const dir = mkdtempSync(join(tmpdir(), 'co-tpl-onepack-'));
+  dirs.push(dir);
+  const env = {
+    PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin', HOME: dir, BASE_REF: 'main',
+    GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com',
+    GIT_CONFIG_NOSYSTEM: '1',
+  };
+  const git = (cwd, ...args) => {
+    const r = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'init.defaultBranch=main', ...args], { cwd, env, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  const base = join(dir, 'base');
+  mkdirSync(join(base, 'templates-registry'), { recursive: true });
+  writeFileSync(join(base, 'templates-registry', 'old.json'), '{}\n');
+  git(dir, 'init', '-q', base);
+  git(base, 'add', '-A');
+  git(base, 'commit', '-q', '-m', 'base');
+  const pr = join(dir, 'pr');
+  git(dir, 'clone', '-q', base, pr);
+  change(pr);
+  git(pr, 'add', '-A');
+  git(pr, 'commit', '-q', '-m', 'pr');
+  return spawnSync('bash', ['-e', '-c', onePackStep.run], { cwd: pr, env, encoding: 'utf8' });
+}
+const posixOnly = { skip: process.platform === 'win32' && 'the step runs in bash on ubuntu-latest; this replays it under a POSIX shell' };
+const put = (pr, rel, body = '{}\n') => { mkdirSync(join(pr, rel, '..'), { recursive: true }); writeFileSync(join(pr, rel), body); };
+
+test('one pack beside a nested JSON file still counts as one pack', posixOnly, () => {
+  // The registry reads direct children only, so a nested file is not a second pack.
+  const r = runOnePackStep((pr) => { put(pr, 'templates-registry/new.json'); put(pr, 'templates-registry/notes/extra.json'); });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('two packs in one PR are refused', posixOnly, () => {
+  const r = runOnePackStep((pr) => { put(pr, 'templates-registry/new.json'); put(pr, 'templates-registry/other.json'); });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /exactly one/);
+});
+
+test('deleting a pack is refused', posixOnly, () => {
+  const r = runOnePackStep((pr) => { rmSync(join(pr, 'templates-registry', 'old.json')); });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /not delete one/);
+});
+
 test('runs nothing else from the PR checkout', () => {
   for (const s of runs) {
     for (const line of s.run.split('\n')) {
