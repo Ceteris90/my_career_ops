@@ -96,6 +96,8 @@ try {
   eq('bareNumeric leaves a semicolon-free name outside the legacy set alone', decodeEntities('&colon&sol', { bareNumeric: true }), '&colon&sol');
   eq('bareNumeric maps the C1 numeric range to windows-1252', decodeEntities('&#128;&#x9F;&#129;', { bareNumeric: true }), '\u20ac\u0178\u0081');
   eq('bareNumeric keeps &nbsp; as U+00A0 and names case-sensitive', decodeEntities('&nbsp;&AMP;&Amp;', { bareNumeric: true }), '\u00a0&&Amp;');
+  eq('bareNumeric leaves Object.prototype names as written', decodeEntities('&toString;&constructor;&valueOf;&hasOwnProperty;&__proto__;', { bareNumeric: true }), '&toString;&constructor;&valueOf;&hasOwnProperty;&__proto__;');
+  eq('default mode leaves Object.prototype names as written', decodeEntities('&toString;&constructor;&__proto__;'), '&toString;&constructor;&__proto__;');
   eq('bareNumeric decodes a C0 control reference, as a browser does', decodeEntities('&#1;x', { bareNumeric: true }), '\u0001x');
   eq('bareNumeric turns NUL, a surrogate and an out-of-range reference into U+FFFD', decodeEntities('&#0;&#xD800;&#x110000;', { bareNumeric: true }), '\ufffd\ufffd\ufffd');
   eq('the default mode still leaves a C0 control reference as written', decodeEntities('&#1;x'), '&#1;x');

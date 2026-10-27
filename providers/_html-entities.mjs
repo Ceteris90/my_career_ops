@@ -158,7 +158,7 @@ export function decodeEntities(s, { bareNumeric = false } = {}) {
     // decoders fold it to a space).
     if (bareNumeric) {
       if (body === 'nbsp') return '\u00A0';
-      if (ATTRIBUTE_UPPER_NAMES[body]) return ATTRIBUTE_UPPER_NAMES[body];
+      if (Object.hasOwn(ATTRIBUTE_UPPER_NAMES, body)) return ATTRIBUTE_UPPER_NAMES[body];
       return Object.hasOwn(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : m;
     }
     if (Object.hasOwn(NAMED_ENTITIES, body)) return NAMED_ENTITIES[body];
