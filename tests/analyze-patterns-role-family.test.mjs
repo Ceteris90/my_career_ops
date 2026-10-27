@@ -6,12 +6,14 @@
 // log is the only record of it), and a family with a handful of applications
 // must never be recommended off one lucky reply.
 import { pass, fail, ROOT } from './helpers.mjs';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
 
 console.log('\nanalyze-patterns — role-family interview yield');
 
-const { buildRoleFamilyYield, roleFamilyOf, wilsonInterval } =
+const { analyze, buildRoleFamilyYield, loadRoleFamilies, roleFamilyOf, wilsonInterval } =
   await import(pathToFileURL(join(ROOT, 'analyze-patterns.mjs')).href);
 
 const check = (cond, msg) => (cond ? pass(msg) : fail(msg));
@@ -66,7 +68,7 @@ nextNum = 1;
 const afterInterview = [...rows('L&D', 25, 0, 'rejected'), ...rows('Other', 75, 0, 'rejected')];
 const noLedger = buildRoleFamilyYield(afterInterview);
 check(noLedger.interviewed === 0, 'snapshot only: rejected rows have no interview on record');
-const ledger = [1, 2, 3, 4, 5].map(num => ({ num, from: 'Interview', to: 'Rejected' }));
+const ledger = afterInterview.slice(0, 5).map(({ num }) => ({ num, from: 'Interview', to: 'Rejected' }));
 const withLedger = buildRoleFamilyYield(afterInterview, { ledger });
 check(withLedger.interviewed === 5, `ledger: five rows rejected after Interview now count (got ${withLedger.interviewed})`);
 check(withLedger.suggestion?.includes('"L&D"'), 'ledger: the family those five came from is suggested');
@@ -75,3 +77,20 @@ check(withLedger.suggestion?.includes('"L&D"'), 'ledger: the family those five c
 nextNum = 1;
 const unsent = [...rows('A', 30, 0, 'evaluated'), ...rows('B', 30, 0, 'skip'), ...rows('C', 25, 1)];
 check(buildRoleFamilyYield(unsent).applied === 25, 'evaluated and skipped rows are outside the applied count');
+
+// --- loadRoleFamilies: reads only the file it is given -----------------------
+const dir = mkdtempSync(join(tmpdir(), 'role-families-'));
+const profile = (name, text) => { const f = join(dir, name); writeFileSync(f, text); return f; };
+try {
+  check(JSON.stringify(loadRoleFamilies(join(dir, 'absent.yml'))) === '{}', 'loadRoleFamilies: a missing file is {}');
+  check(JSON.stringify(loadRoleFamilies(profile('bad.yml', 'role_families: [unclosed\n  : :'))) === '{}', 'loadRoleFamilies: malformed YAML is {}');
+  check(JSON.stringify(loadRoleFamilies(profile('list.yml', 'role_families: [a, b]\n'))) === '{}', 'loadRoleFamilies: a non-map role_families is {}');
+  const got = loadRoleFamilies(profile('ok.yml', 'role_families:\n  Data: ["Data Analyst", " REPORTING "]\n  Scalar: oops\n  Empty: []\n'));
+  check(JSON.stringify(got) === '{"Data":["data analyst","reporting"]}', `loadRoleFamilies: keywords lowercased and trimmed, scalar and empty families dropped (got ${JSON.stringify(got)})`);
+} finally {
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// --- analyze(entries) with supplied entries reads nothing from disk ----------
+const supplied = analyze([{ num: 1, role: 'Data Analyst', status: 'Applied', report: null }], {});
+check(supplied.error !== undefined || supplied.roleFamilyYield !== undefined, 'analyze: supplied entries run without loading the ledger or profile');

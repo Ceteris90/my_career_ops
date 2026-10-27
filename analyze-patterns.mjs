@@ -25,7 +25,7 @@ import { loadCanonicalStates, resolveCanonicalStateId, foldStatusInput, trackerL
 import { atsVendorOf } from './ats-vendor.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
-import { parseStatusLogStages, recoverFunnelStages } from './funnel-stages.mjs';
+import { funnelStageRank, parseStatusLogStages, recoverFunnelStages } from './funnel-stages.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
@@ -401,8 +401,8 @@ function buildViaChannelAnalysis(submitted, isAdvanced, minSample = MIN_VENDOR_N
 // counts; archetypeBreakdown reads the snapshot status and would call it a no.
 let FAMILY_MIN_N = 20;
 const FAMILY_MIN_GAP = 2;
-const FUNNEL_RANK_APPLIED = 1;
-const FUNNEL_RANK_INTERVIEW = 4;
+const FUNNEL_RANK_APPLIED = funnelStageRank('applied');
+const FUNNEL_RANK_INTERVIEW = funnelStageRank('interview');
 
 /** Wilson 95% interval for k of n, as whole percents. null when n is 0. */
 export function wilsonInterval(k, n, z = 1.96) {
@@ -1454,7 +1454,13 @@ function buildPatternSignals(enriched) {
 }
 
 // --- Main analysis ---
-export function analyze(entries = parseTracker(), { ledger = loadStatusLedger(), families = loadRoleFamilies() } = {}) {
+export function analyze(entries, { ledger, families } = {}) {
+  // Supplied entries (tests, other tools) never pull the ledger or profile off
+  // disk; only the CLI path, which reads the tracker itself, reads those too.
+  const fromDisk = entries === undefined;
+  entries ??= parseTracker();
+  ledger ??= fromDisk ? loadStatusLedger() : [];
+  families ??= fromDisk ? loadRoleFamilies() : {};
   if (entries.length === 0) {
     // noData marks this as the empty-tracker case rather than a failure, so the
     // exit status below does not have to match on the message text.

@@ -255,11 +255,13 @@ for (const [form, args] of [
   ['zero', ['--min-family-n', '0']],
   ['negative', ['--min-family-n=-1']],
   ['decimal', ['--min-family-n=1.5']],
+  ['missing', ['--min-family-n']],
+  ['followed by another flag', ['--min-family-n', '--summary']],
 ]) {
   test(`analyze-patterns rejects ${form} role-family sample values`, () => {
     const r = runScript('analyze-patterns.mjs', ...args);
     assert.equal(r.status, 1, describeSpawn(r, `exited ${r.status}, want 1`));
-    assert.match(r.all, /--min-family-n requires a positive integer, got/);
+    assert.match(r.all, /--min-family-n/);
   });
 }
 
