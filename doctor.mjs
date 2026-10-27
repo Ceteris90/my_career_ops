@@ -1158,6 +1158,8 @@ async function checkGmailRefresh(root) {
         grant_type: 'refresh_token',
       }),
       signal: AbortSignal.timeout(8000),
+      // The body carries the client secret and refresh token. Never resend it to another host.
+      redirect: 'error',
     });
     const advice = gmailRefreshAdvice(res.status, await res.text());
     if (advice.ok) return { pass: true, label: advice.label };

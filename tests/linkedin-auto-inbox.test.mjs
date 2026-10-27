@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,22 @@ import { importMailDrop } from '../lib/linkedin-mail-drop.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const JOB_ID = '5151515151';
+
+// importMailDrop writes scan history through scan.mjs, which reads these once.
+// Point them at the test's own root so nothing lands in this checkout's data/.
+function withDataEnv(root, fn) {
+  const keys = ['CAREER_OPS_SCAN_HISTORY', 'CAREER_OPS_PIPELINE', 'CAREER_OPS_TRACKER'];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  process.env.CAREER_OPS_SCAN_HISTORY = join(root, 'data', 'scan-history.tsv');
+  process.env.CAREER_OPS_PIPELINE = '';
+  process.env.CAREER_OPS_TRACKER = '';
+  return Promise.resolve().then(fn).finally(() => {
+    for (const key of keys) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+}
 
 test('invalid_grant tells you about the 7 day Testing expiry and the auth command', () => {
   const advice = gmailRefreshAdvice(400, JSON.stringify({
@@ -62,17 +78,75 @@ test('a drop folder of eml files becomes canonical pipeline rows once', async ()
     `https://www.linkedin.com/comm/jobs/view/${JOB_ID}?trackingId=abc&trk=eml`,
   ].join('\n'));
   try {
-    const first = await importMailDrop({ root, dir });
-    assert.equal(first.added, 1);
-    const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
-    assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`));
-    assert.doesNotMatch(pipeline, /\/comm\/jobs\/view\//);
-    const second = await importMailDrop({ root, dir });
-    assert.equal(second.added, 0);
-    assert.equal(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), pipeline);
+    await withDataEnv(root, async () => {
+      const first = await importMailDrop({ root, dir });
+      assert.equal(first.added, 1);
+      assert.ok(existsSync(join(root, 'data', 'scan-history.tsv')), 'scan history stays in the test root');
+      const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
+      assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`));
+      assert.doesNotMatch(pipeline, /\/comm\/jobs\/view\//);
+      const second = await importMailDrop({ root, dir });
+      assert.equal(second.added, 0);
+      assert.equal(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), pipeline);
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a dry run says nothing was saved, names a file too large to read, and honors CAREER_OPS_PIPELINE', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-drop-dry-'));
+  const dir = join(root, 'data', 'linkedin-alerts');
+  mkdirSync(dir, { recursive: true });
+  const lane = join(root, 'lane-pipeline.md');
+  writeFileSync(lane, `- [ ] https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+  writeFileSync(join(dir, 'a.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\nhttps://www.linkedin.com/jobs/view/6161616161\n`);
+  writeFileSync(join(dir, 'big.mbox'), 'x'.repeat(2_000_001));
+  try {
+    await withDataEnv(root, async () => {
+      process.env.CAREER_OPS_PIPELINE = lane;
+      const result = await importMailDrop({ root, dir, dryRun: true });
+      assert.equal(result.added, 1);
+      assert.equal(result.already, 1);
+      assert.deepEqual(result.skipped, ['big.mbox']);
+      assert.match(result.message, /^1 LinkedIn job found\. Nothing was saved\./);
+      assert.match(result.message, /too large to read: big\.mbox/);
+      assert.deepEqual(readdirSync(dir).sort(), ['a.eml', 'big.mbox']);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unreadable tracker stops the import instead of adding its jobs again', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-drop-locked-'));
+  const dir = join(root, 'data', 'linkedin-alerts');
+  mkdirSync(dir, { recursive: true });
+  const tracker = join(root, 'data', 'applications.md');
+  writeFileSync(tracker, `| 1 | 2026-01-01 | Example Co | Analyst | 4.0 | Applied | | | https://www.linkedin.com/jobs/view/${JOB_ID} |\n`);
+  chmodSync(tracker, 0o000);
+  writeFileSync(join(dir, 'a.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+  try {
+    await withDataEnv(root, async () => {
+      await assert.rejects(importMailDrop({ root, dir }), (err) => err.code === 'EACCES');
+      assert.deepEqual(readdirSync(dir), ['a.eml']);
+    });
+  } finally {
+    chmodSync(tracker, 0o600);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('client and server errors from the token endpoint do not send you to sign in again', () => {
+  const client = gmailRefreshAdvice(401, JSON.stringify({ error: 'invalid_client' }));
+  assert.equal(client.ok, false);
+  assert.match(client.label, /invalid_client/);
+  assert.match(client.fix, /GMAIL_CLIENT_SECRET/);
+  assert.doesNotMatch(client.fix, /auth gmail/);
+  const down = gmailRefreshAdvice(503, 'Service Unavailable');
+  assert.match(down.label, /503/);
+  assert.match(down.fix, /later/);
+  assert.doesNotMatch(down.fix, /auth gmail/);
 });
 
 test('plugins auth gmail without a client id names the Desktop client step', () => {
@@ -141,6 +215,26 @@ test('the scan schedule drains the alert folder', () => {
     });
     const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
     assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`), result.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('running one scheduled job by hand leaves the alert folder alone', () => {
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-manual-'));
+  const dir = join(root, 'data', 'linkedin-alerts');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(root, 'data', 'pipeline.md'), '# Pipeline\n\n## Pending\n\n## Processed\n');
+  writeFileSync(join(dir, 'alert.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+  try {
+    spawnSync(process.execPath, ['web/scripts/scheduled-jobs-runner.mjs', '--job', 'no-such-job'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: { ...process.env, CAREER_OPS_ROOT: root, NO_COLOR: '1' },
+    });
+    assert.deepEqual(readdirSync(dir), ['alert.eml']);
+    assert.doesNotMatch(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), new RegExp(JOB_ID));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

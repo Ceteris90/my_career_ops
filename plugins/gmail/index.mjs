@@ -20,7 +20,6 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
-import { linkedInJobId } from '../../lib/linkedin-url.mjs';
 import { linkedInJobsFromText } from '../../lib/linkedin-import.mjs';
 import {
   extractUrls, isCleanUrl, isAuthenticEmail, parseRoleAtCompany,
@@ -152,10 +151,10 @@ export default {
       const body = getMessageBody(msg.payload);
       const linkedInJobs = linkedInJobsFromText(body);
       const linkedInIds = new Set(linkedInJobs.map((job) => job.id));
-      const cleanUrls = extractUrls(body).filter(isCleanUrl).filter((url) => {
-        const id = linkedInJobId(url);
-        return !id || !linkedInIds.has(id);
-      });
+      // extractUrls returns strings, so compare ids with the same text parser.
+      const cleanUrls = extractUrls(body).filter(isCleanUrl).filter(
+        (url) => !linkedInJobsFromText(url).some((job) => linkedInIds.has(job.id)),
+      );
       for (const url of cleanUrls) {
         if (seenUrls.has(url)) continue;
         seenUrls.add(url);

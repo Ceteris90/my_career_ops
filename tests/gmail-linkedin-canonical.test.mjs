@@ -64,3 +64,44 @@ test('a LinkedIn alert in Gmail becomes a canonical jobs/view url', async () => 
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
+
+test('a LinkedIn link with no query string is not added twice', async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), 'gmail-linkedin-'));
+  const tracking = `https://www.linkedin.com/comm/jobs/view/${JOB_ID}`;
+  const sender = ['jobs-noreply', 'linkedin.example'].join('@');
+  const body = `From: ${sender}\n\n${tracking}\n`;
+  try {
+    const jobs = await gmail.ingest({
+      env: {
+        GMAIL_CLIENT_ID: 'client.example',
+        GMAIL_CLIENT_SECRET: 'secret.example',
+        GMAIL_REFRESH_TOKEN: 'refresh.example',
+      },
+      settings: { label: 'Job Leads', days_back: 7 },
+      dataRoot,
+      dryRun: true,
+      log() {},
+      fetch: async (url) => {
+        const target = String(url);
+        if (new URL(target).hostname === 'oauth2.googleapis.com') return jsonResponse({ access_token: 'token.example' });
+        if (target.includes('/messages?')) return jsonResponse({ messages: [{ id: 'm1' }] });
+        if (target.includes('/messages/m1')) {
+          return jsonResponse({
+            payload: {
+              headers: [
+                { name: 'Subject', value: 'Jobs for you' },
+                { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=linkedin.example' },
+              ],
+              mimeType: 'text/plain',
+              body: { data: b64url(body) },
+            },
+          });
+        }
+        throw new Error(`unexpected url ${target}`);
+      },
+    });
+    assert.deepEqual(jobs.map((job) => job.url), [`https://www.linkedin.com/jobs/view/${JOB_ID}`]);
+  } finally {
+    rmSync(dataRoot, { recursive: true, force: true });
+  }
+});

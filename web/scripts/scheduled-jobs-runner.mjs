@@ -296,17 +296,20 @@ function requestedJobId(args) {
 
 async function main() {
   const root = getCareerOpsRoot();
-  try {
-    await pollLinkedInInbox(root, {
-      codeRoot: CODE_ROOT,
-      log: (line) => process.stderr.write(`${line}\n`),
-    });
-  } catch (error) {
-    process.stderr.write(`linkedin inbox: ${error instanceof Error ? error.message : String(error)}\n`);
+  const manualJobId = requestedJobId(process.argv.slice(2));
+  // The inbox belongs to the 15-minute worker. Running one job by hand does not drain it.
+  if (!manualJobId) {
+    try {
+      await pollLinkedInInbox(root, {
+        codeRoot: CODE_ROOT,
+        log: (line) => process.stderr.write(`${line}\n`),
+      });
+    } catch (error) {
+      process.stderr.write(`linkedin inbox: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
   }
   const storePath = scheduledStorePath(root);
   const runnerResource = runnerResourcePath(storePath);
-  const manualJobId = requestedJobId(process.argv.slice(2));
 
   return withResourceLock(
     runnerResource,

@@ -551,10 +551,14 @@ async function cmdAuth(args) {
       console.log(url);
     },
   });
-  writeFileSync(envPath, next, { mode: 0o600 });
+  // Atomic, so a crash mid-write cannot wipe the other keys, and 0600 even
+  // when an older .env was readable by others.
+  const { writeFileAtomic } = await import('./tracker-utils.mjs');
+  writeFileAtomic(envPath, next, { mode: 0o600 });
   console.log('Saved the Gmail refresh token in .env.');
   console.log('Enable it with node plugins.mjs enable gmail --confirm');
-  console.log('The 15-minute scan schedule runs it. Or run node plugins.mjs run gmail once.');
+  console.log('Run node plugins.mjs run gmail to read job mail now.');
+  console.log('To read it on the 15-minute scan schedule too, set auto: true under plugins.gmail in config/plugins.yml.');
 }
 
 async function main() {
