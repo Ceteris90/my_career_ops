@@ -67,13 +67,21 @@ test("A printed report shows its content without app chrome in either theme", { 
           own: d.querySelector("summary")?.offsetHeight ?? 0,
         })),
     );
-    assert.ok(sections.length >= 4, `${theme}: at least four collapsible sections print (saw ${sections.length})`);
+    const expectedSections = ["Role Summary", "Level and Strategy", "Comp and Demand", "Company Notes", "Interview Plan"];
+    const printedSections = expectedSections.filter((name) => sections.some((section) => section.summary.includes(name)));
+    assert.deepEqual(
+      printedSections,
+      expectedSections,
+      `${theme}: named collapsible sections print (saw ${sections.map((section) => section.summary).join(", ")})`,
+    );
     for (const s of sections) {
       assert.ok(s.details > s.own + 1, `${theme}: "${s.summary}" prints its content, not only its summary`);
     }
 
-    const clipped = await page.locator("main .report-prose table").evaluateAll((tables) =>
-      tables.filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().width > el.parentElement.clientWidth + 1).length,
+    const tables = page.locator("main .report-prose table");
+    assert.ok(await tables.count() > 0, `${theme}: report table renders`);
+    const clipped = await tables.evaluateAll((found) =>
+      found.filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().width > el.parentElement.clientWidth + 1).length,
     );
     assert.equal(clipped, 0, `${theme}: no report table is cut off on paper`);
 
