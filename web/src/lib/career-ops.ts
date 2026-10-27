@@ -601,7 +601,10 @@ function resolveEvalModeFile(root: string, modesDir: string): string {
  * should degrade the market vocabulary, not block every evaluation.
  */
 export function readLanguageConfig(): LanguageConfig {
+  // The profile is the user's (data root); the market mode directories it names
+  // are system files and live in the code checkout.
   const root = careerOpsRoot();
+  const codeRoot = resolveCodeRoot(process.cwd(), process.env);
   let modesDirs = ["modes"];
   let output = "en";
   try {
@@ -621,7 +624,7 @@ export function readLanguageConfig(): LanguageConfig {
           if (typeof value !== "string" || !value.trim()) return null;
           const candidate = value.trim().replace(/\/+$/, "");
           if (!MODES_DIR_RE.test(candidate)) return null;
-          return fs.existsSync(path.join(root, candidate)) ? candidate : null;
+          return fs.existsSync(path.join(codeRoot, candidate)) ? candidate : null;
         };
         // The first declared entry is primary. Do not filter it away and
         // silently promote a later market into the evaluation slot. This
@@ -642,5 +645,5 @@ export function readLanguageConfig(): LanguageConfig {
     /* no profile yet, or malformed — defaults are correct */
   }
   const modesDir = modesDirs[0];
-  return { output, modesDir, modesDirs, evalModeFile: resolveEvalModeFile(root, modesDir) };
+  return { output, modesDir, modesDirs, evalModeFile: resolveEvalModeFile(codeRoot, modesDir) };
 }

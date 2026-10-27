@@ -154,8 +154,8 @@ export async function POST(req: Request) {
     postedAt,
     lang,
     cvTemplate,
-    // The worker's cwd is the data root; the template lives in the checkout.
-    templateRoot: codeRoot,
+    // The worker's cwd is the data root; modes, templates and scripts live in the checkout.
+    codeRoot,
     reportFile: pdfPaths?.reportFile ?? (coverRequest?.ok ? coverRequest.reportFile : undefined),
     coverBrief: coverRequest?.ok ? coverRequest.brief : undefined,
     profile: profileRef(careerOpsRoot()),
