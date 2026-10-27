@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { listTree } from "../../../lib/walk-tree.mjs";
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC = join(WEB, "src");
@@ -57,9 +58,7 @@ function contrast(a, b) {
 
 function sourceUses() {
   const uses = [];
-  for (const e of readdirSync(SRC, { withFileTypes: true, recursive: true })) {
-    if (!e.isFile() || !/\.(tsx?|jsx?|mjs)$/.test(e.name)) continue;
-    const file = join(e.parentPath, e.name);
+  for (const file of listTree(SRC, { match: /\.(tsx?|jsx?|mjs)$/ })) {
     readFileSync(file, "utf8").split("\n").forEach((text, i) => {
       for (const [cls, family, shade, pct] of text.matchAll(UNPREFIXED_TONE_TEXT_CLASS)) {
         if (Number(shade) < 600) continue;
