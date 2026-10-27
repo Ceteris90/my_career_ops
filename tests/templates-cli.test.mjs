@@ -290,11 +290,12 @@ test('remove never deletes through a symlinked templates/<id>', (t) => {
   assert.equal(readFileSync(join(outside, 'cover-letter-template.plain.html'), 'utf-8'), 'keep');
 });
 
-test('a forced reinstall never writes through a dangling symlink in place of a locked file', (t) => {
+test('a forced reinstall refuses a symlink in place of a locked file the new version drops', (t) => {
   const r = root();
   installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
   const outside = join(mk('tpl-out-'), 'planted.html');
-  const locked = join(r, 'templates/demo/cv-template.plain.html');
+  writeFileSync(outside, 'keep');
+  const locked = join(r, 'templates/demo/cover-letter-template.plain.html');
   rmSync(locked);
   try {
     symlinkSync(outside, locked);
@@ -302,11 +303,34 @@ test('a forced reinstall never writes through a dangling symlink in place of a l
     if (err?.code === 'EPERM' || err?.code === 'EACCES') return t.skip(`cannot create symlinks here: ${err.code}`);
     throw err;
   }
-  installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(() => packDir(manifest({ version: '0.2.0' }))), force: true });
-  assert.equal(existsSync(outside), false, 'the install wrote outside the data root');
-  assert.equal(lstatSync(locked).isSymbolicLink(), false);
-  assert.equal(readFileSync(locked, 'utf-8'), CV);
+  const cvOnly = () => packDir(manifest({ version: '0.2.0', templates: [{ ...manifest().templates[0], kind: 'cv', files: { cv: 'templates/cv-template.plain.html' } }] }));
+  assert.throws(() => installPack(r, { entry: reg({ version: '0.2.0', kind: ['cv'] }), clone: cloner(cvOnly), force: true }), /symlink/);
+  assert.equal(lstatSync(locked).isSymbolicLink(), true);
+  assert.equal(readLock(r).packs.demo.version, '0.1.0');
 });
+
+for (const live of [false, true]) {
+  test(`a forced reinstall refuses a ${live ? 'live' : 'dangling'} symlink in place of a locked file`, (t) => {
+    const r = root();
+    installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+    const outside = join(mk('tpl-out-'), 'planted.html');
+    if (live) writeFileSync(outside, 'keep');
+    const locked = join(r, 'templates/demo/cv-template.plain.html');
+    rmSync(locked);
+    try {
+      symlinkSync(outside, locked);
+    } catch (err) {
+      if (err?.code === 'EPERM' || err?.code === 'EACCES') return t.skip(`cannot create symlinks here: ${err.code}`);
+      throw err;
+    }
+    assert.throws(() => installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(() => packDir(manifest({ version: '0.2.0' }))), force: true }), /symlink/);
+    // Nothing was read, deleted or written: the link, its target and the lock are as they were.
+    assert.equal(lstatSync(locked).isSymbolicLink(), true);
+    assert.equal(existsSync(outside), live);
+    if (live) assert.equal(readFileSync(outside, 'utf-8'), 'keep');
+    assert.equal(readLock(r).packs.demo.version, '0.1.0');
+  });
+}
 
 test('a forced reinstall never overwrites a file in templates/<id>/ the lock does not own', () => {
   const r = root();
