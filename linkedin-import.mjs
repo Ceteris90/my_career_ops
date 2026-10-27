@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { mkdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -19,9 +19,10 @@ On the dashboard, paste into LinkedIn job alerts.
 
 function readIf(path) {
   try {
-    return existsSync(path) ? readFileSync(path, 'utf8') : '';
-  } catch {
-    return '';
+    return readFileSync(path, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return '';
+    throw new Error(`I can't read ${path} (${err.message}). Nothing was saved.`);
   }
 }
 

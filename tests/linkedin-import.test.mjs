@@ -59,6 +59,16 @@ test('a saved email with a quoted-printable line break still yields the job', ()
   assert.deepEqual(jobs, [{ id: E, url: `https://www.linkedin.com/jobs/view/${E}` }]);
 });
 
+test('bare and full links keep the order they appear in', () => {
+  const text = `linkedin.com/jobs/view/${A}\nhttps://www.linkedin.com/jobs/view/${B}\nwww.linkedin.com/jobs/view/${C}`;
+  assert.deepEqual(linkedInJobsFromText(text).map((job) => job.id), [A, B, C]);
+});
+
+test('a linkedin.com path inside another site\'s URL is not a job', () => {
+  assert.deepEqual(linkedInJobsFromText('https://example.com/linkedin.com/jobs/view/1000000011'), []);
+  assert.deepEqual(linkedInJobsFromText('https://example.com/?u=linkedin.com/jobs/view/1000000012'), []);
+});
+
 test('jobs already in the pipeline or the tracker are not added again', () => {
   const pipeline = `# Pipeline\n\n## Pending\n\n- [ ] https://www.linkedin.com/comm/jobs/view/${A}?trk=eml | LinkedIn | Job alert\n`;
   const tracker = `| 1 | 2026-01-02 | Northwind | Analyst | 4.0/5 | Evaluated | no | - | https://www.linkedin.com/jobs/view/${B} |\n`;
@@ -157,6 +167,22 @@ test('a root with no data directory still receives the jobs', () => {
     assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
     const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
     assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${A}`));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unreadable tracker stops the import before anything is written', () => {
+  const root = sandbox();
+  try {
+    const applications = join(root, 'data', 'applications.md');
+    rmSync(applications);
+    mkdirSync(applications);
+    const before = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
+    const result = runCli(root, ['--json'], `https://www.linkedin.com/jobs/view/${A}\n`);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Nothing was saved/);
+    assert.equal(readFileSync(join(root, 'data', 'pipeline.md'), 'utf8'), before);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
