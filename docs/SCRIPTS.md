@@ -40,7 +40,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `sh web/scripts/uninstall-scan-schedule.sh` | `web/scripts/uninstall-scan-schedule.sh` | Remove the macOS launchd agent or Linux cron line for the scheduled-jobs queue worker |
 | `npm run company:funded` | `company-funded.mjs` | Review-first discovery of recently funded companies |
 | `npm run validate:portals` | `validate-portals.mjs` | Validate portals.yml shape before scanning |
-| `npm run tracker` | `tracker.mjs` | SQLite derived index over applications.md — sync/query/history/export |
+| `npm run tracker` | `tracker.mjs` | SQLite derived index over applications.md — sync/query/history/export/edit/delete |
 | `npm run find` | `find.mjs` | Resolve a report#/tracker#/company query to its full pipeline identity |
 | `npm run ics-interview -- invite.ics` | `ics-interview.mjs` | Read an interview invite's `.ics` (first VEVENT: start/end/length, time zone, link, organizer) and print a row to paste into `data/active-interviews.md` (read-only) |
 | `npm run panelist-roles -- invite.txt` | `panelist-roles.mjs` | Classify the panelists named in an interview invite (pasted text or `.ics`) by title into recruiter / hiring manager / privacy-compliance / technical / peer / executive, with a one-line prep focus per role (offline, read-only) |
@@ -1141,6 +1141,7 @@ node tracker.mjs history --id 42          # status transitions from status-log.t
 node tracker.mjs export                   # inverse: index → markdown table on stdout
 node tracker.mjs export --out repaired.md # write to a file (existing file backed up to .bak first)
 node tracker.mjs export --out repaired.md --force  # write even when columns would be dropped
+node tracker.mjs edit --num 42 --company "Example Labs" --role "AI Engineer"  # correct existing metadata
 node tracker.mjs delete --num 42 --dry-run # preview: which row would go, and the report it would orphan
 node tracker.mjs delete --num 42          # remove row 42 from applications.md (backed up to .bak first) + reindex
 ```
@@ -1148,6 +1149,8 @@ node tracker.mjs delete --num 42          # remove row 42 from applications.md (
 `query` and `history` auto-resync when the markdown or `status-log.tsv` changed since the last sync, so the index can never serve stale reads.
 
 `sync` detects and reports the corruption classes markdown accumulates — mojibake placeholder cells, scores stranded in the status column, non-canonical statuses (resolved via `templates/states.yml` aliases), missing/malformed/duplicate ids, stray pipes — and normalizes them **in the index only**; the markdown is never modified. Fix at the source with `normalize-statuses.mjs` / `dedup-tracker.mjs`, then re-sync. `history` reads a `status_events` table that each sync rebuilds from the transition ledger, `status-log.tsv` beside the tracker (written by `set-status.mjs`, folded with `funnel-velocity.mjs`'s `foldObservations()` so `correction` and retraction lines apply), so every transition keeps its own date and two changes between syncs stay two (#5555). A status the ledger does not explain — one changed by hand in `applications.md` — is recorded as an event dated with the sync that saw it and shown as `(no ledger row; observed at sync)`. That event is the only part of the index a rebuild cannot reproduce.
+
+`edit` updates only Company and Role on one existing row under the shared tracker lock, backs up the original Markdown to `.bak`, and rebuilds the derived index. Both fields are required; pass the current value for a field you want to keep. Optional `--expect-company` and `--expect-role` reject a stale edit. Empty values, pipes, control characters, malformed rows, and duplicate row numbers are refused. Other cells and original line endings are preserved; evaluation reports, archived postings, and generated artifacts are not renamed or rewritten.
 
 `delete` removes the row numbered `--num` from `applications.md` under the same lock as `merge-tracker.mjs`, after copying the tracker to `applications.md.bak`, and then rebuilds the index. `--dry-run` previews and writes nothing, the backup included. The row's report file is left on disk and named in the output.
 

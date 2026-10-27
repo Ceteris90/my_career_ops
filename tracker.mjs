@@ -40,6 +40,7 @@
  * Usage:
  *   node tracker.mjs sync [--check]             # (re)build applications.db from applications.md
  *                                               # --check: diagnose only, no write; exit 1 if issues found
+ *   node tracker.mjs edit --num N --company NAME --role TITLE
  *   node tracker.mjs query [--status Applied] [--company acme] [--role designer] [--csv]
  *                          [--since 2026-01-01] [--min-score 4] [--id N] [--limit 20] [--json]
  *   node tracker.mjs history --id N             # status transitions: the ledger's, plus changes only a sync saw
@@ -68,6 +69,7 @@ import {
 import { parseStatusLog, foldObservations } from './funnel-velocity.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
+import { editTrackerIdentity } from './lib/tracker-identity.mjs';
 import { escapeFormulaCell } from './lib/tsv-formula-escape.mjs';
 
 /**
@@ -1211,9 +1213,43 @@ async function deleteApp(args, ctx) {
   if (report) ctx.error(`Note: report file may now be orphaned — ${report}`);
 }
 
-const COMMANDS = { sync, query, history, export: exportMd, delete: deleteApp };
+// Identity edits use the same locked source-of-truth write path as other mutations.
+async function editApp(args, ctx) {
+  let transaction;
+  try {
+    transaction = await openTrackerTransaction(ctx.mdPath);
+    const before = transaction.read();
+    const after = editTrackerIdentity(before, {
+      num: flagValue(args, '--num'),
+      company: flagValue(args, '--company'),
+      role: flagValue(args, '--role'),
+      expectedCompany: flagValue(args, '--expect-company'),
+      expectedRole: flagValue(args, '--expect-role'),
+    });
+    if (before !== after) {
+      writeFileAtomic(`${transaction.path}.bak`, before);
+      transaction.replace(after);
+    }
+  } catch (error) {
+    const code = error.code === 'LOCK_TIMEOUT' ? 'lock-timeout' : error.code ?? 'write-failed';
+    ctx.log(JSON.stringify({ error: error.message, code }));
+    return 1;
+  } finally {
+    transaction?.close();
+  }
+  // Markdown is committed. Index repair must not make a successful edit look failed.
+  try {
+    const db = ctx.openDb(await loadSqlite(ctx));
+    syncIndex(db, loadStates(ctx), ctx);
+  } catch (error) {
+    ctx.error(`Identity saved; index resync skipped: ${error.message}`);
+  }
+  ctx.log(JSON.stringify({ ok: true }));
+}
 
-const TOP_LEVEL_USAGE = 'Usage: node tracker.mjs <sync|query|history|export|delete> [flags]\n'
+const COMMANDS = { sync, query, history, export: exportMd, delete: deleteApp, edit: editApp };
+
+const TOP_LEVEL_USAGE = 'Usage: node tracker.mjs <sync|query|history|export|edit|delete> [flags]\n'
   + 'See the header comment of this file for examples, or docs/SCRIPTS.md.';
 
 // Every flag each subcommand accepts, from the header comment (lines 24-32).
@@ -1251,6 +1287,11 @@ const SUBCOMMAND_FLAGS = {
       + '  inverse: applications.db → markdown (stdout by default)\n'
       + '  --force: write even when columns would be dropped',
   },
+  edit: {
+    known: ['--num', '--company', '--role', '--expect-company', '--expect-role', '--help', '-h'],
+    valueFlags: ['--num', '--company', '--role', '--expect-company', '--expect-role'],
+    usage: 'Usage: node tracker.mjs edit --num N --company NAME --role TITLE [--expect-company NAME --expect-role TITLE]',
+  },
   delete: {
     known: ['--num', '--dry-run', '--help', '-h'],
     valueFlags: ['--num'],
@@ -1267,7 +1308,7 @@ const SUBCOMMAND_FLAGS = {
  * another script — passes its own, so two calls in one process can target two
  * trackers (#4758; see resolveDbPath for why that was not possible before).
  *
- * @param {string} command - sync | query | history | export | delete.
+ * @param {string} command - sync | query | history | export | edit | delete.
  * @param {string[]} [args] - The command's flags, as on the command line.
  * @param {object} options
  * @param {string} options.mdPath - The markdown tracker (source of truth).

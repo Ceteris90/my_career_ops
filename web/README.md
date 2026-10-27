@@ -282,3 +282,7 @@ memory. Conversations are limited to 2,000 messages and 1 MB; a larger save is
 rejected visibly without overwriting the previous file. On a save failure, export
 the live conversation (including unsaved text) or explicitly confirm discarding
 unsaved changes to start a new chat. Saved conversations remain on disk.
+
+### Correcting a company or role
+
+Open a tracked application from **Pipeline → All**, then choose **Edit company / role** below the detail-page actions. Update either prefilled field and choose **Save changes**, or **Cancel** to discard the draft. The tracker is updated through the core's locked `tracker.mjs edit` command; the Pipeline list and details refresh from the saved values. A stale edit is rejected so you can refresh before trying again. Original evaluation reports and archived postings remain unchanged.

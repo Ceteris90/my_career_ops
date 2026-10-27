@@ -23,6 +23,7 @@ import { GeneratePdfButton } from "@/components/generate-pdf-button";
 import { CoverDraftButton } from "@/components/cover-draft-button";
 import { ApplyButton } from "@/components/apply-button";
 import { MarkPdfReadyButton } from "@/components/mark-pdf-ready-button";
+import { EditApplication } from "@/components/edit-application";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
 import { ReportMarkdown } from "@/components/report-markdown";
 import { KeywordCoverage } from "@/components/keyword-coverage";
@@ -130,6 +131,8 @@ export function ReportView({
             </a>
           )}
         </div>
+
+        {app && <EditApplication key={app.n} n={String(Number(app.n))} company={app.company} role={app.role} />}
 
         {app && canDelete && (
           <div className="mt-3">
