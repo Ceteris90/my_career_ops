@@ -103,6 +103,35 @@ check('contact name used only when the invite names one (From: line or sign-off)
   assert.match(draftOf(INVITE, [row()]).body, /^Hello,/);
 });
 
+check('tracker role and company with punctuation, digits and combining marks are kept on an exact match', () => {
+  const d = draftOf('Company: Northwind Foods\nWe would like to invite you to schedule your phone screen.',
+    [row({ company: 'Northwind Foods', role: 'Program Lead (Events) / C++ 3M' })]);
+  assert.match(d.subject, /Program Lead \(Events\) \/ C\+\+ 3M interview at Northwind Foods/);
+  const decomposed = 'Cafe' + String.fromCharCode(0x301) + ' Example';
+  const d2 = draftOf('Company: ' + decomposed + '\nWe would like to invite you to schedule your phone screen.', [row({ company: decomposed, role: 'Analyst' })]);
+  assert.ok(d2.subject.includes('Analyst interview at ' + decomposed), d2.subject);
+});
+
+check('tracker values carrying a link, address, control character or excess length fall back to a placeholder', () => {
+  for (const role of ['Analyst http://bad.example', 'Analyst pat@acme.example', 'Analyst\u0007bell', 'x'.repeat(100)]) {
+    const d = draftOf(INVITE, [row({ role })]);
+    assert.match(d.subject, /\[role\]/, role);
+  }
+});
+
+check('sole fuzzy candidate gives no tracker company or role; an unsafe extracted company becomes a placeholder', () => {
+  const d = draftOf('Company: Acme Supply Distribution Group\nWe would like to invite you to schedule your phone screen.', [row()]);
+  assert.match(d.subject, /\[role\] interview at Acme Supply Distribution Group/);
+  const d2 = draftOf('Company: Acme Supply Distribution Group http://bad.example\nWe would like to invite you to schedule your phone screen.', [row()]);
+  assert.match(d2.subject, /\[company\]/);
+});
+
+check('team or organisation sender labels fall back to a plain greeting; a surname like Link is fine', () => {
+  assert.match(draftOf(`From: Acme Careers <no-reply@acme.example>\n${INVITE}`, [row()]).body, /^Hello,/);
+  assert.match(draftOf(`${INVITE}\nBest regards,\nRecruiting Team`, [row()]).body, /^Hello,/);
+  assert.match(draftOf(`${INVITE}\nBest regards,\nSam Link`, [row()]).body, /^Hello Sam,/);
+});
+
 check('--no-clarification-draft equivalent (options.clarificationDraft false) yields null', () => {
   assert.equal(analyzeInvite(INVITE, [row()], { clarificationDraft: false, readReport: noReport }).clarificationDraft, null);
 });

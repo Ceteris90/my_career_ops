@@ -855,13 +855,30 @@ function safeName(value, maxLen) {
   return v;
 }
 
+// Tracker cells are the user's own data, so they get a wider allowlist than
+// invite-derived text (parentheses, slashes, digits, combining marks), with the
+// same hard stops: length, control characters, links and addresses.
+const TRACKER_NAME_RE = /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} '&.,()+\/#:;\u{2019}\u{2013}\u{2014}-]*$/u;
+function safeTrackerName(value, maxLen) {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v || v.length > maxLen) return null;
+  if (/[\p{Cc}\u{2028}\u{2029}]/u.test(v)) return null;
+  if (!TRACKER_NAME_RE.test(v) || /https?|www\.|@/i.test(v)) return null;
+  return v;
+}
+
 // A contact name is used only when the invite names one in a place a sender
 // belongs: a From: line, or a sign-off followed by a name line. First name only.
 function extractContactName(text) {
   const NAME_ONLY = /^[\p{Lu}][\p{L}'.-]*(?:\s+[\p{Lu}][\p{L}'.-]*){0,2}$/u;
+  // Sender labels that name a team or organisation, not a person. Deliberately
+  // not NOT_A_PERSON, whose "link" would reject real surnames.
+  const NOT_A_CONTACT = /\b(?:careers?|recruit(?:er|ers|ing|ment)|talent|hiring|resources|team|support|notifications?|hr|staffing)\b/i;
   const firstName = raw => {
     const t = raw.trim();
-    return NAME_ONLY.test(t) ? safeName(t, 40)?.split(/\s+/)[0] ?? null : null;
+    if (!NAME_ONLY.test(t) || NOT_A_CONTACT.test(t)) return null;
+    return safeName(t, 40)?.split(/\s+/)[0] ?? null;
   };
   const from = text.match(/^\s*from\s*:\s*([^\n<]+?)\s*(?:<[^>\n]*>)?\s*$/im);
   if (from) return firstName(from[1]);
@@ -926,11 +943,11 @@ export function buildClarificationDraft(analysis, text, options = {}) {
   let company = null;
   let role = null;
   if (confident) {
-    company = safeName(confident.company, 60);
-    role = safeName(confident.role, 80);
+    company = safeTrackerName(confident.company, 60);
+    role = safeTrackerName(confident.role, 80);
   } else {
-    const keys = new Set(candidates.map(c => normalizeCompanyName(c.company)));
-    company = safeName(keys.size === 1 ? candidates[0].company : analysis.signals?.company, 60);
+    // No tracker fallback outside an exact single match.
+    company = safeName(analysis.signals?.company, 60);
   }
   company = company || PLACEHOLDER_COMPANY;
   role = role || PLACEHOLDER_ROLE;
