@@ -136,6 +136,9 @@ export function PipelineView({
   const [windowState, setWindowState] = useState<{ key: string; span: { start: number; end: number } } | null>(null);
   const span = windowState?.key === filterKey ? windowState.span : initialTrackerWindow(filtered.length);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
+  // TRACKER_ROW_PX is the first-paint guess. The status cell wraps to two
+  // lines at some widths, so the spacers use the height a mounted row has.
+  const [rowPx, setRowPx] = useState(TRACKER_ROW_PX);
   const mountedRows = filtered.slice(span.start, span.end);
   const columnCount = SORT_KEYS.length + 1;
 
@@ -145,9 +148,11 @@ export function PipelineView({
     const measure = () => {
       if (el.hidden) return;
       const rect = el.getBoundingClientRect();
+      const rowHeight = el.querySelector("tr[data-application-key]")?.getBoundingClientRect().height || rowPx;
+      if (rowHeight !== rowPx) setRowPx(rowHeight);
       const next = trackerWindow({
         count: filtered.length,
-        rowHeight: TRACKER_ROW_PX,
+        rowHeight,
         overscan: TRACKER_OVERSCAN,
         tableTop: rect.top,
         viewportHeight: window.innerHeight,
@@ -164,7 +169,7 @@ export function PipelineView({
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
     };
-  }, [filterKey, filtered.length]);
+  }, [filterKey, filtered.length, rowPx]);
 
   const filteredKeys = filtered.map(applicationKey);
   const selectedRows = filtered.filter((r) => selected.has(applicationKey(r)));
@@ -387,7 +392,7 @@ export function PipelineView({
             <tbody ref={bodyRef} className="divide-y divide-border" hidden={isPending} aria-busy={false}>
               {span.start > 0 && (
                 <tr aria-hidden="true">
-                  <td colSpan={columnCount} style={{ height: span.start * TRACKER_ROW_PX, padding: 0, border: 0 }} />
+                  <td colSpan={columnCount} style={{ height: span.start * rowPx, padding: 0, border: 0 }} />
                 </tr>
               )}
               {mountedRows.map((r, i) => {
@@ -396,7 +401,7 @@ export function PipelineView({
                 const detailHref = `/pipeline/${encodeURIComponent(r.n)}${detailQuery ? `?${detailQuery}` : ""}`;
                 const posting = postingHref(r.url);
                 return (
-                  <tr key={key} data-application-key={key} aria-rowindex={span.start + i + 2} className="group transition-colors hover:bg-surface/40" style={{ height: TRACKER_ROW_PX }}>
+                  <tr key={key} data-application-key={key} aria-rowindex={span.start + i + 2} className="group transition-colors hover:bg-surface/40">
                     <td className="w-8 px-3 py-3">
                       <input
                         type="checkbox"
@@ -463,7 +468,7 @@ export function PipelineView({
               })}
               {span.end < filtered.length && (
                 <tr aria-hidden="true">
-                  <td colSpan={columnCount} style={{ height: (filtered.length - span.end) * TRACKER_ROW_PX, padding: 0, border: 0 }} />
+                  <td colSpan={columnCount} style={{ height: (filtered.length - span.end) * rowPx, padding: 0, border: 0 }} />
                 </tr>
               )}
             </tbody>
