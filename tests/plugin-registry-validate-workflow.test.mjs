@@ -58,6 +58,9 @@ test('checks the base branch out beside the PR checkout', () => {
   // checkout cleans the workspace by default, so the root checkout must come
   // first or it would delete base/.
   assert.ok(steps.indexOf(pr[0]) < steps.indexOf(base[0]), 'checkout the PR first, then base/');
+  // Nothing later in the job needs authenticated git, and the PR controls code
+  // that runs here, so neither checkout may leave a token behind.
+  for (const c of [pr[0], base[0]]) assert.equal(c.with && c.with['persist-credentials'], false, 'persist-credentials: false on every checkout');
 });
 
 test('runs the validator only from the base copy', () => {
