@@ -711,3 +711,17 @@ test('the shipped templates are clean', (t) => {
 });
 
 test.after(() => rmSync(dir, { recursive: true, force: true }));
+
+// An iframe in svg or math is a foreign element: it loads no srcdoc, so nothing in
+// the srcdoc is requested or run (probed with JavaScript-off Chromium). A <meta>
+// breaks out of foreign content, so a refresh outside an iframe still counts.
+test('a srcdoc is read only on an HTML iframe', () => {
+  const inner = '&lt;img src=&quot;https://example.com/a.png&quot;&gt;&lt;script&gt;x()&lt;/script&gt;&lt;meta http-equiv=refresh content=0&gt;';
+  const want = ['meta-refresh', 'remote-subresource', 'script-element'];
+  assert.deepEqual(ids(lint(`<iframe srcdoc="${inner}"></iframe>`)).filter((id) => want.includes(id)).sort(), want);
+  for (const wrap of ['svg', 'math']) {
+    const html = `<${wrap}><iframe srcdoc="${inner}"></iframe></${wrap}>`;
+    assert.deepEqual(ids(lint(html)).filter((id) => want.includes(id)), [], html);
+  }
+  assert.deepEqual(ids(lint('<svg><meta http-equiv="refresh" content="0;url=a.html"></svg>')), ['meta-refresh']);
+});
