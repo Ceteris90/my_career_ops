@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, chmodSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { installPack, removePack, installedPacks, readLock } from '../lib/templates-install.mjs';
@@ -204,6 +204,17 @@ test('remove of an unknown pack is refused', () => {
   assert.throws(() => removePack(root(), 'ghost'), /not installed/);
 });
 
+test('a relative data root works: lock paths are checked against the resolved templates directory', () => {
+  const r = root();
+  installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
+  const rel = relative(process.cwd(), r);
+  assert.ok(!isAbsolute(rel), 'the test needs a relative root');
+  const res = installPack(rel, { entry: reg({ version: '0.2.0' }), clone: cloner(() => packDir(manifest({ version: '0.2.0' }))), force: true });
+  assert.equal(res.version, '0.2.0');
+  removePack(rel, 'demo');
+  assert.equal(existsSync(join(r, 'templates', 'demo')), false);
+});
+
 test('remove never follows a lock path out of templates/<id>/', () => {
   const r = root();
   const victim = join(r, 'victim.txt');
@@ -397,7 +408,8 @@ const squatTmpLock = (r) => mkdirSync(join(r, `templates.lock.${process.pid}.tmp
 test('a failure after the copy removes the files it wrote and leaves nothing behind', () => {
   const r = root();
   squatTmpLock(r);
-  assert.throws(() => installPack(r, { entry: reg(), clone: cloner(() => packDir()) }));
+  // The write's own error surfaces, not the error from cleaning up after it.
+  assert.throws(() => installPack(r, { entry: reg(), clone: cloner(() => packDir()) }), { code: 'EISDIR' });
   assert.equal(existsSync(join(r, 'templates', 'demo')), false);
   assert.equal(existsSync(join(r, 'templates.lock')), false);
   // The retry is not blocked by a half install.
@@ -410,7 +422,7 @@ test('a late failure during a forced reinstall restores the previous version', (
   installPack(r, { entry: reg(), clone: cloner(() => packDir()) });
   squatTmpLock(r);
   const v2 = () => packDir(manifest({ version: '0.2.0' }), { 'templates/cv-template.plain.html': CV + '<!-- v2 -->' });
-  assert.throws(() => installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(v2), force: true }));
+  assert.throws(() => installPack(r, { entry: reg({ version: '0.2.0' }), clone: cloner(v2), force: true }), { code: 'EISDIR' });
   assert.equal(readFileSync(join(r, 'templates/demo/cv-template.plain.html'), 'utf-8'), CV);
   assert.equal(existsSync(join(r, 'templates/demo/cover-letter-template.plain.html')), true);
   assert.equal(readLock(r).packs.demo.version, '0.1.0');
