@@ -1196,8 +1196,9 @@ function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), sha
     }
   };
   for (const tagInfo of doc.tags) {
-    const { raw, name, media } = tagInfo;
-    if (name === 'iframe') {
+    const { raw, name, ns, media } = tagInfo;
+    // An svg or math iframe is a foreign element and loads no srcdoc (probed).
+    if (name === 'iframe' && ns === 'html') {
       const srcdoc = attrValue(raw, 'srcdoc');
       if (srcdoc !== null) {
         if (shallow) capped.push(excerpt(raw));
@@ -1280,8 +1281,8 @@ function documentsIn(doc, depth = 0) {
   if (depth === 0 && nestedDocuments.has(doc)) return nestedDocuments.get(doc);
   const docs = [doc];
   if (depth < MAX_SRCDOC_DEPTH) {
-    for (const { raw, name } of doc.tags) {
-      const srcdoc = name === 'iframe' ? attrValue(raw, 'srcdoc') : null;
+    for (const { raw, name, ns } of doc.tags) {
+      const srcdoc = name === 'iframe' && ns === 'html' ? attrValue(raw, 'srcdoc') : null;
       if (srcdoc !== null) docs.push(...documentsIn(scanHtml(srcdoc), depth + 1));
     }
   }
