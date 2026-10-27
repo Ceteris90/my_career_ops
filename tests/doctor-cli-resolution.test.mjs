@@ -8,7 +8,7 @@ import { pass, fail, NODE, ROOT, rmSync } from './helpers.mjs';
 import { execFileSync } from 'child_process';
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { delimiter, join } from 'path';
 
 console.log('\ndoctor.mjs — CLI resolution');
 
@@ -208,6 +208,24 @@ try {
         pass('opencode.json checkout hint beats a grok binary on PATH');
       } else {
         fail(`#8 unexpected state: ${JSON.stringify({ active_cli: state.active_cli, cli_source: state.cli_source })}`);
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+
+  // POSIX searches the current directory for an empty PATH component (a
+  // leading, trailing, or doubled separator). Windows does not.
+  if (process.platform !== 'win32') {
+    const dir = mkdtempSync(join(tmpdir(), 'co-resolve-empty-component-'));
+    try {
+      writeFileSync(join(dir, 'grok'), '#!/bin/sh\nexit 0\n');
+      chmodSync(join(dir, 'grok'), 0o755);
+      const state = runDoctor(dir, [], { PATH: `${binDirWith(dir, [])}${delimiter}` });
+      if (expectOk(state, '#10 empty PATH component')
+          && state.active_cli === 'grok'
+          && state.cli_source === 'path') {
+        pass('a trailing PATH separator finds grok in the current directory');
+      } else {
+        fail(`#10 unexpected state: ${JSON.stringify({ active_cli: state.active_cli, cli_source: state.cli_source, _error: state._error })}`);
       }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }

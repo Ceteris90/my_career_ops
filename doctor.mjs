@@ -716,13 +716,20 @@ const CLI_BIN = Object.fromEntries(AGENT_CLIS.map((id) => [id, id === 'antigravi
 // because setup is being checked. A directory, or a file without the execute
 // bit, is not an install.
 function cliExecutableOnPath(bin) {
+  const pathEnv = process.env.PATH;
+  // Unset or empty PATH means nothing is installed. A hermetic run keeps the
+  // claude default. A set PATH can still contain an empty component.
+  if (!pathEnv) return false;
   const exts = process.platform === 'win32'
     ? ['', ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').map((ext) => ext.trim()).filter(Boolean)]
     : [''];
-  for (const dir of (process.env.PATH || '').split(delimiter)) {
-    if (!dir) continue;
+  for (const dir of pathEnv.split(delimiter)) {
+    // POSIX searches the current directory for an empty component (a leading,
+    // trailing, or doubled separator). Windows does not.
+    const searchDir = dir || (process.platform === 'win32' ? '' : '.');
+    if (!searchDir) continue;
     for (const ext of exts) {
-      const candidate = join(dir, bin + ext);
+      const candidate = join(searchDir, bin + ext);
       try {
         if (!statSync(candidate).isFile()) continue;
         accessSync(candidate, constants.X_OK);
