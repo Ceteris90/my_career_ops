@@ -606,6 +606,9 @@ function workflowJobs() {
  * paths as written, for comparing a guard with what it guards.
  * @param {object[]} steps
  */
+// `./base/x.mjs` and `base/x.mjs` name one file.
+const dotless = (p) => p.replace(/^(?:\.\/+)+/, '');
+
 function sweepSteps(steps) {
   const sparse = steps.flatMap((s) => {
     const declared = s?.with?.['sparse-checkout'];
@@ -625,8 +628,8 @@ function sweepSteps(steps) {
   // with what it guards before unwrapping.
   const prefixes = steps
     .filter((s) => String(s?.uses ?? '').startsWith('actions/checkout@') && s.with?.path && !s.with.repository)
-    .map((s) => `${String(s.with.path).replace(/\/+$/, '')}/`);
-  const unwrap = (p) => { const pre = prefixes.find((x) => p.startsWith(x)); return pre ? p.slice(pre.length) : p; };
+    .map((s) => `${dotless(String(s.with.path)).replace(/\/+$/, '')}/`);
+  const unwrap = (p) => { const q = dotless(p); const pre = prefixes.find((x) => q.startsWith(x)); return pre ? q.slice(pre.length) : q; };
   const invokedRaw = paths(INVOKES, live);
   const guardedRaw = paths(GUARDS, live);
   return {
@@ -676,6 +679,17 @@ test('an absent-means-pass guard tests the path its job runs', () => {
   for (const j of workflowJobs()) {
     if (!j.guarded.length) continue;
     assert.ok(guardsWhatItRuns(j), `${j.file} (${j.job}) guards a different path than it runs`);
+  }
+});
+
+test('a ./ prefix on the run or on the checkout path still unwraps base/', () => {
+  for (const [path, run] of [['base', 'node ./base/x.mjs'], ['./base', 'node base/x.mjs'], ['./base/', 'node ./base/x.mjs']]) {
+    const j = sweepSteps([
+      { uses: 'actions/checkout@0000000000000000000000000000000000000000', with: { path } },
+      { run: `if [ ! -f ./base/x.mjs ]; then exit 0; fi\n${run}` },
+    ]);
+    assert.deepEqual(j.invoked, ['x.mjs'], `${path} / ${run}`);
+    assert.deepEqual(j.guarded, ['x.mjs'], `${path} / ${run}`);
   }
 });
 
