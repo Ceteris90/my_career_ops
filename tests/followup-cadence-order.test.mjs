@@ -20,10 +20,16 @@ const ROWS = [
   [5, '2026-07-10', 'Umbrella', 'Applied', -34],
   [6, '2026-08-17', 'Hooli', 'Applied', 4],
   [7, '2026-07-25', 'Vandelay', 'Applied', -19],
+  // Same next day as Acme, listed backwards, so only the tracker number orders them.
+  [9, '2026-08-05', 'Pied', 'Applied', -8],
+  [8, '2026-08-05', 'Piper', 'Applied', -8],
+  // Same pinned next day, newer company first in the file, so only application age orders them.
+  [11, '2026-07-20', 'Quark', 'Applied', -5],
+  [12, '2026-06-15', 'Nimbus', 'Applied', -5],
 ];
 const EXPECTED = [
   'Initech',
-  'Globex', 'Umbrella', 'Vandelay', 'Acme',
+  'Globex', 'Umbrella', 'Vandelay', 'Acme', 'Piper', 'Pied', 'Nimbus', 'Quark',
   'Hooli', 'Wonka',
 ];
 
@@ -37,6 +43,13 @@ try {
     '|---|------|---------|------|-------|--------|-----|--------|-------|',
     ...ROWS.map(([num, date, company, status]) =>
       `| ${num} | ${date} | ${company} | Platform Engineer | 4.0/5 | ${status} | ❌ | — | https://jobs.${company.toLowerCase()}.example/1 |`),
+    '',
+  ].join('\n'));
+  writeFileSync(join(dir, 'data', 'follow-ups.md'), [
+    '# Follow-ups',
+    '',
+    '- next #11 2026-08-15 (set 2026-08-01)',
+    '- next #12 2026-08-15 (set 2026-08-01)',
     '',
   ].join('\n'));
 
