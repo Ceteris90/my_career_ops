@@ -399,8 +399,14 @@ function jurisdictionFoldedKey(distinctive) {
  * (whatever companyTokens() dropped from `distinctive`), gives the keys a
  * posting is actually likely to spell: "Eleven Labs Ltd" -> 'elevenlabs',
  * 'eleven'; "London Stock Exchange Group plc" -> 'londonstockexchangegroup',
- * 'londonstockexchange'. Nothing is trimmed from the middle, so "S&P Global
- * Limited" keeps 'spglobal' and never becomes 'sp'.
+ * 'londonstockexchange'.
+ *
+ * Every key keeps at least one distinctive token and at least three
+ * characters. Without the first, a generic-only register name ("Digital
+ * Solutions Ltd") trims to 'digital' and claims any posting spelled that way;
+ * without the second, "S&P Global Limited" trims past 'spglobal' to 'sp', a
+ * two-letter key that is coincidence as often as signal (the same floor the
+ * fuzzy tiers apply).
  *
  * @param {{all: string[], distinctive: string[]}} tokens
  * @returns {string[]} Keys longest-first, excluding the full key itself.
@@ -411,7 +417,10 @@ function trimmedKeys(tokens) {
   const rest = [...tokens.all];
   while (rest.length > 1 && !distinctive.has(rest[rest.length - 1])) {
     rest.pop();
-    keys.push(rest.join(''));
+    if (!rest.some((t) => distinctive.has(t))) break;
+    const key = rest.join('');
+    if (key.length < 3) break;
+    keys.push(key);
   }
   return keys;
 }
@@ -919,12 +928,23 @@ export function pickRegisterCsvUrl(payload) {
       `GOV.UK Content API lists ${attachments.length} attachment(s) but no CSV — the publication's format changed; check ${REGISTER_PAGE}`,
     );
   }
+  const url = new URL(csv.url, REGISTER_PAGE);
+  if (url.protocol !== 'https:' || !REGISTER_ASSET_HOSTS.has(url.hostname)) {
+    throw new Error(`refusing register CSV from an unexpected host: ${url.href}`);
+  }
   return {
-    url: csv.url,
+    url: url.href,
     filename: csv.filename || null,
     publishedAt: payload?.public_updated_at || payload?.updated_at || null,
   };
 }
+
+/**
+ * Hosts the register CSV may be downloaded from. The URL comes out of a JSON
+ * payload, so it is checked before anything is fetched: a changed or tampered
+ * response must not point an 11 MB download at an arbitrary or internal host.
+ */
+const REGISTER_ASSET_HOSTS = new Set(['assets.publishing.service.gov.uk', 'www.gov.uk']);
 
 /** Minimum plausible register size, below which a download is treated as truncated. */
 const MIN_REGISTER_ROWS = 1000;
@@ -1308,8 +1328,8 @@ function selfTest() {
     public_updated_at: '2026-10-23T08:32:45Z',
     details: {
       attachments: [
-        { url: 'https://example.invalid/notes.pdf', content_type: 'application/pdf' },
-        { url: 'https://example.invalid/reg.csv', content_type: 'text/csv', filename: 'reg.csv' },
+        { url: 'https://assets.publishing.service.gov.uk/media/x/notes.pdf', content_type: 'application/pdf' },
+        { url: 'https://assets.publishing.service.gov.uk/media/x/reg.csv', content_type: 'text/csv', filename: 'reg.csv' },
       ],
     },
   });

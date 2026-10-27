@@ -171,6 +171,25 @@ test('lookupSponsor token-trimmed tier: nothing is trimmed from the middle of a 
   assert.notEqual(colne.verdict, 'licensed', '"Colne" stops at the distinctive word "Valley"');
 });
 
+test('lookupSponsor token-trimmed tier: every trimmed key keeps a distinctive token', () => {
+  // "Digital Solutions Ltd" is filler only, and "S&P Global Limited" would
+  // trim past 'spglobal' to the two-letter 'sp'. Neither key may exist, so a
+  // posting spelled "Digital" or "SP" is not handed either organisation.
+  const own = buildRegisterIndex(parseRegister([
+    'Organisation Name,Town/City,County,Type & Rating,Route',
+    'Digital Solutions Ltd,Leeds,,Worker (A rating),Skilled Worker',
+    'S&P Global Limited,London,,Worker (A rating),Skilled Worker',
+  ].join('\n')).organisations);
+  for (const query of ['Digital', 'SP']) {
+    const r = lookupSponsor(own, query);
+    assert.notEqual(r.matchTier, 'token-trimmed', `"${query}" must not match on a trimmed key`);
+    assert.notEqual(r.verdict, 'licensed', `"${query}" must not resolve to an organisation`);
+  }
+  const sp = lookupSponsor(own, 'S&P Global');
+  assert.equal(sp.verdict, 'licensed', 'the full brand still resolves');
+  assert.equal(sp.organisations[0].name, 'S&P Global Limited');
+});
+
 test('lookupSponsor strong tier: still reached when the keys differ but the distinctive sets match', () => {
   // Singular/plural filler ("Technology" vs "Technologies") changes the KEY,
   // so no trimmed key equals it — but both names reduce to {wayve}, which is
@@ -380,21 +399,21 @@ test('pickRegisterCsvUrl: the CSV attachment is selected over other formats', ()
     public_updated_at: '2026-10-23T08:32:45Z',
     details: {
       attachments: [
-        { url: 'https://example.invalid/notes.pdf', content_type: 'application/pdf' },
-        { url: 'https://example.invalid/reg.csv', content_type: 'text/csv', filename: 'reg.csv' },
+        { url: 'https://assets.publishing.service.gov.uk/media/x/notes.pdf', content_type: 'application/pdf' },
+        { url: 'https://assets.publishing.service.gov.uk/media/x/reg.csv', content_type: 'text/csv', filename: 'reg.csv' },
       ],
     },
   });
-  assert.equal(picked.url, 'https://example.invalid/reg.csv');
+  assert.equal(picked.url, 'https://assets.publishing.service.gov.uk/media/x/reg.csv');
   assert.equal(picked.filename, 'reg.csv');
   assert.equal(picked.publishedAt, '2026-10-23T08:32:45Z');
 });
 
 test('pickRegisterCsvUrl: a .csv url is accepted even when the content type is generic', () => {
   const picked = pickRegisterCsvUrl({
-    details: { attachments: [{ url: 'https://example.invalid/reg.csv', content_type: 'application/octet-stream' }] },
+    details: { attachments: [{ url: 'https://assets.publishing.service.gov.uk/media/x/reg.csv', content_type: 'application/octet-stream' }] },
   });
-  assert.equal(picked.url, 'https://example.invalid/reg.csv');
+  assert.equal(picked.url, 'https://assets.publishing.service.gov.uk/media/x/reg.csv');
 });
 
 test('pickRegisterCsvUrl: no CSV throws with the publication page to check, never a guess', () => {
@@ -404,6 +423,23 @@ test('pickRegisterCsvUrl: no CSV throws with the publication page to check, neve
   );
   assert.throws(() => pickRegisterCsvUrl({ details: { attachments: [] } }), /no attachments/);
   assert.throws(() => pickRegisterCsvUrl({}), /no attachments/);
+});
+
+test('pickRegisterCsvUrl: refuses a CSV that is not https on a GOV.UK host', () => {
+  for (const url of [
+    'http://assets.publishing.service.gov.uk/media/x/reg.csv',
+    'https://example.com/reg.csv',
+    'https://assets.publishing.service.gov.uk.example.com/reg.csv',
+    'https://169.254.169.254/reg.csv',
+  ]) {
+    assert.throws(
+      () => pickRegisterCsvUrl({ details: { attachments: [{ url, content_type: 'text/csv' }] } }),
+      /unexpected host/,
+      url,
+    );
+  }
+  const relative = pickRegisterCsvUrl({ details: { attachments: [{ url: '/media/x/reg.csv', content_type: 'text/csv' }] } });
+  assert.equal(relative.url, 'https://www.gov.uk/media/x/reg.csv', 'a relative URL resolves against GOV.UK');
 });
 
 // --- 6. Employer extraction and roll-up -------------------------------------
