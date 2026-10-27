@@ -7,7 +7,7 @@ import { pass, fail, NODE, ROOT } from './helpers.mjs';
 import { execFileSync } from 'child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'fs';
 import { tmpdir } from 'os';
-import { delimiter, join } from 'path';
+import { join } from 'path';
 
 console.log('\ndoctor.mjs — CLI-aware Playwright MCP detection');
 
@@ -36,17 +36,11 @@ const EMPTY_HOME_DIR = mkdtempSync(join(tmpdir(), 'co-mcp-emptyhome-'));
 // doctor-cli-resolution.test.mjs. Scenarios that WANT any of these values
 // pass them explicitly via env.
 // The default scenarios assert cli_source=default means claude. That is only
-// true when no other agent CLI is executable on PATH. A developer machine
-// with one installed would otherwise decide those results. Node's own
-// directory is not a safe pin: the binary often shares a directory with
-// another CLI. git lives in the system directories this keeps.
-function hermeticPath() {
-  if (process.platform === 'win32') {
-    const sys = process.env.SystemRoot || 'C:\\Windows';
-    return join(sys, 'System32');
-  }
-  return ['/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(delimiter);
-}
+// true when no other agent CLI is executable on PATH. System directories are
+// not a safe pin: a machine image can ship a binary whose name matches one
+// (pi, gemini, copilot). An empty directory cannot. Node is launched by its
+// absolute path, and doctor skips its git check when git cannot be run.
+const EMPTY_PATH_DIR = mkdtempSync(join(tmpdir(), 'co-mcp-empty-path-'));
 
 function hostEnv() {
   const {
@@ -57,7 +51,7 @@ function hostEnv() {
     PATH: _path,
     ...rest
   } = process.env;
-  return { ...rest, PATH: hermeticPath() };
+  return { ...rest, PATH: EMPTY_PATH_DIR };
 }
 
 function runDoctor(cwd, args, env, { executionCwd = cwd } = {}) {
@@ -1241,4 +1235,5 @@ try {
 } finally {
   rmSync(EMPTY_CONFIG_DIR, { recursive: true, force: true });
   rmSync(EMPTY_HOME_DIR, { recursive: true, force: true });
+  rmSync(EMPTY_PATH_DIR, { recursive: true, force: true });
 }
