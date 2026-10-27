@@ -252,7 +252,7 @@ export function ReportView({
                       <details key={i} className="group mt-2 overflow-hidden rounded-xl border border-border/60 bg-surface/20">
                         <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 px-4 py-3 font-mono text-xs text-muted transition-colors hover:bg-surface-hover">
                           {cleanHeading(s.heading)}
-                          <ChevronDown className="ml-auto size-4 shrink-0 text-faint transition-transform group-open:rotate-180 print:hidden" />
+                          <ChevronDown className="ml-auto size-4 shrink-0 text-faint transition-transform group-open:rotate-180" />
                         </summary>
                         <div className="report-prose border-t border-border/60 px-4 py-3">
                           <ReportMarkdown>{s.content}</ReportMarkdown>
