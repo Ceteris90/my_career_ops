@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
+import { readJsonObject } from "@/lib/json-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,13 +52,11 @@ function runImport(text: string): Promise<ImportPayload> {
 }
 
 export async function POST(req: Request) {
-  let text = "";
-  try {
-    const body = (await req.json()) as { text?: unknown };
-    text = typeof body?.text === "string" ? body.text : "";
-  } catch {
+  const body = await readJsonObject<{ text?: unknown }>(req);
+  if (!body) {
     return Response.json({ ...FAILED, message: "No LinkedIn jobs found. Open a job alert email, select all, copy, and paste it here." }, { status: 400 });
   }
+  const text = typeof body.text === "string" ? body.text : "";
   const result = await runImport(text);
   const status = result.error === "too-large" ? 413 : result.error ? 500 : 200;
   return Response.json(result, { status });
