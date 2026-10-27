@@ -19,7 +19,6 @@
  * Exit code: 0 if all active, 1 if any expired or uncertain
  */
 
-import { chromium } from 'playwright';
 import { readFile } from 'fs/promises';
 import {
   checkUrlLivenessWithFallback,
@@ -248,6 +247,7 @@ async function main() {
   let browser = null, page = null, headed = null;
   async function ensureBrowser() {
     if (browser) return;
+    const { chromium } = await import('playwright');
     const launched = await chromium.launch({ headless: true });
     try {
       page = await newLivenessPage(launched);
