@@ -2,20 +2,28 @@
 export function inboxCommand(input) {
   if (!input || input.typing || input.composing || input.metaKey || input.ctrlKey || input.altKey) return null;
   const key = input.key;
-  if (key === "j" || key === "ArrowDown") return "next";
-  if (key === "k" || key === "ArrowUp") return "prev";
+  // Arrow keys stay with the browser so the page still scrolls.
+  if (key === "j") return "next";
+  if (key === "k") return "prev";
   if (key === "s" || key === "S") return "save";
   if ((key === "x" || key === "X") && input.shiftKey && (input.selected ?? 0) > 0) return "skip-selected";
   if (key === "x" || key === "X") return "skip";
   return null;
 }
 
-/** @param {{ tagName?: string, isContentEditable?: boolean, closestDialog?: boolean } | null | undefined} target */
+const NOT_TYPING_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset"]);
+
+/**
+ * A text field, a select, or anything in a dialog takes the keys. A row
+ * checkbox does not: it keeps focus after a click, and Shift+X comes next.
+ * @param {{ tagName?: string, type?: string, isContentEditable?: boolean, closestDialog?: boolean } | null | undefined} target
+ */
 export function typingFromTarget(target) {
   if (!target) return false;
   if (target.closestDialog) return true;
   const tag = String(target.tagName || "").toUpperCase();
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable === true;
+  if (tag === "INPUT") return !NOT_TYPING_INPUTS.has(String(target.type || "text").toLowerCase());
+  return tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable === true;
 }
 
 export function moveCursor(index, count, delta) {

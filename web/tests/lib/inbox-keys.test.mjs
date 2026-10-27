@@ -4,9 +4,9 @@ import { cursorAfterRemoval, inboxCommand, moveCursor, typingFromTarget } from "
 
 test("j and k move, s saves, and x skips the focused posting", () => {
   assert.equal(inboxCommand({ key: "j" }), "next");
-  assert.equal(inboxCommand({ key: "ArrowDown" }), "next");
+  assert.equal(inboxCommand({ key: "ArrowDown" }), null, "arrows keep scrolling the page");
   assert.equal(inboxCommand({ key: "k" }), "prev");
-  assert.equal(inboxCommand({ key: "ArrowUp" }), "prev");
+  assert.equal(inboxCommand({ key: "ArrowUp" }), null);
   assert.equal(inboxCommand({ key: "s" }), "save");
   assert.equal(inboxCommand({ key: "x" }), "skip");
   assert.equal(inboxCommand({ key: "X" }), "skip");
@@ -28,6 +28,8 @@ test("keys do nothing while typing, composing, or holding a modifier", () => {
 
 test("a field or an open dialog is typing, a button is not", () => {
   assert.equal(typingFromTarget({ tagName: "INPUT" }), true);
+  assert.equal(typingFromTarget({ tagName: "INPUT", type: "search" }), true);
+  assert.equal(typingFromTarget({ tagName: "INPUT", type: "checkbox" }), false, "a checked row keeps Shift+X");
   assert.equal(typingFromTarget({ tagName: "TEXTAREA" }), true);
   assert.equal(typingFromTarget({ tagName: "SELECT" }), true);
   assert.equal(typingFromTarget({ tagName: "DIV", isContentEditable: true }), true);

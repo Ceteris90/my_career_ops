@@ -284,6 +284,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       const target = event.target;
       const typing = typingFromTarget(target instanceof Element ? {
         tagName: target.tagName,
+        type: target instanceof HTMLInputElement ? target.type : undefined,
         isContentEditable: target instanceof HTMLElement && target.isContentEditable,
         closestDialog: Boolean(target.closest("dialog, [role='dialog']")),
       } : null);
@@ -314,11 +315,18 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
         current.skipSelected();
         return;
       }
-      const index = current.cursor < 0 ? 0 : current.cursor;
+      // With no cursor yet, s or x only shows it on the first row. Acting on a
+      // row the user cannot see yet would save or skip it unseen.
+      if (current.cursor < 0) {
+        if (current.visible.length === 0) return;
+        event.preventDefault();
+        setCursor(0);
+        return;
+      }
+      const index = current.cursor;
       const row = current.visible[index];
       if (!row || inboxScoreTarget(current.scoreByUrl.get(row.job.url)).evaluated) return;
       event.preventDefault();
-      if (current.cursor < 0) setCursor(0);
       if (command === "save") {
         current.save(row.job);
         setCursor(moveCursor(index, current.visible.length, 1));
@@ -375,18 +383,11 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
         <p className="text-sm font-medium text-foreground">
           {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
         </p>
-        <div className="flex items-center gap-3">
-          {visible.length > 0 && (
-            <button type="button" onClick={() => setSelected(new Set(visible.map((e) => e.job.url)))} className="text-xs text-muted transition-colors hover:text-foreground">
-              Select shown
-            </button>
-          )}
-          {hiddenCount > 0 && (
-            <button type="button" onClick={() => void restoreHidden()} disabled={restoring} aria-busy={restoring} className="text-xs text-faint transition-colors hover:text-foreground disabled:opacity-50 max-sm:min-h-[44px]">
-              {hiddenCount} hidden · {restoring ? "restoring…" : "restore"}
-            </button>
-          )}
-        </div>
+        {hiddenCount > 0 && (
+          <button type="button" onClick={() => void restoreHidden()} disabled={restoring} aria-busy={restoring} className="text-xs text-faint transition-colors hover:text-foreground disabled:opacity-50 max-sm:min-h-[44px]">
+            {hiddenCount} hidden · {restoring ? "restoring…" : "restore"}
+          </button>
+        )}
       </div>
       <p className="mt-1 text-xs text-faint">j and k move. s saves. x skips. Shift+X skips the checked rows.</p>
 
