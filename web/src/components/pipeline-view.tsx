@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, ChevronsUpDown, X, Compass, ArrowRight, ExternalLink, Download } from "lucide-react";
@@ -21,6 +21,7 @@ import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-naviga
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
+import { initialTrackerWindow, TRACKER_OVERSCAN, TRACKER_ROW_PX, trackerWindow } from "@/lib/tracker-window.mjs";
 
 type Tab = (typeof PIPELINE_TABS)[number];
 
@@ -130,6 +131,40 @@ export function PipelineView({
       (row) => companyPresentation(row).label,
     ) as Application[];
   }, [visibleApplications, tab, deferredQ, sort, minFilter]);
+
+  const filterKey = `${visibleTab}|${deferredQ}|${sort.key}|${sort.dir}|${minFilter ?? ""}|${filtered.length}`;
+  const [windowState, setWindowState] = useState<{ key: string; span: { start: number; end: number } } | null>(null);
+  const span = windowState?.key === filterKey ? windowState.span : initialTrackerWindow(filtered.length);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const mountedRows = filtered.slice(span.start, span.end);
+  const columnCount = SORT_KEYS.length + 1;
+
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => {
+      if (el.hidden) return;
+      const rect = el.getBoundingClientRect();
+      const next = trackerWindow({
+        count: filtered.length,
+        rowHeight: TRACKER_ROW_PX,
+        overscan: TRACKER_OVERSCAN,
+        tableTop: rect.top,
+        viewportHeight: window.innerHeight,
+      });
+      setWindowState((prev) => {
+        if (prev?.key === filterKey && prev.span.start === next.start && prev.span.end === next.end) return prev;
+        return { key: filterKey, span: next };
+      });
+    };
+    measure();
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+    };
+  }, [filterKey, filtered.length]);
 
   const filteredKeys = filtered.map(applicationKey);
   const selectedRows = filtered.filter((r) => selected.has(applicationKey(r)));
@@ -349,14 +384,19 @@ export function PipelineView({
             </thead>
             {/* Keep editors mounted while query navigation is pending: sorting
                 must not discard an open editor or an in-flight status save. */}
-            <tbody className="divide-y divide-border" hidden={isPending} aria-busy={false}>
-              {filtered.map((r) => {
+            <tbody ref={bodyRef} className="divide-y divide-border" hidden={isPending} aria-busy={false}>
+              {span.start > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={columnCount} style={{ height: span.start * TRACKER_ROW_PX, padding: 0, border: 0 }} />
+                </tr>
+              )}
+              {mountedRows.map((r) => {
                 const company = companyPresentation(r);
                 const key = applicationKey(r);
                 const detailHref = `/pipeline/${encodeURIComponent(r.n)}${detailQuery ? `?${detailQuery}` : ""}`;
                 const posting = postingHref(r.url);
                 return (
-                  <tr key={key} data-application-key={key} className="group transition-colors hover:bg-surface/40">
+                  <tr key={key} data-application-key={key} className="group transition-colors hover:bg-surface/40" style={{ height: TRACKER_ROW_PX }}>
                     <td className="w-8 px-3 py-3">
                       <input
                         type="checkbox"
@@ -421,6 +461,11 @@ export function PipelineView({
                   </tr>
                 );
               })}
+              {span.end < filtered.length && (
+                <tr aria-hidden="true">
+                  <td colSpan={columnCount} style={{ height: (filtered.length - span.end) * TRACKER_ROW_PX, padding: 0, border: 0 }} />
+                </tr>
+              )}
             </tbody>
             {isPending && (
               <tbody className="divide-y divide-border" aria-busy="true">

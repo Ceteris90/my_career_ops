@@ -37,5 +37,8 @@ test("the pipeline table mounts a window of a long tracker", { skip: liveServerS
   const scrolled = await mounted();
   assert.ok(scrolled < 40, `scrolled paint mounted ${scrolled} rows`);
   assert.equal(await page.getByRole("link", { name: "#1", exact: true }).count(), 0);
+  await page.getByPlaceholder("Search company or role…").fill("Zulu");
+  await page.getByRole("link", { name: "Fixture Zulu", exact: true }).waitFor();
+  assert.equal(await mounted(), 1);
   assert.deepEqual(errors, []);
 });
