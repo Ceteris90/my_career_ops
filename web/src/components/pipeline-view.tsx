@@ -104,9 +104,7 @@ export function PipelineView({
   // runs at low priority, and React drops a stale render when the next
   // keystroke arrives, so typing no longer waits on the whole table.
   const deferredQ = useDeferredValue(q);
-  // Typing stays local, so include it explicitly when leaving the list. Row
-  // links read the deferred copy too: the keystroke's urgent render then
-  // re-renders no memoized row, and the links catch up with the table.
+  // Typing stays local, so include it explicitly when leaving the list.
   const detailQuery = pipelineQuery(params.toString(), deferredQ);
 
   const filtered = useMemo(() => {

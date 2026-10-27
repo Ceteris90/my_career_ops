@@ -3,11 +3,6 @@
 // directory, then set PIPELINE_ROW_RERENDER_TEST_URL and
 // PIPELINE_ROW_RERENDER_TEST_ROOT when running this file.
 // Generate that directory with: node tests/fixtures/pipeline-status.mjs
-//
-// Ticking one row, or typing into the search box, must not re-render tracker
-// rows whose content did not change: on a 600-row tracker every such render
-// costs ~90 ms per interaction. The probe stands in for React DevTools, which
-// production React notifies on every commit.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,6 +13,8 @@ import { liveServerSkip } from "../helpers/live-server.mjs";
 const url = process.env.PIPELINE_ROW_RERENDER_TEST_URL;
 const root = process.env.PIPELINE_ROW_RERENDER_TEST_ROOT;
 
+// Production React reports every commit to __REACT_DEVTOOLS_GLOBAL_HOOK__, so
+// this stand-in hook can record which tracker rows re-rendered.
 function installCommitProbe() {
   const lastProps = new Map();
   window.__commits = [];

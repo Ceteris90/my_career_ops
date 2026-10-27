@@ -30,7 +30,6 @@ test("Pipeline detail links preserve the list context", { skip: liveServerSkip("
   const search = page.getByPlaceholder("Search company or role…");
   await search.fill("Fixture"); // local typing does not update the URL
   const row = page.locator("tbody tr").filter({ has: page.getByRole("link", { name: "#11", exact: true }) });
-  // Row links follow the deferred search, so they gain q a render after the keystroke.
   await row.locator('a[href*="q=Fixture"]').first().waitFor();
   for (const name of ["#11", "Fixture Alpha", "Engineer"]) {
     const href = await row.getByRole("link", { name, exact: true }).getAttribute("href");
