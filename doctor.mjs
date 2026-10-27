@@ -16,6 +16,7 @@ import { discoverPlugins, pluginRoots, pluginStatus } from './plugins/_engine.mj
 import { getCareerOpsRoot, getProfilePath, hasProfileOverride, isPluginInstallCopy } from './path-resolver.mjs';
 import { parseConfigByExtension } from './jsonc-parse.mjs';
 import { validateFlags, flagValue } from './lib/cli-flags.mjs';
+import { gmailRefreshAdvice } from './lib/gmail-auth.mjs';
 import { geminiNodeFloor } from './lib/gemini-node-floor.mjs';
 import { SKILL_ENTRYPOINTS } from './scaffolder/bin/skill-entrypoints.mjs';
 import { nodeFloor } from './lib/node-floor.mjs';
@@ -1132,6 +1133,51 @@ function checkPlugins(root) {
   return fixes.length ? { warn: true, label, fix: fixes } : { pass: true, label };
 }
 
+async function checkGmailRefresh(root) {
+  const envPath = join(root, '.env');
+  if (!existsSync(envPath)) return null;
+  let parsed = {};
+  try {
+    parsed = dotenv.parse(readFileSync(envPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  const clientId = parsed.GMAIL_CLIENT_ID;
+  const clientSecret = parsed.GMAIL_CLIENT_SECRET;
+  const refreshToken = parsed.GMAIL_REFRESH_TOKEN;
+  if (!clientId || !clientSecret || !refreshToken) return null;
+  const tokenUrl = process.env.CAREER_OPS_GMAIL_TOKEN_URL || 'https://oauth2.googleapis.com/token';
+  try {
+    const res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const advice = gmailRefreshAdvice(res.status, await res.text());
+    if (advice.ok) return { pass: true, label: advice.label };
+    return { warn: true, label: advice.label, fix: advice.fix };
+  } catch (err) {
+    return {
+      warn: true,
+      label: `Gmail refresh token could not be checked (${err instanceof Error ? err.message : err}).`,
+      fix: 'Run node plugins.mjs auth gmail when you are online.',
+    };
+  }
+}
+
+function checkLinkedInAlerts() {
+  return {
+    pass: true,
+    label: 'LinkedIn alerts: save the email in data/linkedin-alerts, or run node plugins.mjs auth gmail',
+  };
+}
+
 // profile.yml steers scoring targets, output language, spend tier, CV format and
 // location policy — and the existence check above is all that ever looked at it.
 // Every reader does `profile?.language?.output` and takes the fallback when the
@@ -1260,6 +1306,8 @@ async function main() {
       ? [checkAutoDir('data'), checkPipelineFile(), checkAutoDir('output'), checkAutoDir('reports')]
       : []),
     checkPlugins(projectRoot),
+    await checkGmailRefresh(projectRoot),
+    checkLinkedInAlerts(projectRoot),
     // checkPrereq already explains the .env case when the profile is missing.
     prereqPresent(projectRoot, { path: 'config/profile.yml' }) ? checkEnvFileProfile(projectRoot) : null,
   ].filter(Boolean);

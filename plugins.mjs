@@ -5,6 +5,7 @@
  *
  *   node plugins.mjs list                       # discovered plugins + status
  *   node plugins.mjs run <id> [hook] [args…]    # run one hook of one plugin
+ *   node plugins.mjs auth gmail                 # loopback sign-in, writes the refresh token
  *   node plugins.mjs run gmail                  # ingest (the plugin's only hook)
  *   node plugins.mjs run notion search "staff platform engineer"
  *   node plugins.mjs run notion export [--dry-run]
@@ -36,6 +37,7 @@ import { localToday } from './lib/local-today.mjs';
 import { postingKey } from './url-key.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
+import { GMAIL_DESKTOP_CLIENT_HELP, runGmailAuth } from './lib/gmail-auth.mjs';
 import { resolveColumns, parseTrackerRow, isHeaderRow, isSeparatorRow } from './tracker-parse.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -526,6 +528,36 @@ async function cmdAdd(args) {
   else console.log(`\n  To enable it (grants the above), run:  node plugins.mjs enable ${installed.id} --confirm`);
 }
 
+async function cmdAuth(args) {
+  const id = args[0];
+  if (id !== 'gmail') {
+    console.error('Usage: node plugins.mjs auth gmail');
+    process.exit(1);
+  }
+  await loadDotenvOnce(DATA_ROOT);
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    console.error(GMAIL_DESKTOP_CLIENT_HELP);
+    process.exit(1);
+  }
+  const envPath = path.join(DATA_ROOT, '.env');
+  const envText = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
+  const { envText: next } = await runGmailAuth({
+    clientId,
+    clientSecret,
+    envText,
+    log(url) {
+      console.log('Open this link to let CareerOps read job mail:');
+      console.log(url);
+    },
+  });
+  writeFileSync(envPath, next, { mode: 0o600 });
+  console.log('Saved the Gmail refresh token in .env.');
+  console.log('Enable it with node plugins.mjs enable gmail --confirm');
+  console.log('The 15-minute scan schedule runs it. Or run node plugins.mjs run gmail once.');
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   switch (cmd) {
@@ -533,6 +565,7 @@ async function main() {
     case 'list': return cmdList();
     case 'available': return cmdAvailable();
     case 'run': return cmdRun(rest);
+    case 'auth': return cmdAuth(rest);
     case 'skill': return cmdSkill(rest);
     case 'new': return cmdNew(rest);
     case 'add': return cmdAdd(rest);
@@ -540,7 +573,7 @@ async function main() {
     case 'trust': return cmdTrust(rest);
     case 'remove': return cmdRemove(rest);
     default:
-      console.error('Usage: node plugins.mjs [list | available | run <id> [hook] | skill <id> | new <name> | add <name|owner/repo> [--sha <c>] [--confirm] | enable <id> [--confirm] | trust <id> | remove <id>]');
+      console.error('Usage: node plugins.mjs [list | available | run <id> [hook] | auth gmail | skill <id> | new <name> | add <name|owner/repo> [--sha <c>] [--confirm] | enable <id> [--confirm] | trust <id> | remove <id>]');
       process.exit(1);
   }
 }

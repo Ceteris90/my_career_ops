@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
-import { gmailRefreshAdvice, upsertEnvAssignment, gmailAuthRequest } from '../lib/gmail-auth.mjs';
+import { gmailRefreshAdvice, upsertEnvAssignment, gmailAuthRequest, runGmailAuth } from '../lib/gmail-auth.mjs';
 import { importMailDrop } from '../lib/linkedin-mail-drop.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -82,13 +82,65 @@ test('plugins auth gmail without a client id names the Desktop client step', () 
       cwd: ROOT,
       encoding: 'utf8',
       timeout: 30_000,
-      env: { ...process.env, CAREER_OPS_ROOT: root, NO_COLOR: '1' },
+      env: {
+        ...process.env,
+        CAREER_OPS_ROOT: root,
+        GMAIL_CLIENT_ID: '',
+        GMAIL_CLIENT_SECRET: '',
+        GMAIL_REFRESH_TOKEN: '',
+        NO_COLOR: '1',
+      },
     });
     assert.notEqual(result.status, 0);
     const text = `${result.stdout}${result.stderr}`;
     assert.match(text, /Desktop/);
     assert.match(text, /console\.cloud\.google\.com/);
     assert.doesNotMatch(text, /refresh token is/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loopback sign-in stores the refresh token and does not print it', async () => {
+  let printed = '';
+  const result = await runGmailAuth({
+    clientId: 'client.example',
+    clientSecret: 'secret.example',
+    envText: 'GMAIL_CLIENT_ID=client.example\n',
+    timeoutMs: 5000,
+    log(url) { printed += url; },
+    open(url) {
+      const auth = new URL(url);
+      const redirect = auth.searchParams.get('redirect_uri');
+      const state = auth.searchParams.get('state');
+      fetch(`${redirect}/?code=code.example&state=${encodeURIComponent(state)}`).catch(() => {});
+    },
+    fetchFn: async () => ({
+      ok: true,
+      text: async () => JSON.stringify({ refresh_token: 'refresh.example', access_token: 'access.example' }),
+    }),
+  });
+  assert.match(result.envText, /^GMAIL_REFRESH_TOKEN=refresh\.example$/m);
+  assert.match(result.envText, /^GMAIL_CLIENT_ID=client\.example$/m);
+  assert.doesNotMatch(printed, /refresh\.example/);
+  assert.doesNotMatch(printed, /secret\.example/);
+});
+
+test('the scan schedule drains the alert folder', () => {
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-schedule-'));
+  const dir = join(root, 'data', 'linkedin-alerts');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(root, 'data', 'pipeline.md'), '# Pipeline\n\n## Pending\n\n## Processed\n');
+  writeFileSync(join(dir, 'alert.eml'), `https://www.linkedin.com/jobs/view/${JOB_ID}\n`);
+  try {
+    const result = spawnSync(process.execPath, ['web/scripts/scheduled-jobs-runner.mjs'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: { ...process.env, CAREER_OPS_ROOT: root, NO_COLOR: '1' },
+    });
+    const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
+    assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${JOB_ID}`), result.stderr);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -110,16 +162,22 @@ test('doctor explains invalid_grant from the token endpoint', async () => {
       'GMAIL_REFRESH_TOKEN=refresh.example',
       '',
     ].join('\n'));
-    const result = spawnSync(process.execPath, ['doctor.mjs', '--target', root], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      timeout: 60_000,
-      env: {
-        ...process.env,
-        CAREER_OPS_ROOT: root,
-        CAREER_OPS_GMAIL_TOKEN_URL: `http://127.0.0.1:${port}/token`,
-        NO_COLOR: '1',
-      },
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ['doctor.mjs', '--target', root], {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          CAREER_OPS_ROOT: root,
+          CAREER_OPS_GMAIL_TOKEN_URL: `http://127.0.0.1:${port}/token`,
+          NO_COLOR: '1',
+        },
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.on('error', reject);
+      child.on('close', (status) => resolve({ status, stdout, stderr }));
     });
     const text = `${result.stdout}${result.stderr}`;
     assert.match(text, /invalid_grant/);
