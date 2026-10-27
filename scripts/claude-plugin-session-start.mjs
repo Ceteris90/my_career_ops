@@ -61,14 +61,31 @@ function readJson(path) {
   }
 }
 
-function runNpmInstall(cwd) {
+// The install holds deps.lock, so it must end before the hook's 300 s timeout
+// kills this process and leaves a lock whose owner is gone, and before a
+// waiting session's 240 s wait runs out.
+export const NPM_INSTALL_TIMEOUT_MS = 180_000;
+const NPM_INSTALL_ARGS = ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'];
+
+/**
+ * @param {string} cwd
+ * @param {{command?: string, args?: string[], timeoutMs?: number}} [options] - command and args are for tests
+ * @returns {{ok: boolean, code: number|null, error?: string}}
+ */
+export function runNpmInstall(cwd, { command = 'npm', args = NPM_INSTALL_ARGS, timeoutMs = NPM_INSTALL_TIMEOUT_MS } = {}) {
   // --ignore-scripts: Playwright's browser download is doctor's job, and it
   // would otherwise hold the session start for minutes.
-  const result = spawnSync('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
+  const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf-8',
-    shell: process.platform === 'win32',
+    // npm is npm.cmd on Windows, which Node only starts through a shell. There
+    // the timeout ends cmd.exe and can leave npm itself running.
+    shell: process.platform === 'win32' && command === 'npm',
+    timeout: timeoutMs,
   });
+  if (result.error?.code === 'ETIMEDOUT') {
+    return { ok: false, code: null, error: `npm install did not finish within ${timeoutMs / 1000} s` };
+  }
   return { ok: result.status === 0, code: result.status, error: result.error?.message };
 }
 
@@ -144,11 +161,21 @@ function installAndLink({ pluginRoot, dataDir, install, link }) {
 
 /**
  * Create the data root, unless it resolves inside a plugin copy, where it
- * would be deleted on the next update.
+ * would be deleted on the next update. With no argument the root comes from
+ * getCareerOpsRoot(), which refuses such a root with an UnsafeDataRootError.
  *
- * @returns {{status: 'ok'|'inside-plugin-copy', root: string}}
+ * @param {string} [root]
+ * @returns {{status: 'ok'|'inside-plugin-copy', root: string, source?: string}}
  */
-export function ensureDataRoot(root = getCareerOpsRoot()) {
+export function ensureDataRoot(root) {
+  if (root === undefined) {
+    try {
+      root = getCareerOpsRoot();
+    } catch (err) {
+      if (err?.code !== 'CAREER_OPS_UNSAFE_DATA_ROOT') throw err;
+      return { status: 'inside-plugin-copy', root: err.root, source: err.source };
+    }
+  }
   if (isPluginInstallCopy(root)) return { status: 'inside-plugin-copy', root };
   mkdirSync(root, { recursive: true });
   return { status: 'ok', root };
@@ -183,8 +210,8 @@ export async function sessionStart(env = process.env) {
   const data = ensureDataRoot();
   if (data.status === 'inside-plugin-copy') {
     lines.push(
-      `career-ops plugin: the data root ${data.root} is inside the plugin install, which Claude Code replaces on every update. ` +
-      'Do not write the user\'s files there: ask them to set CAREER_OPS_ROOT to an absolute path outside ~/.claude/plugins.',
+      `career-ops plugin: ${data.source ?? 'the data root'} points inside the plugin install (${data.root}), which Claude Code replaces on every update, ` +
+      'so career-ops scripts refuse it. Ask the user to set it to an absolute path outside ~/.claude/plugins, or to remove it to use ~/career-ops-data.',
     );
   }
   return lines;

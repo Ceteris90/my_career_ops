@@ -73,27 +73,56 @@ export function pluginDefaultDataRoot() {
 }
 
 /**
+ * Thrown by getCareerOpsRoot() when an explicit data root (an environment
+ * variable or the marker file) resolves inside a plugin install copy. Claude
+ * Code deletes that copy on the next plugin update, so every write there would
+ * be lost. The override is refused rather than redirected: it names a folder
+ * on purpose, and silently writing somewhere else would hide the mistake.
+ */
+export class UnsafeDataRootError extends Error {
+  constructor(root, source) {
+    super(
+      `${source} points inside a Claude Code plugin install (${root}), which Claude Code replaces on every plugin update. ` +
+      `Set it to a folder outside ~/.claude/plugins, or remove it to use ${pluginDefaultDataRoot()}.`,
+    );
+    this.name = 'UnsafeDataRootError';
+    this.code = 'CAREER_OPS_UNSAFE_DATA_ROOT';
+    this.root = root;
+    this.source = source;
+  }
+}
+
+function explicitRoot(root, source) {
+  if (isPluginInstallCopy(root)) throw new UnsafeDataRootError(root, source);
+  return root;
+}
+
+/**
  * Returns the resolved career-ops data directory root.
  * Priority: process.env.CAREER_OPS_ROOT or process.env.CAREER_OPS_DATA_DIR >
  * .career-ops-data marker file > ~/career-ops-data when the code root is a
  * Claude Code plugin install copy > codebase root (__dirname).
  *
  * @returns {string} Absolute path to the data root
+ * @throws {UnsafeDataRootError} When the environment or the marker names a
+ *   folder inside a plugin install copy
  */
 export function getCareerOpsRoot() {
+  const envName = process.env.CAREER_OPS_ROOT?.trim() ? 'CAREER_OPS_ROOT' : 'CAREER_OPS_DATA_DIR';
   const env = process.env.CAREER_OPS_ROOT?.trim() || process.env.CAREER_OPS_DATA_DIR?.trim();
   if (env) {
-    return resolve(__dirname, env);
+    return explicitRoot(resolve(__dirname, env), envName);
   }
   const markerFile = join(__dirname, '.career-ops-data');
   if (existsSync(markerFile)) {
+    let content = '';
     try {
-      const content = readFileSync(markerFile, 'utf-8').trim();
-      if (content) {
-        return resolve(__dirname, content);
-      }
+      content = readFileSync(markerFile, 'utf-8').trim();
     } catch {
       // ignore read errors
+    }
+    if (content) {
+      return explicitRoot(resolve(__dirname, content), 'The .career-ops-data marker');
     }
   }
   // A plugin install copy is replaced on every plugin update, so the code

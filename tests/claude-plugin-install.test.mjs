@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { isPluginInstallCopy } from '../path-resolver.mjs';
 import { linkNodeModules } from './helpers.mjs';
-import { ensureDataRoot, ensureDependencies, sessionStart } from '../scripts/claude-plugin-session-start.mjs';
+import { ensureDataRoot, ensureDependencies, runNpmInstall, sessionStart } from '../scripts/claude-plugin-session-start.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -87,6 +87,37 @@ test('a checkout outside the plugins root keeps its own data root', (t) => {
   mkdirSync(checkout, { recursive: true });
   copyFileSync(join(ROOT, 'path-resolver.mjs'), join(checkout, 'path-resolver.mjs'));
   assert.equal(dataRootFrom(checkout, childEnv(base)), checkout);
+});
+
+function rootErrorFrom(dir, env) {
+  const result = spawnSync(process.execPath, ['-e', "import('./path-resolver.mjs').then((m) => { try { console.log(m.getCareerOpsRoot()); } catch (err) { console.log(JSON.stringify({ name: err.name, code: err.code, source: err.source, root: err.root })); process.exitCode = 3; } })"], { cwd: dir, env, encoding: 'utf-8' });
+  assert.equal(result.status, 3, `expected a refusal, got: ${result.stdout}${result.stderr}`);
+  return JSON.parse(result.stdout.trim());
+}
+
+test('an explicit data root inside a plugin copy is refused, never used', (t) => {
+  const base = sandbox(t);
+  const copy = pluginCopy(base, ['path-resolver.mjs']);
+  const inside = join(copy, 'userdata');
+
+  for (const name of ['CAREER_OPS_ROOT', 'CAREER_OPS_DATA_DIR']) {
+    const err = rootErrorFrom(copy, childEnv(base, { [name]: inside }));
+    assert.deepEqual(err, { name: 'UnsafeDataRootError', code: 'CAREER_OPS_UNSAFE_DATA_ROOT', source: name, root: inside });
+  }
+  // A relative value resolves against the copy, so it lands inside it too.
+  assert.equal(rootErrorFrom(copy, childEnv(base, { CAREER_OPS_ROOT: 'userdata' })).root, inside);
+
+  writeFileSync(join(copy, '.career-ops-data'), 'userdata\n');
+  assert.equal(rootErrorFrom(copy, childEnv(base)).source, 'The .career-ops-data marker');
+});
+
+test('a checkout refuses a data root inside a plugin copy too', (t) => {
+  const base = sandbox(t);
+  const checkout = join(base, 'career-ops');
+  mkdirSync(checkout, { recursive: true });
+  copyFileSync(join(ROOT, 'path-resolver.mjs'), join(checkout, 'path-resolver.mjs'));
+  const inside = join(base, 'plugins', 'cache', 'mk', 'career-ops', '1.0.0', 'userdata');
+  assert.equal(rootErrorFrom(checkout, childEnv(base, { CAREER_OPS_ROOT: inside })).code, 'CAREER_OPS_UNSAFE_DATA_ROOT');
 });
 
 function fakePlugin(base, dependencies = { 'js-yaml': '^5.3.0' }) {
@@ -184,6 +215,31 @@ test('the hook creates the data root, never one inside a plugin copy', (t) => {
   const inside = join(base, 'plugins', 'cache', 'mk', 'career-ops', '1.0.0', 'data');
   assert.equal(ensureDataRoot(inside).status, 'inside-plugin-copy');
   assert.equal(existsSync(inside), false);
+});
+
+test('the hook reports a refused data root instead of failing', (t) => {
+  const base = sandbox(t);
+  const inside = join(base, 'plugins', 'cache', 'mk', 'career-ops', '1.0.0', 'userdata');
+  const saved = { root: process.env.CAREER_OPS_ROOT, cache: process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR };
+  process.env.CAREER_OPS_ROOT = inside;
+  process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR = join(base, 'plugins');
+  t.after(() => {
+    for (const [key, value] of [['CAREER_OPS_ROOT', saved.root], ['CLAUDE_CODE_PLUGIN_CACHE_DIR', saved.cache]]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  assert.deepEqual(ensureDataRoot(), { status: 'inside-plugin-copy', root: inside, source: 'CAREER_OPS_ROOT' });
+  assert.equal(existsSync(inside), false);
+});
+
+test('an npm install that runs too long is stopped and reported', (t) => {
+  const base = sandbox(t);
+  const started = Date.now();
+  const result = runNpmInstall(base, { command: process.execPath, args: ['-e', 'setTimeout(() => {}, 10000)'], timeoutMs: 300 });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /did not finish within 0.3 s/);
+  assert.ok(Date.now() - started < 5000, 'the install was not stopped at its timeout');
 });
 
 test('the hook does nothing for a checkout loaded in place', async (t) => {
@@ -298,19 +354,21 @@ function runDoctor({ base, copy }, args, extra = {}) {
   return { ...result, home };
 }
 
-test('doctor creates no User Layer files when the data root is inside the plugin copy', (t) => {
+test('doctor reports a data root inside the plugin copy and creates nothing there', (t) => {
   const setup = doctorPluginCopy(t);
   if (!setup) return;
   const inside = join(setup.copy, 'userdata');
 
   const human = runDoctor(setup, [], { CAREER_OPS_ROOT: inside });
-  assert.match(human.stdout, /inside the Claude Code plugin install/);
+  assert.equal(human.status, 1);
+  assert.match(human.stdout, /CAREER_OPS_ROOT points inside a Claude Code plugin install/);
   assert.equal(existsSync(inside), false, 'doctor created User Layer folders inside the plugin copy');
 
   const onboarding = runDoctor(setup, ['--json', '--init-templates'], { CAREER_OPS_ROOT: inside });
   const state = JSON.parse(onboarding.stdout);
   assert.deepEqual(state.autoCopied, []);
-  assert.ok(state.warnings.some((w) => w.includes('inside the Claude Code plugin install')), state.warnings.join('\n'));
+  assert.equal(state.dataRootError.code, 'CAREER_OPS_UNSAFE_DATA_ROOT');
+  assert.ok(state.warnings.some((w) => w.includes('inside a Claude Code plugin install')), state.warnings.join('\n'));
   assert.equal(existsSync(inside), false, '--init-templates seeded files inside the plugin copy');
 });
 

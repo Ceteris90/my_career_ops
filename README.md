@@ -281,7 +281,7 @@ Install career-ops once and use it from any folder in the Claude desktop app's *
 4. To get new versions without doing anything, open the marketplace you added and turn on **Sync automatically**. **Check for updates** pulls them right away. A new version means a new `version` in `.claude-plugin/plugin.json`. Pushes that leave it unchanged don't reach installs (see [docs/CLAUDE_PLUGIN.md](docs/CLAUDE_PLUGIN.md#updating)).
 5. Start a new session in the **Code** tab. The first start takes a few extra seconds while career-ops installs its Node packages. Then type `/career-ops:career-ops`, or paste a job URL. On first use it walks you through setup.
 
-By default, your CV, profile, tracker and reports are saved in `~/career-ops-data` (`CAREER_OPS_ROOT` picks another folder). They are never saved inside the plugin, so plugin updates never touch them.
+By default, your CV, profile, tracker and reports are saved in `~/career-ops-data` (`CAREER_OPS_ROOT` or `CAREER_OPS_DATA_DIR` picks another folder). They are never saved inside the plugin: a folder inside it is refused, so plugin updates never touch your files.
 
 From the Claude Code CLI, the same install is two commands:
 

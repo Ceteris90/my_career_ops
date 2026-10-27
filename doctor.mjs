@@ -25,6 +25,30 @@ import { findExperienceSections, parseCompanyHeading, EXPERIENCE_HEADING_NAMES }
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 
+// path-resolver.mjs refuses an explicit data root inside a plugin install copy,
+// and some modules loaded below resolve the root as they load. Ask once, first,
+// so the refusal reaches the user as a report instead of a stack trace.
+try {
+  getCareerOpsRoot();
+} catch (err) {
+  if (err?.code !== 'CAREER_OPS_UNSAFE_DATA_ROOT') throw err;
+  if (argv.includes('--json')) {
+    // Same keys as a normal --json run, so an agent reading `warnings` sees it;
+    // onboardingNeeded stays true so nothing proceeds on this root.
+    console.log(JSON.stringify({
+      onboardingNeeded: true,
+      missing: [],
+      unpersonalized: [],
+      warnings: [err.message],
+      autoCopied: [],
+      dataRootError: { code: err.code, source: err.source, root: err.root },
+    }));
+  } else {
+    console.log(`\ncareer-ops doctor\n================\n\n✗ ${err.message}\n`);
+  }
+  process.exit(1);
+}
+
 // Modules that import an npm package (directly or through their own imports)
 // load here, after the fact, instead of as static imports. A static import of
 // a missing package fails while Node links the module graph, before a single
