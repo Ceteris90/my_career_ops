@@ -90,7 +90,12 @@ try {
   eq('bareNumeric decodes a decimal reference without a semicolon', decodeEntities('https&#58//x', { bareNumeric: true }), 'https://x');
   eq('bareNumeric decodes a hex reference without a semicolon', decodeEntities('a&#x3a//x', { bareNumeric: true }), 'a://x');
   eq('bareNumeric still decodes semicolon-terminated references', decodeEntities('&#106;s &amp;', { bareNumeric: true }), 'js &');
-  eq('bareNumeric leaves a semicolon-free named reference alone', decodeEntities('&amp#58', { bareNumeric: true }), '&amp#58');
+  // `&amp` decodes without its semicolon unless an alphanumeric or `=` follows, as a browser does in an attribute.
+  eq('bareNumeric decodes a legacy name with no semicolon before other punctuation', decodeEntities('&amp#58', { bareNumeric: true }), '&#58');
+  eq('bareNumeric leaves a legacy name alone before an alphanumeric or =', decodeEntities('&ampx &amp=1', { bareNumeric: true }), '&ampx &amp=1');
+  eq('bareNumeric leaves a semicolon-free name outside the legacy set alone', decodeEntities('&colon&sol', { bareNumeric: true }), '&colon&sol');
+  eq('bareNumeric maps the C1 numeric range to windows-1252', decodeEntities('&#128;&#x9F;&#129;', { bareNumeric: true }), '\u20ac\u0178\u0081');
+  eq('bareNumeric keeps &nbsp; as U+00A0 and names case-sensitive', decodeEntities('&nbsp;&AMP;&Amp;', { bareNumeric: true }), '\u00a0&&Amp;');
   eq('bareNumeric decodes a C0 control reference, as a browser does', decodeEntities('&#1;x', { bareNumeric: true }), '\u0001x');
   eq('bareNumeric turns NUL, a surrogate and an out-of-range reference into U+FFFD', decodeEntities('&#0;&#xD800;&#x110000;', { bareNumeric: true }), '\ufffd\ufffd\ufffd');
   eq('the default mode still leaves a C0 control reference as written', decodeEntities('&#1;x'), '&#1;x');
