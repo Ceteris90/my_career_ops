@@ -879,7 +879,7 @@ test('configured email does not block opt-in redaction when email detection is e
 test('privacy-status renders pattern-only message when patterns are enabled without guarded values', async () => {
   const { execFileSync } = await import('node:child_process');
   withConfigFile('auto_detect:\n  email: true\n', (path) => {
-    const out = execFileSync(process.execPath, [join(getCareerOpsRoot(), 'privacy-status.mjs')], {
+    const out = execFileSync(process.execPath, [resolve(import.meta.dirname, '../privacy-status.mjs')], {
       env: { ...process.env, CAREER_OPS_PRIVACY: path },
       encoding: 'utf-8',
     });
@@ -891,7 +891,7 @@ test('privacy-status renders pattern-only message when patterns are enabled with
 test('privacy-status renders too-short message when values were actually rejected as too short', async () => {
   const { execFileSync } = await import('node:child_process');
   withConfigFile('protected:\n  short: "abc"\n', (path) => {
-    const out = execFileSync(process.execPath, [join(getCareerOpsRoot(), 'privacy-status.mjs')], {
+    const out = execFileSync(process.execPath, [resolve(import.meta.dirname, '../privacy-status.mjs')], {
       env: { ...process.env, CAREER_OPS_PRIVACY: path },
       encoding: 'utf-8',
     });
@@ -904,7 +904,7 @@ test('privacy-status error message reflects actual reason for top-level non-mapp
   withConfigFile('- just\n- a list\n', (path) => {
     let err;
     try {
-      execFileSync(process.execPath, [join(getCareerOpsRoot(), 'privacy-status.mjs'), '--json'], {
+      execFileSync(process.execPath, [resolve(import.meta.dirname, '../privacy-status.mjs'), '--json'], {
         env: { ...process.env, CAREER_OPS_PRIVACY: path },
         encoding: 'utf-8',
       });
