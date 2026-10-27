@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -27,6 +27,7 @@ const wf = load(text);
 const steps = wf.jobs.validate.steps;
 const checkouts = steps.filter(s => String(s.uses || '').startsWith('actions/checkout@'));
 const runs = steps.filter(s => typeof s.run === 'string');
+const dirs = [];
 
 // ── 1. The workflow ──────────────────────────────────────────────────────
 
@@ -47,21 +48,45 @@ test('checks the base branch out beside the PR checkout', () => {
   assert.ok(steps.indexOf(pr[0]) < steps.indexOf(base[0]), 'checkout the PR first, then base/');
 });
 
+// Runs the shape-gate step's own shell script in a scratch tree, with `node`
+// replaced by a stub that records its arguments, and returns what it ran.
+const shapeStep = runs.find(s => s.run.includes('validate-template-registry.mjs'));
+function runShapeStep({ baseHasValidator }) {
+  const dir = mkdtempSync(join(tmpdir(), 'co-tpl-step-'));
+  dirs.push(dir);
+  mkdirSync(join(dir, 'bin'));
+  mkdirSync(join(dir, 'base'));
+  writeFileSync(join(dir, 'validate-template-registry.mjs'), '');
+  if (baseHasValidator) writeFileSync(join(dir, 'base', 'validate-template-registry.mjs'), '');
+  const stub = join(dir, 'bin', 'node');
+  writeFileSync(stub, '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$NODE_LOG"\n');
+  chmodSync(stub, 0o755);
+  const log = join(dir, 'node.log');
+  const r = spawnSync('bash', ['-e', '-c', shapeStep.run], {
+    cwd: dir, encoding: 'utf8', env: { PATH: `${join(dir, 'bin')}:/usr/bin:/bin`, NODE_LOG: log },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  return readFileSync(log, 'utf8').trim().split('\n');
+}
+
 test('runs the base validator against the PR checkout', () => {
-  const invocations = runs.flatMap(s => s.run.split('\n')).filter(l => l.includes('validate-template-registry.mjs'));
-  assert.ok(invocations.length >= 1);
-  for (const line of invocations) {
-    assert.match(line.trim(), /^node base\/validate-template-registry\.mjs\b/, `must run the base copy: ${line.trim()}`);
-    assert.match(line, /--root \.(\s|$)/, `must point --root at the PR checkout: ${line.trim()}`);
-  }
+  assert.ok(shapeStep, 'a step runs validate-template-registry.mjs');
+  assert.deepEqual(runShapeStep({ baseHasValidator: true }), ['base/validate-template-registry.mjs --root .']);
 });
 
-test('runs nothing from the PR checkout', () => {
+test('runs the PR copy only while the base branch has no validator yet', () => {
+  // The PR that first adds the validator has no trusted copy to run. A PR cannot
+  // delete the file from the base branch, so this branch is never reachable once
+  // the validator has merged.
+  assert.deepEqual(runShapeStep({ baseHasValidator: false }), ['validate-template-registry.mjs --root .']);
+});
+
+test('runs nothing else from the PR checkout', () => {
   for (const s of runs) {
     for (const line of s.run.split('\n')) {
       const t = line.trim();
       if (!/^(node|npm|npx|bash|sh|python3?)\b/.test(t)) continue;
-      assert.match(t, /^node base\//, `only base/ code may run: ${t}`);
+      assert.match(t, /^node (base\/|"\$VALIDATOR")/, `only base/ code, or the chosen validator, may run: ${t}`);
     }
   }
 });
@@ -75,7 +100,6 @@ test('pins every action to a full commit SHA', () => {
 // ── 2. The validator behaves as the workflow assumes ─────────────────────
 
 const VALIDATOR = join(ROOT, 'validate-template-registry.mjs');
-const dirs = [];
 function prCheckout(files = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'co-tpl-pr-'));
   dirs.push(dir);
