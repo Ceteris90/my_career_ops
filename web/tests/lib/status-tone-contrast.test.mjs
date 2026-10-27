@@ -11,8 +11,7 @@ const THEME = readFileSync(createRequire(import.meta.url).resolve("tailwindcss/t
 const GLOBALS = readFileSync(join(SRC, "app", "globals.css"), "utf8");
 
 const FAMILIES = ["emerald", "amber", "red"];
-// Unprefixed only: dark:, hover: and similar variants are preceded by a colon.
-const CLASS = /(?<![\w:/-])text-(emerald|amber|red)-(\d{3})(?:\/(\d+))?(?![\w-])/g;
+const UNPREFIXED_TONE_TEXT_CLASS = /(?<![\w:/-])text-(emerald|amber|red)-(\d{3})(?:\/(\d+))?(?![\w-])/g;
 
 function oklchToSrgb(L, C, h) {
   const a = C * Math.cos((h * Math.PI) / 180);
@@ -62,7 +61,7 @@ function sourceUses() {
     if (!e.isFile() || !/\.(tsx?|jsx?|mjs)$/.test(e.name)) continue;
     const file = join(e.parentPath, e.name);
     readFileSync(file, "utf8").split("\n").forEach((text, i) => {
-      for (const [cls, family, shade, pct] of text.matchAll(CLASS)) {
+      for (const [cls, family, shade, pct] of text.matchAll(UNPREFIXED_TONE_TEXT_CLASS)) {
         if (Number(shade) < 600) continue;
         uses.push({
           where: `${relative(WEB, file)}:${i + 1}`,
