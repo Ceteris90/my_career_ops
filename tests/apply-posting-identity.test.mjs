@@ -398,5 +398,10 @@ for (const file of ['modes/apply.md', 'modes/sg/apply.md', ...localized]) {
     const at = lines.findIndex(l => /#(NNN|\{###\})/.test(l));
     assert.ok(at !== -1, 'no report-number line in the output template');
     assert.ok(lines[at + 1]?.includes('**Draft without saving**'), `the line after "${lines[at].trim()}" does not cover the unsaved draft`);
+    // The replacement itself carries no report metadata: no report number,
+    // score or archetype placeholder, and it names its own text in quotes.
+    const replacement = lines[at + 1];
+    assert.ok(!/#(NNN|\{###\})|X[.,]X\/5|\[(type|tipo|Typ|typ|tipe|tür|тип|类型|類型|loại)\]/.test(replacement), `the unsaved-draft line still carries report metadata: ${replacement}`);
+    assert.match(replacement, /["“「][^"”」]+["”」]/, 'the unsaved-draft line does not give the text that replaces the header');
   });
 }
