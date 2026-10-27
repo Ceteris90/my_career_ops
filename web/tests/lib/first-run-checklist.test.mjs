@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cvReadiness } from "../../src/lib/cv/quality.ts";
+import { onboardingChecklist } from "../../src/lib/home/onboarding-checklist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -39,12 +40,40 @@ test("a short skills list with no role stays thin", () => {
   assert.equal(skills.scoreable, false);
 });
 
-test("compact first-run checklist is the four setup files", () => {
-  const src = readFileSync(join(root, "src/components/home/onboarding-progress.tsx"), "utf8");
-  assert.match(src, /const showSections = !compact/);
-  assert.match(src, /showSections && generic\.length/);
-  assert.match(src, /\{showSections && \(/);
-  assert.match(src, /what evaluations score against/);
+test("a bare experience heading is not a role", () => {
+  for (const md of ["## Experience", "## Experience\n\n## Skills\nScheduling"]) {
+    const bare = cvReadiness(md);
+    assert.equal(bare.scoreable, false, md);
+  }
+  assert.equal(cvReadiness("## Experience\nFloor lead, Northwind Market").scoreable, true);
+});
+
+const SECTIONS = [
+  { heading: "## Your Target Roles", state: "filled" },
+  { heading: "## Your Deal Breakers", state: "missing" },
+];
+
+test("compact first-run checklist counts the four setup files", () => {
+  const compact = onboardingChecklist({ missing: ["cv.md", "modes/_profile.md", "config/profile.yml", "portals.yml"], sections: SECTIONS, compact: true });
+  assert.equal(compact.showSections, false);
+  assert.equal(compact.done, 0);
+  assert.equal(compact.total, 4);
+  const full = onboardingChecklist({ missing: [], sections: SECTIONS });
+  assert.equal(full.showSections, true);
+  assert.equal(full.done, 5);
+  assert.equal(full.total, 6);
+  assert.deepEqual(full.asks, ["my personalization (deal breakers)"]);
+});
+
+test("compact mode still asks for a missing personalization file", () => {
+  const compact = onboardingChecklist({ missing: ["cv.md", "modes/_profile.md"], sections: SECTIONS, compact: true });
+  assert.deepEqual(compact.asks, ["my CV", "my personalization file (modes/_profile.md)"]);
+  // The full list asks through its sections line instead, not twice.
+  const full = onboardingChecklist({ missing: ["modes/_profile.md"], sections: SECTIONS });
+  assert.deepEqual(full.asks, ["my personalization (deal breakers)"]);
+});
+
+test("first-run home renders the compact checklist", () => {
   const home = readFileSync(join(root, "src/components/home/first-run-home.tsx"), "utf8");
   assert.match(home, /<OnboardingProgress compact/);
 });
