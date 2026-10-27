@@ -82,6 +82,17 @@ export function MobileNav({ followupsEnabled }: { followupsEnabled: boolean }) {
     };
   }, [open]);
 
+  // md:hidden conceals the drawer on desktop but leaves `open` set, so the
+  // scroll lock above would stay after a resize. Close when the desktop layout applies.
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 48rem)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setOpen(false);
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
+
   // Swipe-right-to-close.
   const drag = useRef({ x0: 0, dx: 0, active: false });
   const onTouchStart = (e: React.TouchEvent) => {

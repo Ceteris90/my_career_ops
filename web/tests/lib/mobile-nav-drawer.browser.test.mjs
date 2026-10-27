@@ -63,5 +63,12 @@ test("mobile navigation drawer stays out of the viewport until opened", { skip: 
   await page.waitForTimeout(500);
   const reclosed = await page.evaluate(drawerLeftPaintEdge);
   assert.ok(reclosed.left >= reclosed.viewport, `drawer closed by Escape paints from x=${reclosed.left}`);
+
+  await opener.click();
+  await page.waitForFunction(() => document.body.style.overflow === "hidden");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.waitForFunction(() => document.body.style.overflow !== "hidden");
+  assert.equal(await page.locator("body").evaluate((el) => el.style.overflow), "", "widening to desktop releases the scroll lock");
+  assert.equal(await opener.getAttribute("aria-expanded"), "false");
   assert.deepEqual(errors, []);
 });
