@@ -48,9 +48,19 @@ jobs:
         with:
           node-version: '24'
 
-      # Deterministic shape gate (no network).
+      # Deterministic shape gate (no network). The base copy runs whenever the
+      # base branch has one. The only PR it cannot run for is the one that first
+      # adds validate-template-registry.mjs: there is no trusted copy yet, so that
+      # PR's own copy runs. A PR cannot remove the file from the base branch, so
+      # every registry PR after it is judged by the base copy.
       - name: Validate registry shape
-        run: node base/validate-template-registry.mjs --root .
+        run: |
+          VALIDATOR=base/validate-template-registry.mjs
+          if [ ! -f "$VALIDATOR" ]; then
+            echo "::notice::validate-template-registry.mjs is not on the base branch yet, so this PR's copy runs"
+            VALIDATOR=validate-template-registry.mjs
+          fi
+          node "$VALIDATOR" --root .
 
       - name: One pack per PR
         # base_ref goes through env, never ${{ }}-spliced into the script:
