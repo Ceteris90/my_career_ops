@@ -54,12 +54,6 @@ ok('apply.md defines the posting identity without the title', () => {
   assert.match(preflight, /title is not part of the identity/, 'does not say a retitled posting is still the same application');
 });
 
-ok('apply.md no longer offers to adapt answers onto a different posting', () => {
-  const preflight = step(apply, '## Step 5 — Preflight gate');
-  assert.ok(!/adapt with this mismatch/.test(preflight), 'Step 5 still offers "adapt with this mismatch"');
-  assert.match(preflight, /Evaluate as new/);
-  assert.match(preflight, /Draft without saving/);
-});
 
 ok('apply.md drafts an unsaved answer set without the other posting\'s report', () => {
   // The matched report, its Section H and its tailored CV were written for a
@@ -99,6 +93,60 @@ ok('apply.md Step 9 sets no status on a row that is another application', () => 
   assert.match(postApply, /set no status on the matched report's row/);
 });
 
+// ── The choices for a different posting, in every language ─────────────────
+// The two choices carry their English labels in every mode, the way the rule
+// names do, so the offer itself can be read without knowing the language: every
+// block that offers a choice for a different posting may name only these two.
+// A third bold option (an "adapt anyway", in any wording) fails here, which a
+// check for one English phrase could not see in a translation.
+const CHOICES = ['Draft without saving', 'Evaluate as new'];
+const RULE_NAMES = new Set([IDENTITY, WRITE_RULE]);
+
+/** Each block naming a choice: the sibling sub-bullets of one prompt, or one paragraph. */
+function choiceBlocks(lines) {
+  const blocks = new Map();
+  lines.forEach((line, i) => {
+    if (!CHOICES.some(c => line.includes(`**${c}**`))) return;
+    const bullet = line.match(/^(\s+)- /);
+    if (!bullet) {
+      blocks.set(i, [...line.matchAll(/\*\*([^*]+)\*\*/g)].map(m => m[1]).filter(l => !RULE_NAMES.has(l)));
+      return;
+    }
+    const sibling = (l) => l.startsWith(`${bullet[1]}- `);
+    let start = i;
+    while (start > 0 && sibling(lines[start - 1])) start--;
+    let end = i;
+    while (end + 1 < lines.length && sibling(lines[end + 1])) end++;
+    blocks.set(start, lines.slice(start, end + 1).map(l => l.match(/^\s+- \*\*([^*]+)\*\*/)?.[1]).filter(Boolean));
+  });
+  return [...blocks.values()];
+}
+
+function assertChoices(text) {
+  const blocks = choiceBlocks(text.split('\n'));
+  assert.ok(blocks.some(b => CHOICES.every(c => b.includes(c))), 'no block offers both "Evaluate as new" and "Draft without saving"');
+  for (const labels of blocks) {
+    const extra = labels.filter(l => !CHOICES.includes(l));
+    assert.deepStrictEqual(extra, [], `a different posting is offered more than the two choices: ${extra.join(', ')}`);
+  }
+}
+
+ok('apply.md offers a different posting only the two choices', () => assertChoices(apply));
+
+// The modes that carry the canonical Steps 6 and 7 read the report there, far
+// below the preflight, so the unsaved path has to be restated where it is read.
+const generationSteps = {
+  'modes/apply.md': ['## Step 6 — ', '## Step 7 — '],
+  'modes/ja/oubo.md': ['## Step 6 -- ', '## Step 7 -- '],
+  'modes/vi/ung-tuyen.md': ['## Bước 6 — ', '## Bước 7 — '],
+};
+for (const [file, headings] of Object.entries(generationSteps)) {
+  ok(`${file}: the question and generation steps skip the report on an unsaved draft`, () => {
+    const text = read(file);
+    for (const heading of headings) assert.ok(step(text, heading).includes('**Draft without saving**'), `"${heading.trim()}" does not handle the unsaved path`);
+  });
+}
+
 // ── Every translation points at it ──────────────────────────────────────────
 const modeFiles = readdirSync(join(ROOT, 'modes'), { withFileTypes: true })
   .filter(e => e.isDirectory())
@@ -119,10 +167,7 @@ ok('the localized apply modes are found', () => {
 for (const file of localized) {
   const lines = read(file).split('\n');
 
-  ok(`${file}: the preflight offers no adaptation onto a different posting`, () => {
-    // modes/ja and modes/vi carry the canonical preflight, prompt included.
-    assert.ok(!lines.some(l => /adapt with this mismatch/.test(l)), 'still offers "adapt with this mismatch"');
-  });
+  ok(`${file}: a different posting is offered only the two choices`, () => assertChoices(lines.join('\n')));
 
   ok(`${file}: the role-change step points at the posting identity`, () => {
     const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));

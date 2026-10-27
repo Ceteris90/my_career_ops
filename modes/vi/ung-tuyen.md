@@ -54,8 +54,8 @@ Trước khi tạo bất kỳ câu trả lời nào, xác minh form vẫn trỏ 
 3. So công ty và tin tuyển dụng hiển thị với báo cáo khớp (xem **Posting identity** bên dưới).
 4. Nếu danh tính không khớp, báo cáo khớp thuộc về một đơn ứng tuyển khác. Dừng trước khi soạn và hỏi:
    "Form có vẻ dành cho [công ty hiển thị] — [vai trò hiển thị], không phải tin trong báo cáo khớp, [công ty báo cáo] — [vai trò báo cáo]. Bạn muốn tôi đánh giá tin này như một tin mới, soạn câu trả lời mà không lưu vào báo cáo nào, hay dừng?"
-   - **Đánh giá như tin mới**: chạy auto-pipeline cho tin hiển thị. Nó ghi báo cáo và dòng tracker riêng; tiếp tục với báo cáo đó.
-   - **Soạn mà không lưu**: gác báo cáo khớp và CV đã điều chỉnh của nó sang một bên trước khi soạn, và chỉ soạn từ tin hiển thị, `cv.md` và hồ sơ của ứng viên. Các block, Block H và CV đã điều chỉnh của báo cáo đó được viết cho tin khác. Bước 8 không ghi `## Application Answers` và Bước 9 không đặt trạng thái nào, vì không có báo cáo nào thuộc về đơn này.
+   - **Evaluate as new** (đánh giá như tin mới): chạy auto-pipeline cho tin hiển thị. Nó ghi báo cáo và dòng tracker riêng; tiếp tục với báo cáo đó.
+   - **Draft without saving** (soạn mà không lưu): gác báo cáo khớp và CV đã điều chỉnh của nó sang một bên trước khi soạn, và chỉ soạn từ tin hiển thị, `cv.md` và hồ sơ của ứng viên. Các block, Block H và CV đã điều chỉnh của báo cáo đó được viết cho tin khác. Bước 8 không ghi `## Application Answers` và Bước 9 không đặt trạng thái nào, vì không có báo cáo nào thuộc về đơn này.
    - Không bao giờ điều chỉnh câu trả lời của báo cáo khớp cho tin này: chúng được soạn cho tin khác, và lưu vào đó sẽ ghi đè hồ sơ của đơn mà báo cáo đó thuộc về.
 5. Nếu danh tính khớp nhưng chức danh đổi, Bước 3 quyết định: điều chỉnh câu trả lời theo chức danh mới hay đánh giá lại.
 6. Nếu tin có vẻ đã đóng, từ chối tạo bản cuối trừ khi ứng viên bỏ qua tường minh với lý do đã biết.
@@ -147,6 +147,8 @@ Xác định MỌI câu hỏi đang hiển thị:
 - Ô lương (khoảng, kỳ vọng)
 - Ô tải lên (CV, PDF cover letter)
 
+Ở nhánh **Draft without saving** (Bước 5), không có báo cáo nào thuộc về tin này: coi mọi câu hỏi là câu hỏi mới, và không dùng báo cáo khớp, Block H, `## Application Answers` hay CV đã điều chỉnh của nó trong câu trả lời.
+
 Phân loại từng câu hỏi:
 - **Đã có trong Block H hoặc `## Application Answers`** → điều chỉnh câu trả lời có sẵn
 - **Câu hỏi mới** → tạo câu trả lời từ báo cáo cộng nguồn ở Bước 4b, theo thứ tự ưu tiên của Bước 4b: CV đã điều chỉnh cho những gì nó có, `cv.md` chỉ cho một phần nó bỏ hoàn toàn
@@ -174,6 +176,8 @@ Với mọi ô văn bản tự do, kiểm tra **ô điều khiển đã render**
 - **Nguồn biết đến tin** -> chọn đúng nguồn thật (ITviec, TopCV, VietnamWorks, LinkedIn, giới thiệu...), không đoán.
 
 ## Bước 7 — Tạo câu trả lời
+
+Ở nhánh **Draft without saving** (Bước 5), bỏ qua mục 1 và 2 bên dưới cùng CV đã điều chỉnh: chúng đến từ báo cáo khớp, vốn thuộc về tin khác. Tạo câu trả lời từ tin hiển thị, `cv.md` và hồ sơ của ứng viên.
 
 Với mỗi câu hỏi, tạo câu trả lời theo:
 

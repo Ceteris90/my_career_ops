@@ -284,6 +284,8 @@ Identify ALL visible questions:
 - Salary fields (range, expectation)
 - Upload fields (resume, cover letter PDF)
 
+On the **Draft without saving** path (Step 5), no report belongs to this posting: classify every question as new, and leave the matched report, its Section H, its `## Application Answers` and its tailored CV out of the answers.
+
 Classify each question:
 - **Already answered in Section H or `## Application Answers`** → adapt the existing response
 - **New question** → generate response from the report plus the Step 4b sources, at the Step 4b precedence: the tailored CV for anything it covers, `cv.md` only for a whole section it omits
@@ -301,6 +303,8 @@ For every free-text field, inspect the **rendered form control** before drafting
 
 
 ## Step 7 — Generate responses
+
+On the **Draft without saving** path (Step 5), skip items 1 and 2 below and the tailored CV: they come from the matched report, which belongs to another posting. Generate from the visible posting, `cv.md` and the candidate's profile.
 
 For each question, generate the response following:
 

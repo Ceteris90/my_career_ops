@@ -44,7 +44,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Trin 3 -- Detektér rolleændringer
 
-Dette trin gælder kun, så længe formularen stadig er report'ens opslag: samme arbejdsgiver og samme opslag (`modes/apply.md` -> Step 5 -> **Posting identity**); titlen tæller ikke med. Matcher flere reports virksomheden, så tag først den, hvis URL eller req-ID er dette opslag, og spørg kandidaten, hvis det er uklart. En anden arbejdsgiver eller et andet opslag hos samme arbejdsgiver er ikke en rolleændring: tilpas aldrig report'ens svar til det. Evaluér det som et nyt opslag (auto-pipeline, egen report), eller udarbejd svar uden at gemme dem i nogen report.
+Dette trin gælder kun, så længe formularen stadig er report'ens opslag: samme arbejdsgiver og samme opslag (`modes/apply.md` -> Step 5 -> **Posting identity**); titlen tæller ikke med. Matcher flere reports virksomheden, så tag først den, hvis URL eller req-ID er dette opslag, og spørg kandidaten, hvis det er uklart. En anden arbejdsgiver eller et andet opslag hos samme arbejdsgiver er ikke en rolleændring: tilpas aldrig report'ens svar til det. Vælg i stedet **Evaluate as new** (evaluér det som et nyt opslag: auto-pipeline, egen report) eller **Draft without saving** (udarbejd svar uden at gemme dem i nogen report). Ved **Draft without saving** lægges den matchede report, dens svar og dens tilpassede CV til side, og svarene skrives kun ud fra det synlige opslag, `cv.md` og profilen; trinene nedenfor, der læser report'en, gælder ikke.
 
 Hvis rollen på skærmen afviger fra den evaluerede:
 - **Advar kandidaten**: "Rollen har ændret sig fra [X] til [Y]. Ønsker du, at jeg genevaluerer, eller at jeg tilpasser svarene til den nye titel?"

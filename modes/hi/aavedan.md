@@ -44,7 +44,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Step 3 -- Role Changes Detect करें
 
-यह step तभी लागू होता है जब form अब भी report वाली posting हो: वही employer और वही posting (`modes/apply.md` → Step 5 → **Posting identity**); title से फ़र्क नहीं पड़ता। अगर company से कई reports match करें, तो पहले वह report लें जिसका URL या req ID यही posting है, और साफ़ न हो तो candidate से पूछें। दूसरा employer, या उसी employer की दूसरी posting, role change नहीं है: report के answers को कभी उस पर adapt न करें। उसे नई posting की तरह evaluate करें (auto-pipeline, अपनी report), या answers draft करें पर किसी report में save न करें।
+यह step तभी लागू होता है जब form अब भी report वाली posting हो: वही employer और वही posting (`modes/apply.md` → Step 5 → **Posting identity**); title से फ़र्क नहीं पड़ता। अगर company से कई reports match करें, तो पहले वह report लें जिसका URL या req ID यही posting है, और साफ़ न हो तो candidate से पूछें। दूसरा employer, या उसी employer की दूसरी posting, role change नहीं है: report के answers को कभी उस पर adapt न करें। इसके बजाय **Evaluate as new** (नई posting की तरह evaluate करें: auto-pipeline, अपनी report) या **Draft without saving** (answers draft करें पर किसी report में save न करें) चुनें। **Draft without saving** में matched report, उसके answers और उसका tailored CV अलग रखें, और सिर्फ़ दिख रही posting, `cv.md` और profile से लिखें; नीचे के जो steps report पढ़ते हैं, वे लागू नहीं होते।
 
 यदि screen का role evaluated role से अलग हो:
 - **Candidate को alert करें**: "Role [X] से [Y] में change हुआ है। क्या आप चाहते हैं कि मैं reevaluate करूँ या नए title के अनुसार responses adapt करूँ?"

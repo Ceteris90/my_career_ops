@@ -45,7 +45,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Stap 3 -- Detecteer rolwijzigingen
 
-Deze stap geldt alleen zolang het formulier nog de vacature van het rapport is: dezelfde werkgever en dezelfde vacature (`modes/apply.md` -> Step 5 -> **Posting identity**); de titel telt niet mee. Een andere werkgever, of een andere vacature bij dezelfde werkgever, is geen rolwijziging: pas de antwoorden van het rapport er nooit op aan. Evalueer die als nieuwe vacature (auto-pipeline, eigen rapport), of stel antwoorden op zonder ze in een rapport op te slaan.
+Deze stap geldt alleen zolang het formulier nog de vacature van het rapport is: dezelfde werkgever en dezelfde vacature (`modes/apply.md` -> Step 5 -> **Posting identity**); de titel telt niet mee. Een andere werkgever, of een andere vacature bij dezelfde werkgever, is geen rolwijziging: pas de antwoorden van het rapport er nooit op aan. Kies in plaats daarvan **Evaluate as new** (evalueer die als nieuwe vacature: auto-pipeline, eigen rapport) of **Draft without saving** (stel antwoorden op zonder ze in een rapport op te slaan). Bij **Draft without saving** leg je het gevonden rapport, de antwoorden erin en het afgestemde cv opzij en schrijf je alleen op basis van de zichtbare vacature, `cv.md` en het profiel; de stappen hieronder die het rapport lezen, gelden dan niet.
 
 Als de rol op het scherm afwijkt van de geëvalueerde rol:
 - **Waarschuw de kandidaat**: "De rol is veranderd van [X] in [Y]. Wil je dat ik de antwoorden opnieuw evalueer of aanpas aan de nieuwe titel?"

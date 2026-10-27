@@ -44,7 +44,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Passo 3 -- Detectar mudanças na vaga
 
-Este passo só se aplica enquanto o formulário ainda for a vaga do report: mesmo empregador e mesma vaga (`modes/apply.md` → Step 5 → **Posting identity**); o título não conta. Se vários reports corresponderem à empresa, pegar primeiro aquele cuja URL ou req ID seja esta vaga, e perguntar ao candidato se não estiver claro. Outro empregador, ou outra vaga do mesmo empregador, não é uma mudança de função: nunca adaptar a ela as respostas do report. Avaliá-la como vaga nova (auto-pipeline, report próprio) ou redigir respostas sem salvá-las em nenhum report.
+Este passo só se aplica enquanto o formulário ainda for a vaga do report: mesmo empregador e mesma vaga (`modes/apply.md` → Step 5 → **Posting identity**); o título não conta. Se vários reports corresponderem à empresa, pegar primeiro aquele cuja URL ou req ID seja esta vaga, e perguntar ao candidato se não estiver claro. Outro empregador, ou outra vaga do mesmo empregador, não é uma mudança de função: nunca adaptar a ela as respostas do report. Escolher em vez disso **Evaluate as new** (avaliá-la como vaga nova: auto-pipeline, report próprio) ou **Draft without saving** (redigir respostas sem salvá-las em nenhum report). Com **Draft without saving**, deixar de lado o report encontrado, suas respostas e seu CV adaptado, e redigir só a partir da vaga visível, do `cv.md` e do perfil; os passos abaixo que leem o report não se aplicam.
 
 Se a vaga na tela difere da avaliada:
 - **Avisar o candidato**: "A vaga mudou de [X] para [Y]. Quer que eu reavalie ou adapto as respostas ao novo título?"

@@ -70,7 +70,7 @@ Application answers を生成する前に、form が意図した active job を�
 
 ## Step 3 -- Detect changes in the role
 
-この step は、form がまだ report の posting である間だけ適用する：同じ employer かつ同じ posting（`modes/apply.md` → Step 5 → **Posting identity**）。title は判定に含めない。company に一致する report が複数ある場合は、まず URL か req ID がこの posting と一致する report を選び、はっきりしなければ候補者に確認する。別の employer、または同じ employer の別 posting は role の変更ではない：report の回答をそれに adapt しない。新しい posting として evaluate する（auto-pipeline、専用の report）か、どの report にも保存せずに回答を draft する。
+この step は、form がまだ report の posting である間だけ適用する：同じ employer かつ同じ posting（`modes/apply.md` → Step 5 → **Posting identity**）。title は判定に含めない。company に一致する report が複数ある場合は、まず URL か req ID がこの posting と一致する report を選び、はっきりしなければ候補者に確認する。別の employer、または同じ employer の別 posting は role の変更ではない：report の回答をそれに adapt しない。代わりに **Evaluate as new**（新しい posting として evaluate する：auto-pipeline、専用の report）か **Draft without saving**（どの report にも保存せずに回答を draft する）を選ぶ。どちらも Step 5 の同名の選択肢と同じで、**Draft without saving** では matched report、その回答、tailored CV を使わない。
 
 画面上の role が evaluation 済みの role と異なる場合：
 - **Notify the candidate:** "The role has changed from [X] to [Y]. Do you want me to re-evaluate or adapt the responses to the new title?"
@@ -89,6 +89,8 @@ Visible questions をすべて特定する：
 - Salary fields（range、expectation）
 - Upload fields（resume、cover letter PDF）
 
+**Draft without saving**（Step 5）の場合、この posting に属する report はない：すべての question を new として扱い、matched report、その Section H、`## Application Answers`、tailored CV を回答に使わない。
+
 各 question を分類する：
 - **Already answered in Section H or `## Application Answers`** → 既存 response を adapt
 - **New question** → report + `cv.md` から response を generate
@@ -103,6 +105,8 @@ Visible questions をすべて特定する：
 Legal、demographic、work-authorization、visa/sponsorship、salary、disability、veteran、background-check、relocation、self-identification fields の回答を捏造してはならない。回答が `config/profile.yml` または visible context に明示されていない場合は、`needs_candidate_confirmation` として mark し、候補者に確認するための最も安全な質問を出す。
 
 ## Step 7 -- Generate responses
+
+**Draft without saving**（Step 5）の場合、下の 1 と 2、および tailored CV は使わない：どれも別の posting の matched report から来ている。Visible posting、`cv.md`、candidate の profile から generate する。
 
 各 question について、以下に従って response を生成する：
 

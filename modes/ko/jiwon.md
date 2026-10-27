@@ -44,7 +44,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Step 3 -- 역할 변경 감지
 
-이 단계는 양식이 여전히 report의 공고일 때만 적용됩니다: 같은 고용주이고 같은 공고여야 합니다 (`modes/apply.md` → Step 5 → **Posting identity**). 직함은 따지지 않습니다. 회사와 일치하는 report가 여러 개라면, 먼저 URL이나 req ID가 이 공고인 report를 고르고, 불분명하면 후보자에게 물어보세요. 다른 고용주이거나 같은 고용주의 다른 공고라면 역할 변경이 아닙니다: report의 답변을 거기에 맞춰 조정하지 마세요. 새 공고로 평가하거나 (auto-pipeline, 별도 report), 어떤 report에도 저장하지 않고 답변 초안만 작성하세요.
+이 단계는 양식이 여전히 report의 공고일 때만 적용됩니다: 같은 고용주이고 같은 공고여야 합니다 (`modes/apply.md` → Step 5 → **Posting identity**). 직함은 따지지 않습니다. 회사와 일치하는 report가 여러 개라면, 먼저 URL이나 req ID가 이 공고인 report를 고르고, 불분명하면 후보자에게 물어보세요. 다른 고용주이거나 같은 고용주의 다른 공고라면 역할 변경이 아닙니다: report의 답변을 거기에 맞춰 조정하지 마세요. 대신 **Evaluate as new** (새 공고로 평가: auto-pipeline, 별도 report) 또는 **Draft without saving** (어떤 report에도 저장하지 않고 답변 초안만 작성)을 선택하세요. **Draft without saving**에서는 일치한 report와 그 답변, 맞춤 CV를 제쳐 두고, 보이는 공고와 `cv.md`, 프로필만으로 작성하세요. report를 읽는 아래 단계는 적용되지 않습니다.
 
 화면의 역할이 평가한 역할과 다르면:
 - **후보자에게 알림**: "역할이 [X]에서 [Y]로 바뀐 것 같습니다. 새 역할로 다시 평가할까요, 아니면 새 title에 맞춰 답변만 조정할까요?"

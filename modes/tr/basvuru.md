@@ -39,7 +39,7 @@ Aday bir başvuru formunu doldururken çalışan etkileşimli mod. Ekrandakileri
 
 ## Adım 3 — Rol Değişikliğini Tespit Et
 
-Bu adım yalnızca form hâlâ raporun ilanıysa geçerlidir: aynı işveren ve aynı ilan (`modes/apply.md` → Step 5 → **Posting identity**); başlık sayılmaz. Şirketle birden çok rapor eşleşirse önce URL'si veya req ID'si bu ilan olan raporu al, belirsizse adaya sor. Başka bir işveren ya da aynı işverenin başka bir ilanı rol değişikliği değildir: raporun yanıtlarını asla ona uyarlama. Onu yeni bir ilan olarak değerlendir (auto-pipeline, kendi raporu) ya da yanıtları hiçbir rapora kaydetmeden taslak olarak hazırla.
+Bu adım yalnızca form hâlâ raporun ilanıysa geçerlidir: aynı işveren ve aynı ilan (`modes/apply.md` → Step 5 → **Posting identity**); başlık sayılmaz. Şirketle birden çok rapor eşleşirse önce URL'si veya req ID'si bu ilan olan raporu al, belirsizse adaya sor. Başka bir işveren ya da aynı işverenin başka bir ilanı rol değişikliği değildir: raporun yanıtlarını asla ona uyarlama. Bunun yerine **Evaluate as new** (yeni bir ilan olarak değerlendir: auto-pipeline, kendi raporu) ya da **Draft without saving** (yanıtları hiçbir rapora kaydetmeden taslak olarak hazırla) seç. **Draft without saving** seçildiğinde eşleşen raporu, yanıtlarını ve uyarlanmış CV'sini bir kenara bırak; yalnızca görünen ilandan, `cv.md`'den ve profilden yaz. Raporu okuyan aşağıdaki adımlar o zaman uygulanmaz.
 
 Ekrandaki rol önceki değerlendirmedekinden farklıysa:
 - **Adayı uyar:** "Rol [X]'den [Y]'ye değişmiş görünüyor. Yeniden değerlendireyim mi, yoksa yanıtları yeni başlığa uyarlayayım mı?"

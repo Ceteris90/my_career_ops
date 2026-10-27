@@ -44,7 +44,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 ## Krok 3 -- Wykryj zmiany roli
 
-Ten krok obowiązuje tylko, dopóki formularz nadal dotyczy oferty z reportu: ten sam pracodawca i ta sama oferta (`modes/apply.md` → Step 5 → **Posting identity**); tytuł się nie liczy. Jeśli do firmy pasuje kilka reportów, najpierw wybierz ten, którego URL lub req ID to ta oferta, a gdy nie jest to jasne, zapytaj kandydata. Inny pracodawca albo inna oferta u tego samego pracodawcy to nie zmiana roli: nigdy nie dostosowuj do niej odpowiedzi z reportu. Oceń ją jako nową ofertę (auto-pipeline, własny report) albo przygotuj odpowiedzi bez zapisywania ich w żadnym reporcie.
+Ten krok obowiązuje tylko, dopóki formularz nadal dotyczy oferty z reportu: ten sam pracodawca i ta sama oferta (`modes/apply.md` → Step 5 → **Posting identity**); tytuł się nie liczy. Jeśli do firmy pasuje kilka reportów, najpierw wybierz ten, którego URL lub req ID to ta oferta, a gdy nie jest to jasne, zapytaj kandydata. Inny pracodawca albo inna oferta u tego samego pracodawcy to nie zmiana roli: nigdy nie dostosowuj do niej odpowiedzi z reportu. Zamiast tego wybierz **Evaluate as new** (oceń ją jako nową ofertę: auto-pipeline, własny report) albo **Draft without saving** (przygotuj odpowiedzi bez zapisywania ich w żadnym reporcie). Przy **Draft without saving** odłóż dopasowany report, jego odpowiedzi i jego dopasowane CV, i pisz tylko na podstawie widocznej oferty, `cv.md` i profilu; poniższe kroki, które czytają report, wtedy nie obowiązują.
 
 Jeśli rola na ekranie różni się od ocenionej:
 - **Ostrzeż kandydata**: "Rola zmieniła się z [X] na [Y]. Czy chcesz, żebym ocenił ją ponownie, czy dostosował odpowiedzi do nowego tytułu?"
