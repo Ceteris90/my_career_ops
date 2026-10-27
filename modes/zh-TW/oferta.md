@@ -305,6 +305,9 @@
 ## ATS 關鍵字擷取
 (列出 15–20 個從該 JD 中擷取的高頻核心技術／業務關鍵字，用於履歷最佳化)
 
+## Keyword Coverage
+（由 `node keyword-match.mjs <report>` 產生——覆蓋率 %、present、thin、missing）
+
 ## Job Description (archived verbatim)
 （職缺描述全文，逐字貼上——見下方要求）
 ```
@@ -326,6 +329,10 @@ if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report mus
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
 ' {json-file}
 ```
+
+### 1b. 嵌入 ATS 關鍵字覆蓋率
+
+儲存報告後執行 `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md`，把 `## Keyword Coverage` 區塊貼在 ATS 關鍵字擷取之下（標題維持英文）。僅供診斷：只有當關鍵字反映真實經驗時才補充。
 
 ### 2. 登錄到 Tracker 紀錄簿
 

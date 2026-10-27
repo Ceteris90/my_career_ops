@@ -430,6 +430,9 @@ Guardar la evaluación completa en `reports/{###}-{company-slug}-{YYYY-MM-DD}.md
 ## Palabras clave extraídas
 (lista de 15-20 palabras clave de la oferta para optimización ATS)
 
+## Keyword Coverage
+(generado por `node keyword-match.mjs <report>` — cobertura en %, present, thin, missing)
+
 ## Job Description (archived verbatim)
 (el texto completo de la oferta, pegado tal cual — ver el requisito más abajo)
 ```
@@ -453,6 +456,10 @@ process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1
 ```
 
 **Machine Summary (obligatorio):** YAML fence después del encabezado — mismo schema y reglas que `batch/batch-prompt.md` (fuente de verdad). Incluye `advertised_comp` (cifra textual de la JD o `null`), `risk_summary` (mapa), y `requirement_importance` (tabla del Bloque B fila por fila; tope `inferred` de la puerta se mantiene).
+
+### 1b. Insertar la cobertura de keywords ATS
+
+Tras guardar el report, ejecutar `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md` y pegar el bloque `## Keyword Coverage` debajo de las palabras clave extraídas (el encabezado se queda en inglés). Solo diagnóstico: añadir una keyword solo si refleja experiencia real.
 
 ### 2. Registrar en el tracker
 

@@ -261,6 +261,9 @@
 ## Keywords extracted
 (قائمة تحتوي على 15-20 كلمة مفتاحية مستخرجة من الـ JD ومهمة لتحسين الـ ATS)
 
+## Keyword Coverage
+(يُنشئه `node keyword-match.mjs <report>` — نسبة التغطية، present، thin، missing)
+
 ## Job Description (archived verbatim)
 (النص الكامل لإعلان الوظيفة، يُلصق حرفياً — انظر المتطلب أدناه)
 ```
@@ -282,6 +285,10 @@ if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report mus
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
 ' {json-file}
 ```
+
+### 1b. إدراج تغطية الكلمات المفتاحية لـ ATS
+
+بعد حفظ التقرير، شغّل `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md` والصق كتلة `## Keyword Coverage` أسفل الكلمات المفتاحية المستخرجة (يبقى العنوان بالإنجليزية). للتشخيص فقط: لا تُضف كلمة مفتاحية إلا إذا كانت تعكس خبرة حقيقية.
 
 ### 2. التسجيل في نظام التتبع
 

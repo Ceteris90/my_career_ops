@@ -289,6 +289,9 @@
 ## ATS 关键词提取
 (列出 15-20 个从该 JD 中提取的高频核心技术/业务关键词，用于简历优化)
 
+## Keyword Coverage
+（由 `node keyword-match.mjs <report>` 生成——覆盖率 %、present、thin、missing）
+
 ## Job Description (archived verbatim)
 （职位描述全文，逐字粘贴——见下方要求）
 ```
@@ -310,6 +313,10 @@ if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report mus
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
 ' {json-file}
 ```
+
+### 1b. 嵌入 ATS 关键词覆盖率
+
+保存报告后运行 `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md`，把 `## Keyword Coverage` 区块贴在 ATS 关键词提取之下（标题保持英文）。仅用于诊断：只有当关键词反映真实经验时才补充。
 
 ### 2. 登记到 Tracker 记录簿
 将此条记录登记到 tracker：写入 TSV 文件（`_shared.md` 的规则 9），再用 `node merge-tracker.mjs` 合并；严禁直接在 `data/applications.md` 中手动添加行。字段：

@@ -340,6 +340,9 @@ Full evaluation を `reports/{###}-{company-slug}-{YYYY-MM-DD}.md` に保存す�
 ## Keywords extracted
 (list of 15-20 keywords from the JD for ATS optimization)
 
+## Keyword Coverage
+(`node keyword-match.mjs <report>` が生成 — coverage %、present、thin、missing)
+
 ## Job Description (archived verbatim)
 (posting の全文を verbatim で貼る — 下の要件を参照)
 ```
@@ -361,6 +364,10 @@ if (p.report != null) { if (!/^[0-9]+$/.test(String(p.report))) fail("report mus
 process.exit(spawnSync(process.execPath, args, { stdio: "inherit" }).status ?? 1);
 ' {json-file}
 ```
+
+### 1b. ATS keyword coverage を埋め込む
+
+Report を保存したら `node keyword-match.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md` を実行し、`## Keyword Coverage` block を `## Keywords extracted` の下に貼る（見出しは英語のまま）。診断用のみ：keyword は実際の経験を反映する場合だけ追加する。
 
 ### 2. Record in tracker
 
