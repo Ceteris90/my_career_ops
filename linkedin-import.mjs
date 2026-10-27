@@ -67,7 +67,7 @@ async function main() {
   if (!dryRun && !plan.error && plan.added.length > 0) {
     const { appendToPipeline, appendToScanHistory } = await import('./scan.mjs');
     const { localToday } = await import('./lib/local-today.mjs');
-    const offers = linkedInOffers(plan.added);
+    const offers = linkedInOffers(plan.added, text);
     mkdirSync(dirname(pipelinePath), { recursive: true });
     await appendToPipeline(offers, { pipelinePath });
     await appendToScanHistory(offers, localToday(), 'added');

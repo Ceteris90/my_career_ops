@@ -226,7 +226,6 @@ export function TodayDashboard({
           {inBetween && <QuickEvaluate />}
         </div>
       </section>
-      <LinkedInPaste />
 
       {dataError && !dataLoading && (
         <div role="alert" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface/40 px-5 py-4 text-sm text-muted">
@@ -328,6 +327,8 @@ export function TodayDashboard({
           </p>
         </div>
       )}
+
+      <LinkedInPaste />
 
       {decisionUndo && (
         <div className="fixed inset-x-0 bottom-32 z-40 flex justify-center px-4 sm:bottom-6">

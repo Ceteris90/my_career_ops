@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   linkedInJobsFromText,
   planLinkedInImport,
+  linkedInOffers,
   LINKEDIN_DOCTOR_LABEL,
   linkedInPluginFix,
 } from '../lib/linkedin-import.mjs';
@@ -76,14 +77,49 @@ test('jobs already in the pipeline or the tracker are not added again', () => {
   assert.deepEqual(plan.added.map((job) => job.id), [C, D]);
   assert.deepEqual(plan.already.map((job) => job.id), [A, B]);
   assert.equal(plan.found, 4);
-  assert.equal(plan.message, '2 LinkedIn jobs added. 2 were already in your list.');
+  assert.equal(plan.message, '2 LinkedIn jobs added. Open Pipeline to review them. 2 were already in your list.');
 });
 
 test('the success line names the count of jobs added', () => {
   const plan = planLinkedInImport(`https://www.linkedin.com/jobs/view/${A}`, '');
-  assert.equal(plan.message, '1 LinkedIn job added.');
+  assert.equal(plan.message, '1 LinkedIn job added. Open Pipeline to review it.');
   const many = planLinkedInImport(ALERT, '');
-  assert.equal(many.message, '4 LinkedIn jobs added.');
+  assert.equal(many.message, '4 LinkedIn jobs added. Open Pipeline to review them.');
+});
+
+test('a title above the link is kept, and a slug fills in when the paste has no title', () => {
+  const text = [
+    'Customer Success Lead',
+    'Quillfeather Labs',
+    'Austin, TX',
+    `https://www.linkedin.com/jobs/view/${A}`,
+    `https://www.linkedin.com/jobs/view/staff-analyst-quill-${B}/`,
+  ].join('\n');
+  const offers = linkedInOffers(linkedInJobsFromText(text), text);
+  assert.equal(offers[0].title, 'Customer Success Lead');
+  assert.equal(offers[0].company, 'Quillfeather Labs');
+  assert.equal(offers[1].title, 'Staff Analyst Quill');
+  assert.equal(offers[1].company, 'LinkedIn');
+  assert.equal(offers[1].url, `https://www.linkedin.com/jobs/view/${B}`);
+});
+
+test('the CLI writes the title from the line above the link', () => {
+  const root = sandbox();
+  try {
+    const text = [
+      'Customer Success Lead',
+      'Quillfeather Labs',
+      `https://www.linkedin.com/jobs/view/${A}`,
+    ].join('\n');
+    const result = runCli(root, ['--json'], text);
+    assert.equal(result.status, 0, result.stderr);
+    const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
+    assert.match(pipeline, /Customer Success Lead/);
+    assert.match(pipeline, /Quillfeather Labs/);
+    assert.match(JSON.parse(result.stdout).message, /Open Pipeline to review it/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('an empty paste explains what to copy', () => {
@@ -143,7 +179,7 @@ test('the CLI writes canonical rows and a second run does not duplicate them', (
     assert.equal(first.status, 0, first.stderr);
     const parsed = JSON.parse(first.stdout);
     assert.equal(parsed.added, 4);
-    assert.equal(parsed.message, '4 LinkedIn jobs added.');
+    assert.equal(parsed.message, '4 LinkedIn jobs added. Open Pipeline to review them.');
     const pipeline = readFileSync(join(root, 'data', 'pipeline.md'), 'utf8');
     assert.match(pipeline, new RegExp(`https://www.linkedin.com/jobs/view/${A}`));
     assert.doesNotMatch(pipeline, /\/comm\/jobs\/view\//);

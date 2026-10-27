@@ -10,7 +10,7 @@ Paste a LinkedIn job alert into CareerOps. The jobs land in your pipeline. You d
 4. On the home page or the pipeline, paste into **LinkedIn job alerts**.
 5. Click **Add these jobs**.
 
-You should see a line such as `12 LinkedIn jobs added`. Those jobs show in the inbox as LinkedIn, Job alert. Open a link to read the posting.
+You should see a line such as `12 LinkedIn jobs added. Open Pipeline to review them.` Each row uses the job title from the line above the link. When the paste has no title, the row uses the words in the job link. Open Pipeline to read the posting.
 
 A job that is already in the pipeline or the tracker is not added again.
 
