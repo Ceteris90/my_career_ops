@@ -91,6 +91,9 @@ try {
   eq('bareNumeric decodes a hex reference without a semicolon', decodeEntities('a&#x3a//x', { bareNumeric: true }), 'a://x');
   eq('bareNumeric still decodes semicolon-terminated references', decodeEntities('&#106;s &amp;', { bareNumeric: true }), 'js &');
   eq('bareNumeric leaves a semicolon-free named reference alone', decodeEntities('&amp#58', { bareNumeric: true }), '&amp#58');
+  eq('bareNumeric decodes a C0 control reference, as a browser does', decodeEntities('&#1;x', { bareNumeric: true }), '\u0001x');
+  eq('bareNumeric turns NUL, a surrogate and an out-of-range reference into U+FFFD', decodeEntities('&#0;&#xD800;&#x110000;', { bareNumeric: true }), '\ufffd\ufffd\ufffd');
+  eq('the default mode still leaves a C0 control reference as written', decodeEntities('&#1;x'), '&#1;x');
   eq('the default mode leaves a semicolon-free numeric reference alone', decodeEntities('https&#58//x'), 'https&#58//x');
 
   // URL punctuation: a scheme or authority written as references must decode.

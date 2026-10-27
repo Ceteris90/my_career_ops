@@ -132,6 +132,10 @@ export function decodeEntities(s, { bareNumeric = false } = {}) {
     if (body[0] === '#') {
       const isHex = body[1] === 'x' || body[1] === 'X';
       const code = parseInt(body.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      // An attribute caller sees what the browser sees: NUL, a surrogate and a
+      // code point past U+10FFFF become U+FFFD, and every other reference
+      // decodes, a leading C0 control included (the URL parser strips it).
+      if (bareNumeric) return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? '\ufffd' : String.fromCodePoint(code);
       // Anything outside the emittable set is left exactly as written. Raw
       // `&#0;` in a title is visible and inert; a decoded NUL is neither.
       return isEmittableCodePoint(code) ? String.fromCodePoint(code) : m;

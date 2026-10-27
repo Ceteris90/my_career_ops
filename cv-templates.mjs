@@ -651,8 +651,6 @@ export function atsLint(path, kind, opts = {}) {
 // posture as atsLint: warnings only, never throws, never blocks a render.
 // The rules live here rather than in templates/ats-rules.yml because they
 // describe the renderer, not modes/pdf.md.
-const TAG_RE = /<[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
-const ANY_TAG_RE = /<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
 // The schemes the URL Standard calls special. Chromium routes (and the renderer
 // aborts) a request to any of them, with or without `//` after the colon.
 const REMOTE_PROTOCOLS = new Set(['http:', 'https:', 'ftp:', 'ws:', 'wss:']);
@@ -660,13 +658,8 @@ const REMOTE_PROTOCOLS = new Set(['http:', 'https:', 'ftp:', 'ws:', 'wss:']);
 const DOCUMENT_URL = 'file:///template/';
 // A URL starting with two slashes, in either direction, names a host.
 const SCHEME_RELATIVE_RE = /^[\\/]{2}/;
-const COMMENT_OR_STYLE_RE = /<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
-// Comments go, except inside a <style> body: there `<!--` and `-->` are raw
-// CSS text (ignored tokens), and the rules between them are live. The
-// alternation is leftmost-first, so a comment wrapping a <style> is stripped.
-const stripComments = (html) => html.replace(COMMENT_OR_STYLE_RE, (m) => (m.startsWith('<!--') ? ' ' : m));
-// How many levels of iframe srcdoc markup are read for remote requests.
-const MAX_SRCDOC_DEPTH = 3;
+// How many levels of iframe srcdoc markup are read; what lies deeper is reported, not skipped.
+const MAX_SRCDOC_DEPTH = 16;
 
 // CSS Syntax 3, "consume an escaped code point": `\` plus 1-6 hex digits and one
 // optional whitespace, or `\` plus any other character, which stands for itself.
@@ -743,21 +736,146 @@ function srcsetUrls(v) {
 
 const excerpt = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
 
-// Remote requests in one document's markup, and in the markup of every iframe
-// srcdoc inside it. `inheritedBase` is the base URL of the document that holds
-// this markup: a srcdoc document inherits its parent's, and its own <base> wins.
-function remoteSubresources(html, depth, inheritedBase) {
-  const out = [];
+// One pass over the markup in the HTML tokenizer's own terms, so no rule has to
+// guess what is a tag and what is text. Comments (and the `<!-->` forms), bogus
+// comments, CDATA in svg/math, the bodies of raw-text and RCDATA elements, and
+// everything inside <template> are not markup and never become tags; a quoted
+// attribute value is part of its tag. Open tags come back with the video, audio
+// or picture they sit in, and <style> bodies come back whole. With JavaScript
+// off a <noscript> is ordinary markup, so it is scanned like any other.
+const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext']);
+const MEDIA = new Set(['video', 'audio', 'picture']);
+function scanHtml(html) {
+  const tags = [];
+  const styles = [];
+  const media = [];
+  const TAG = /<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/y;
+  let template = 0;
+  let foreign = 0;
+  let i = 0;
+  while ((i = html.indexOf('<', i)) !== -1) {
+    const next = html[i + 1];
+    if (html.startsWith('<!--', i)) {
+      const abrupt = /^<!---?>/.exec(html.slice(i, i + 6));
+      const close = /--!?>/g;
+      close.lastIndex = i + 4;
+      const end = abrupt ? null : close.exec(html);
+      i = abrupt ? i + abrupt[0].length : end ? end.index + end[0].length : html.length;
+    } else if (foreign && html.startsWith('<![CDATA[', i)) {
+      const end = html.indexOf(']]>', i);
+      i = end < 0 ? html.length : end + 3;
+    } else if (next === '!' || next === '?' || (next === '/' && !/[a-zA-Z]/.test(html[i + 2] ?? ''))) {
+      const end = html.indexOf('>', i);
+      i = end < 0 ? html.length : end + 1;
+    } else {
+      TAG.lastIndex = i;
+      const m = TAG.exec(html);
+      if (!m) { i++; continue; }
+      i = TAG.lastIndex;
+      const name = m[2].toLowerCase();
+      const selfClosing = /\/\s*$/.test(m[3]);
+      if (m[1]) {
+        if (name === 'template' && template) template--;
+        else if ((name === 'svg' || name === 'math') && foreign) foreign--;
+        else if (media.at(-1) === name) media.pop();
+        continue;
+      }
+      const inert = template > 0;
+      if (!inert) tags.push({ raw: m[0], name, media: media.at(-1) ?? null });
+      if (name === 'template') template++;
+      if ((name === 'svg' || name === 'math') && !selfClosing) foreign++;
+      if (MEDIA.has(name) && !selfClosing) media.push(name);
+      // In svg only script and style keep raw text; title and friends are markup there.
+      if (RAW_TEXT.has(name) && (!foreign || name === 'script' || name === 'style')) {
+        const end = name === 'plaintext' ? null : new RegExp(`</${name}(?=[\\s/>])`, 'gi');
+        if (end) end.lastIndex = i;
+        const found = end?.exec(html);
+        const stop = end ? (found ? found.index : html.length) : html.length;
+        if (name === 'style' && !inert) styles.push({ tag: m[0], body: html.slice(i, stop).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, foreign ? '$1' : '$&') });
+        i = stop;
+      }
+    }
+  }
+  return { tags, styles };
+}
+
+// The URLs a stylesheet asks for, read the way CSS Syntax 3 tokenizes it: comments
+// and strings are skipped as units (so `"/*"` opens no comment and `content:"url(x)"`
+// requests nothing), an unquoted url() runs to its `)`, and a string is a request
+// only inside url(), image-set() or right after @import. @namespace takes a
+// namespace name, not a resource. Escapes are decoded in names and values.
+const CSS_IDENT = /(?:[a-zA-Z0-9_-]|[^\x00-\x7f]|\\(?:[0-9a-fA-F]{1,6}(?:\r\n|[ \t\n\r\f])?|[^\n\r\f]))+/y;
+function cssRequestUrls(css) {
+  const urls = [];
+  const open = [];
+  let atRule = null;
+  let atFirst = false;
+  let i = 0;
+  const ident = (at) => { CSS_IDENT.lastIndex = at; const m = CSS_IDENT.exec(css); return m ? m[0] : null; };
+  while (i < css.length) {
+    const c = css[i];
+    if (c === '/' && css[i + 1] === '*') {
+      const end = css.indexOf('*/', i + 2);
+      i = end < 0 ? css.length : end + 2;
+    } else if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < css.length && css[j] !== c && css[j] !== '\n') j += css[j] === '\\' ? 2 : 1;
+      const value = decodeCssEscapes(css.slice(i + 1, Math.min(j, css.length)));
+      const top = open.at(-1);
+      if (atRule !== 'namespace' && (top === 'url' || top === 'image-set' || top === '-webkit-image-set' || (atRule === 'import' && atFirst && !open.length))) urls.push(value);
+      atFirst = false;
+      i = css[j] === c ? j + 1 : j;
+    } else {
+      const word = c === '@' ? ident(i + 1) : ident(i);
+      if (word && c === '@') {
+        atRule = decodeCssEscapes(word).toLowerCase();
+        atFirst = true;
+        i += 1 + word.length;
+      } else if (word) {
+        atFirst = false;
+        i += word.length;
+        if (css[i] !== '(') continue;
+        i++;
+        const name = decodeCssEscapes(word).toLowerCase();
+        while (name === 'url' && /\s/.test(css[i] ?? '')) i++;
+        if (name !== 'url' || css[i] === '"' || css[i] === "'") { open.push(name); continue; }
+        let j = i;
+        while (j < css.length && css[j] !== ')') j += css[j] === '\\' ? 2 : 1;
+        if (atRule !== 'namespace') urls.push(decodeCssEscapes(css.slice(i, j).trim()));
+        i = j + 1;
+      } else {
+        if (c === '(') open.push('(');
+        else if (c === ')') open.pop();
+        else if (c === ';' || c === '{') atRule = null;
+        if (!/\s/.test(c)) atFirst = false;
+        i++;
+      }
+    }
+  }
+  return urls;
+}
+
+// Requests made by one scanned document, and by every iframe srcdoc inside it.
+// `inheritedBase` is the base URL of the document that holds the markup: a
+// srcdoc document inherits its parent's, and its own <base> wins. A srcdoc
+// nested past MAX_SRCDOC_DEPTH is probed one level (`shallow`) and, if it holds
+// a request or yet another srcdoc, reported as `capped` instead of passing.
+const requestCache = new WeakMap();
+function scanRequests(doc, depth = 0, inheritedBase = new URL(DOCUMENT_URL), shallow = false) {
+  if (depth === 0 && requestCache.has(doc)) return requestCache.get(doc);
+  const remote = [];
+  const capped = [];
   // A relative URL resolves against an absolute remote <base href>, so it is
   // a remote request too. Only the first <base> counts, as in a browser.
   let base = inheritedBase;
-  const baseTag = (html.match(TAG_RE) || []).find((t) => /^<base\b/i.test(t) && attrValue(t, 'href') !== null);
+  const baseTag = doc.tags.find((t) => t.name === 'base' && attrValue(t.raw, 'href') !== null);
   if (baseTag) {
-    try { base = new URL(urlValue(baseTag, 'href'), inheritedBase); } catch { /* an unparsable base is ignored */ }
+    try { base = new URL(urlValue(baseTag.raw, 'href'), inheritedBase); } catch { /* an unparsable base is ignored */ }
   }
   // Classify the resolved URL rather than pattern-match the text, so every
   // spelling the URL parser accepts counts: `https:example.com`, `https:/x`,
   // `https:\\x`. `//host` and its backslash forms name a host whatever the base.
+  // A URL the parser rejects is not requested.
   const isRemote = (u, { sameDocFragment = false } = {}) => {
     const v = u.trim();
     if (v === '' || v.startsWith('{{')) return false;
@@ -769,99 +887,108 @@ function remoteSubresources(html, depth, inheritedBase) {
     try {
       return REMOTE_PROTOCOLS.has(new URL(v, base).protocol);
     } catch {
-      return /^(?:https?|ftp|wss?):/i.test(v);
+      return false;
     }
   };
-  for (const tag of html.match(TAG_RE) || []) {
-    const name = /^<([a-zA-Z0-9]+)/.exec(tag)[1].toLowerCase();
-    // srcdoc markup is fetched like the page's own, and the renderer aborts it too.
-    if (name === 'iframe' && depth < MAX_SRCDOC_DEPTH) {
-      const srcdoc = attrValue(tag, 'srcdoc');
-      if (srcdoc !== null) out.push(...remoteSubresources(stripComments(srcdoc), depth + 1, base));
+  for (const { raw, name, media } of doc.tags) {
+    if (name === 'iframe') {
+      const srcdoc = attrValue(raw, 'srcdoc');
+      if (srcdoc !== null) {
+        if (shallow) capped.push(excerpt(raw));
+        else if (depth < MAX_SRCDOC_DEPTH) {
+          const inner = scanRequests(scanHtml(srcdoc), depth + 1, base);
+          remote.push(...inner.remote);
+          capped.push(...inner.capped);
+        } else {
+          const inner = scanRequests(scanHtml(srcdoc), depth + 1, base, true);
+          if (inner.remote.length || inner.capped.length) capped.push(excerpt(raw));
+        }
+      }
     }
+    // What the renderer fetches, probed with a JavaScript-off context: an input
+    // src only for type=image, a source src only in video/audio and its srcset
+    // only in picture, never a track, and for <link> only stylesheet, prefetch
+    // and a preload that names its `as`. Icons and modulepreload are not requested.
     const attrs = [];
-    if (['img', 'source', 'video', 'audio', 'track', 'image', 'input'].includes(name)) attrs.push('src');
-    if (name === 'img' || name === 'source') attrs.push('srcset');
+    if (['img', 'video', 'audio'].includes(name)) attrs.push('src');
+    if (name === 'input' && (attrValue(raw, 'type') ?? '').trim().toLowerCase() === 'image') attrs.push('src');
+    if (name === 'source' && (media === 'video' || media === 'audio')) attrs.push('src');
+    if (name === 'img' || (name === 'source' && media === 'picture')) attrs.push('srcset');
     if (name === 'video') attrs.push('poster');
-    if (name === 'image' || name === 'use') attrs.push('href', 'xlink:href');
-    if (name === 'link' && /\b(?:stylesheet|preload|icon|prefetch)\b/i.test(attrValue(tag, 'rel') ?? '')) attrs.push('href');
+    if (name === 'image') attrs.push('src', 'href', 'xlink:href');
+    if (name === 'use' || name === 'feimage') attrs.push('href', 'xlink:href');
+    if (name === 'link') {
+      const rel = (attrValue(raw, 'rel') ?? '').toLowerCase().split(/\s+/);
+      if (rel.includes('stylesheet') || rel.includes('prefetch') || (rel.includes('preload') && (attrValue(raw, 'as') ?? '').trim() !== '')) attrs.push('href');
+    }
     const sameDocFragment = name === 'use';
-    const urls = attrs.flatMap((a) => {
-      if (a === 'srcset') return srcsetUrls(attrValue(tag, a) ?? '');
-      return [urlValue(tag, a) ?? ''];
-    });
-    if (urls.some((u) => isRemote(u, { sameDocFragment }))) out.push(excerpt(tag));
+    const urls = attrs.flatMap((a) => (a === 'srcset' ? srcsetUrls(attrValue(raw, a) ?? '') : [urlValue(raw, a) ?? '']));
+    if (urls.some((u) => isRemote(u, { sameDocFragment }))) remote.push(excerpt(raw));
   }
   // Only CSS-bearing content: <style> bodies and style="" values. A title or
   // visible text that happens to contain url(...) is prose, not a request.
-  // Bodies are found by walking real tags, so `<style>` written inside a
-  // quoted attribute value is text, not an element.
-  const sources = [];
-  let open = null;
-  let isCss = false;
-  for (const m of html.matchAll(ANY_TAG_RE)) {
-    if (open === null && /^<style\b/i.test(m[0])) {
-      open = m.index + m[0].length;
-      // A style element with another type is not CSS; browsers ignore it.
-      const type = attrValue(m[0], 'type');
-      isCss = type === null || /^\s*(?:text\/css)?\s*$/i.test(type);
-    } else if (open !== null && /^<\/style\b/i.test(m[0])) {
-      if (isCss) sources.push(html.slice(open, m.index));
-      open = null;
-    }
-  }
-  for (const tag of html.match(TAG_RE) || []) {
-    const inline = attrValue(tag, 'style');
+  const sources = doc.styles
+    // A style element with another type is not CSS; browsers ignore it.
+    .filter(({ tag }) => /^\s*(?:text\/css)?\s*$/i.test(attrValue(tag, 'type') ?? ''))
+    .map(({ body }) => body);
+  for (const { raw } of doc.tags) {
+    const inline = attrValue(raw, 'style');
     if (inline) sources.push(inline);
   }
-  // Escapes are decoded first: `\68 ttps://x` is `https://x` to the renderer,
-  // and so is `\75 rl(` for `url(`.
-  const css = decodeCssEscapes(sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' '));
-  for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1], { sameDocFragment: true })) out.push(excerpt(`url(${m[1]})`));
-  for (const m of css.matchAll(/@import\s*["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
-  return out;
+  for (const source of sources) {
+    for (const u of cssRequestUrls(source)) if (isRemote(u, { sameDocFragment: true })) remote.push(excerpt(`url(${u})`));
+  }
+  const result = { remote, capped };
+  if (depth === 0) requestCache.set(doc, result);
+  return result;
 }
 
 const RENDER_RULES = [
   {
     id: 'script-element',
     rule: 'A <script> never runs: the renderer disables JavaScript.',
-    detect: (html) => (html.match(TAG_RE) || []).filter((tag) => /^<script\b/i.test(tag)).map(excerpt),
+    detect: (doc) => doc.tags.filter((t) => t.name === 'script').map((t) => excerpt(t.raw)),
   },
   {
     id: 'embedded-content',
     rule: '<iframe>, <object> and <embed> pull in content the renderer will not load.',
     // An iframe with srcdoc carries its own static markup, which renders with
     // JavaScript off and needs no request.
-    detect: (html) => (html.match(TAG_RE) || [])
-      .filter((tag) => /^<(?:iframe|object|embed)\b/i.test(tag) && !(/^<iframe\b/i.test(tag) && attrNames(tag).includes('srcdoc')))
-      .map(excerpt),
+    detect: (doc) => doc.tags
+      .filter((t) => ['iframe', 'object', 'embed'].includes(t.name) && !(t.name === 'iframe' && attrNames(t.raw).includes('srcdoc')))
+      .map((t) => excerpt(t.raw)),
   },
   {
     id: 'event-handler-attribute',
     rule: 'An on* attribute never fires: the renderer disables JavaScript.',
-    detect: (html) => (html.match(TAG_RE) || [])
-      .filter((tag) => attrNames(tag).some((n) => /^on[a-z]+$/.test(n)))
-      .map(excerpt),
+    detect: (doc) => doc.tags
+      .filter((t) => attrNames(t.raw).some((n) => /^on[a-z]+$/.test(n)))
+      .map((t) => excerpt(t.raw)),
   },
   {
     id: 'script-url',
     rule: 'A javascript: or data:text/html URL is never followed.',
-    detect: (html) => (html.match(TAG_RE) || [])
-      .filter((tag) => ['href', 'src', 'xlink:href'].some((a) => /^\s*(?:javascript:|data:text\/html)/i.test(urlValue(tag, a) ?? '')))
-      .map(excerpt),
+    detect: (doc) => doc.tags
+      .filter((t) => ['href', 'src', 'xlink:href'].some((a) => /^\s*(?:javascript:|data:text\/html)/i.test(urlValue(t.raw, a) ?? '')))
+      .map((t) => excerpt(t.raw)),
   },
   {
     id: 'meta-refresh',
     rule: 'A <meta http-equiv="refresh"> redirect is not followed in a PDF render.',
-    detect: (html) => (html.match(TAG_RE) || [])
-      .filter((tag) => /^<meta\b/i.test(tag) && /^\s*refresh\s*$/i.test(attrValue(tag, 'http-equiv') ?? ''))
-      .map(excerpt),
+    // A refresh with no content, or content that does not start with a time, does nothing.
+    detect: (doc) => doc.tags
+      .filter((t) => t.name === 'meta' && /^\s*refresh\s*$/i.test(attrValue(t.raw, 'http-equiv') ?? '') && /^\s*[0-9.]/.test(attrValue(t.raw, 'content') ?? ''))
+      .map((t) => excerpt(t.raw)),
   },
   {
     id: 'remote-subresource',
     rule: 'Every request that is not file: or data: is aborted, so a remote image, stylesheet or font is dropped without a message.',
-    detect: (html) => remoteSubresources(html, 0, new URL(DOCUMENT_URL)),
+    detect: (doc) => scanRequests(doc).remote,
+  },
+  {
+    id: 'srcdoc-depth-limit',
+    rule: `An iframe srcdoc nested deeper than ${MAX_SRCDOC_DEPTH} levels is not inspected, so what it requests is unknown.`,
+    detect: (doc) => scanRequests(doc).capped,
   },
 ];
 
@@ -875,9 +1002,9 @@ const RENDER_RULES = [
 export function renderLint(path) {
   const result = { ok: true, path, findings: [], error: null };
   try {
-    const html = stripComments(readFileSync(path, 'utf-8'));
+    const doc = scanHtml(readFileSync(path, 'utf-8'));
     for (const { id, rule, detect } of RENDER_RULES) {
-      for (const detail of detect(html)) {
+      for (const detail of detect(doc)) {
         result.findings.push({ id, rule, severity: 'warning', detail });
       }
     }

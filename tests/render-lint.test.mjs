@@ -25,7 +25,7 @@ const CASES = [
   {
     id: 'script-element',
     hit: ['<body><script>fetch("x")</script></body>', '<SCRIPT src="a.js"></SCRIPT>'],
-    miss: ['<p>Wrote a script for the pipeline</p>', '<noscript>Enable JS</noscript>', '<!-- <script>x</script> -->', '<img alt="<script>" src="a.png">'],
+    miss: ['<p>Wrote a script for the pipeline</p>', '<noscript>Enable JS</noscript>', '<!-- <script>x</script> -->', '<img alt="<script>" src="a.png">', '<textarea><script>x</script></textarea>', '<template><script>x</script></template>', '<svg><text><![CDATA[<script>x</script>]]></text></svg>'],
   },
   {
     id: 'embedded-content',
@@ -35,7 +35,7 @@ const CASES = [
   {
     id: 'event-handler-attribute',
     hit: ['<body onload="x()">', '<img src="a.png" onerror=x()>', '<a href="#" ONCLICK="x()">go</a>', '<svg/onload=x()>', '<img src="a.png"onerror=x()>', '<img src=\'a.png\'onerror=x()>'],
-    miss: ['<p title="once=twice">x</p>', '<div data-onclick="x">x</div>', '<p>onload= in text</p>', '<a href=/onload=x>x</a>', '<a href=a/onclick=b>x</a>', '<img src="a.png" alt=x/onerror=y>'],
+    miss: ['<p title="once=twice">x</p>', '<div data-onclick="x">x</div>', '<p>onload= in text</p>', '<a href=/onload=x>x</a>', '<a href=a/onclick=b>x</a>', '<img src="a.png" alt=x/onerror=y>', '<template><img src="a.png" onerror="x()"></template>', '<textarea><img onerror=x()></textarea>'],
   },
   {
     id: 'script-url',
@@ -44,8 +44,10 @@ const CASES = [
   },
   {
     id: 'meta-refresh',
-    hit: ['<meta http-equiv="refresh" content="0;url=a.html">'],
-    miss: ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width">'],
+    hit: ['<meta http-equiv="refresh" content="0;url=a.html">', '<meta http-equiv="refresh" content=" 3 ; url=a.html">', '<meta http-equiv="refresh" content="5">'],
+    // Chromium follows a refresh that parses to a time (the remote target is requested, then aborted)
+    // and ignores one with no content, an empty one, or one whose content does not start with a number.
+    miss: ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width">', '<meta http-equiv="refresh">', '<meta http-equiv="refresh" content="">', '<meta http-equiv="refresh" content="x">', '<meta http-equiv="refresh" content="url=a.html">', '<template><meta http-equiv="refresh" content="0;url=a.html"></template>'],
   },
   {
     id: 'remote-subresource',
@@ -131,6 +133,36 @@ const CASES = [
       // The srcdoc document inherits the parent's base URL, and its own <base> overrides it.
       '<base href="https://cdn.example/"><iframe srcdoc="<img src=\'logo.png\'>"></iframe>',
       '<iframe srcdoc="<base href=\'https://own.example/\'><img src=\'logo.png\'>"></iframe>',
+      // Comment markers inside a quoted attribute or a CSS string are text, so the live request after them still counts.
+      '<img alt="<!--" src="https://example.com/a.png">-->',
+      '<!--><img src="https://example.com/a.png">',
+      '<!---><img src="https://example.com/a.png">',
+      '<style>.x{--a:"/*";background-image:url(https://example.com/a.png);--b:"*/"}</style>',
+      '<style>.x{--a:\'/*\';background:url(https://example.com/a.png)}/* "real" */</style>',
+      '<style>.x{background:url(https://example.com/a/*b*/.png)}</style>',
+      // image-set() takes bare string candidates, which are requests too.
+      '<style>.x{background-image:image-set("https://example.com/a.png" 1x)}</style>',
+      '<style>.x{background-image:-webkit-image-set(\'https:example.com/a.png\' 1x)}</style>',
+      '<base href="https://cdn.example/"><style>.x{background-image:image-set("a.png" 1x)}</style>',
+      // Attribute and element forms the HTML parser accepts.
+      '<img/src=https://example.com/a.png>',
+      '<svg><defs><filter id="f"><feImage href="https://example.com/a.png"/></filter></defs></svg>',
+      '<svg><defs><filter id="f"><feImage xlink:href="https://example.com/a.png"/></filter></defs></svg>',
+      '<svg><style><![CDATA[.s{background:url(https://example.com/a.png)}]]></style></svg>',
+      '<svg><style>.s{background:url(https://example.com/a.png)}</style></svg>',
+      // JavaScript is off, so <noscript> content is parsed as markup and requested.
+      '<noscript><img src="https://example.com/a.png"></noscript>',
+      '<template></template><img src="https://example.com/a.png">',
+      '<img src="&#1;https://example.com/a.png">',
+      '<video><source src="https://example.com/a.mp4"></video>',
+      '<audio><source src="https://example.com/a.mp3"></audio>',
+      '<picture><video><source src="https://example.com/a.mp4"></video></picture>',
+      '<picture><source srcset="https://example.com/a.png"><img alt=""></picture>',
+      '<input type="image" src="https://example.com/a.png">',
+      '<input type=IMAGE src="https://example.com/a.png">',
+      '<link rel="alternate stylesheet" href="https://example.com/a.css">',
+      '<link rel="preload" as="image" href="https://example.com/a.png">',
+      '<link rel="prefetch" href="https://example.com/a.html">',
       // CSS escapes are decoded before the URL is classified.
       '<style>@import "\\68 ttps://example.com/a.css";</style>',
       '<style>@import url("\\68 ttps://example.com/a.css");</style>',
@@ -183,6 +215,38 @@ const CASES = [
       // Not fetched by the renderer (JavaScript is off), so nothing is dropped: probed with
       // Playwright's javaScriptEnabled:false context, where modulepreload and icon never reach route().
       '<link rel="modulepreload" href="https://cdn.example/m.js">',
+      // Text in raw-text, RCDATA, CDATA and inert template content is not markup, so nothing is requested.
+      '<textarea><img src="https://example.com/a.png"></textarea>',
+      '<title><img src="https://example.com/a.png"></title>',
+      '<script>var s = \'<img src="https://example.com/a.png">\';</script>',
+      '<svg><text><![CDATA[<image href="https://example.com/a.png"/>]]></text></svg>',
+      '<xmp><img src="https://example.com/a.png"></xmp>',
+      '<iframe><img src="https://example.com/a.png"></iframe>',
+      '<template><img src="https://example.com/a.png"></template>',
+      '<template><base href="https://cdn.example/"></template><img src="photo.png">',
+      '<style>.x::before{content:"url(https://example.com/a.png)"}</style>',
+      '<style>.x{font-family:"url(https://example.com/a.png)"}</style>',
+      '<style>@namespace url("https://example.com/ns");</style>',
+      '<style>@namespace svg url(https://example.com/ns);</style>',
+      // The renderer fetches an input src only for type=image, and a source src only inside video or audio.
+      '<input type="hidden" src="https://example.com/a.png">',
+      '<input src="https://example.com/a.png">',
+      '<input type="text" src="https://example.com/a.png">',
+      '<source src="https://example.com/a.png">',
+      '<picture><source src="https://example.com/a.png"><img alt=""></picture>',
+      '<source srcset="https://example.com/a.png">',
+      '<video><source srcset="https://example.com/a.png"></video>',
+      '<track src="https://example.com/a.vtt">',
+      '<video><track src="https://example.com/a.vtt" kind="subtitles" default></video>',
+      // Never requested with JavaScript off: icons, a preload with no `as`, a rel that only contains a fetching word.
+      '<link rel="icon" href="https://example.com/favicon.ico">',
+      '<link rel="shortcut icon" href="https://example.com/favicon.ico">',
+      '<link rel="apple-touch-icon" href="https://example.com/a.png">',
+      '<link rel="preload" href="https://example.com/a.png">',
+      '<link rel="x-stylesheet" href="https://example.com/a.css">',
+      // A host the URL parser rejects is not requested.
+      '<img src="https://exa%00mple.test/a.png">',
+      '<img src="https://exa&#0;mple.test/a.png">',
       // Local files and data stay quiet under both kinds of base, with or without `//`.
       '<img src="file:logo.png">',
       '<base href="https://cdn.example/"><img src="file:///tmp/a.png">',
@@ -213,16 +277,21 @@ for (const { id, hit, miss } of CASES) {
   });
 }
 
-test('nested srcdoc is linted to a depth cap and never loops or throws', () => {
+test('srcdoc nested past the cap is surfaced by a depth-limit finding, never silently passed', () => {
   const nest = (inner, levels) => {
     let html = inner;
     for (let i = 0; i < levels; i++) html = `<iframe srcdoc="${html.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}"></iframe>`;
     return html;
   };
-  const leaf = '<img src="https://example.com/a.png">';
-  assert.ok(ids(lint(nest(leaf, 3))).includes('remote-subresource'), 'three levels deep is within the cap');
-  const deep = lint(nest(leaf, 40));
-  assert.equal(deep.error, null);
+  const remote = '<img src="https://example.com/a.png">';
+  const local = '<img src="a.png">';
+  assert.ok(ids(lint(nest(remote, 3))).includes('remote-subresource'), 'inside the cap the remote request is named');
+  assert.deepEqual(ids(lint(nest(local, 8))), [], 'local-only nesting inside the cap is valid');
+  const past = lint(nest(remote, 40));
+  assert.equal(past.error, null);
+  assert.ok(ids(past).includes('srcdoc-depth-limit'), 'a remote request past the cap still fails through the depth-limit finding');
+  assert.ok(!ids(past).includes('remote-subresource'), 'the capped iframe is not labelled a remote subresource');
+  assert.ok(ids(lint(nest(local, 40))).includes('srcdoc-depth-limit'), 'content past the cap cannot be proven local, so it is reported too');
 });
 
 test('every finding is a warning with a rule text and a detail', () => {
