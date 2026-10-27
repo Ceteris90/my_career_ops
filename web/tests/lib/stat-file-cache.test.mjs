@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import "../helpers/web-ts-alias-loader.mjs";
@@ -91,7 +91,14 @@ test("an unchanged tracker is not read again, and an edited row is", () => {
     const current = origRead(file, "utf8");
     const sameSize = current.replace("Interview", "Evaluated");
     assert.equal(Buffer.byteLength(sameSize), Buffer.byteLength(current));
-    writeFileSync(file, sameSize);
+    const seen = statSync(file, { bigint: true }).mtimeNs;
+    const deadline = Date.now() + 2000;
+    let moved = false;
+    while (!moved) {
+      writeFileSync(file, sameSize);
+      moved = statSync(file, { bigint: true }).mtimeNs !== seen;
+      if (!moved && Date.now() > deadline) throw new Error("mtime did not advance");
+    }
     assert.equal(readApplications()[0].status, "Evaluated");
   });
 });
