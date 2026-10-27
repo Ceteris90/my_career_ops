@@ -411,7 +411,9 @@ if (selector !== null) {
     const nums = idList.filter((part) => /^\d+$/.test(part));
     const shown = nums.slice(0, 8);
     const action = flags.undo ? '--undo' : requestedStatus;
-    const lines = shown.map((id) => `node set-status.mjs ${id} ${action}`);
+    // These numbers are tracker rows. A bare `14 Applied` is rejected when that
+    // row's report id differs, so the command that means "tracker row" is --row.
+    const lines = shown.map((id) => `node set-status.mjs --row ${id} ${action}`);
     const extra = nums.length - shown.length;
     const more = extra > 0 ? `\n... and ${extra} more` : '';
     const empty = idList.some((part) => part === '') ? ' The list has an empty slot.' : '';

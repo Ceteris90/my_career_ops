@@ -61,8 +61,8 @@ describe('set-status rejects a list of tracker numbers', () => {
       const result = spawn(sb, ['14,78', 'Applied']);
       assert.equal(result.status, 1, result.stderr);
       assert.doesNotMatch(result.stderr, /company matching/);
-      assert.match(result.stderr, /node set-status\.mjs 14 Applied/);
-      assert.match(result.stderr, /node set-status\.mjs 78 Applied/);
+      assert.match(result.stderr, /node set-status\.mjs --row 14 Applied/);
+      assert.match(result.stderr, /node set-status\.mjs --row 78 Applied/);
       assert.equal(readFileSync(sb.tracker).equals(before), true);
     } finally {
       rmSync(sb.dir, { recursive: true, force: true });
@@ -75,8 +75,8 @@ describe('set-status rejects a list of tracker numbers', () => {
       const result = spawn(sb, ['14, 78', 'Applied', '--dry-run']);
       assert.equal(result.status, 1, result.stderr);
       assert.doesNotMatch(result.stderr, /company matching/);
-      assert.match(result.stderr, /node set-status\.mjs 14 Applied/);
-      assert.match(result.stderr, /node set-status\.mjs 78 Applied/);
+      assert.match(result.stderr, /node set-status\.mjs --row 14 Applied/);
+      assert.match(result.stderr, /node set-status\.mjs --row 78 Applied/);
     } finally {
       rmSync(sb.dir, { recursive: true, force: true });
     }
@@ -138,6 +138,41 @@ describe('set-status rejects a list of tracker numbers', () => {
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /#14/);
       assert.match(result.stdout, /Fernhollow Labs/);
+    } finally {
+      rmSync(sb.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('--undo names one --row command per tracker number', () => {
+    const sb = sandbox();
+    try {
+      const result = spawn(sb, ['14,78', '--undo']);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /node set-status\.mjs --row 14 --undo/);
+      assert.match(result.stderr, /node set-status\.mjs --row 78 --undo/);
+    } finally {
+      rmSync(sb.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the suggested command still selects a row whose report id differs', () => {
+    const linked = TRACKER
+      .replace('| 14 | 2026-10-01 | Fernhollow Labs | Data Analyst | 4.2/5 | Evaluated | ❌ | — | fixture |',
+        '| 14 | 2026-10-01 | Fernhollow Labs | Data Analyst | 4.2/5 | Evaluated | ❌ | [99](reports/99-fernhollow.md) | fixture |')
+      .replace('| 78 | 2026-10-02 | Quillfeather Labs | Designer | 3.5/5 | Evaluated | ❌ | — | fixture |',
+        '| 78 | 2026-10-02 | Quillfeather Labs | Designer | 3.5/5 | Evaluated | ❌ | [100](reports/100-quillfeather.md) | fixture |');
+    const sb = sandbox(linked);
+    try {
+      const listed = spawn(sb, ['14,78', 'Applied']);
+      assert.equal(listed.status, 1, listed.stderr);
+      assert.match(listed.stderr, /node set-status\.mjs --row 14 Applied/);
+      assert.match(listed.stderr, /node set-status\.mjs --row 78 Applied/);
+      const bare = spawn(sb, ['14', 'Applied', '--dry-run']);
+      assert.notEqual(bare.status, 0, bare.stdout);
+      assert.match(bare.stderr, /report ID/);
+      const explicit = spawn(sb, ['--row', '14', 'Applied', '--dry-run']);
+      assert.equal(explicit.status, 0, explicit.stderr);
+      assert.match(explicit.stdout, /Fernhollow Labs/);
     } finally {
       rmSync(sb.dir, { recursive: true, force: true });
     }
