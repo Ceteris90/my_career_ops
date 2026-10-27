@@ -107,7 +107,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 投递建议提示：
 - [此处填入需要候选人手动确认的个人信息，例如期望薪资、最早入职时间等]
-- [提醒候选人在此处上传之前定制好的简历 PDF]
+- [仅当已确认报告对应当前可见的职位时，提醒候选人在此处上传为该职位定制的简历 PDF；若选择了 **Draft without saving**，或没有与当前职位对应的报告，则说明尚未选定匹配的定制简历，不要推荐为其他职位定制的简历]
 ```
 
 ---

@@ -107,7 +107,7 @@ Follow the Scope section in `modes/apply.md`. Run `node apply-scope.mjs root` an
 
 投遞前提醒：
 - [此處填入需要求職者手動確認的個人資訊，例如期望薪資、最快到職日等]
-- [提醒求職者在此處上傳先前客製好的履歷 PDF]
+- [僅當已確認報告對應目前看到的職缺時，提醒求職者在此處上傳為該職缺客製的履歷 PDF；若選擇了 **Draft without saving**，或沒有與目前職缺對應的報告，則說明尚未選定相符的客製履歷，不要推薦為其他職缺客製的履歷]
 ```
 
 ---

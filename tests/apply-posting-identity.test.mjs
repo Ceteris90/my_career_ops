@@ -205,3 +205,21 @@ ok('modes/nl/solliciteren.md finds the report by employer, not by title', () => 
   assert.match(nl, /vacature-URL of het requisition-ID/);
   assert.match(nl, /functietitel alleen om rapporten te beperken/);
 });
+
+for (const file of ['modes/zh/apply.md', 'modes/zh-TW/apply.md']) {
+  ok(`${file}: the output template recommends a tailored CV only for this posting`, () => {
+    // The template told the candidate to upload "the previously tailored CV"
+    // even on an unsaved draft for another posting, whose CV Step 3 sets aside.
+    const reminder = read(file).split('\n').find(l => /^- \[/.test(l) && l.includes("PDF"));
+    assert.ok(reminder, 'no CV upload reminder in the output template');
+    assert.ok(reminder.includes('**Draft without saving**'), 'the CV upload reminder does not handle the unsaved path');
+  });
+}
+
+ok('modes/nl/solliciteren.md asks before rejecting a report on a URL mismatch alone', () => {
+  // An application form often sits on another ATS host than the posting. With no
+  // requisition ID, the URL alone cannot reject the employer's report: the
+  // canonical identity lets the candidate confirm it.
+  const nl = read('modes/nl/solliciteren.md');
+  assert.match(nl, /vraag de kandidaat dan of het rapport van deze werkgever bij dit formulier hoort/);
+});
