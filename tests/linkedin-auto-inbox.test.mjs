@@ -190,3 +190,61 @@ test('doctor explains invalid_grant from the token endpoint', async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a stray request on the loopback port does not end the sign-in', async () => {
+  const result = await runGmailAuth({
+    clientId: 'client.example',
+    clientSecret: 'secret.example',
+    envText: '',
+    timeoutMs: 5000,
+    async open(url) {
+      const auth = new URL(url);
+      const redirect = auth.searchParams.get('redirect_uri');
+      const state = auth.searchParams.get('state');
+      await fetch(`${redirect}/favicon.ico`).catch(() => {});
+      fetch(`${redirect}/?code=code.example&state=${encodeURIComponent(state)}`).catch(() => {});
+    },
+    fetchFn: async () => ({
+      ok: true,
+      text: async () => JSON.stringify({ refresh_token: 'refresh.example' }),
+    }),
+  });
+  assert.match(result.envText, /^GMAIL_REFRESH_TOKEN=refresh\.example$/m);
+});
+
+test('a rejected sign-in code is not blamed on the 7-day Testing expiry', async () => {
+  await assert.rejects(runGmailAuth({
+    clientId: 'client.example',
+    clientSecret: 'secret.example',
+    envText: '',
+    timeoutMs: 5000,
+    open(url) {
+      const auth = new URL(url);
+      fetch(`${auth.searchParams.get('redirect_uri')}/?code=code.example&state=${encodeURIComponent(auth.searchParams.get('state'))}`).catch(() => {});
+    },
+    fetchFn: async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: 'invalid_grant', error_description: 'Bad Request' }),
+    }),
+  }), (err) => !/7 days|Testing/.test(err.message) && /node plugins\.mjs auth gmail/.test(err.message));
+});
+
+test('an enabled gmail plugin runs on the schedule only with auto: true', async () => {
+  const { pollLinkedInInbox } = await import('../lib/linkedin-auto.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'linkedin-auto-optin-'));
+  mkdirSync(join(root, 'config'), { recursive: true });
+  writeFileSync(join(root, '.env'), 'GMAIL_CLIENT_ID=client.example\nGMAIL_CLIENT_SECRET=secret.example\nGMAIL_REFRESH_TOKEN=refresh.example\n');
+  const calls = [];
+  const spawnSyncImpl = (...args) => { calls.push(args); return { status: 0, stdout: '', stderr: '' }; };
+  try {
+    writeFileSync(join(root, 'config', 'plugins.yml'), 'plugins:\n  gmail:\n    enabled: true\n');
+    await pollLinkedInInbox(root, { spawnSyncImpl });
+    assert.equal(calls.length, 0, 'an install that ran gmail by hand keeps running it by hand');
+    writeFileSync(join(root, 'config', 'plugins.yml'), 'plugins:\n  gmail:\n    enabled: true\n    auto: true\n');
+    await pollLinkedInInbox(root, { spawnSyncImpl });
+    assert.equal(calls.length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
