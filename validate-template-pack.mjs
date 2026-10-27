@@ -25,6 +25,11 @@ const FILE_PREFIX = { cv: 'cv-template', cover: 'cover-letter-template' };
 
 const isText = (v) => typeof v === 'string' && v.trim() !== '';
 
+// A `..` segment is refused as written when it resolves back inside the pack
+// (#5949); one that leaves the pack is reported as outside it: a declared path names its file directly. Both separators count,
+// since a pack can be validated on Windows.
+const hasDotDot = (rel) => isText(rel) && rel.split(/[\\/]/).includes('..');
+
 /** Absolute path of `rel` when it stays inside `root`, else null. */
 function inside(root, rel) {
   if (!isText(rel) || path.isAbsolute(rel)) return null;
@@ -97,6 +102,7 @@ export function validatePack(dir) {
         const abs = inside(root, rel);
         const expected = `${FILE_PREFIX[kind]}.${entry.id}.html`;
         if (!abs) problems.push(`${eid}: files.${kind} "${rel}" is outside the pack`);
+        else if (hasDotDot(rel)) problems.push(`${eid}: files.${kind} "${rel}" contains a \`..\` segment`);
         else if (path.basename(rel) !== expected) problems.push(`${eid}: files.${kind} "${rel}" does not match the filename convention "${expected}"`);
         else if (!existsSync(abs) || !statSync(abs).isFile()) problems.push(`${eid}: files.${kind} "${rel}": missing file (not found on disk)`);
         else if (!realInside(realRoot, abs)) problems.push(`${eid}: files.${kind} "${rel}" is outside the pack (symlink)`);
@@ -107,6 +113,7 @@ export function validatePack(dir) {
       const pabs = inside(root, prel);
       if (!isText(prel)) problems.push(`${eid}: previews.${kind} missing`);
       else if (!pabs) problems.push(`${eid}: previews.${kind} "${prel}" is outside the pack`);
+      else if (hasDotDot(prel)) problems.push(`${eid}: previews.${kind} "${prel}" contains a \`..\` segment`);
       else if (!existsSync(pabs)) problems.push(`${eid}: previews.${kind} "${prel}" not found on disk`);
       else if (!statSync(pabs).isFile()) problems.push(`${eid}: previews.${kind} "${prel}" is not a file`);
       else if (!realInside(realRoot, pabs)) problems.push(`${eid}: previews.${kind} "${prel}" is outside the pack (symlink)`);
