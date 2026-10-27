@@ -1,6 +1,5 @@
 // Optional Chrome regression: start the built web server against disposable
 // data, then ASSISTANT_MARKDOWN_LAZY_TEST_URL=http://127.0.0.1:3000 node --test this-file.mjs.
-// Pages that never open the assistant must not download the markdown parser.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { liveServerSkip } from "../helpers/live-server.mjs";

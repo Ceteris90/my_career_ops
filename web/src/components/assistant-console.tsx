@@ -35,8 +35,6 @@ type Part =
 type Msg = { role: "user" | "assistant"; parts: Part[] };
 type RequestFeedback = { id: number; phase: "working" | "ready" | "error"; announce: boolean };
 
-// Mounted on every page but renders markdown only once opened, so the parser
-// stays out of the shared bundle.
 const loadMarkdown = () => import("@/components/assistant-markdown");
 const AssistantMarkdown = lazy(loadMarkdown);
 
