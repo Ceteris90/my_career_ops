@@ -1,9 +1,3 @@
-// Search stats enriches every tracker row with its report's archetype. Each
-// report lookup must not re-read the tracker or re-list reports/, or the page
-// grows with the square of the tracker (600 rows took 0.8 s, 1200 took 2.9 s).
-//
-// Run: npm test -- tests/lib/analytics-report-lookup-once.test.mjs
-
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs, { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
