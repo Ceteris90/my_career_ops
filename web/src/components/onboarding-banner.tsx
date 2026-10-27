@@ -32,17 +32,25 @@ export function OnboardingBanner() {
 
   useEffect(() => {
     setCli(hasCli());
-    fetch("/api/doctor")
-      .then((r) => r.json())
-      .then((doctor: Doctor) => {
-        setD(doctor);
-        try {
-          if (bannerStaysDismissed(localStorage.getItem(SETUP_BANNER_KEY), doctor.missing)) setDismissed(true);
-        } catch {
-          // A blocked storage read just shows the banner again.
-        }
-      })
-      .catch(() => {});
+    // Re-read after setup changes. router.refresh() keeps this component's
+    // state, so a dismissal for the old missing set would otherwise stick.
+    const refresh = () => {
+      fetch("/api/doctor")
+        .then((r) => r.json())
+        .then((doctor: Doctor) => {
+          setD(doctor);
+          try {
+            setDismissed(bannerStaysDismissed(localStorage.getItem(SETUP_BANNER_KEY), doctor.missing));
+          } catch {
+            // A blocked storage read just shows the banner again.
+            setDismissed(false);
+          }
+        })
+        .catch(() => {});
+    };
+    refresh();
+    window.addEventListener("co-onboarding-changed", refresh);
+    return () => window.removeEventListener("co-onboarding-changed", refresh);
   }, []);
 
   if (dismissed || !d || !d.onboardingNeeded) return null;
