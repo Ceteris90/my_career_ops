@@ -25,12 +25,15 @@ writeFileSync(typoFile, `tracked_companys:\n${COMPANY}title_fliter:\n  positive:
 writeFileSync(cleanFile, `tracked_companies:\n${COMPANY}`);
 writeFileSync(notesFile, `notes: "a private reminder, not a setting"\ntracked_companies: []\n`);
 
+// Scan reads the tracker, pipeline, and scan history to dedupe. Point every
+// data path at the temp dir so a developer's own files never feed the run.
 function run(script, args, extraEnv) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('CAREER_OPS_')));
   const r = spawnSync(process.execPath, [join(ROOT, script), ...args], {
     cwd: ROOT,
     encoding: 'utf-8',
     timeout: 30_000,
-    env: { ...process.env, ...extraEnv },
+    env: { ...env, CAREER_OPS_ROOT: dir, ...extraEnv },
   });
   assert.equal(r.error, undefined, `${script} failed to spawn`);
   assert.equal(r.signal, null, `${script} killed by ${r.signal}`);
