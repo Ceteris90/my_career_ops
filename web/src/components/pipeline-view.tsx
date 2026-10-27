@@ -7,7 +7,7 @@ import { Search, ChevronsUpDown, X, Compass, ArrowRight, ExternalLink, Download 
 import type { Application, InboxJob } from "@/lib/career-ops";
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
-import { CANONICAL_STATES, canonStatus, scoreNum, scoreTone } from "@/lib/format";
+import { CANONICAL_STATES, scoreNum, scoreTone } from "@/lib/format";
 import { StatusSelect } from "@/components/status-select";
 import { applicationKey, applySavedStatus, saveStatuses } from "@/lib/pipeline-status.mjs";
 import { InboxTriage } from "@/components/inbox/inbox-triage";
@@ -17,7 +17,7 @@ import { PipelineTableRowsSkeleton } from "@/components/page-loading-skeletons";
 import { startRouteProgress } from "@/components/route-progress";
 import { sortRows } from "@/lib/core/pipeline-sort.mjs";
 import { PageFrame } from "@/components/page-frame";
-import { PIPELINE_TABS, pipelineQuery, pipelineTab } from "@/lib/pipeline-navigation.mjs";
+import { PIPELINE_TABS, pipelineQuery, pipelineTab, rowOnPipelineTab } from "@/lib/pipeline-navigation.mjs";
 import { COMPARE_MAX } from "@/lib/pipeline-compare.mjs";
 import { postingHref, postingLabel } from "@/lib/posting-url.mjs";
 import { trackerCsv, trackerCsvFilename } from "@/lib/tracker-csv.mjs";
@@ -110,7 +110,7 @@ export function PipelineView({
   const filtered = useMemo(() => {
     if (tab === "INBOX") return [];
     let rows = visibleApplications;
-    if (tab !== "ALL") rows = rows.filter((r) => canonStatus(r.status).includes(tab));
+    if (tab !== "ALL") rows = rows.filter((r) => rowOnPipelineTab(r.status, tab));
     if (minFilter != null) {
       rows = rows.filter((r) => {
         const n = scoreNum(r.score);
@@ -211,7 +211,8 @@ export function PipelineView({
               ? inboxCount
               : t === "ALL"
                 ? visibleApplications.length
-                : visibleApplications.filter((r) => canonStatus(r.status).includes(t)).length;
+                : visibleApplications.filter((r) => rowOnPipelineTab(r.status, t)).length;
+          if (t === "OTHER" && count === 0 && visibleTab !== "OTHER") return null;
           return (
             <button
               key={t}
@@ -406,7 +407,7 @@ export function PipelineView({
                         // If this focused row leaves its tab, preserve a useful
                         // focus target. Do not interrupt someone using search.
                         const focusedRow = document.activeElement?.closest("tr");
-                        if (tab !== "ALL" && !canonStatus(status).includes(tab) && (restoreFocus || focusedRow?.dataset.applicationKey === key)) {
+                        if (tab !== "ALL" && !rowOnPipelineTab(status, tab) && (restoreFocus || focusedRow?.dataset.applicationKey === key)) {
                           activeTab.current?.focus();
                         }
                         setAnnouncement(`Application #${r.n} status saved as ${status}.`);
