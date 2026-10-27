@@ -10,6 +10,17 @@ import { execFileSync } from 'child_process';
 import { homedir } from 'os';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { findTitleFilterConflicts } from './lib/title-filter-conflicts.mjs';
+import { sectionState, scanHeadings, SECTIONS } from './lib/personalization.mjs';
+import { discoverPlugins, pluginRoots, pluginStatus } from './plugins/_engine.mjs';
+import { getCareerOpsRoot, getProfilePath, hasProfileOverride } from './path-resolver.mjs';
+import { parseConfigByExtension } from './jsonc-parse.mjs';
+import { validateFlags, flagValue } from './lib/cli-flags.mjs';
+import { geminiNodeFloor } from './lib/gemini-node-floor.mjs';
+import { SKILL_ENTRYPOINTS } from './scaffolder/bin/skill-entrypoints.mjs';
+import { nodeFloor } from './lib/node-floor.mjs';
+import { classifyChromiumLaunchError } from './lib/chromium-launch-error.mjs';
+import { findExperienceSections, parseCompanyHeading, EXPERIENCE_HEADING_NAMES } from './lib/cv-markdown.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,6 +65,38 @@ const { findExperienceSections, parseCompanyHeading, EXPERIENCE_HEADING_NAMES } 
 
 const argv = process.argv.slice(2);
 
+// Modules that import an npm package (directly or through their own imports)
+// load here, after the fact, instead of as static imports. A static import of
+// a missing package fails while Node links the module graph, before a single
+// line of this file runs, so a copy with no node_modules (a ZIP download, a
+// copy made without `npm install`) died with a raw ERR_MODULE_NOT_FOUND stack
+// from the very check that exists to report missing dependencies. Loading them
+// dynamically lets that failure be caught and reported with the fix.
+let hasYamlContent, loadYaml, dotenv, AGENT_CLIS, validateProfile, EXAMPLE_PATH, resolveExtractorMode, auditUserTemplates;
+try {
+  [
+    { hasYamlContent, loadYaml },
+    { default: dotenv },
+    { AGENT_CLIS },
+    { validateProfile, EXAMPLE_PATH },
+    { resolveExtractorMode },
+    { auditUserTemplates },
+  ] = await Promise.all([
+    import('./lib/yaml-document.mjs'),
+    import('dotenv'),
+    import('./lib/agent-cli.mjs'),
+    import('./validate-profile.mjs'),
+    import('./browser-extract.mjs'),
+    import('./cv-templates.mjs'),
+  ]);
+} catch (err) {
+  let missing = [];
+  try { missing = findMissingDependencies(__dirname); } catch { /* no readable package.json: rethrow below */ }
+  if (err?.code !== 'ERR_MODULE_NOT_FOUND' || missing.length === 0) throw err;
+  console.error(`career-ops dependencies are not installed in ${__dirname} (missing: ${missing.join(', ')}), so doctor cannot run its checks.\nFix: run \`npm install\` in ${__dirname}, then run doctor again.`);
+  process.exit(1);
+}
+
 // CLIs the doctor recognises.
 
 // --help ran the full diagnostic and printed the report at exit 0 (#2856), so
@@ -63,7 +106,9 @@ const argv = process.argv.slice(2);
 // flags before --help so `--help --bogus` still errors.
 const KNOWN_FLAGS = ['--target', '--json', '--init-templates', '--strict', '--cli', '--help', '-h'];
 
-// Both take their value as the next argv token.
+// Both take a value, as the next argv token or as `--flag=value`. validateFlags
+// accepts either form, so both are read with flagValue(): an indexOf() lookup
+// cannot see `--target=<path>` and would diagnose this checkout instead.
 const VALUE_FLAGS = ['--target', '--cli'];
 
 const USAGE = `Usage:
@@ -78,15 +123,14 @@ const USAGE = `Usage:
 CLIs: ${AGENT_CLIS.join(', ')}`;
 
 // requireOperand: without it, `--target --json` reads --json as the target
-// path (argv[targetIdx + 1] below has no adjacency check of its own), and the
+// path (flagValue() below takes the next token as-is), and the
 // doctor silently diagnoses a directory literally named "--json" at exit 0
 // (#3087) — this is the onboarding entrypoint, so that's a user told to
 // create files that already exist. Nothing more specific to say than the
 // shared message.
 validateFlags(argv, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS, requireOperand: true });
 
-const targetIdx = argv.indexOf('--target');
-const explicitTarget = targetIdx !== -1 && argv[targetIdx + 1] ? argv[targetIdx + 1] : null;
+const explicitTarget = flagValue(argv, '--target') || null;
 const projectRoot = explicitTarget || getCareerOpsRoot();
 // --target diagnoses a whole other checkout, so that checkout's profile is the
 // one that counts; otherwise CAREER_OPS_PROFILE applies as it does everywhere.
@@ -124,8 +168,7 @@ if (INIT_TEMPLATES && !JSON_OUT) {
 // Opt-in so the default `npm run doctor` stays fast and fully offline.
 const STRICT = argv.includes('--strict');
 
-const cliIdx = argv.indexOf('--cli');
-const cliFlag = cliIdx !== -1 ? argv[cliIdx + 1] : null;
+const cliFlag = flagValue(argv, '--cli') ?? null;
 
 // ANSI colors (only on TTY)
 const isTTY = process.stdout.isTTY;
@@ -406,15 +449,55 @@ function playwrightInstallFix() {
   return 'Run: npx playwright install chromium';
 }
 
+// Missing shared libraries are a host problem, not a download problem: the
+// browser is there and `npx playwright install` skips it. Playwright's own
+// remedy is install-deps, which installs system packages and so needs root.
+// It only knows apt (#4223), so on any other Linux it would fail with
+// "apt-get: command not found"; there the distro's own package manager is the
+// fix.
+function isDebianLike() {
+  try {
+    const osRelease = readFileSync('/etc/os-release', 'utf-8');
+    return /^(?:ID|ID_LIKE)=.*\b(?:debian|ubuntu)\b/m.test(osRelease);
+  } catch {
+    return false;
+  }
+}
+
+function playwrightDepsFix() {
+  if (existsSync('/etc/NIXOS')) return playwrightInstallFix();
+  // On Windows the missing pieces are Media Foundation DLLs. install-deps
+  // installs them through Playwright's install_media_pack.ps1, which enables a
+  // Windows Server feature and so needs an administrator shell; Windows N
+  // editions lack them by design and need Microsoft's Media Feature Pack.
+  if (process.platform === 'win32') {
+    return [
+      'Run in an administrator terminal: npx playwright install-deps chromium',
+      'On a Windows N edition, install the Media Feature Pack from Microsoft instead (Settings → Apps → Optional features).',
+    ];
+  }
+  if (process.platform === 'linux' && !isDebianLike()) {
+    return 'Install the packages that provide these libraries with your distribution\'s package manager. `npx playwright install-deps` uses apt-get, so it only works on Debian and Ubuntu.';
+  }
+  const sudo = process.platform !== 'win32' && process.getuid?.() ? 'sudo ' : '';
+  return `Run: ${sudo}npx playwright install-deps chromium`;
+}
+
 async function checkPlaywright() {
   let chromium;
   try {
     ({ chromium } = await import('playwright'));
-  } catch {
+  } catch (err) {
+    // The package itself is missing or broken, so there is no browser to
+    // install yet: `npx playwright install` would fetch a CLI whose version
+    // need not match the one package.json pins.
+    const notFound = err?.code === 'ERR_MODULE_NOT_FOUND';
     return {
       pass: false,
-      label: 'Playwright chromium not installed',
-      fix: playwrightInstallFix(),
+      label: notFound
+        ? 'Playwright chromium could not be checked: the playwright package is not installed'
+        : `Playwright chromium could not be checked: the playwright package failed to load (${String(err?.message ?? err).split('\n')[0]})`,
+      fix: 'Run: npm install',
     };
   }
   // Validate by launching — chromium.executablePath() points at Chrome for Testing
@@ -426,11 +509,30 @@ async function checkPlaywright() {
   try {
     browser = await chromium.launch({ headless: true });
     return { pass: true, label: 'Playwright chromium installed' };
-  } catch {
+  } catch (err) {
+    // Only a missing binary is fixed by installing it. Everything else means
+    // the binary is present and failed to start, so the advice follows the
+    // error Playwright reported instead of repeating a no-op install.
+    const cause = classifyChromiumLaunchError(err);
+    if (cause.kind === 'missing-executable') {
+      return {
+        pass: false,
+        label: 'Playwright chromium not installed',
+        fix: playwrightInstallFix(),
+      };
+    }
+    if (cause.kind === 'missing-libraries') {
+      const which = cause.libraries.length ? ` (${cause.libraries.join(', ')})` : '';
+      return {
+        pass: false,
+        label: `Playwright chromium is installed but cannot start: the system libraries it needs are missing${which}`,
+        fix: playwrightDepsFix(),
+      };
+    }
     return {
       pass: false,
-      label: 'Playwright chromium not installed',
-      fix: playwrightInstallFix(),
+      label: `Playwright chromium is installed but failed to launch: ${cause.detail}`,
+      fix: 'Reinstalling will not fix this, because the browser is already installed. If doctor runs inside a sandbox or container, check that it allows a browser process to start.',
     };
   } finally {
     try { await browser?.close(); } catch { /* ignore */ }
@@ -1067,9 +1169,39 @@ function checkCvShape(root) {
       ? 'cv.md: no Experience section the CV checks recognize — title and structure checks will not run'
       : 'cv.md: Experience section has no "### Company — Location" entries — title and structure checks will not run',
     fix: [
-      `Name the section ${EXPERIENCE_HEADING_NAMES.map((n) => `"## ${n}"`).join(', ')}`,
+      ...(sections.length === 0 ? [`Name the section ${EXPERIENCE_HEADING_NAMES.map((n) => `"## ${n}"`).join(', ')}`] : []),
       'Start each job with "### Company — Location", then a bold **Title** line, then a dates line (see examples/cv-example.md)',
     ],
+  };
+}
+
+// The user's own templates under data/templates/ (#5777). Advisory: a template
+// that stopped resolving, or lost a slot every shipped variant keeps, is named
+// here instead of surfacing at render time.
+function checkUserTemplates(root) {
+  let findings;
+  try {
+    // The shipped baseline is the checkout being diagnosed, when it has one. A
+    // --target that holds only user data has no templates/, so the executing
+    // checkout's own default stays the baseline there.
+    const shipped = join(codeRoot, 'templates');
+    findings = auditUserTemplates({
+      userDir: join(root, 'data', 'templates'),
+      ...(existsSync(join(shipped, 'cv-template.html')) ? { dir: shipped } : {}),
+    });
+  } catch (err) {
+    return { warn: true, label: `data/templates: could not be audited (${err.message})` };
+  }
+  if (findings.length === 0) return null;
+  return {
+    warn: true,
+    label: `data/templates: ${findings.length} template${findings.length === 1 ? '' : 's'} need${findings.length === 1 ? 's' : ''} attention`,
+    fix: findings.flatMap((f) => f.problems.map((p) => {
+      const file = f.path.split(/[\\/]/).pop();
+      return p.type === 'invalid' || p.type === 'name'
+        ? `${file}: ${p.detail}`
+        : `${file}: lacks ${p.missing.map((m) => `{{${m}}}`).join(', ')}, which every shipped ${f.kind === 'cv' ? 'CV' : 'cover-letter'} variant keeps`;
+    })),
   };
 }
 
@@ -1117,6 +1249,7 @@ async function main() {
     checkProfileShape(projectRoot),
     checkTitleFilterConflicts(projectRoot),
     checkCvShape(projectRoot),
+    checkUserTemplates(projectRoot),
     checkAutoDir('data'),
     checkPipelineFile(),
     checkAutoDir('output'),
@@ -1391,6 +1524,7 @@ function onboardingState(root) {
   const bakCheck = checkTrackedBakFiles(codeRoot);
   const skillCheck = checkSkillEntrypoints(codeRoot);
   const cvShape = checkCvShape(root);
+  const userTemplates = checkUserTemplates(root);
   const envFileProfile = checkEnvFileProfile(root);
   const warnings = [
     ...(cliWarning ? [cliWarning] : []),
@@ -1398,6 +1532,7 @@ function onboardingState(root) {
     ...(bakCheck.warn ? [`${bakCheck.label}\n→ ${[].concat(bakCheck.fix || []).join('\n  ')}`] : []),
     ...(skillCheck.warn ? [`${skillCheck.label}\n→ ${[].concat(skillCheck.fix || []).join('\n  ')}`] : []),
     ...(cvShape?.warn ? [`${cvShape.label}\n→ ${[].concat(cvShape.fix || []).join('\n  ')}`] : []),
+    ...(userTemplates?.warn ? [`${userTemplates.label}\n→ ${[].concat(userTemplates.fix || []).join('\n  ')}`] : []),
     ...(envFileProfile ? [`${envFileProfile.label}\n→ ${envFileProfile.fix.join('\n  ')}`] : []),
     ...unpersonalized.map((u) => `${u.path} ${u.reason} — ${u.impact}\n→ Personalize it from cv.md before running evaluations.`),
   ];
