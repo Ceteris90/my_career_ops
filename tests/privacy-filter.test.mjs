@@ -62,7 +62,10 @@ try {
   const back = restoreIfEnabled(model, PROFILE_ON);
   check(back.includes('<h1>Jane Doe</h1>'), 'restore puts the real name back');
   check(back.includes('jane.doe@example.org') && back.includes('+91 98765 43210'), 'restore puts email and phone back');
-  check(back.includes('https://www.linkedin.com/in/janedoe') && !back.includes('https://www.https'), 'restore does not double the URL prefix');
+  // Whole-string comparison, not a URL substring check: restore must emit exactly the configured URL once.
+  const expectedBack = '<h1>Jane Doe</h1><p>jane.doe@example.org | +91 98765 43210 | ' +
+    'https://www.linkedin.com/in/janedoe | github.com/janedoe</p>';
+  check(back === expectedBack, 'restore emits the configured URLs exactly, without doubling the URL prefix');
   check(!back.includes('Candidate Name') && !back.includes('example.com') && !back.includes('/candidate'), 'no placeholder survives restore');
   check(restoreIfEnabled(model, PROFILE_OFF) === model, 'restoreIfEnabled is a no-op when off');
   check(restoreCandidatePII('Cost: $& $1', PROFILE_ON) === 'Cost: $& $1', 'restore leaves unrelated text untouched');
@@ -105,6 +108,21 @@ privacy:
   const upper = restoreCandidatePII(`${PLACEHOLDERS.name.toUpperCase()} <${PLACEHOLDERS.email.toUpperCase()}>`, PROFILE_ON);
   check(upper === 'Jane Doe <jane.doe@example.org>', 'restore is case-insensitive for an uppercased model response');
 
+  // ── Rule order and phone/URL edge cases ──────────────────────────────────
+  const ONE_WORD = 'candidate:\n  full_name: "Jane"\n  email: "jane.doe@example.org"\n';
+  check(redactCandidatePII('Write to jane.doe@example.org, ask for Jane.', ONE_WORD) ===
+    `Write to ${PLACEHOLDERS.email}, ask for ${PLACEHOLDERS.name}.`,
+  'a one-word name does not corrupt the email before it is redacted');
+
+  const WITH_EXT = 'candidate:\n  full_name: "Jane Doe"\n  phone: "+1 415 555 2671 ext 123"\n';
+  check(!/555/.test(redactCandidatePII('Call 415 555 2671 or +1 (415) 555-2671', WITH_EXT)),
+    'phone extension digits stay out of the number matcher');
+  check(restoreCandidatePII(PLACEHOLDERS.phone, WITH_EXT) === '+1 415 555 2671 ext 123', 'restore keeps the configured phone including its extension');
+
+  const EMPTY_URL = 'candidate:\n  full_name: "Jane Doe"\n  linkedin: "https://"\n  github: "www."\n';
+  check(redactCandidatePII('Plain text with no profile links', EMPTY_URL) === 'Plain text with no profile links',
+    'a URL value with an empty path adds no rule');
+
   // ── Edge cases ───────────────────────────────────────────────────────────
   check(redactCandidatePII(null, PROFILE_ON) === null, 'null text passes through');
   check(redactCandidatePII('Text', '') === 'Text', 'empty profile passes text through');
@@ -120,5 +138,7 @@ check(/redactIfEnabled/.test(read('gemini-eval.mjs')), 'gemini-eval.mjs applies 
 check(/anonymizeContext\(/.test(read('openrouter-runner.mjs')), 'openrouter-runner.mjs applies the opt-in filter');
 const tailor = read('openai-tailor.mjs');
 check(/redactIfEnabled/.test(tailor) && /restoreIfEnabled/.test(tailor), 'openai-tailor.mjs redacts and restores');
-check(tailor.indexOf('restoreIfEnabled(tailoredHtml') < tailor.indexOf('validateLockedSections(tailoredHtml'),
+const restoreAt = tailor.indexOf('restoreIfEnabled(tailoredHtml');
+const validateAt = tailor.indexOf('validateLockedSections(tailoredHtml');
+check(restoreAt >= 0 && validateAt >= 0 && restoreAt < validateAt,
   'openai-tailor.mjs restores before locked-section validation');

@@ -73,15 +73,10 @@ function buildRules(profileYmlText) {
   if (!candidate || typeof candidate !== 'object') return [];
   const rules = [];
 
+  // The name rule is pushed LAST (see below): a one-word name such as "Jane"
+  // would otherwise rewrite the start of "jane.doe@example.org" before the
+  // email rule could match it.
   const name = cleanString(candidate.full_name);
-  if (name) {
-    const parts = name.split(/\s+/).map(escapeRegex).join('\\s+');
-    rules.push({
-      kind: 'name',
-      original: name,
-      find: new RegExp(`(?<![\\p{L}\\p{N}])${parts}(?![\\p{L}\\p{N}])`, 'giu'),
-    });
-  }
 
   // Primary first: it is the address restored from the placeholder. Alternates
   // (a list, or a name -> address mapping) are redacted to the same placeholder.
@@ -98,7 +93,10 @@ function buildRules(profileYmlText) {
   }
 
   const phone = cleanString(candidate.phone);
-  const digits = phone ? phone.replace(/\D/g, '') : '';
+  // Match the number itself: an extension ("ext 123", "x123", "#123") is not part
+  // of what appears in a CV's number, so keep its digits out of the matcher.
+  const phoneBase = phone ? phone.replace(/[\s,;]*(?:ext(?:ension)?\.?|x|#)\s*\d+\s*$/i, '') : '';
+  const digits = phoneBase.replace(/\D/g, '');
   if (digits.length >= MIN_PHONE_DIGITS) {
     // Match the number however it is spaced or punctuated, and also without
     // its country code (the CV may write "98765 43210" for "+91 98765 43210").
@@ -116,12 +114,21 @@ function buildRules(profileYmlText) {
 
   for (const kind of ['linkedin', 'github']) {
     const url = cleanString(candidate[kind]);
-    if (!url) continue;
+    if (!url || !normalizeUrl(url)) continue; // e.g. "https://": an empty pattern would match everywhere
     rules.push({
       kind,
       original: url,
       // Canonical profile path, plus any ?query / #fragment that follows it in the text.
       find: new RegExp(`${URL_PREFIX}${escapeRegex(normalizeUrl(url))}(?![\\w-])\\/?(?:[?#][^\\s)\\]>"']*?(?=[.,;:!]*(?:[\\s)\\]>"']|$)))?`, 'gi'),
+    });
+  }
+
+  if (name) {
+    const parts = name.split(/\s+/).map(escapeRegex).join('\\s+');
+    rules.push({
+      kind: 'name',
+      original: name,
+      find: new RegExp(`(?<![\\p{L}\\p{N}])${parts}(?![\\p{L}\\p{N}])`, 'giu'),
     });
   }
 
