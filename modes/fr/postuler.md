@@ -13,7 +13,7 @@ Mode interactif pour le moment ou le candidat remplit un formulaire de candidatu
 1. DETECTER     -> Ouvrir l'offre dans le navigateur Playwright de ce projet
 2. IDENTIFIER   -> Extraire entreprise + role depuis la page
 3. RECHERCHER   -> Matcher avec les reports existants dans reports/
-4. CHARGER      -> Lire le report complet + `## Application Answers` et Bloc H (si existants)
+4. CHARGER      -> Lire le report complet + `## Application Answers` et Bloc H (si existants), une fois la **Posting identity** confirmee
 5. COMPARER     -> Le role a l'ecran correspond-il a celui evalue ? Si changement -> alerter
 6. ANALYSER     -> Identifier TOUTES les questions visibles du formulaire
 7. GENERER      -> Pour chaque question, generer une reponse personnalisee

@@ -13,7 +13,7 @@ Modo interativo para quando o candidato está preenchendo um formulário de cand
 1. DETECTAR    → Abrir a vaga no navegador Playwright deste projeto
 2. IDENTIFICAR → Extrair empresa + vaga da página
 3. BUSCAR      → Match contra reports existentes em reports/
-4. CARREGAR    → Ler report completo + `## Application Answers` e Bloco H (se existirem)
+4. CARREGAR    → Ler report completo + `## Application Answers` e Bloco H (se existirem), depois de confirmada a **Posting identity**
 5. COMPARAR    → A vaga na tela coincide com a avaliada? Se mudou → avisar
 6. ANALISAR    → Identificar TODAS as perguntas visíveis do formulário
 7. GERAR       → Para cada pergunta, gerar resposta personalizada

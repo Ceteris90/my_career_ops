@@ -13,7 +13,7 @@ Interactive mode जब candidate इस प्रोजेक्ट के Play
 1. DETECT     -> Is project ke Playwright browser mein posting kholen
 2. IDENTIFY   -> Page से company + role extract करें
 3. SEARCH     -> reports/ में existing reports से match करें
-4. LOAD       -> पूरा report + `## Application Answers` और Block H (यदि मौजूद हों) पढ़ें
+4. LOAD       -> पूरा report + `## Application Answers` और Block H (यदि मौजूद हों) पढ़ें — **Posting identity** सही होने के बाद
 5. COMPARE    -> Screen का role evaluated role से match करता है? Change हो तो alert करें
 6. ANALYZE    -> Form के सभी visible questions identify करें
 7. GENERATE   -> हर question के लिए personalized response generate करें

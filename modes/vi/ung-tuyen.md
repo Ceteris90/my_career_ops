@@ -17,7 +17,7 @@ Mode tương tác dành cho lúc ứng viên đang điền form ứng tuyển tr
 1. DETECT      → Mở tin trong trình duyệt Playwright của dự án này
 2. IDENTIFY    → Trích công ty + vai trò từ trang
 3. SEARCH      → Đối chiếu với các báo cáo hiện có trong reports/
-4. LOAD        → Đọc báo cáo đầy đủ + Block H / Application Answers (nếu có)
+4. LOAD        → Đọc báo cáo đầy đủ + Block H / Application Answers (nếu có), sau khi **Posting identity** được xác nhận
 4b. TAILORED   → Xác định CV đã điều chỉnh cho báo cáo đó; nó, không phải cv.md, là nguồn cho các trường kinh nghiệm
 5. PREFLIGHT   → Xác nhận tin còn mở + công ty/vai trò khớp trước khi soạn
 5b. PRE-SCAN   → Quét trang tìm câu hỏi loại trực tiếp (bằng cấp, kinh nghiệm, quyền làm việc/visa, bảo lãnh, mức lương sàn)
@@ -101,7 +101,7 @@ Chức danh không thuộc danh tính. Tin được đổi tên sau khi đánh g
 
 1. Trích tên công ty và chức danh từ trang
 2. Tìm trong `reports/` theo tên công ty (grep không phân biệt hoa thường)
-3. Nếu khớp → nạp báo cáo đầy đủ. Nếu nhiều báo cáo khớp công ty, trước hết so URL hoặc req ID của tin với `**URL:**` của từng báo cáo. Báo cáo có tin khớp là báo cáo đúng, kể cả khi vai trò đã lưu khác: tin có thể đã được đổi tên, và Bước 3 xử lý việc đó. Chỉ dùng vai trò để thu hẹp các báo cáo mà URL hoặc req ID không phân định được. Nếu vẫn còn nhiều hơn một, hỏi ứng viên báo cáo nào thuộc về form này trước khi nạp: Bước 8 ghi vào báo cáo được nạp ở đây. Cho đến khi Bước 5 xác nhận **Posting identity**, chỉ đọc báo cáo để so sánh: câu trả lời (mục 4) và Block H chỉ được khôi phục cho tin này. Với tin khác, Bước 5 đưa ra **Evaluate as new** hoặc **Draft without saving**, và không dùng gì từ báo cáo này.
+3. Nếu khớp → chỉ đọc phần đầu của từng báo cáo khớp (công ty, vai trò, `**URL:**`). Nếu nhiều báo cáo khớp công ty, trước hết so URL hoặc req ID của tin với `**URL:**` của từng báo cáo. Báo cáo có tin khớp là báo cáo đúng, kể cả khi vai trò đã lưu khác: tin có thể đã được đổi tên, và Bước 3 xử lý việc đó. Chỉ dùng vai trò để thu hẹp các báo cáo mà URL hoặc req ID không phân định được. Nếu vẫn còn nhiều hơn một, hỏi ứng viên báo cáo nào thuộc về form này trước khi nạp: Bước 8 ghi vào báo cáo được nạp ở đây. Chỉ nạp báo cáo đầy đủ, câu trả lời (mục 4), Block H và CV đã điều chỉnh (Bước 4b) khi Bước 5 đã xác nhận **Posting identity**: Bước 5 chỉ cần phần đầu để so sánh. Với tin khác, Bước 5 đưa ra **Evaluate as new** hoặc **Draft without saving**, và không nạp gì ngoài phần đầu.
 4. Nếu có mục `## Application Answers` → khôi phục bằng bộ đọc nghiêm ngặt, không bao giờ bằng cách đọc lại markdown đã render như văn xuôi:
 
    ```bash

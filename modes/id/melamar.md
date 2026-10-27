@@ -13,7 +13,7 @@ Mode interaktif untuk saat kandidat mengisi formulir lamaran di browser Playwrig
 1. DETEKSI      -> Buka lowongan di browser Playwright proyek ini
 2. IDENTIFIKASI -> Ekstrak perusahaan + role dari halaman
 3. CARI         -> Cocokkan dengan report yang ada di reports/
-4. MUAT         -> Baca report lengkap + `## Application Answers` dan Blok H (jika ada)
+4. MUAT         -> Baca report lengkap + `## Application Answers` dan Blok H (jika ada), setelah **Posting identity** terpenuhi
 5. BANDINGKAN   -> Apakah role di layar cocok dengan yang dievaluasi? Jika berubah -> beri peringatan
 6. ANALISIS     -> Identifikasi SEMUA pertanyaan yang terlihat di formulir
 7. HASILKAN     -> Untuk tiap pertanyaan, hasilkan jawaban yang dipersonalisasi

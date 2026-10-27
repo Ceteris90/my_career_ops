@@ -13,7 +13,7 @@ Modalità interattiva per quando il candidato compila un modulo di candidatura (
 1. RILEVARE      -> Leggere la scheda attiva del browser (screenshot/URL/titolo)
 2. IDENTIFICARE  -> Estrarre azienda + ruolo dalla pagina
 3. CERCARE       -> Trovare corrispondenze con i report esistenti in reports/
-4. CARICARE      -> Leggere il report completo + `## Application Answers` e Blocco H (se esistono)
+4. CARICARE      -> Leggere il report completo + `## Application Answers` e Blocco H (se esistono), dopo che la **Posting identity** è confermata
 5. CONFRONTARE   -> Il ruolo a schermo corrisponde a quello valutato? Se cambia -> avvisare
 6. ANALIZZARE    -> Identificare TUTTE le domande visibili nel modulo
 7. GENERARE      -> Per ogni domanda, generare una risposta personalizzata

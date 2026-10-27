@@ -29,8 +29,8 @@ Do not submit the form. Stop before Submit, Send, or Apply. Continue only after 
 1. DETECT      → Open the posting in this project's Playwright browser
 2. IDENTIFY    → Extract company + role from the page
 3. SEARCH      → Match against existing reports in reports/
-4. LOAD        → Read full report + Section H / Application Answers (if they exist)
-4b. TAILORED   → Resolve the tailored CV for that report; it, not cv.md, sources experience fields
+4. LOAD        → Read the matched reports' headers; the full report + Section H / Application Answers (if they exist) once **Posting identity** holds
+4b. TAILORED   → Resolve the tailored CV for that report once its posting is confirmed; it, not cv.md, sources experience fields
 5. PREFLIGHT   → Confirm posting liveness + that the form is the report's posting before drafting
 5b. PRE-SCAN   → Scan page for knock-out questions (degree, experience, work authorization/visa, sponsorship, salary floors)
 5d. STATUS     → Warn if a form question screens for a specific immigration status rather than work authorization (warn-only; candidate decides)
@@ -169,7 +169,7 @@ Before drafting answers, read the matched report's Block G fixed-term finding an
 
 1. Extract company name and role title from the page
 2. Search `reports/` under every root printed by `node apply-scope.mjs root` (this checkout, plus the configured data root when set) by company name (case-insensitive grep). Do not search only the checkout when the data root holds the reports.
-3. If there is a match → load the full report. If more than one report matches the company, first compare the posting URL or req ID with each report's `**URL:**`. A report whose posting matches is the one, even if its stored role differs: the posting may have been retitled, and Step 3 handles that. Use the role only to narrow reports that the URL or req ID could not decide. If more than one is still possible, ask the candidate which report belongs to this form before loading any of them: Step 8 writes into the report loaded here. Until Step 5 confirms the **Posting identity**, read the report only to compare it: its answers (item 4) and its Section H are recovered for this posting only. For a different posting, Step 5 offers **Evaluate as new** or **Draft without saving**, and nothing from this report is used.
+3. If there is a match → read only the header of each matching report (company, role, `**URL:**`). If more than one report matches the company, first compare the posting URL or req ID with each report's `**URL:**`. A report whose posting matches is the one, even if its stored role differs: the posting may have been retitled, and Step 3 handles that. Use the role only to narrow reports that the URL or req ID could not decide. If more than one is still possible, ask the candidate which report belongs to this form before loading any of them: Step 8 writes into the report loaded here. Load the full report, its answers (item 4), its Section H and its tailored CV (Step 4b) only once Step 5 confirms the **Posting identity**: the header is all Step 5 compares. For a different posting, Step 5 offers **Evaluate as new** or **Draft without saving**, and nothing past the header is loaded.
 4. If there is a `## Application Answers` section → recover it through the strict reader, never by re-reading the rendered markdown as prose:
 
    ```bash

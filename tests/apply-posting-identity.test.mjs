@@ -166,6 +166,36 @@ const searchText = (file, text) => (searchStep[file] ? step(text, searchStep[fil
 
 ok('apply.md confirms the posting before loading the report\'s answers', () => assertIdentityBeforeLoad(searchText('modes/apply.md', apply)));
 
+// The workflow overview at the top of each mode is the first thing read; its
+// LOAD line said "read the full report" with no condition at all.
+function assertWorkflowLoadGated(text) {
+  const lines = text.split('\n');
+  const open = lines.findIndex(l => /^\s*```/.test(l));
+  const close = lines.findIndex((l, i) => i > open && /^\s*```/.test(l));
+  const load = lines.slice(open + 1, close).find(l => /^4\.\s/.test(l));
+  assert.ok(load, 'no LOAD line in the workflow overview');
+  assert.ok(load.includes(`**${IDENTITY}**`), `the workflow LOAD line loads the report unconditionally: ${load}`);
+}
+
+ok('apply.md: the workflow LOAD line waits for the posting identity', () => assertWorkflowLoadGated(apply));
+
+// apply.md, modes/ja and modes/vi compare the report in Step 5, after Step 2
+// has picked it. "Load the full report, but read it only to compare" still put
+// the other posting's answers in context, so Step 2 reads the header alone.
+const headerFirst = {
+  'modes/apply.md': { item: /^3\. If there is a match/, reads: 'read only the header of each matching report', loads: /→ load the full report/ },
+  'modes/ja/oubo.md': { item: /^3\. Match があれば/, reads: 'header（company、role、`**URL:**`）だけを読み', loads: /full report を load$/ },
+  'modes/vi/ung-tuyen.md': { item: /^3\. Nếu khớp/, reads: 'chỉ đọc phần đầu của từng báo cáo khớp', loads: /→ nạp báo cáo đầy đủ/ },
+};
+for (const [file, expect] of Object.entries(headerFirst)) {
+  ok(`${file}: Step 2 reads only report headers until the posting is confirmed`, () => {
+    const item = step(read(file), searchStep[file]).split('\n').find(l => expect.item.test(l));
+    assert.ok(item, 'no Step 2 match item');
+    assert.ok(item.includes(expect.reads), 'Step 2 does not limit itself to the report header');
+    assert.ok(!expect.loads.test(item), 'Step 2 still loads the full report before the posting is confirmed');
+  });
+}
+
 // The modes that carry the canonical Steps 6 and 7 read the report there, far
 // below the preflight, so the unsaved path has to be restated where it is read.
 const generationSteps = {
@@ -203,6 +233,8 @@ for (const file of localized) {
   ok(`${file}: a different posting is offered only the two choices`, () => assertChoices(lines.join('\n')));
 
   ok(`${file}: the posting is confirmed before the report's answers are loaded`, () => assertIdentityBeforeLoad(searchText(file, lines.join('\n'))));
+
+  ok(`${file}: the workflow LOAD line waits for the posting identity`, () => assertWorkflowLoadGated(lines.join('\n')));
 
   ok(`${file}: the role-change step points at the posting identity`, () => {
     const roleChange = sectionAt(lines, lines.findIndex(isRolePrompt));

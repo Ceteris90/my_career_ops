@@ -13,7 +13,7 @@
 1. 捕获 (DETECT)    → 用本项目的 Playwright 浏览器打开职位页面
 2. 识别 (IDENTIFY)  → 从页面中提取公司名称与职位名称
 3. 检索 (SEARCH)    → 匹配 reports/ 目录下已保存的评估报告
-4. 载入 (LOAD)      → 读取对应的评估报告、`## Application Answers` 及 H 部分的拟答草稿 (若存在)
+4. 载入 (LOAD)      → 读取对应的评估报告、`## Application Answers` 及 H 部分的拟答草稿 (若存在)，在 **Posting identity** 成立之后
 5. 校准 (COMPARE)   → 比对当前屏幕上的职位是否与之前评估的职位完全一致。若有变动，进行提示
 6. 解析 (ANALYZE)   → 识别出页面上所有可见的表单提问输入框
 7. 生成 (GENERATE)  → 结合报告背景与简历 cv.md，为每个问题生成定制草稿

@@ -13,7 +13,7 @@
 1. DETECT      -> 이 프로젝트의 Playwright 브라우저에서 공고 열기
 2. IDENTIFY    -> 페이지에서 회사 + 역할 추출
 3. SEARCH      -> reports/ 안의 기존 report와 매칭
-4. LOAD        -> 전체 report + `## Application Answers`와 블록 H(있다면) 읽기
+4. LOAD        -> 전체 report + `## Application Answers`와 블록 H(있다면) 읽기 — **Posting identity** 확인 후
 5. COMPARE     -> 화면의 역할이 평가한 역할과 같은지 확인. 바뀌었다면 알림
 6. ANALYZE     -> 화면에 보이는 모든 지원서 질문 식별
 7. GENERATE    -> 각 질문에 대해 개인화 답변 생성

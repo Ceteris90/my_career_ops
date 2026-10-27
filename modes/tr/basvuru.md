@@ -13,7 +13,7 @@ Aday bir başvuru formunu doldururken çalışan etkileşimli mod. Ekrandakileri
 1. TESPİT ET      → Aktif sekmeyi oku (ekran görüntüsü / URL / sayfa başlığı)
 2. TANI KOY       → Sayfadan şirket adını ve rolü çıkar
 3. RAPORU BUL     → reports/ klasöründe bu ilana ait raporu ara
-4. YÜKLE          → Tam raporu oku (önceki değerlendirme + varsa Blok H / `## Application Answers`)
+4. YÜKLE          → Tam raporu oku (önceki değerlendirme + varsa Blok H / `## Application Answers`), **Posting identity** doğrulandıktan sonra
 5. KARŞILAŞTIR    → Ekrandaki rol raporla eşleşiyor mu? Farklıysa adayı uyar
 6. FORMU ANALİZ ET → Görünen tüm alanları ve soruları tespit et
 7. YANIT ÜRET     → Her alan için kişiselleştirilmiş yanıt oluştur

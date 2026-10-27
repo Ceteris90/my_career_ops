@@ -13,7 +13,7 @@ Interaktiv mode til det øjeblik, hvor kandidaten udfylder en ansøgningsformula
 1. DETEKTÉR     -> Åbn opslaget i dette projekts Playwright-browser
 2. IDENTIFICÉR  -> Udtræk virksomhed + rolle fra siden
 3. SØG          -> Match mod eksisterende reports i reports/
-4. INDLÆS       -> Læs den fulde report + `## Application Answers` og Blok H (hvis de findes)
+4. INDLÆS       -> Læs den fulde report + `## Application Answers` og Blok H (hvis de findes), når **Posting identity** holder
 5. SAMMENLIGN   -> Svarer rollen på skærmen til den evaluerede? Hvis ændret -> advar
 6. ANALYSÉR     -> Identificér ALLE synlige spørgsmål i formularen
 7. GENERÉR      -> Generér et personaliseret svar til hvert spørgsmål

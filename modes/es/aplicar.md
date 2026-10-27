@@ -13,7 +13,7 @@ Modo interactivo para el momento en que el candidato rellena un formulario de ca
 1. DETECTAR     -> Abrir la oferta en el navegador Playwright de este proyecto
 2. IDENTIFICAR  -> Extraer empresa + rol desde la página
 3. BUSCAR       -> Hacer match con los reports existentes en reports/
-4. CARGAR       -> Leer el report completo + Bloque H / `## Application Answers` (si existen)
+4. CARGAR       -> Leer el report completo + Bloque H / `## Application Answers` (si existen), una vez confirmada la **Posting identity**
 5. COMPARAR     -> ¿El rol en pantalla coincide con el evaluado? Si cambió -> avisar
 6. ANALIZAR     -> Identificar TODAS las preguntas visibles del formulario
 7. GENERAR      -> Para cada pregunta, generar una respuesta personalizada

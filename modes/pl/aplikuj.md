@@ -13,7 +13,7 @@ Tryb interaktywny na moment, gdy kandydat wypełnia formularz aplikacyjny w prze
 1. WYKRYJ       -> Otwórz ogłoszenie w przeglądarce Playwright tego projektu
 2. ZIDENTYFIKUJ -> Wyciągnij firmę + rolę ze strony
 3. WYSZUKAJ     -> Dopasuj do istniejących reportów w reports/
-4. ZAŁADUJ      -> Przeczytaj pełny report + `## Application Answers` i Blok H (jeśli istnieją)
+4. ZAŁADUJ      -> Przeczytaj pełny report + `## Application Answers` i Blok H (jeśli istnieją), gdy **Posting identity** się zgadza
 5. PORÓWNAJ     -> Czy rola na ekranie odpowiada ocenionej? Jeśli zmiana -> ostrzeż
 6. PRZEANALIZUJ -> Zidentyfikuj WSZYSTKIE widoczne pytania formularza
 7. WYGENERUJ    -> Dla każdego pytania wygeneruj spersonalizowaną odpowiedź

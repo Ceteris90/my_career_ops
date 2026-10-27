@@ -13,7 +13,7 @@ Interaktiver Modus für den Moment, in dem der Kandidat ein Bewerbungsformular i
 1. ERKENNEN     → Stellenanzeige in der Playwright-Sitzung dieses Projekts öffnen
 2. IDENTIFIZIEREN → Firma + Rolle aus der Seite extrahieren
 3. SUCHEN       → mit bestehenden Reports unter reports/ abgleichen
-4. LADEN        → vollständigen Report lesen + `## Application Answers` und Block H (falls vorhanden)
+4. LADEN        → vollständigen Report lesen + `## Application Answers` und Block H (falls vorhanden), sobald die **Posting identity** gilt
 5. VERGLEICHEN  → Stimmt die Rolle auf dem Bildschirm mit der bewerteten überein? Wenn sie sich geändert hat → warnen
 6. ANALYSIEREN  → ALLE sichtbaren Fragen des Formulars identifizieren
 7. ERZEUGEN     → Für jede Frage eine passgenaue Antwort generieren

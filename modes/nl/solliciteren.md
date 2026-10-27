@@ -13,7 +13,7 @@ Interactieve modus voor wanneer de kandidaat een sollicitatieformulier invult in
 1. DETECTEREN     -> Open de vacature in de Playwright-browser van dit project
 2. IDENTIFICEREN  -> Haal bedrijf en functie uit de pagina
 3. ZOEKEN         -> Zoek een match in de bestaande rapporten in reports/
-4. LADEN          -> Lees het volledige rapport, `## Application Answers` en blok H (indien aanwezig)
+4. LADEN          -> Lees het volledige rapport, `## Application Answers` en blok H (indien aanwezig), zodra de **Posting identity** vaststaat
 5. VERGELIJKEN    -> Komt de functie overeen met de evaluatie? Waarschuw bij wijzigingen
 6. ANALYSEREN     -> Identificeer ALLE zichtbare vragen in het formulier
 7. GENEREREN      -> Genereer voor elke vraag een persoonlijk antwoord

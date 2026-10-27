@@ -13,7 +13,7 @@
 1. 擷取 (DETECT)    → 用本專案的 Playwright 瀏覽器開啟職缺頁面
 2. 辨識 (IDENTIFY)  → 從頁面中擷取公司名稱與職缺名稱
 3. 搜尋 (SEARCH)    → 比對 reports/ 目錄下已儲存的評估報告
-4. 載入 (LOAD)      → 讀取對應的評估報告、`## Application Answers` 及 H 區的擬答草稿（若存在）
+4. 載入 (LOAD)      → 讀取對應的評估報告、`## Application Answers` 及 H 區的擬答草稿（若存在），在 **Posting identity** 成立之後
 5. 校準 (COMPARE)   → 比對畫面上的職缺是否與先前評估的完全一致。若有變動，提出提示
 6. 解析 (ANALYZE)   → 辨識頁面上所有可見的表單問題輸入框
 7. 產生 (GENERATE)  → 結合報告脈絡與履歷 cv.md，為每個問題產生客製草稿
