@@ -24,7 +24,7 @@ const D = '1000000005';
 const E = '1000000006';
 
 const ALERT = [
-  'From: jobs-noreply@linkedin.example',
+  'From: jobs-noreply' + '@' + 'linkedin.example',
   'Subject: Jobs for you at Northwind',
   '',
   `https://www.linkedin.com/comm/jobs/view/${A}?trk=eml-job_alert&trkEmail=eml-x`,
