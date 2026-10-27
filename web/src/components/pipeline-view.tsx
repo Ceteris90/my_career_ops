@@ -350,9 +350,9 @@ export function PipelineView({
            of being silently cut off. min-w keeps the columns readable rather
            than letting w-full crush them on a phone. */
         <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[44rem] text-sm">
+          <table aria-rowcount={filtered.length + 1} className="w-full min-w-[44rem] text-sm">
             <thead className="bg-surface/60 text-left text-xs uppercase tracking-wide text-faint">
-              <tr>
+              <tr aria-rowindex={1}>
                 <th className="w-8 px-3 py-2.5">
                   <input
                     type="checkbox"
@@ -390,13 +390,13 @@ export function PipelineView({
                   <td colSpan={columnCount} style={{ height: span.start * TRACKER_ROW_PX, padding: 0, border: 0 }} />
                 </tr>
               )}
-              {mountedRows.map((r) => {
+              {mountedRows.map((r, i) => {
                 const company = companyPresentation(r);
                 const key = applicationKey(r);
                 const detailHref = `/pipeline/${encodeURIComponent(r.n)}${detailQuery ? `?${detailQuery}` : ""}`;
                 const posting = postingHref(r.url);
                 return (
-                  <tr key={key} data-application-key={key} className="group transition-colors hover:bg-surface/40" style={{ height: TRACKER_ROW_PX }}>
+                  <tr key={key} data-application-key={key} aria-rowindex={span.start + i + 2} className="group transition-colors hover:bg-surface/40" style={{ height: TRACKER_ROW_PX }}>
                     <td className="w-8 px-3 py-3">
                       <input
                         type="checkbox"
@@ -413,12 +413,12 @@ export function PipelineView({
                     <td className="px-4 py-3 font-medium">
                       <Link href={detailHref} className="flex items-center gap-2.5 transition-colors group-hover:text-brand">
                         <CompanyLogo name={company.logoName} size={20} />
-                        {company.label}
+                        <span className="block max-w-64 truncate" title={company.label}>{company.label}</span>
                       </Link>
                     </td>
                   <td className="px-4 py-3 text-muted">
                     <div className="flex items-center gap-2">
-                      <Link href={detailHref} tabIndex={-1}>{r.role}</Link>
+                      <Link href={detailHref} tabIndex={-1} className="block max-w-72 truncate" title={r.role}>{r.role}</Link>
                       {posting && (
                         <a
                           href={posting}
