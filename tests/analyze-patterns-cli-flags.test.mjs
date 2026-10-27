@@ -14,6 +14,7 @@ const SCRIPT = join(ROOT, 'analyze-patterns.mjs');
 const VALID_FLAGS = [
   '--min-threshold',
   '--min-vendor-n',
+  '--min-family-n',
   '--self-test',
   '--summary',
   '--help',
