@@ -55,6 +55,7 @@ const SUITES = {
   "loading-transition": { url: "LOADING_TRANSITION_TEST_URL", root: "LOADING_TRANSITION_TEST_ROOT", fixture: "pipeline-status" },
   "pipeline-inline-status": { url: "PIPELINE_STATUS_TEST_URL", root: "PIPELINE_STATUS_TEST_ROOT", fixture: "pipeline-status" },
   "pipeline-return": { url: "PIPELINE_RETURN_TEST_URL", root: "PIPELINE_RETURN_TEST_ROOT", fixture: "pipeline-status" },
+  "report-print": { url: "REPORT_PRINT_TEST_URL", root: "REPORT_PRINT_TEST_ROOT", fixture: "report-print" },
   "worker-feedback": { url: "WORKER_FEEDBACK_TEST_URL", fixture: "blank" },
 };
 
