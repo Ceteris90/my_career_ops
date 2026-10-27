@@ -892,10 +892,14 @@ export function scanHtml(html) {
       if (e.media) media.pop();
     }
   };
-  // Text that is the child of a foreign <style> is its stylesheet.
-  const text = (from, to) => {
+  // Text that is the child of a foreign <style> is its stylesheet. Foreign content
+  // has no raw text, so its character references are decoded before CSS reads them;
+  // a CDATA section's are not (probed).
+  const text = (from, to, cdata = false) => {
     const sheet = stack.at(-1)?.sheet;
-    if (sheet) sheet.body += html.slice(from, to);
+    if (!sheet) return;
+    const chunk = html.slice(from, to);
+    sheet.body += cdata ? chunk : decodeEntities(chunk, { bareNumeric: true, text: true });
   };
   // Whether the HTML rules, not the foreign content rules, read a token about to be inserted.
   const htmlRules = (name, end) => {
@@ -960,7 +964,7 @@ export function scanHtml(html) {
     } else if (cur && cur.ns !== 'html' && !cur.integration && !(cur.ns === 'math' && MATH_TEXT_POINTS.has(cur.name)) && html.startsWith('<![CDATA[', i)) {
       text(pending, at);
       const end = html.indexOf(']]>', i);
-      text(i + 9, end < 0 ? html.length : end);
+      text(i + 9, end < 0 ? html.length : end, true);
       i = end < 0 ? html.length : end + 3;
       pending = i;
     } else if (next === '!' || next === '?' || (next === '/' && !/[a-zA-Z]/.test(html[i + 2] ?? ''))) {
