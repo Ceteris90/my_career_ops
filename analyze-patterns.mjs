@@ -443,12 +443,16 @@ export function roleFamilyOf(entry, families = {}) {
 }
 
 export function buildRoleFamilyYield(enriched, { ledger = [], families = {}, minN = FAMILY_MIN_N, minGap = FAMILY_MIN_GAP } = {}) {
-  const statusByNum = new Map(enriched.map(e => [e.num, e.normalizedStatus]));
+  // One row per tracker number, the last wins as in trackerStatusByNum: the
+  // ledger is keyed by number, so two rows sharing one would both inherit the
+  // same Interview transition and overcount.
+  const byNum = new Map(enriched.map(e => [e.num, e]));
+  const statusByNum = new Map([...byNum].map(([num, e]) => [num, e.normalizedStatus]));
   const reached = recoverFunnelStages(statusByNum, ledger);
   const groups = new Map();
   let applied = 0;
   let interviewed = 0;
-  for (const e of enriched) {
+  for (const e of byNum.values()) {
     const rank = reached.get(e.num) || 0;
     if (rank < FUNNEL_RANK_APPLIED) continue;
     const family = roleFamilyOf(e, families);
@@ -471,7 +475,7 @@ export function buildRoleFamilyYield(enriched, { ledger = [], families = {}, min
   // named; a 0% overall rate has no gap to measure.
   const best = overallRate > 0
     ? rows
-        .filter(r => r.sufficientSample && r.interviewed > 0 && r.interviewed / r.applied >= minGap * overallRate)
+        .filter(r => r.family !== 'Unknown' && r.sufficientSample && r.interviewed > 0 && r.interviewed / r.applied >= minGap * overallRate)
         .sort((a, b) => b.rate - a.rate || b.applied - a.applied)[0] || null
     : null;
   return {

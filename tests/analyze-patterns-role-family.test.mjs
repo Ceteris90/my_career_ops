@@ -102,3 +102,16 @@ nextNum = 1;
 const nearMiss = [...rows('Near', 23, 2), ...rows('Rest', 2276, 98)];
 const nm = buildRoleFamilyYield(nearMiss);
 check(nm.families.find(f => f.family === 'Near').rate === 8.7 && nm.suggestion === null, 'gap: 8.696% against a 8.699% bar is not suggested although it displays as 8.7%');
+
+// --- Unknown is a catch-all, never a family to aim at ------------------------
+nextNum = 1;
+const unk = buildRoleFamilyYield([...rows('Unknown', 30, 6), ...rows('Rest', 70, 1)]);
+check(unk.families.some(f => f.family === 'Unknown' && f.interviewed === 6) && unk.suggestion === null, 'Unknown: listed in the table but never named in the suggestion');
+
+// --- duplicate tracker numbers count once ------------------------------------
+const dup = [
+  { num: 1, role: 'A', report: { archetype: 'A' }, normalizedStatus: 'rejected' },
+  { num: 1, role: 'B', report: { archetype: 'B' }, normalizedStatus: 'rejected' },
+];
+const dupYield = buildRoleFamilyYield(dup, { ledger: [{ num: 1, from: 'Interview', to: 'Rejected' }] });
+check(dupYield.applied === 1 && dupYield.interviewed === 1, `duplicate numbers: one ledger Interview is one interview, not two (got ${dupYield.interviewed} of ${dupYield.applied})`);
