@@ -20,8 +20,8 @@ test("visible labels are part of accessible names, and shell content sits in lan
     unexpected.push(route.request().url());
     return route.abort();
   });
-  // A stable build hides the pre-release pill, so pretend to be an alpha.
-  await page.route("**/api/version", (route) => route.fulfill({ json: { version: "0.0.0-fixture", channel: "alpha", sha: "f1x7ure" } }));
+  const PRERELEASE_VERSION_STUB = { version: "0.0.0-fixture", channel: "alpha", sha: "f1x7ure" };
+  await page.route("**/api/version", (route) => route.fulfill({ json: PRERELEASE_VERSION_STUB }));
 
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Accessibility.enable");
@@ -33,9 +33,7 @@ test("visible labels are part of accessible names, and shell content sits in lan
     await locator.evaluate((el) => el.removeAttribute("data-ax-probe"));
     return nodes[0]?.name?.value ?? "";
   }
-  // The words a sighted voice-control user reads off the control: decorative
-  // aria-hidden glyphs (the "co" brand mark) and 1px sr-only text are not.
-  const visibleText = (locator) => locator.evaluate((el) => {
+  const voiceControlLabel = (locator) => locator.evaluate((el) => {
     const parts = [];
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
@@ -54,7 +52,7 @@ test("visible labels are part of accessible names, and shell content sits in lan
     await page.goto(`${origin.origin}${route}`);
     await t.test(`${route}: the assistant launcher's name starts with its visible label`, async () => {
       await launcher.waitFor();
-      const text = await visibleText(launcher);
+      const text = await voiceControlLabel(launcher);
       const name = await nameOf(launcher);
       assert.ok(norm(name).startsWith(norm(text)), `launcher shows "${text}" but is named "${name}"`);
     });
@@ -71,7 +69,7 @@ test("visible labels are part of accessible names, and shell content sits in lan
       const button = row.locator("button", { hasText: label });
       await button.waitFor();
       assert.equal(await button.count(), 1, `one "${label}" button in the Fixture Beta row`);
-      const text = await visibleText(button);
+      const text = await voiceControlLabel(button);
       assert.equal(text, label, `"${label}" is visible at desktop width`);
       const name = await nameOf(button);
       assert.ok(norm(name).includes(norm(text)), `row button shows "${text}" but is named "${name}"`);
