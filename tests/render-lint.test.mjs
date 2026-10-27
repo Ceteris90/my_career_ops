@@ -97,6 +97,57 @@ const CASES = [
       '<base href="https://cdn.example/icon.svg"><img src="#logo">',
       '<base href="https://cdn.example/"><img srcset="#a 1x">',
       '<base href="https://cdn.example/"><link rel="stylesheet" href="#x">',
+      // A special scheme needs no `//`: the URL parser resolves each of these to a remote host,
+      // and Chromium routes (and the renderer aborts) every one, probed with javaScriptEnabled:false.
+      '<img src="https:example.com/logo.png">',
+      '<img src="HTTPS:example.com/a.png">',
+      '<img src="http:example.com/a.png">',
+      '<img src="https:/example.com/a.png">',
+      '<img src="https:///example.com/a.png">',
+      '<img src="https:\\\\example.com\\a.png">',
+      '<img src="https:/\\example.com/a.png">',
+      '<img src="ftp:example.com/a.png">',
+      '<img src="ws://example.com/a.png">',
+      '<img src="wss:example.com/a.png">',
+      '<img src=" https:example.com/a.png">',
+      '<img srcset="a.png 1x, https:example.com/a.png 2x">',
+      '<link rel="stylesheet" href="https:example.com/a.css">',
+      '<style>body{background:url(https:example.com/a.png)}</style>',
+      '<style>@import "https:example.com/a.css";</style>',
+      '<base href="file:///tmp/"><img src="https:example.com/a.png">',
+      // Scheme-relative in either slash direction, as `//host` already was.
+      '<img src="\\\\example.com\\a.png">',
+      '<img src="/\\example.com/a.png">',
+      '<img src="\\/example.com/a.png">',
+      // A base without `//` still names a remote origin.
+      '<base href="https:cdn.example/"><img src="logo.png">',
+      // The markup of an iframe srcdoc is fetched like the page's own (probed with javaScriptEnabled:false).
+      '<iframe srcdoc="<img src=\'https://example.com/a.png\'>"></iframe>',
+      '<iframe srcdoc="&lt;img src=&quot;https://example.com/a.png&quot;&gt;"></iframe>',
+      '<iframe srcdoc="<link rel=stylesheet href=\'https://example.com/a.css\'>"></iframe>',
+      '<iframe srcdoc="<style>@import \'https://example.com/a.css\'</style>"></iframe>',
+      '<iframe srcdoc="<style>body{background:url(https://example.com/a.png)}</style><p>x"></iframe>',
+      '<iframe srcdoc="<iframe srcdoc=\'&lt;img src=&quot;https://example.com/a.png&quot;&gt;\'></iframe>"></iframe>',
+      // The srcdoc document inherits the parent's base URL, and its own <base> overrides it.
+      '<base href="https://cdn.example/"><iframe srcdoc="<img src=\'logo.png\'>"></iframe>',
+      '<iframe srcdoc="<base href=\'https://own.example/\'><img src=\'logo.png\'>"></iframe>',
+      // CSS escapes are decoded before the URL is classified.
+      '<style>@import "\\68 ttps://example.com/a.css";</style>',
+      '<style>@import url("\\68 ttps://example.com/a.css");</style>',
+      '<style>@import url(\\68 ttps://example.com/a.css);</style>',
+      '<style>@\\69 mport "https://example.com/a.css";</style>',
+      '<style>.a{background:url("\\68 ttps://example.com/a.png")}</style>',
+      '<style>.a{background:url(\\68 ttps://example.com/a.png)}</style>',
+      '<style>.a{background:url("https\\3a //example.com/a.png")}</style>',
+      '<style>.a{background:url("https:\\/\\/example.com/a.png")}</style>',
+      '<style>.a{background:url("\\000068ttps://example.com/a.png")}</style>',
+      '<style>.a{background:url("h\\ttps://example.com/a.png")}</style>',
+      '<style>.a{background:\\75 rl("https://example.com/a.png")}</style>',
+      '<style>.a{background:u\\72l(https://example.com/a.png)}</style>',
+      '<style>.a{background:url("htt\\\nps://example.com/a.png")}</style>',
+      '<style>.a{background:url("https://example.com/a\\2e png")}</style>',
+      '<div style="background:url(&quot;\\68 ttps://example.com/a.png&quot;)"></div>',
+      '<base href="https://cdn.example/"><style>.a{background:url("\\69 mg/a.png")}</style>',
     ],
     miss: [
       '<a href="https://example.com/me">me</a>',
@@ -132,6 +183,23 @@ const CASES = [
       // Not fetched by the renderer (JavaScript is off), so nothing is dropped: probed with
       // Playwright's javaScriptEnabled:false context, where modulepreload and icon never reach route().
       '<link rel="modulepreload" href="https://cdn.example/m.js">',
+      // Local files and data stay quiet under both kinds of base, with or without `//`.
+      '<img src="file:logo.png">',
+      '<base href="https://cdn.example/"><img src="file:///tmp/a.png">',
+      '<base href="https://cdn.example/"><img src="data:image/png;base64,AAAA">',
+      '<base href="https:cdn.example/"><img src="{{PHOTO}}">',
+      // A srcdoc with nothing remote in it stays quiet.
+      '<iframe srcdoc="<p>Hello</p>"></iframe>',
+      '<iframe srcdoc="<img src=\'data:image/png;base64,AAAA\'><img src=\'a.png\'>"></iframe>',
+      '<iframe srcdoc="<!-- <img src=\'https://example.com/a.png\'> -->"></iframe>',
+      '<iframe srcdoc="<p>https://example.com/a.png</p>"></iframe>',
+      // The src is ignored when srcdoc is present, so only the srcdoc markup counts.
+      '<iframe srcdoc="<p>x</p>" src="a.html"></iframe>',
+      // CSS escapes that decode to a local path stay local; a non-url() string is not a request.
+      '<style>.a{background:url("\\66 ile.png")}</style>',
+      '<style>.a{background:url("\\70 hoto.png")}</style>',
+      '<style>.a{content:"\\68 ttps://example.com/a.png"}</style>',
+      '<style>.a{background:url("\\68  ttps://example.com/a.png")}</style>',
     ],
   },
 ];
@@ -144,6 +212,18 @@ for (const { id, hit, miss } of CASES) {
     for (const html of miss) assert.ok(!ids(lint(html)).includes(id), `unexpected ${id} for: ${html}`);
   });
 }
+
+test('nested srcdoc is linted to a depth cap and never loops or throws', () => {
+  const nest = (inner, levels) => {
+    let html = inner;
+    for (let i = 0; i < levels; i++) html = `<iframe srcdoc="${html.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}"></iframe>`;
+    return html;
+  };
+  const leaf = '<img src="https://example.com/a.png">';
+  assert.ok(ids(lint(nest(leaf, 3))).includes('remote-subresource'), 'three levels deep is within the cap');
+  const deep = lint(nest(leaf, 40));
+  assert.equal(deep.error, null);
+});
 
 test('every finding is a warning with a rule text and a detail', () => {
   const r = lint('<script>x</script>');

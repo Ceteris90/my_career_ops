@@ -653,7 +653,32 @@ export function atsLint(path, kind, opts = {}) {
 // describe the renderer, not modes/pdf.md.
 const TAG_RE = /<[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
 const ANY_TAG_RE = /<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^>"'])*>/g;
-const REMOTE_RE = /^\s*(?:(?:https?|ftp):)?\/\//i;
+// The schemes the URL Standard calls special. Chromium routes (and the renderer
+// aborts) a request to any of them, with or without `//` after the colon.
+const REMOTE_PROTOCOLS = new Set(['http:', 'https:', 'ftp:', 'ws:', 'wss:']);
+// Stands in for the template's own file: URL when there is no remote <base>.
+const DOCUMENT_URL = 'file:///template/';
+// A URL starting with two slashes, in either direction, names a host.
+const SCHEME_RELATIVE_RE = /^[\\/]{2}/;
+const COMMENT_OR_STYLE_RE = /<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
+// Comments go, except inside a <style> body: there `<!--` and `-->` are raw
+// CSS text (ignored tokens), and the rules between them are live. The
+// alternation is leftmost-first, so a comment wrapping a <style> is stripped.
+const stripComments = (html) => html.replace(COMMENT_OR_STYLE_RE, (m) => (m.startsWith('<!--') ? ' ' : m));
+// How many levels of iframe srcdoc markup are read for remote requests.
+const MAX_SRCDOC_DEPTH = 3;
+
+// CSS Syntax 3, "consume an escaped code point": `\` plus 1-6 hex digits and one
+// optional whitespace, or `\` plus any other character, which stands for itself.
+// A backslash-newline inside a string is a line continuation and decodes to nothing.
+function decodeCssEscapes(css) {
+  return css.replace(/\\(?:\r\n|[\n\r\f]|([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|([\s\S]))/g, (m, hex, ch) => {
+    if (hex === undefined && ch === undefined) return '';
+    if (ch !== undefined) return ch;
+    const code = parseInt(hex, 16);
+    return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? '\ufffd' : String.fromCodePoint(code);
+  });
+}
 
 // Reads attributes by walking the tag, so a quoted value that happens to
 // contain `src=x` is a value and not a second attribute.
@@ -718,6 +743,85 @@ function srcsetUrls(v) {
 
 const excerpt = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 80);
 
+// Remote requests in one document's markup, and in the markup of every iframe
+// srcdoc inside it. `inheritedBase` is the base URL of the document that holds
+// this markup: a srcdoc document inherits its parent's, and its own <base> wins.
+function remoteSubresources(html, depth, inheritedBase) {
+  const out = [];
+  // A relative URL resolves against an absolute remote <base href>, so it is
+  // a remote request too. Only the first <base> counts, as in a browser.
+  let base = inheritedBase;
+  const baseTag = (html.match(TAG_RE) || []).find((t) => /^<base\b/i.test(t) && attrValue(t, 'href') !== null);
+  if (baseTag) {
+    try { base = new URL(urlValue(baseTag, 'href'), inheritedBase); } catch { /* an unparsable base is ignored */ }
+  }
+  // Classify the resolved URL rather than pattern-match the text, so every
+  // spelling the URL parser accepts counts: `https:example.com`, `https:/x`,
+  // `https:\\x`. `//host` and its backslash forms name a host whatever the base.
+  const isRemote = (u, { sameDocFragment = false } = {}) => {
+    const v = u.trim();
+    if (v === '' || v.startsWith('{{')) return false;
+    if (SCHEME_RELATIVE_RE.test(v)) return true;
+    // A fragment-only URL is a resource request that resolves against the base
+    // (`<img src="#logo">`), but a same-document reference in `<use>` and CSS
+    // `url(#id)`, which is never fetched.
+    if (sameDocFragment && v.startsWith('#')) return false;
+    try {
+      return REMOTE_PROTOCOLS.has(new URL(v, base).protocol);
+    } catch {
+      return /^(?:https?|ftp|wss?):/i.test(v);
+    }
+  };
+  for (const tag of html.match(TAG_RE) || []) {
+    const name = /^<([a-zA-Z0-9]+)/.exec(tag)[1].toLowerCase();
+    // srcdoc markup is fetched like the page's own, and the renderer aborts it too.
+    if (name === 'iframe' && depth < MAX_SRCDOC_DEPTH) {
+      const srcdoc = attrValue(tag, 'srcdoc');
+      if (srcdoc !== null) out.push(...remoteSubresources(stripComments(srcdoc), depth + 1, base));
+    }
+    const attrs = [];
+    if (['img', 'source', 'video', 'audio', 'track', 'image', 'input'].includes(name)) attrs.push('src');
+    if (name === 'img' || name === 'source') attrs.push('srcset');
+    if (name === 'video') attrs.push('poster');
+    if (name === 'image' || name === 'use') attrs.push('href', 'xlink:href');
+    if (name === 'link' && /\b(?:stylesheet|preload|icon|prefetch)\b/i.test(attrValue(tag, 'rel') ?? '')) attrs.push('href');
+    const sameDocFragment = name === 'use';
+    const urls = attrs.flatMap((a) => {
+      if (a === 'srcset') return srcsetUrls(attrValue(tag, a) ?? '');
+      return [urlValue(tag, a) ?? ''];
+    });
+    if (urls.some((u) => isRemote(u, { sameDocFragment }))) out.push(excerpt(tag));
+  }
+  // Only CSS-bearing content: <style> bodies and style="" values. A title or
+  // visible text that happens to contain url(...) is prose, not a request.
+  // Bodies are found by walking real tags, so `<style>` written inside a
+  // quoted attribute value is text, not an element.
+  const sources = [];
+  let open = null;
+  let isCss = false;
+  for (const m of html.matchAll(ANY_TAG_RE)) {
+    if (open === null && /^<style\b/i.test(m[0])) {
+      open = m.index + m[0].length;
+      // A style element with another type is not CSS; browsers ignore it.
+      const type = attrValue(m[0], 'type');
+      isCss = type === null || /^\s*(?:text\/css)?\s*$/i.test(type);
+    } else if (open !== null && /^<\/style\b/i.test(m[0])) {
+      if (isCss) sources.push(html.slice(open, m.index));
+      open = null;
+    }
+  }
+  for (const tag of html.match(TAG_RE) || []) {
+    const inline = attrValue(tag, 'style');
+    if (inline) sources.push(inline);
+  }
+  // Escapes are decoded first: `\68 ttps://x` is `https://x` to the renderer,
+  // and so is `\75 rl(` for `url(`.
+  const css = decodeCssEscapes(sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' '));
+  for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1], { sameDocFragment: true })) out.push(excerpt(`url(${m[1]})`));
+  for (const m of css.matchAll(/@import\s*["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
+  return out;
+}
+
 const RENDER_RULES = [
   {
     id: 'script-element',
@@ -757,59 +861,7 @@ const RENDER_RULES = [
   {
     id: 'remote-subresource',
     rule: 'Every request that is not file: or data: is aborted, so a remote image, stylesheet or font is dropped without a message.',
-    detect: (html) => {
-      const out = [];
-      // A relative URL resolves against an absolute remote <base href>, so it is
-      // a remote request too. Only the first <base> counts, as in a browser.
-      const baseTag = (html.match(TAG_RE) || []).find((t) => /^<base\b/i.test(t) && attrValue(t, 'href') !== null);
-      const hasRemoteBase = Boolean(baseTag) && /^\s*(?:https?|ftp):\/\//i.test(urlValue(baseTag, 'href'));
-      const isRelative = (u) => { const v = u.trim(); return v !== '' && !v.startsWith('{{') && !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith('//'); };
-      // A fragment-only URL is a resource request that resolves against the base
-      // (`<img src="#logo">`), but a same-document reference in `<use>` and CSS
-      // `url(#id)`, which is never fetched.
-      const isRemote = (u, { sameDocFragment = false } = {}) => REMOTE_RE.test(u) || (hasRemoteBase && isRelative(u) && !(sameDocFragment && u.trim().startsWith('#')));
-      for (const tag of html.match(TAG_RE) || []) {
-        const name = /^<([a-zA-Z0-9]+)/.exec(tag)[1].toLowerCase();
-        const attrs = [];
-        if (['img', 'source', 'video', 'audio', 'track', 'image', 'input'].includes(name)) attrs.push('src');
-        if (name === 'img' || name === 'source') attrs.push('srcset');
-        if (name === 'video') attrs.push('poster');
-        if (name === 'image' || name === 'use') attrs.push('href', 'xlink:href');
-        if (name === 'link' && /\b(?:stylesheet|preload|icon|prefetch)\b/i.test(attrValue(tag, 'rel') ?? '')) attrs.push('href');
-        const sameDocFragment = name === 'use';
-        const urls = attrs.flatMap((a) => {
-          if (a === 'srcset') return srcsetUrls(attrValue(tag, a) ?? '');
-          return [urlValue(tag, a) ?? ''];
-        });
-        if (urls.some((u) => isRemote(u, { sameDocFragment }))) out.push(excerpt(tag));
-      }
-      // Only CSS-bearing content: <style> bodies and style="" values. A title or
-      // visible text that happens to contain url(...) is prose, not a request.
-      // Bodies are found by walking real tags, so `<style>` written inside a
-      // quoted attribute value is text, not an element.
-      const sources = [];
-      let open = null;
-      let isCss = false;
-      for (const m of html.matchAll(ANY_TAG_RE)) {
-        if (open === null && /^<style\b/i.test(m[0])) {
-          open = m.index + m[0].length;
-          // A style element with another type is not CSS; browsers ignore it.
-          const type = attrValue(m[0], 'type');
-          isCss = type === null || /^\s*(?:text\/css)?\s*$/i.test(type);
-        } else if (open !== null && /^<\/style\b/i.test(m[0])) {
-          if (isCss) sources.push(html.slice(open, m.index));
-          open = null;
-        }
-      }
-      for (const tag of html.match(TAG_RE) || []) {
-        const inline = attrValue(tag, 'style');
-        if (inline) sources.push(inline);
-      }
-      const css = sources.join('\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
-      for (const m of css.matchAll(/url\(\s*["']?\s*([^)"']*)/gi)) if (isRemote(m[1], { sameDocFragment: true })) out.push(excerpt(`url(${m[1]})`));
-      for (const m of css.matchAll(/@import\s*["']\s*([^"']*)/gi)) if (isRemote(m[1])) out.push(excerpt(`@import ${m[1]}`));
-      return out;
-    },
+    detect: (html) => remoteSubresources(html, 0, new URL(DOCUMENT_URL)),
   },
 ];
 
@@ -823,10 +875,7 @@ const RENDER_RULES = [
 export function renderLint(path) {
   const result = { ok: true, path, findings: [], error: null };
   try {
-    // Comments go, except inside a <style> body: there `<!--` and `-->` are raw
-    // CSS text (ignored tokens), and the rules between them are live. The
-    // alternation is leftmost-first, so a comment wrapping a <style> is stripped.
-    const html = readFileSync(path, 'utf-8').replace(/<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => (m.startsWith('<!--') ? ' ' : m));
+    const html = stripComments(readFileSync(path, 'utf-8'));
     for (const { id, rule, detect } of RENDER_RULES) {
       for (const detail of detect(html)) {
         result.findings.push({ id, rule, severity: 'warning', detail });
