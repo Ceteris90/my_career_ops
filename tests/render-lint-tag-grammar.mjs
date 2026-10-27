@@ -28,6 +28,37 @@ const SEPARATORS = [' ', ' ', ' ', '\t', '\n', '\f', ' ', '', '/', ' / ', '//']
 const NAME_CHARS = ['a', 'b', 'S', 'r', 'c', '=', '"', "'", '<', '/', '`', ' ', '-', '&', 'ON', '\u0000'];
 const VALUE_PIECES = ['a', 'b', 'A1', ' ', '=', '"', "'", '<', '>', '/', '&amp;', '&#58;', '&colon;', '&sol;', '&Tab;', '&NewLine;', '&#0;', '&#x41', '&#65', '&amp', '&lt', '&gt;', '&quot;', '&apos;', '&#1;', '&nbsp;', ' ', '`', '\n', '\t', '--', '!', 'https://e.test/a.png', '\u0000', '&', '&;', '&#;', '&#x;', '&AMP', '&ampx', '&amp=', '&#128;', '&#x9F;', '&#X41;', '&#xD800;', '&#x110000;', '&Amp;', '&amp;amp;', '&ampamp;', '&colon', '&sol', '&#x0;', '&#10;', '&#13;', '\r\n', '\r'];
 
+// Hand-picked tags, led by the case that mis-tokenised before: a quote opens a value only right
+// after `=`, so `alt=Jane's` is one unquoted value. Recorded with the generated ones.
+export const EXPLICIT_TAGS = [
+  ['an apostrophe inside an unquoted value is a value character (the reviewer case)', "<img alt=Jane's src=https://x/a.png>"],
+  ['a double quote inside an unquoted value', '<img alt=say"hi src=https://x/a.png>'],
+  ['the quote opens a value only right after =', '<a href=x"y z>'],
+  ['> inside a double-quoted value', '<img alt="a>b" src=x>'],
+  ['a double quote inside a single-quoted value', "<a href='x\"y'>"],
+  ['no space between two quoted attributes', '<a b="c"d="e">'],
+  ['a missing value at >', '<a b=>'],
+  ['a missing value before the next attribute', '<a b= c=d>'],
+  ['= starts an attribute name', '<a =b c>'],
+  ['quote, apostrophe, < and ` inside names', '<a "b=c \'d=e f<g=h i`j=k>'],
+  ['a slash inside a name and after an unquoted value', '<a b/c d=e/>'],
+  ['an unquoted value keeps its trailing slash', '<a href=x/>'],
+  ['a slash before the closing >', '<a b=c />'],
+  ['the first of two equal names wins', '<a b="c" b="d" B=e>'],
+  ['an unterminated double quote swallows the marker', '<a b="c>'],
+  ['an unterminated single quote swallows the marker', "<a b='c>"],
+  ['a NBSP is part of a tag name', '<a b=c>'],
+  ['a NBSP is part of an unquoted value', '<a b=c d>'],
+  ['a NUL becomes U+FFFD in a name and a value', '<a\u0000b c\u0000d=e\u0000f>'],
+  ['references: numeric without a semicolon, names with one', '<a b=&amp;&#58;&#x3a&colon;&sol;&Tab;&NewLine;>'],
+  ['legacy names decode with no semicolon unless an alphanumeric or = follows', '<a b=&amp&ampx&amp=1&lt&gt&quot&nbsp>'],
+  ['a C1 reference maps through windows-1252', '<a b=&#128;&#x9F;&#129;>'],
+  ['a leading control character stays in the value', '<a b=&#1;javascript:x>'],
+  ['uppercase names and values', '<IMG SRC=A.PNG ALT="X">'],
+  ['whitespace of every kind between attributes', '<a\tb=c\nd=e\ff=g>'],
+  ['a slash directly after the tag name', '<img/src=x/alt=y>'],
+].map(([note, html]) => ({ note, html: html + MARKER }));
+
 export function generateTags(count, seed) {
   const r = rng(seed);
   const pick = (list) => list[Math.floor(r() * list.length)];
