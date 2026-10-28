@@ -37,6 +37,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
+  REGISTER_CONTENT_API,
   REGISTER_FIXTURE,
   annotateCompanies,
   buildRegisterIndex,
@@ -53,6 +54,7 @@ import {
   parseTypeRating,
   pickRegisterCsvUrl,
   readCacheMeta,
+  refreshCache,
   resolveRegisterColumns,
 } from '../sponsor-check.mjs';
 
@@ -229,6 +231,23 @@ test('lookupSponsor: two entities with the same distinctive tokens are reported,
     r.candidates.map((o) => o.name).sort(),
     ['Northwind Robotics Holdings Ltd', 'Northwind Robotics Limited'],
   );
+});
+
+test('lookupSponsor: an exact name and another holder\'s suffix-trimmed name are both reported', () => {
+  // "Foo Bar" is one holder's whole name and "Foo Bar Ltd"'s trimmed key. The
+  // two hold different routes, so reporting either alone could give the wrong
+  // Skilled Worker answer.
+  const own = buildRegisterIndex(parseRegister([
+    'Organisation Name,Town/City,County,Type & Rating,Route',
+    'Foo Bar,Leeds,,Worker (A rating),Creative Worker',
+    'Foo Bar Ltd,York,,Worker (A rating),Skilled Worker',
+  ].join('\n')).organisations);
+  for (const [query, tier] of [['Foo Bar', 'exact'], ['Foo Bar (agency)', 'token']]) {
+    const r = lookupSponsor(own, query);
+    assert.equal(r.verdict, 'ambiguous', query);
+    assert.equal(r.matchTier, tier, query);
+    assert.deepEqual(r.candidates.map((o) => o.name).sort(), ['Foo Bar', 'Foo Bar Ltd'], query);
+  }
 });
 
 test('lookupSponsor: two same-named licence holders in different towns are both reported', () => {
@@ -478,6 +497,28 @@ test('fetchRegisterCsv: a redirect off GOV.UK is refused before it is requested'
     await assert.rejects(fetchRegisterCsv(`${ASSET}/x/reg.csv`, { fetchImpl }), /unexpected host/, location);
     assert.deepEqual(requested, [`${ASSET}/x/reg.csv`], `${location} must never be fetched`);
   }
+});
+
+test('refreshCache: after a redirect the cache names the file actually served', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'career-ops-sponsor-redirect-'));
+  const rows = Array.from({ length: 1200 }, (_, i) => `Org ${i} Ltd,London,,Worker (A rating),Skilled Worker`);
+  const csv = ['Organisation Name,Town/City,County,Type & Rating,Route', ...rows].join('\n');
+  const routes = {
+    [REGISTER_CONTENT_API]: () => Response.json({
+      public_updated_at: '2026-10-27T09:00:00Z',
+      details: { attachments: [{ url: `${ASSET}/old/Register_-_2026-10-23.csv`, content_type: 'text/csv', filename: 'Register_-_2026-10-23.csv' }] },
+    }),
+    [`${ASSET}/old/Register_-_2026-10-23.csv`]: () => new Response(null, { status: 301, headers: { location: `${ASSET}/new/Register_-_2026-10-27.csv` } }),
+    [`${ASSET}/new/Register_-_2026-10-27.csv`]: () => new Response(csv),
+  };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => routes[url]();
+  t.after(() => { globalThis.fetch = realFetch; rmSync(dir, { recursive: true, force: true }); });
+
+  const { meta } = await refreshCache({ cacheDir: dir, csvPath: join(dir, 'r.csv'), metaPath: join(dir, 'r.json') });
+  assert.equal(meta.sourceUrl, `${ASSET}/new/Register_-_2026-10-27.csv`);
+  assert.equal(meta.sourceFilename, 'Register_-_2026-10-27.csv');
+  assert.equal(meta.publishedAt, '2026-10-27T09:00:00Z', 'the publication date still comes from the Content API');
 });
 
 test('fetchRegisterCsv: a redirect loop gives up instead of following forever', async () => {

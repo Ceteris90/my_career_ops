@@ -561,22 +561,29 @@ export function lookupSponsor(index, company) {
   const tokens = companyTokens(query);
   const resolve = (ids) => [...new Set(ids)].map((id) => index.organisations[id]);
 
-  // Tier 1-2: exact identity. Several organisations under one key are two
-  // same-named licence holders, not a guess — both are reported.
-  const exact = resolve(index.byExactKey.get(normalizeCompany(query)) || []);
-  if (exact.length) return decide(base, exact, 'exact');
-
-  const tokenKey = resolve(index.byTokenKey.get(tokens.key) || []);
-  if (tokenKey.length) return decide(base, tokenKey, 'token');
-
+  // Tiers 1, 2 and 2b are all key EQUALITY, so they are pooled rather than
+  // tried in turn: "Foo Bar" is the exact name of one licence holder and the
+  // suffix-trimmed name of another ("Foo Bar Ltd"), and stopping at the first
+  // tier that hits would report one of two equally good matches as the
+  // answer. Several organisations here are reported, never picked between.
+  // The tier named is the strongest one that contributed a match.
+  //
+  // Tier 1: exact identity.
+  const exactIds = index.byExactKey.get(normalizeCompany(query)) || [];
+  // Tier 2: the same tokens, spaced or punctuated differently.
+  const tokenIds = index.byTokenKey.get(tokens.key) || [];
   // Tier 2b: the query spells a register name minus the legal suffix the
   // register always carries — "ElevenLabs" -> "Eleven Labs Ltd", "S&P Global"
-  // -> "S&P Global Limited". Still key EQUALITY, against a key built by
-  // dropping only trailing filler (see trimmedKeys); it runs before the
-  // short-token guard below precisely because "S&P Global" reduces to tokens
-  // of one and two letters and would otherwise never be compared at all.
-  const trimmedKey = resolve(index.byTrimmedKey.get(tokens.key) || []);
-  if (trimmedKey.length) return decide(base, trimmedKey, 'token-trimmed');
+  // -> "S&P Global Limited". Against a key built by dropping only trailing
+  // filler (see trimmedKeys); it runs before the short-token guard below
+  // precisely because "S&P Global" reduces to tokens of one and two letters
+  // and would otherwise never be compared at all.
+  const trimmedIds = index.byTrimmedKey.get(tokens.key) || [];
+  const equal = resolve([...exactIds, ...tokenIds, ...trimmedIds]);
+  if (equal.length) {
+    const tier = exactIds.length ? 'exact' : tokenIds.length ? 'token' : 'token-trimmed';
+    return decide(base, equal, tier);
+  }
 
   if (!tokens.distinctive.length) {
     return {
@@ -1024,7 +1031,8 @@ export async function refreshCache({ timeoutMs = 120_000, cacheDir = CACHE_DIR, 
   const meta = {
     fetchedAt: new Date().toISOString(),
     sourceUrl: csvUrl,
-    sourceFilename: source.filename,
+    // After a redirect the file served is not the one the Content API named.
+    sourceFilename: csvUrl === source.url ? source.filename : decodeURIComponent(new URL(csvUrl).pathname.split('/').pop()) || null,
     publishedAt: source.publishedAt,
     contentApi: REGISTER_CONTENT_API,
     registerPage: REGISTER_PAGE,
