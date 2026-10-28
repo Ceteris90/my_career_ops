@@ -247,6 +247,20 @@ try {
   if (cleanCsbLocation(undefined) === '' && cleanCsbLocation([]) === '') pass('cleanCsbLocation tolerates missing/empty location');
   else fail('cleanCsbLocation should return "" for missing/empty input');
 
+  // The jobs API appends a trailing comma ("City, Region, Country, ").
+  // clean() trims whitespace and leaves the comma, which is what the user sees.
+  // Interior commas and a trailing postal code stay.
+  const commaCases = [
+    [['Bend, OR, USA, '], 'Bend, OR, USA'],
+    [['Oslo, NOR,'], 'Oslo, NOR'],
+    [['Columbus, OH, USA,<br/>'], 'Columbus, OH, USA'],
+    [['Bend, OR, USA, ', 'Oslo, NOR,'], 'Bend, OR, USA / Oslo, NOR'],
+  ];
+  const commaBad = commaCases.filter(([raw, want]) => cleanCsbLocation(raw) !== want)
+    .map(([raw, want]) => `${JSON.stringify(raw)} => ${JSON.stringify(cleanCsbLocation(raw))} (wanted ${JSON.stringify(want)})`);
+  if (commaBad.length === 0) pass('cleanCsbLocation strips a trailing comma and keeps interior commas');
+  else fail(`cleanCsbLocation trailing comma: ${commaBad.join('; ')}`);
+
   // parseCsbJobs — map the {response:{…}} records; build {id}-{locale} URLs and
   // sanitize the cosmetic slug (HTML entities, URL-structural chars).
   const csbJson = {
@@ -267,6 +281,25 @@ try {
   else fail(`parseCsbJobs url wrong: ${JSON.stringify(c1 && c1.url)}`);
   if (c1 && c1.location === 'Anyang, KOR, 14058') pass('parseCsbJobs cleans jobLocationShort');
   else fail(`parseCsbJobs location wrong: ${JSON.stringify(c1 && c1.location)}`);
+  // A trailing comma is a location artifact. The same character in a title
+  // must survive, because titles go through clean() and locations do not
+  // share that trim.
+  const commaParsed = parseCsbJobs({
+    jobSearchResult: [{
+      response: {
+        id: '9001',
+        unifiedStandardTitle: 'Ops Lead,',
+        unifiedUrlTitle: 'Ops-Lead',
+        jobLocationShort: ['Bend, OR, USA, '],
+        unifiedStandardStart: '10/1/26',
+      },
+    }],
+  }, csbCfg, 'en_US');
+  if (commaParsed[0]?.location === 'Bend, OR, USA' && commaParsed[0]?.title === 'Ops Lead,') {
+    pass('parseCsbJobs strips a trailing location comma and leaves a title comma');
+  } else {
+    fail(`parseCsbJobs comma row: ${JSON.stringify(commaParsed[0])}`);
+  }
   if (c1 && c1.postedAt === Date.UTC(2026, 5, 18)) pass('parseCsbJobs sets postedAt from unifiedStandardStart');
   else fail(`parseCsbJobs postedAt wrong: ${JSON.stringify(c1 && c1.postedAt)}`);
   const c2 = csbJobs[1];
