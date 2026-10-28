@@ -6,6 +6,10 @@ license: MIT
 
 # gmail plugin
 
+LinkedIn job alerts do not need this plugin. Paste the email with
+`node linkedin-import.mjs`, or use the box on the dashboard. See
+`docs/LINKEDIN_JOBS.md`.
+
 Reads a Gmail label, extracts clean job URLs from authentic (DMARC-passing)
 emails, and returns them as leads. The engine writes them to the pipeline.
 
