@@ -11,11 +11,17 @@
  */
 export function normalizeToApplicationUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return rawUrl;
+
   try {
-    const parsed = new URL(rawUrl.trim());
+    const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed);
+    const candidate = hasProtocol ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(candidate);
+    const host = parsed.hostname.toLowerCase();
 
     // Ashby: https://jobs.ashbyhq.com/:company/:jobId -> /application
-    if (parsed.hostname.endsWith("ashbyhq.com")) {
+    if (/(^|\.)ashbyhq\.com$/.test(host)) {
       const parts = parsed.pathname.split("/").filter(Boolean);
       if (parts.length === 2 && parts[1] !== "application") {
         parsed.pathname = `/${parts[0]}/${parts[1]}/application`;
@@ -24,7 +30,7 @@ export function normalizeToApplicationUrl(rawUrl) {
     }
 
     // Lever: https://jobs.lever.co/:company/:jobId -> /apply
-    if (parsed.hostname.endsWith("lever.co")) {
+    if (/(^|\.)lever\.co$/.test(host)) {
       const parts = parsed.pathname.split("/").filter(Boolean);
       if (parts.length === 2 && parts[1] !== "apply") {
         parsed.pathname = `/${parts[0]}/${parts[1]}/apply`;
@@ -33,7 +39,7 @@ export function normalizeToApplicationUrl(rawUrl) {
     }
 
     // Workable: https://apply.workable.com/:company/j/:jobId -> /apply/
-    if (parsed.hostname.endsWith("workable.com")) {
+    if (/(^|\.)workable\.com$/.test(host)) {
       const parts = parsed.pathname.split("/").filter(Boolean);
       if (parts.length === 3 && parts[1] === "j" && parts[2] !== "apply") {
         parsed.pathname = `/${parts[0]}/j/${parts[2]}/apply`;
@@ -42,7 +48,7 @@ export function normalizeToApplicationUrl(rawUrl) {
     }
 
     // SmartRecruiters: https://jobs.smartrecruiters.com/:company/:jobId -> /apply
-    if (parsed.hostname.endsWith("smartrecruiters.com")) {
+    if (/(^|\.)smartrecruiters\.com$/.test(host)) {
       const parts = parsed.pathname.split("/").filter(Boolean);
       if (parts.length === 2 && parts[1] !== "apply") {
         parsed.pathname = `/${parts[0]}/${parts[1]}/apply`;
@@ -51,14 +57,14 @@ export function normalizeToApplicationUrl(rawUrl) {
     }
 
     // Greenhouse: boards.greenhouse.io/:company/jobs/:jobId -> #app
-    if (parsed.hostname.endsWith("greenhouse.io")) {
+    if (/(^|\.)greenhouse\.io$/.test(host)) {
       if (parsed.pathname.includes("/jobs/") && !parsed.hash) {
         parsed.hash = "app";
         return parsed.toString();
       }
     }
 
-    return parsed.toString();
+    return hasProtocol ? parsed.toString() : rawUrl;
   } catch {
     return rawUrl;
   }
