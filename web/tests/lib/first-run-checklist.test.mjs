@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cvReadiness } from "../../src/lib/cv/quality.ts";
-import { onboardingChecklist } from "../../src/lib/home/onboarding-checklist.mjs";
+import { onboardingChecklist, PREREQS } from "../../src/lib/home/onboarding-checklist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -80,6 +80,14 @@ test("compact mode still asks for a missing personalization file", () => {
   // The full list asks through its sections line instead, not twice.
   const full = onboardingChecklist({ missing: ["modes/_profile.md"], sections: SECTIONS });
   assert.deepEqual(full.asks, ["my personalization (deal breakers)"]);
+});
+
+test("checklist prereq keys match the doctor list", () => {
+  const doctor = readFileSync(join(root, "../doctor.mjs"), "utf8");
+  const block = doctor.match(/const USER_LAYER_PREREQS = \[([\s\S]*?)\n\];/);
+  assert.ok(block, "doctor.mjs still lists USER_LAYER_PREREQS");
+  const paths = [...block[1].matchAll(/path:\s*'([^']+)'/g)].map((match) => match[1]);
+  assert.deepEqual(PREREQS.map((item) => item.key), paths);
 });
 
 test("first-run home renders the compact checklist", () => {
