@@ -107,6 +107,7 @@ are defined:
   `experience_filter` is on in `portals.yml` (`jd-years.mjs`). `5+` and `3-5` are
   a required overall bar (ranges by their floor); `2/5+ by degree` lists
   degree-conditional bars; `2/5+` lists several required bars (the lowest decides);
+  `5+ or equivalent` is a bar the JD lets you meet another way (never drops);
   `pref 5+` and `skill 3+` are preferred-only or skill-specific figures that do not
   gate; `none stated` means the JD names no figure; `unread` means it could not be
   fetched. `… above band` marks a row above your band that `action: label` kept.

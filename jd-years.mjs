@@ -36,9 +36,9 @@
  *      the most lenient honest reading. Several bars that differ ("5+ years
  *      of software", "2+ years leading a team") are all required, so the real
  *      bar is at least the highest; gating on the lowest means a drop happens
- *      only when every one of them is out of reach. A JD read from a listing
- *      description cut at the provider's cap may be missing a lower bar
- *      (a degree alternative further down), so that reading never drops.
+ *      only when every one of them is out of reach. A bar with an
+ *      "equivalent combination" route, or read from a listing description
+ *      rather than the full JD, is shown but never drops.
  */
 
 import {
@@ -52,7 +52,6 @@ import {
 } from './browser-extract.mjs';
 import { resolveAtsApi, JD_TEXT_API_ATS, throttleProviderRequest } from './liveness-api.mjs';
 import { fetchJsonWithRetry, makeHttpCtx } from './providers/_http.mjs';
-import { DESCRIPTION_CAP } from './providers/_html-to-text.mjs';
 
 /**
  * @typedef {Object} YearsMention
@@ -61,6 +60,8 @@ import { DESCRIPTION_CAP } from './providers/_html-to-text.mjs';
  * @property {'required'|'preferred'} kind
  * @property {'overall'|'skill'|'degree-substitute'|'sub'} scope
  * @property {boolean} degreeAlt  One of several degree-conditional bars
+ * @property {boolean} [alternative] The JD offers another way to meet it
+ *   ("or an equivalent combination of education and experience")
  * @property {string} quote       The sentence it came from (trimmed)
  */
 
@@ -70,7 +71,8 @@ import { DESCRIPTION_CAP } from './providers/_html-to-text.mjs';
  *   stated: the JD names a required overall bar; the others carry no gate.
  * @property {number|null} min      Gating floor (lowest required overall floor)
  * @property {number|null} max      Upper bound when that bar is a range
- * @property {boolean} confident    The text was whole, so the lowest bar found is the lowest stated
+ * @property {boolean} confident    The lowest bar found is a hard bar: the text was the whole
+ *   JD and offers no "equivalent combination" route around it
  * @property {string} display       Compact form for the pipeline row
  * @property {YearsMention[]} mentions
  */
@@ -92,11 +94,15 @@ const MENTION_RE = new RegExp(
   + `[\\s-]*(years?|yrs?|months?)\\b`,
   'gi',
 );
-// "a year of experience", "one full year".
+// "a year of experience", "one full year". Only with experience named right
+// after it: "$100K a year, depending on experience" is pay, not a bar.
 const SINGLE_YEAR_RE = /\b(?:a|an|one)\s+(?:full\s+)?year\b/gi;
+const SINGLE_YEAR_TRAIL = /^(?:'s|')?(?:\s+(?:of\s+)?(?:[\w/&-]+\s+){0,3}?(?:experience|exp)\b|\s+(?:in|as|working|managing|leading)\b)/i;
 
 // What may follow "years" for the mention to be about experience.
-const EXPERIENCE_TRAIL = /^(?:'s|')?\s*(?:\+\s*)?(?:of\b|in\b|as\b|at\b|on\b|within\b|across\b|working|leading|managing|building|doing|designing|developing|running|owning|delivering|supporting|selling|practicing|practising|teaching|serving|consulting|operating|(?:[\w/&-]+\s+){1,3}(?:experience|exp)\b|experience|exp\b|professional|relevant|related|direct|hands|industry|work\b|progressive|combined|total|post|full[- ]time|practical|prior|previous|demonstrated|proven|minimum|min\b|or more|or greater|or longer|plus\b|\(|\)|,|;|:|\.|$|-|—|–|and\b|with\b|using\b|required|preferred)/i;
+// A dash counts only when spaced ("5+ years - required"): "a year-long
+// program" and "3-year plan" are not about the candidate.
+const EXPERIENCE_TRAIL = /^(?:\s+[-—–]|(?:'s|')?\s*(?:\+\s*)?(?:of\b|in\b|as\b|at\b|on\b|within\b|across\b|working|leading|managing|building|doing|designing|developing|running|owning|delivering|supporting|selling|practicing|practising|teaching|serving|consulting|operating|(?:[\w/&-]+\s+){1,3}(?:experience|exp)\b|experience|exp\b|professional|relevant|related|direct|hands|industry|work\b|progressive|combined|total|post|full[- ]time|practical|prior|previous|demonstrated|proven|minimum|min\b|or more|or greater|or longer|plus\b|\(|\)|,|;|:|\.|$|and\b|with\b|using\b|required|preferred))/i;
 // "years of X" where X makes it not about work experience.
 const NON_EXPERIENCE_OF = /^(?:'s|')?\s*of\s+(?:age|college|university|school|schooling|education|study|studies|service|history|data|operations?|growth|existence|tenure|employment with us)\b/i;
 // Words right before the number that make it a time window, not a requirement.
@@ -106,6 +112,10 @@ const NOT_A_REQUIREMENT = /\b(?:year[- ]over[- ]year|years? old|years? of age|ag
 // Company voice ("our team has 50 years of combined experience") with no
 // candidate-facing word in the sentence. Case-sensitive "us", so "a US
 // multinational" is not read as the company speaking.
+// Someone else's experience: "work alongside engineers with 10+ years",
+// "learn from mentors who have 15 years". Skipping it can only keep a row.
+const THIRD_PARTY_LEAD = /\b(?:engineers|experts|colleagues|peers|leaders|mentors|teammates|team members|veterans|specialists|founders|partners|advisors|people)\s+(?:with|who have|who bring|having)\s+(?:over\s+|more than\s+|a combined\s+|decades and\s+)?$/i;
+const THIRD_PARTY_SENTENCE = /\b(?:alongside|learn from|mentored by|surrounded by|led by)\b/i;
 const COMPANY_VOICE = /\b(?:[Ww]e|[Ww]e've|[Ww]e're|[Oo]ur|us)\b/;
 const CANDIDATE_VOICE = /\b(?:you|your|candidate|applicant|required|requirements?|minimum|must|should|ideal(?:ly)?|qualif\w*|looking for|seeking|need)\b/i;
 
@@ -122,10 +132,14 @@ const SUB_LEAD = /\b(?:including|incl\.?|of which|of those|of this|within that|w
 const DEGREE_TRAIL = /^(?:'s|')?\s*(?:\+\s*)?(?:of\s+(?:\w+\s+){0,2}?)?(?:experience\s+)?(?:with|and|plus|\+)\s+(?:an?\s+|the\s+)?(?:relevant\s+|related\s+)?(?:degree|bachelor|master|mba|ph\.?\s?d|doctorate|b\.?s\b|b\.?a\b|m\.?s\b|m\.?a\b|bsc|msc|advanced|graduate|undergraduate)/i;
 const SKILL_TRAIL = /^(?:'s|')?\s*(?:\+\s*)?(?:of\s+)?(?:(?:hands[- ]on|direct|professional|practical|relevant|production|commercial)\s+)?(?:experience\s+)?(?:with|using|programming|coding|writing|scripting)\b/i;
 
+// "or an equivalent combination of education and experience": the bar can
+// be met another way, so it is shown but never drops on its own.
+const EQUIVALENT_COMBINATION = /\bequivalent combination\b|\bor (?:an? )?equivalent (?:amount|level|mix) of\b|\bcombination of (?:education|training) and (?:work )?experience\b/i;
+
 const NO_EXPERIENCE_RE = /\bno (?:prior |previous )?(?:work |professional |industry )?experience (?:is )?(?:required|necessary|needed)\b/i;
 
 // Heading shapes: short, no year figure, and a recognisable section name.
-const PREFERRED_HEADING = /\b(?:prefer|nice[- ]to[- ]have|bonus|desir|plus|ideal|extra credit|stand out)/i;
+const PREFERRED_HEADING = /\b(?:prefer|nice[- ]to[- ]have|good[- ]to[- ]have|great[- ]to[- ]have|bonus|desir|plus|ideal|extra credit|stand out|even better|would be (?:great|nice)|great if|added advantage|differentiat)/i;
 const REQUIRED_HEADING = /\b(?:require|minimum|basic|must|qualif|what you(?:'ll)? (?:need|bring)|you (?:have|bring)|looking for|about you|who you are|experience|skills)/i;
 
 /** @param {string} raw */
@@ -195,13 +209,14 @@ function mentionKind(sentence, at, fallback) {
 function mentionsIn(sentence, sectionKind) {
   if (NOT_A_REQUIREMENT.test(sentence)) return [];
   if (COMPANY_VOICE.test(sentence) && !CANDIDATE_VOICE.test(sentence)) return [];
+  if (THIRD_PARTY_SENTENCE.test(sentence)) return [];
 
   /** @type {Array<YearsMention & {at: number, end: number}>} */
   const found = [];
   const consider = (/** @type {number} */ at, /** @type {number} */ end, /** @type {number} */ floor, /** @type {number|null} */ ceiling, /** @type {string} */ unit) => {
     const lead = sentence.slice(Math.max(0, at - 40), at);
     const trail = sentence.slice(end);
-    if (WINDOW_LEAD.test(lead)) return;
+    if (WINDOW_LEAD.test(lead) || THIRD_PARTY_LEAD.test(lead)) return;
     if (NON_EXPERIENCE_OF.test(trail)) return;
     const months = /^mo/i.test(unit);
     if (months && !/^(?:'s|')?\s*(?:of\s+)?(?:\w+\s+){0,3}?experience\b/i.test(trail)) return;
@@ -251,6 +266,7 @@ function mentionsIn(sentence, sectionKind) {
   for (const m of sentence.matchAll(SINGLE_YEAR_RE)) {
     const at = m.index ?? 0;
     if (found.some(f => at >= f.at && at < f.end)) continue;
+    if (!SINGLE_YEAR_TRAIL.test(sentence.slice(at + m[0].length))) continue;
     consider(at, at + m[0].length, 1, null, 'year');
   }
 
@@ -284,6 +300,8 @@ export function parseYearsRequirement(jd) {
   /** @type {'required'|'preferred'} */
   let section = 'required';
   let noExperience = false;
+  /** @type {YearsMention[]} */
+  let previous = [];
   for (const line of lines) {
     if (NO_EXPERIENCE_RE.test(line)) noExperience = true;
     const heading = headingKind(line);
@@ -292,7 +310,14 @@ export function parseYearsRequirement(jd) {
       continue;
     }
     for (const sentence of sentences(line)) {
-      mentions.push(...mentionsIn(sentence, section));
+      const found = mentionsIn(sentence, section);
+      if (EQUIVALENT_COMBINATION.test(sentence)) {
+        // Its own bars, or the ones just before it ("5+ years.\n- Or an
+        // equivalent combination ...").
+        for (const m of found.length ? found : previous) m.alternative = true;
+      }
+      mentions.push(...found);
+      if (found.length) previous = found;
     }
   }
 
@@ -320,7 +345,9 @@ export function parseYearsRequirement(jd) {
   if (floors.length > 1) {
     display = gating.every(m => m.degreeAlt) ? `${floors.join('/')}+ by degree` : `${floors.join('/')}+`;
   }
-  return { status: 'stated', min: lowest.floor, max: lowest.ceiling, confident: true, display, mentions };
+  const confident = !gating.some(m => m.alternative);
+  if (!confident) display = `${display} or equivalent`;
+  return { status: 'stated', min: lowest.floor, max: lowest.ceiling, confident, display, mentions };
 }
 
 /**
@@ -454,24 +481,26 @@ export async function fetchJdText(url, { boardCache, ctx = makeHttpCtx() } = {})
 /**
  * Read each offer's stated years and split the list by band.
  *
- * One JD request per offer at most, and none when the provider's listing
- * already carried the full description. A listing description at the
- * provider cap may be cut short of the qualifications, so it never drops.
- * Every failure keeps the offer. Order is preserved.
+ * One JD request per offer at most, through its ATS's public API. The full JD
+ * always wins over the listing's own description: a listing can carry a
+ * teaser or a capped excerpt that states a bar and leaves out the
+ * alternative or the "preferred" that follows it. So a reading taken from the
+ * listing (no JD API for the host, or the request failed) is shown but never
+ * drops. Every failure keeps the offer. Order is preserved.
  *
  * @template {{url: string, description?: string}} T
  * @param {T[]} offers
  * @param {{years: number, stretchYears: number, action: 'drop'|'label', concurrency: number}} filter
- * @param {{ fetchJd?: (url: string) => Promise<string|null>, descriptionCap?: number }} [deps]
+ * @param {{ fetchJd?: (url: string) => Promise<string|null>, onProgress?: (done: number, total: number) => void }} [deps]
  * @returns {Promise<{ kept: Array<T & {years: YearsVerdict}>, dropped: Array<T & {years: YearsVerdict}> }>}
  */
 export async function applyExperienceFilter(offers, filter, deps = {}) {
   const boardCache = new Map();
   const fetchJd = deps.fetchJd || (url => fetchJdText(url, { boardCache }));
-  const descriptionCap = deps.descriptionCap ?? DESCRIPTION_CAP;
   /** @type {Array<T & {years: YearsVerdict}>} */
   const annotated = new Array(offers.length);
   let cursor = 0;
+  let done = 0;
 
   async function worker() {
     while (cursor < offers.length) {
@@ -482,35 +511,24 @@ export async function applyExperienceFilter(offers, filter, deps = {}) {
       /** @type {YearsVerdict['source']} */
       let source = null;
       let error = null;
-      let truncated = false;
-      const listing = typeof offer.description === 'string' ? offer.description.trim() : '';
+      let text = null;
       try {
-        if (listing && listing.length < descriptionCap) {
-          req = parseYearsRequirement(listing);
-          source = 'listing';
-        } else {
-          const text = await fetchJd(offer.url);
-          if (text) {
-            req = parseYearsRequirement(text);
-            source = 'ats';
-          } else if (listing) {
-            req = parseYearsRequirement(listing);
-            source = 'listing';
-            truncated = true;
-          }
-        }
+        text = await fetchJd(offer.url);
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
-        if (listing) {
-          req = parseYearsRequirement(listing);
-          source = 'listing';
-          truncated = true;
-        }
       }
-      if (req && truncated) req = { ...req, confident: false };
+      const listing = typeof offer.description === 'string' ? offer.description.trim() : '';
+      if (text) {
+        req = parseYearsRequirement(text);
+        source = 'ats';
+      } else if (listing) {
+        req = { ...parseYearsRequirement(listing), confident: false };
+        source = 'listing';
+      }
       const verdict = classifyYears(req, filter);
       const label = formatYearsSegment(req, verdict).replace(/^yrs: /, '');
       annotated[i] = { ...offer, years: { req, verdict, source, error, label } };
+      deps.onProgress?.(++done, offers.length);
     }
   }
 

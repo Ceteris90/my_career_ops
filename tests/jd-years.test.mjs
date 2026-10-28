@@ -5,7 +5,10 @@
 // The property every section protects: a posting is dropped only for a clear,
 // required, overall bar above the band. Unknown, ambiguous, preferred-only,
 // skill-only and unread JDs are kept.
-import { pass, fail } from './helpers.mjs';
+import { pass, fail, warn, ROOT } from './helpers.mjs';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import assert from 'node:assert';
 import {
   parseYearsRequirement,
@@ -13,10 +16,10 @@ import {
   formatYearsSegment,
   resolveExperienceFilter,
   applyExperienceFilter,
+  fetchJdText,
 } from '../jd-years.mjs';
 import { formatPipelineOffer } from '../scan.mjs';
 import { extractLabels } from '../sync-batch-input.mjs';
-import { parseInbox } from '../web/src/lib/pipeline-table.mjs';
 
 const ok = async (name, fn) => {
   try { await fn(); pass(name); } catch (e) { fail(`${name} — ${e.message}`); }
@@ -93,6 +96,17 @@ const PARSE_CASES = [
   ['This is a 12-month contract', 'none', null, false, 'none stated'],
   ['Revenue grew 40% year-over-year for 3 years', 'none', null, false, 'none stated'],
   ['', 'none', null, false, 'none stated'],
+  // False-drop guards found in review
+  ['This is a year-long rotational program for new graduates', 'none', null, false, 'none stated'],
+  ['Pay is about $100K a year, depending on experience.', 'none', null, false, 'none stated'],
+  ['Join our 3-year rotational program; prior experience welcome', 'none', null, false, 'none stated'],
+  ["You'll work alongside engineers with 10+ years of experience", 'none', null, false, 'none stated'],
+  ['Learn from mentors who have 15 years in the industry.', 'none', null, false, 'none stated'],
+  ['Even better if you have:\n- 8+ years of experience in strategy', 'preferred-only', null, false, 'pref 8+'],
+  ['Bonus points:\n- 6 years in fintech', 'preferred-only', null, false, 'pref 6+'],
+  ['5+ years of experience, or an equivalent combination of education and experience', 'stated', 5, false, '5+ or equivalent'],
+  ['- 5+ years of relevant experience\n- Or an equivalent combination of education and experience', 'stated', 5, false, '5+ or equivalent'],
+  ['A year of experience in customer support', 'stated', 1, true, '1+'],
 ];
 
 await ok(`parser reads ${PARSE_CASES.length} real phrasings`, () => {
@@ -149,6 +163,11 @@ await ok('degree alternatives gate on the lowest bar', () => {
 await ok('several bars: in when the lowest is in reach, out only when every one is above', () => {
   assert.strictEqual(classifyYears(parseYearsRequirement('5+ years of experience; 2+ years leading a team'), band), 'in');
   assert.strictEqual(classifyYears(parseYearsRequirement('5+ years of experience in strategy; 9+ years in finance'), band), 'out');
+});
+
+await ok('an "equivalent combination" route keeps a bar above the band', () => {
+  const r = parseYearsRequirement('7+ years of experience, or an equivalent combination of education and experience');
+  assert.strictEqual(classifyYears(r, band), 'unknown');
 });
 
 await ok('unknown, preferred-only, skill-only and unread are never out', () => {
@@ -217,24 +236,86 @@ await ok('a failed or unsupported fetch keeps the offer as unread', async () => 
   assert.strictEqual(kept[0].years.error, 'HTTP 503');
 });
 
-await ok('a complete listing description is read without a request', async () => {
-  let calls = 0;
-  const { dropped } = await applyExperienceFilter([offer(7, { description: '8+ years of experience required.' })], filter, {
-    fetchJd: async () => { calls++; return null; },
-  });
-  assert.strictEqual(calls, 0);
-  assert.strictEqual(dropped.length, 1);
-});
-
-await ok('a listing description cut at the provider cap never drops', async () => {
-  const long = `8+ years of experience required. ${'x'.repeat(200)}`;
-  const { kept, dropped } = await applyExperienceFilter([offer(8, { description: long })], filter, {
-    descriptionCap: 100,
-    fetchJd: async () => { throw new Error('timeout'); },
+await ok('the full JD wins over the listing teaser', async () => {
+  const { kept, dropped } = await applyExperienceFilter([offer(7, { description: '8+ years of experience required.' })], filter, {
+    fetchJd: async () => 'Requirements: 2+ years of experience.',
   });
   assert.strictEqual(dropped.length, 0);
-  assert.strictEqual(kept[0].years.verdict, 'unknown');
-  assert.strictEqual(kept[0].years.label, '8+');
+  assert.strictEqual(kept[0].years.label, '2+');
+  assert.strictEqual(kept[0].years.source, 'ats');
+});
+
+await ok('a reading from the listing alone is shown but never drops', async () => {
+  for (const fetchJd of [async () => null, async () => { throw new Error('timeout'); }]) {
+    const { kept, dropped } = await applyExperienceFilter([offer(8, { description: '8+ years of experience required.' })], filter, { fetchJd });
+    assert.strictEqual(dropped.length, 0);
+    assert.strictEqual(kept[0].years.verdict, 'unknown');
+    assert.strictEqual(kept[0].years.label, '8+');
+    assert.strictEqual(kept[0].years.source, 'listing');
+  }
+});
+
+await ok('progress is reported once per offer', async () => {
+  const seen = [];
+  await applyExperienceFilter([offer(1), offer(4)], filter, {
+    fetchJd: async (url) => JDS[url],
+    onProgress: (done, total) => seen.push(`${done}/${total}`),
+  });
+  assert.deepStrictEqual(seen.sort(), ['1/2', '2/2']);
+});
+
+console.log('\njd-years — JD fetch');
+
+/** A transport stub: records each URL, answers from a map, throws for an Error value. */
+const stubCtx = (answers) => {
+  const calls = [];
+  return {
+    calls,
+    ctx: {
+      fetchJson: async (url) => {
+        calls.push(url);
+        const a = answers[url];
+        if (a instanceof Error) throw Object.assign(a, { status: 404 });
+        if (a === undefined) throw Object.assign(new Error(`unexpected ${url}`), { status: 404 });
+        return a;
+      },
+      sleep: async () => {},
+    },
+  };
+};
+
+await ok('Greenhouse asks for the content and returns the JD text', async () => {
+  const api = 'https://boards-api.greenhouse.io/v1/boards/acme/jobs/123?content=true';
+  const { ctx, calls } = stubCtx({ [api]: { title: 'Analyst', content: '&lt;p&gt;4+ years of experience&lt;/p&gt;' } });
+  const text = await fetchJdText('https://boards.greenhouse.io/acme/jobs/123', { ctx });
+  assert.deepStrictEqual(calls, [api]);
+  assert.match(String(text), /4\+ years of experience/);
+});
+
+await ok('Ashby reads the board once for every posting on it, and retries a failed board', async () => {
+  const api = 'https://api.ashbyhq.com/posting-api/job-board/acme';
+  const board = { jobs: [
+    { id: 'aaaaaaaa-0000-0000-0000-000000000001', title: 'A', descriptionPlain: '3+ years of experience' },
+    { id: 'aaaaaaaa-0000-0000-0000-000000000002', title: 'B', descriptionPlain: '6+ years of experience' },
+  ] };
+  const boardCache = new Map();
+  const { ctx, calls } = stubCtx({ [api]: board });
+  const a = await fetchJdText('https://jobs.ashbyhq.com/acme/aaaaaaaa-0000-0000-0000-000000000001', { ctx, boardCache });
+  const b = await fetchJdText('https://jobs.ashbyhq.com/acme/aaaaaaaa-0000-0000-0000-000000000002', { ctx, boardCache });
+  assert.strictEqual(calls.length, 1);
+  assert.match(String(a), /3\+ years/);
+  assert.match(String(b), /6\+ years/);
+
+  const failing = new Map();
+  const bad = stubCtx({ [api]: new Error('gone') });
+  await assert.rejects(fetchJdText('https://jobs.ashbyhq.com/acme/aaaaaaaa-0000-0000-0000-000000000001', { ctx: bad.ctx, boardCache: failing }));
+  assert.strictEqual(failing.size, 0, 'a failed board is not cached');
+});
+
+await ok('a host with no public JD API makes no request', async () => {
+  const { ctx, calls } = stubCtx({});
+  assert.strictEqual(await fetchJdText('https://careers.example.com/jobs/42', { ctx }), null);
+  assert.strictEqual(calls.length, 0);
 });
 
 await ok('action: label keeps an out-of-band offer and marks it', async () => {
@@ -264,9 +345,16 @@ await ok('a hostile label cannot add a column or a checkbox', () => {
   assert.ok(row.endsWith('| yrs: 5+ / x - \\[ \\] https://evil/1'), row);
 });
 
-await ok('pipeline readers treat `yrs:` as a label, not a location', () => {
+await ok('pipeline readers treat `yrs:` as a label, not a location', async () => {
   const line = '- [ ] https://x/3 | Acme | Analyst | yrs: 3-5 | note: keep';
   assert.deepStrictEqual(extractLabels(line.slice(6)), { yrs: '3-5', note: 'keep' });
+  // web/ is optional in a checkout (#3269), so its reader is loaded only when present.
+  const webReader = join(ROOT, 'web', 'src', 'lib', 'pipeline-table.mjs');
+  if (!existsSync(join(ROOT, 'web', 'src'))) {
+    warn('web/ not present in this checkout — skipping the web pipeline reader check');
+    return;
+  }
+  const { parseInbox } = await import(pathToFileURL(webReader).href);
   const [row] = parseInbox(`${line}\n`);
   assert.strictEqual(row.location, undefined);
   assert.strictEqual(row.company, 'Acme');

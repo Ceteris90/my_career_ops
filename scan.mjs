@@ -4800,7 +4800,12 @@ async function main() {
   let experienceDropped = [];
   if (experienceFilter.enabled && verifiedOffers.length > 0) {
     console.log(`\nReading stated years of experience for ${verifiedOffers.length} new offer(s)...`);
-    const { kept, dropped } = await applyExperienceFilter(verifiedOffers, experienceFilter);
+    // A first scan with the filter on can read hundreds of JDs; say how far along.
+    const { kept, dropped } = await applyExperienceFilter(verifiedOffers, experienceFilter, {
+      onProgress: (done, total) => {
+        if (done % PROGRESS_EVERY === 0 || done === total) process.stderr.write(`[${new Date().toTimeString().slice(0, 8)}] scan: ${done}/${total} JDs read\n`);
+      },
+    });
     verifiedOffers = kept;
     experienceDropped = dropped;
   }

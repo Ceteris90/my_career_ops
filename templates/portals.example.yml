@@ -422,16 +422,19 @@
 # Reads the years of experience each NEW posting's JD asks for, after every
 # other cut, and drops a posting only when the JD clearly states an overall
 # minimum above your band. Your years come from config/profile.yml
-# (candidate.years_of_experience). One JD request per new posting at most
-# (none when the board's listing already carries the full description), via
-# the ATS's public JSON API: Greenhouse, Lever, Ashby, Workday, SmartRecruiters,
-# Workable, Zoho Recruit. Zero LLM tokens.
+# (candidate.years_of_experience). One JD request per new posting at most, via
+# the ATS's public JSON API: Greenhouse, Lever, Ashby (one request per board),
+# Workday, SmartRecruiters, Workable, Zoho Recruit. Zero LLM tokens. Other hosts
+# fall back to the listing's own description, which is shown but never drops.
+# The first scan with this on reads every new posting's JD, so it runs longer.
 #
 # In band: the JD's minimum is <= your years + stretch_years. A range counts by
 # its floor ("3-5 years" is a 3), and "7 with a BS or 5 with an MS" by its
-# lowest bar. Never dropped, only labelled on the pipeline row (`yrs:`):
-# preferred-only and skill-specific figures ("2+ years of SQL"), bars that
-# disagree, JDs that state none, and JDs that could not be read.
+# lowest bar, and several required bars by the lowest. Never dropped, only
+# labelled on the pipeline row (`yrs:`): preferred-only and skill-specific
+# figures ("2+ years of SQL"), bars with an "equivalent combination of
+# education and experience" route, JDs that state none, and JDs that could
+# not be read.
 #
 # Independent of skip_tiers: that reads the title, this reads the JD. Use both
 # (skip_tiers drops interns cheaply, before any JD is fetched) or either.
