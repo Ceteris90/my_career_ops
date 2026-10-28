@@ -777,6 +777,15 @@ function selfTest() {
   assert(parseAmount('$123,684-$254,644 USD')?.mid === 189164, 'US range, symbol on both bounds, hyphen');
   assert(parseAmount('€80,000-€90,000')?.min === 80000, 'EUR range, symbol on both bounds');
   assert(parseAmount('$150,000')?.mid === 150000, 'single value with symbol still works');
+  assert(parseAmount('Annual Annual Salary Range: $165,000 - $190,000')?.mid === 177500, 'leading label before colon stripped');
+  assert(parseAmount('$204.4K – $352K • Offers Equity')?.mid === 278200, 'trailing bullet suffix stripped');
+  assert(parseAmount('$220,000 - $400,000 USD per year')?.mid === 310000, 'trailing cadence phrase + ISO code both stripped');
+  assert(parseAmount('$220,000 - $400,000 per year USD')?.mid === 310000, 'ISO code after the cadence phrase also stripped');
+  assert(parseAmount('$150,000 (note: negotiable)')?.mid === 150000, 'colon after the first digit is a note, not a label');
+  assert(parseAmount('€50,000 – €60,000 (Spain)')?.mid === 55000, 'trailing parenthetical scope note stripped');
+  assert(parseAmount('€4,000 – €5,000 (per month)') === null, 'parenthetical non-annual period fails closed');
+  assert(parseAmount('100k tax') === null, 'non-ISO trailing token is not a currency');
+  assert(parseAmount('Salary: €35.000 - €45.000')?.min === 35000 && parseAmount('Salary: €35.000 - €45.000')?.max === 45000, 'label stripped ahead of the separator logic');
   assert(parseAmount('€35.000 - €45.000')?.min === 35000 && parseAmount('€35.000 - €45.000')?.max === 45000, 'period-grouped range (#3174)');
   assert(parseAmount('40.000')?.mid === 40000, 'period-grouped single value (#3174)');
   assert(parseAmount('35.000 - 55.000')?.mid === 45000, 'period-grouped range, no currency symbol (#3174)');
