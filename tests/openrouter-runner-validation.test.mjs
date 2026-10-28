@@ -193,6 +193,23 @@ test('rejects evaluations missing essential blocks (e.g. Block A or Block B or B
   assert.equal(resG.reason, 'missing_block_G');
 });
 
+test('rejects misleading headings such as About and Background as block substitutes', () => {
+  const withAbout = VALID_EVALUATION.replace('## A) Role Summary', '## About the Role');
+  const resAbout = validateEvaluationResponse(withAbout);
+  assert.equal(resAbout.ok, false);
+  assert.equal(resAbout.reason, 'missing_block_A');
+
+  const withBackground = VALID_EVALUATION.replace('## B) Match with CV', '## Background');
+  const resBg = validateEvaluationResponse(withBackground);
+  assert.equal(resBg.ok, false);
+  assert.equal(resBg.reason, 'missing_block_B');
+
+  const withA1 = VALID_EVALUATION.replace('## A) Role Summary', '## A1 Role Summary');
+  const resA1 = validateEvaluationResponse(withA1);
+  assert.equal(resA1.ok, false);
+  assert.equal(resA1.reason, 'missing_block_A');
+});
+
 test('rejects evaluations without a score or decision', () => {
   const noScore = VALID_EVALUATION
     .replace(/\*\*Score:\*\* 4\.2\/5\n\*\*Decision:\*\* Apply/i, '')
@@ -282,14 +299,17 @@ test('callOpenRouter does not disk-blacklist models on timeout', async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), 'cops-timeout-test-'));
   const realFetch = globalThis.fetch;
   const realKey = process.env.OPENROUTER_API_KEY;
+  const origModel = process.env.CAREER_OPS_MODEL;
 
   try {
     process.env.CAREER_OPS_ROOT = dataRoot;
     process.env.OPENROUTER_API_KEY = 'test-key';
     process.env.CAREER_OPS_TIMEOUT_MS = '100'; // short timeout for testing
+    delete process.env.CAREER_OPS_MODEL; // ensure dynamic model rotation path is exercised
 
-    globalThis.fetch = async (url) => {
-      if (String(url).endsWith('/models')) {
+    globalThis.fetch = async (url, init = {}) => {
+      const u = String(url);
+      if (u.endsWith('/models')) {
         return {
           ok: true,
           status: 200,
@@ -298,16 +318,33 @@ test('callOpenRouter does not disk-blacklist models on timeout', async () => {
           }),
         };
       }
-      // Never resolve to trigger AbortController timeout
-      return new Promise((resolve) => setTimeout(resolve, 5000));
+      return new Promise((_, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          return reject(err);
+        }
+        signal?.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
     };
 
     const runnerUrl = `${pathToFileURL(join(ROOT, 'openrouter-runner.mjs')).href}?test=timeout-noblacklist`;
     const runner = await import(runnerUrl);
 
-    await assert.rejects(async () => {
-      await runner.callOpenRouter('system', 'user');
-    });
+    await assert.rejects(
+      async () => {
+        await runner.callOpenRouter('system', 'user');
+      },
+      (err) => {
+        assert.match(err.message, /Timeout after 0\.1s/);
+        return true;
+      }
+    );
 
     const blacklistFile = join(dataRoot, 'data', 'model-blacklist.json');
     assert.equal(existsSync(blacklistFile), false, 'Timeout should not write a blacklist file to disk');
@@ -316,6 +353,8 @@ test('callOpenRouter does not disk-blacklist models on timeout', async () => {
     globalThis.fetch = realFetch;
     if (realKey === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = realKey;
+    if (origModel === undefined) delete process.env.CAREER_OPS_MODEL;
+    else process.env.CAREER_OPS_MODEL = origModel;
     delete process.env.CAREER_OPS_ROOT;
     delete process.env.CAREER_OPS_TIMEOUT_MS;
     rmSync(dataRoot, { recursive: true, force: true });
@@ -343,9 +382,9 @@ test('cmdPipeline with { one: true } processes exactly one job without running s
     const initialPipeline = [
       '# Pipeline',
       '',
-      '- [ ] https://example.com/job-1 | Acme | Senior Backend Engineer',
-      '- [ ] https://example.com/job-2 | Beta | Full Stack Engineer',
-      '- [ ] https://example.com/job-3 | Gamma | DevOps Engineer',
+      '- [ ] https://jobs.test/job-1 | Acme | Senior Backend Engineer',
+      '- [ ] https://jobs.test/job-2 | Beta | Full Stack Engineer',
+      '- [ ] https://jobs.test/job-3 | Gamma | DevOps Engineer',
       '',
     ].join('\n');
     writeFileSync(join(dataDir, 'pipeline.md'), initialPipeline, 'utf-8');
@@ -362,7 +401,7 @@ test('cmdPipeline with { one: true } processes exactly one job without running s
           }),
         };
       }
-      if (u.includes('example.com/job-')) {
+      if (u.includes('jobs.test/job-')) {
         return {
           ok: true,
           status: 200,
@@ -415,9 +454,9 @@ test('cmdPipeline with { one: true } processes exactly one job without running s
 
     // Assert pipeline.md has only item 1 marked done, and items 2 & 3 remain pending
     const updatedPipeline = readFileSync(join(dataDir, 'pipeline.md'), 'utf-8');
-    assert.match(updatedPipeline, /- \[x\] https:\/\/example\.com\/job-1/);
-    assert.match(updatedPipeline, /- \[ \] https:\/\/example\.com\/job-2/);
-    assert.match(updatedPipeline, /- \[ \] https:\/\/example\.com\/job-3/);
+    assert.match(updatedPipeline, /- \[x\] https:\/\/jobs\.test\/job-1/);
+    assert.match(updatedPipeline, /- \[ \] https:\/\/jobs\.test\/job-2/);
+    assert.match(updatedPipeline, /- \[ \] https:\/\/jobs\.test\/job-3/);
   } finally {
     globalThis.fetch = realFetch;
     if (realKey === undefined) delete process.env.OPENROUTER_API_KEY;
@@ -473,6 +512,34 @@ test('MODEL_TIMEOUT_MS honors OPENROUTER_TIMEOUT_MS environment override', async
     const runnerUrl = `${pathToFileURL(join(ROOT, 'openrouter-runner.mjs')).href}?test=timeout-openrouter-${Date.now()}`;
     const runner = await import(runnerUrl);
     assert.equal(runner.MODEL_TIMEOUT_MS, 75000);
+  } finally {
+    if (origOps === undefined) delete process.env.CAREER_OPS_TIMEOUT_MS;
+    else process.env.CAREER_OPS_TIMEOUT_MS = origOps;
+    if (origOpenRouter === undefined) delete process.env.OPENROUTER_TIMEOUT_MS;
+    else process.env.OPENROUTER_TIMEOUT_MS = origOpenRouter;
+  }
+});
+
+test('MODEL_TIMEOUT_MS falls back to 120000ms on invalid or non-positive environment overrides', async () => {
+  const origOps = process.env.CAREER_OPS_TIMEOUT_MS;
+  const origOpenRouter = process.env.OPENROUTER_TIMEOUT_MS;
+  delete process.env.OPENROUTER_TIMEOUT_MS;
+
+  const invalidValues = ['abc', '-500', '0', 'NaN', 'Infinity'];
+  try {
+    for (const val of invalidValues) {
+      process.env.CAREER_OPS_TIMEOUT_MS = val;
+      const runnerUrl = `${pathToFileURL(join(ROOT, 'openrouter-runner.mjs')).href}?test=timeout-invalid-${encodeURIComponent(val)}-${Date.now()}`;
+      const runner = await import(runnerUrl);
+      assert.equal(runner.MODEL_TIMEOUT_MS, 120000, `Expected 120000 fallback for value: "${val}", got: ${runner.MODEL_TIMEOUT_MS}`);
+    }
+
+    // Invalid CAREER_OPS_TIMEOUT_MS falls back to valid OPENROUTER_TIMEOUT_MS
+    process.env.CAREER_OPS_TIMEOUT_MS = 'not-a-number';
+    process.env.OPENROUTER_TIMEOUT_MS = '85000';
+    const runnerUrl = `${pathToFileURL(join(ROOT, 'openrouter-runner.mjs')).href}?test=timeout-fallback-openrouter-${Date.now()}`;
+    const runner = await import(runnerUrl);
+    assert.equal(runner.MODEL_TIMEOUT_MS, 85000);
   } finally {
     if (origOps === undefined) delete process.env.CAREER_OPS_TIMEOUT_MS;
     else process.env.CAREER_OPS_TIMEOUT_MS = origOps;

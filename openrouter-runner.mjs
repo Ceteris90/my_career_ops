@@ -72,10 +72,16 @@ const OPENROUTER_API_URL    = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const MAX_TOKENS            = 8192;
 const RATE_LIMIT_DELAY_MS   = 2500;  // pause between requests on free tier
-const MODEL_TIMEOUT_MS = parseInt(
-  process.env.CAREER_OPS_TIMEOUT_MS || process.env.OPENROUTER_TIMEOUT_MS || '120000',
-  10
-);
+const DEFAULT_MODEL_TIMEOUT_MS = 120_000;
+const parseTimeoutOverride = (val) => {
+  if (!val) return null;
+  const parsed = Number.parseInt(val, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+const MODEL_TIMEOUT_MS =
+  parseTimeoutOverride(process.env.CAREER_OPS_TIMEOUT_MS) ??
+  parseTimeoutOverride(process.env.OPENROUTER_TIMEOUT_MS) ??
+  DEFAULT_MODEL_TIMEOUT_MS;
 
 // ---------------------------------------------------------------------------
 // Quota & response validation errors
@@ -169,13 +175,13 @@ export function validateEvaluationResponse(content) {
 
   // 7. Require essential sections from the A-G evaluation format
   const blocks = [
-    ['A', /(?:^|\n)#{1,4}\s*(?:A[).:-]?\s*|Block A\b|Role Summary\b)/im],
-    ['B', /(?:^|\n)#{1,4}\s*(?:B[).:-]?\s*|Block B\b|Match with CV\b|CV Match\b)/im],
-    ['C', /(?:^|\n)#{1,4}\s*(?:C[).:-]?\s*|Block C\b|Level and Strategy\b)/im],
-    ['D', /(?:^|\n)#{1,4}\s*(?:D[).:-]?\s*|Block D\b|Comp and Demand\b)/im],
-    ['E', /(?:^|\n)#{1,4}\s*(?:E[).:-]?\s*|Block E\b|Customization Plan\b|Personalization Plan\b|Tailoring Plan\b)/im],
-    ['F', /(?:^|\n)#{1,4}\s*(?:F[).:-]?\s*|Block F\b|Interview Plan\b)/im],
-    ['G', /(?:^|\n)#{1,4}\s*(?:G[).:-]?\s*|Block G\b|Posting Legitimacy\b|Legitimacy\b)/im],
+    ['A', /(?:^|\n)#{1,4}\s*(?:A(?![A-Za-z0-9])[).:-]?\s*|Block A\b|Role Summary\b)/im],
+    ['B', /(?:^|\n)#{1,4}\s*(?:B(?![A-Za-z0-9])[).:-]?\s*|Block B\b|Match with CV\b|CV Match\b)/im],
+    ['C', /(?:^|\n)#{1,4}\s*(?:C(?![A-Za-z0-9])[).:-]?\s*|Block C\b|Level and Strategy\b)/im],
+    ['D', /(?:^|\n)#{1,4}\s*(?:D(?![A-Za-z0-9])[).:-]?\s*|Block D\b|Comp and Demand\b)/im],
+    ['E', /(?:^|\n)#{1,4}\s*(?:E(?![A-Za-z0-9])[).:-]?\s*|Block E\b|Customization Plan\b|Personalization Plan\b|Tailoring Plan\b)/im],
+    ['F', /(?:^|\n)#{1,4}\s*(?:F(?![A-Za-z0-9])[).:-]?\s*|Block F\b|Interview Plan\b)/im],
+    ['G', /(?:^|\n)#{1,4}\s*(?:G(?![A-Za-z0-9])[).:-]?\s*|Block G\b|Posting Legitimacy\b|Legitimacy\b)/im],
   ];
 
   for (const [letter, pattern] of blocks) {
