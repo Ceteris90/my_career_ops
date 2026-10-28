@@ -46,6 +46,8 @@ function canonicalizeSeparators(numStr) {
   return numStr.replace(grouped, '$1').replace(sep, '.');
 }
 
+const ISO_4217_CODES = new Set(Intl.supportedValuesOf('currency'));
+
 /**
  * Parse a written amount or range into numbers. Annual suffixes and currency
  * tokens are stripped, never interpreted: the currency is the caller's to
@@ -61,10 +63,20 @@ export function parseAmount(raw) {
   // Strings copied verbatim from a JD carry a leading label ("Annual Salary
   // Range: $165,000 - $190,000") and a trailing bullet suffix ("$204.4K -
   // $352K • Offers Equity"). Both are dropped before anything below reads the
-  // number, so the separator logic only ever sees the amount itself.
-  const lastColon = s.lastIndexOf(':');
-  if (lastColon !== -1) s = s.slice(lastColon + 1).trim();
+  // number, so the separator logic only ever sees the amount itself. Only a
+  // colon BEFORE the first digit is a label: one after it belongs to a note
+  // ("$150,000 (note: negotiable)"), and cutting there would drop the amount.
+  const firstDigit = s.search(/\d/);
+  const labelColon = firstDigit === -1 ? -1 : s.lastIndexOf(':', firstDigit);
+  if (labelColon !== -1) s = s.slice(labelColon + 1).trim();
   s = s.split('•')[0].trim();
+  // A trailing parenthetical note carries no figure ("(note: negotiable)",
+  // "(Spain)"), unless it names a non-annual period ("(per month)"): that one
+  // stays, so the string fails closed instead of yielding a monthly figure.
+  s = s.replace(/\s*\(([^()\d]*)\)\s*$/, (note, inner) => {
+    const period = compensationPeriod(inner);
+    return period && period !== 'annual' ? note : '';
+  }).trim();
   // Keep period recognition separate from amount parsing, but allow an explicit
   // annual suffix to coexist with the numeric value.
   // It may appear on either side of a trailing currency token ("60k CAD per
@@ -74,12 +86,14 @@ export function parseAmount(raw) {
   const stripAnnual = (value) => value.replace(/\s*(?:\/\s*(?:year|yr)|per\s+(?:year|annum)|annual(?:ly)?|yearly)\s*$/i, '').trim();
   s = stripAnnual(s);
   // Strip currency symbols anywhere (US pay-transparency ranges often repeat the
-  // symbol on both bounds: "$123,684—$254,644 USD") and a trailing 3-letter
-  // ISO-4217-style alpha token (any case — "450k SEK", "80-90k eur"). Exactly
-  // three letters, so the lone "k" magnitude suffix ("80k") is never eaten, and
-  // prose ("competitive") still fails the numeric match below even after losing
-  // its last three letters.
-  s = s.replace(/[€$£¥]/g, '').replace(/\s*[A-Za-z]{3}\s*$/, '').trim();
+  // symbol on both bounds: "$123,684—$254,644 USD") and a trailing ISO-4217
+  // code (any case — "450k SEK", "80-90k eur"). Only a real code is stripped:
+  // any three letters would turn "100k tax" into 100k, a qualifier read as
+  // salary data. A three-letter token also never eats the lone "k" magnitude
+  // suffix ("80k").
+  s = s.replace(/[€$£¥]/g, '')
+    .replace(/\s*([A-Za-z]{3})\s*$/, (token, code) => (ISO_4217_CODES.has(code.toUpperCase()) ? '' : token))
+    .trim();
   s = stripAnnual(s);
   const toNum = (numStr, kFlag) => {
     const n = parseFloat(canonicalizeSeparators(numStr));
