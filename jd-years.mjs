@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * jd-years.mjs — the years of experience a job description asks for, and
- * whether that is within reach of the candidate (#TBD).
+ * whether that is within reach of the candidate (#6153).
  *
  * Titles say little about this. "Lead" roles ask for four years and plain
  * "Analyst" roles ask for ten, so skip_tiers (classify-tier.mjs, which reads
