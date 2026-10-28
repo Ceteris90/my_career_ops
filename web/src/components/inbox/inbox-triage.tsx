@@ -12,6 +12,7 @@ import { FacetChips } from "./facet-chips";
 import { TriageRow, type RowScore } from "./triage-row";
 import { ShortlistTray, type ShortItem } from "./shortlist-tray";
 import { cn } from "@/lib/cn";
+import { inboxScoreTarget } from "@/lib/inbox-score-target.mjs";
 import { estimateRunCost } from "@/lib/run-cost-estimate.mjs";
 import { createInboxSkipActions, queueInboxSkip } from "@/lib/inbox-skip-client.mjs";
 import { CONFIG_KEY, subscribeConfig } from "@/lib/config-events.mjs";
@@ -32,6 +33,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const skipChain = useRef(new Map<string, Promise<void>>());
   const undoRunning = useRef(new Set<UndoNotice["fn"]>());
   const restoreRunning = useRef(false);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   // facets
   const [within, setWithin] = useState<number | null>(null);
@@ -166,8 +168,23 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
 
   const anyFacet = within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
-  const visible = capped ? ordered.slice(0, BATCH) : ordered;
+  const visible = useMemo(() => capped ? ordered.slice(0, BATCH) : ordered, [capped, ordered]);
   const hiddenCount = hidden.length;
+
+  const selectable = useMemo(() => visible.filter(({ job }) => !inboxScoreTarget(scoreByUrl.get(job.url)).evaluated), [visible, scoreByUrl]);
+  const allShownSelected = selectable.length > 0 && selectable.every(({ job }) => selected.has(job.url));
+  const someShownSelected = selectable.some(({ job }) => selected.has(job.url));
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someShownSelected && !allShownSelected;
+  }, [allShownSelected, someShownSelected]);
+  // Selection follows the shown, scoreable rows when filters or workers change.
+  useEffect(() => {
+    const eligible = new Set(selectable.map(({ job }) => job.url));
+    setSelected(current => {
+      const next = new Set([...current].filter(url => eligible.has(url)));
+      return next.size === current.size ? current : next;
+    });
+  }, [selectable]);
 
   const isShortlisted = (url: string) => shortlist.some((s) => s.url === url);
 
@@ -236,9 +253,12 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     });
   const saveSelected = () => {
     const add = enriched
-      .filter((e) => selected.has(e.job.url) && !isShortlisted(e.job.url))
-      .map((e) => ({ url: e.job.url, company: e.job.company, role: e.job.role }));
-    if (add.length) setShortlist((s) => [...s, ...add]);
+      .filter(({ job }) => selected.has(job.url) && !inboxScoreTarget(scoreByUrl.get(job.url)).evaluated)
+      .map(({ job }) => ({ url: job.url, company: job.company, role: job.role }));
+    setShortlist(current => {
+      const saved = new Set(current.map(item => item.url));
+      return [...current, ...add.filter(item => { if (saved.has(item.url)) return false; saved.add(item.url); return true; })];
+    });
     setSelected(new Set());
   };
 
@@ -280,10 +300,16 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       />
 
       {/* batch header: fresh slice by default, or the full filtered set */}
-      <div className="mt-4 flex items-baseline justify-between gap-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 text-xs text-muted max-sm:min-h-11">
+            <input ref={selectAllRef} type="checkbox" aria-label="Select all shown jobs" checked={allShownSelected} disabled={!loaded || selectable.length === 0} onChange={() => setSelected(allShownSelected ? new Set() : new Set(selectable.map(({ job }) => job.url)))} className="size-4 accent-brand disabled:opacity-50" />
+            Select all shown <span className="text-faint tabular-nums">({selectable.length})</span>
+          </label>
         <p className="text-sm font-medium text-foreground">
           {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
         </p>
+        </div>
         {hiddenCount > 0 && (
           <button type="button" onClick={() => void restoreHidden()} disabled={restoring} aria-busy={restoring} className="text-xs text-faint transition-colors hover:text-foreground disabled:opacity-50 max-sm:min-h-[44px]">
             {hiddenCount} hidden · {restoring ? "restoring…" : "restore"}

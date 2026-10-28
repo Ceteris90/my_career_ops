@@ -44,6 +44,7 @@ process.env.TMPDIR = fs.realpathSync(os.tmpdir());
 // "disposable data" get blank: no tracker, and the fictional cv.md
 // assistant-focus needs.
 const SUITES = {
+  "inbox-select-all": { url: "INBOX_SELECT_TEST_URL", root: "INBOX_SELECT_TEST_ROOT", fixture: "inbox-undo" },
   "analytics-views": { url: "ANALYTICS_TEST_URL", root: "ANALYTICS_TEST_ROOT", fixture: "pipeline-status" },
   "apply-field-accessibility": { url: "APPLY_FIELDS_TEST_URL", fixture: "blank" },
   "assistant-confirmation-accessibility": { url: "ASSISTANT_CONFIRM_TEST_URL", fixture: "blank" },
