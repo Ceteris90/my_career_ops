@@ -189,9 +189,13 @@ await ok('off unless experience_filter is present and not disabled', () => {
   assert.deepStrictEqual(resolveExperienceFilter({ enabled: false }, 5), { enabled: false });
 });
 
-await ok('on with profile years and defaults', () => {
+await ok('on with profile years and defaults (action defaults to label)', () => {
   assert.deepStrictEqual(resolveExperienceFilter({ enabled: true }, 5),
-    { enabled: true, years: 5, stretchYears: 1, action: 'drop', concurrency: 4 });
+    { enabled: true, years: 5, stretchYears: 1, action: 'label', concurrency: 4 });
+  assert.strictEqual(resolveExperienceFilter({ action: 'drop' }, 5).action, 'drop');
+  // Only an explicit `drop` removes rows: a typo or any other value labels.
+  assert.strictEqual(resolveExperienceFilter({ action: 'Drop' }, 5).action, 'label');
+  assert.strictEqual(resolveExperienceFilter({ action: true }, 5).action, 'label');
   assert.deepStrictEqual(resolveExperienceFilter({ years: 3, stretch_years: 0, action: 'label', concurrency: 2 }, 9),
     { enabled: true, years: 3, stretchYears: 0, action: 'label', concurrency: 2 });
 });
@@ -324,6 +328,16 @@ await ok('action: label keeps an out-of-band offer and marks it', async () => {
   });
   assert.strictEqual(dropped.length, 0);
   assert.strictEqual(kept[0].years.label, '6+ above band');
+});
+
+await ok('a block with no action keeps out-of-band offers (label is the default)', async () => {
+  const resolved = resolveExperienceFilter({ enabled: true, stretch_years: 0 }, 3);
+  if (!resolved.enabled) throw new Error('filter should be on');
+  const { kept, dropped } = await applyExperienceFilter([offer(1), offer(2)], resolved, {
+    fetchJd: async (url) => JDS[url],
+  });
+  assert.strictEqual(dropped.length, 0);
+  assert.deepStrictEqual(kept.map(o => o.years.label), ['2-4', '6+ above band']);
 });
 
 console.log('\njd-years — pipeline row');

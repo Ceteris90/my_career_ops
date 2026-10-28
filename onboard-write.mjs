@@ -40,7 +40,7 @@ const USAGE = `
       "countries": ["United States"],
       "cities": ["Berlin"],
       "max_posting_age_days": 45,
-      "experience_filter"?: { "stretch_years"?: 1, "action"?: "drop" | "label" }
+      "experience_filter"?: { "stretch_years"?: 1, "action"?: "label" | "drop" }
     }
   }
 `;
@@ -121,7 +121,7 @@ export function normalizeAnswers(raw) {
     if (typeof stretch !== 'number' || !Number.isFinite(stretch) || stretch < 0 || stretch > 60) {
       throw new AnswerError('portals.experience_filter.stretch_years must be a number from 0 to 60');
     }
-    const action = opts.action ?? 'drop';
+    const action = opts.action ?? 'label';
     if (action !== 'drop' && action !== 'label') throw new AnswerError('portals.experience_filter.action must be drop or label');
     experienceFilter = { stretch_years: stretch, action };
   }

@@ -420,8 +420,10 @@
 
 # -- Experience filter (optional, off unless set) --
 # Reads the years of experience each NEW posting's JD asks for, after every
-# other cut, and drops a posting only when the JD clearly states an overall
-# minimum above your band. Your years come from config/profile.yml
+# other cut, and marks a posting `above band` when the JD clearly states an
+# overall minimum above your band. By default nothing is dropped: a wrong drop
+# silently costs you a real job, a wrong label costs one glance at a row. Set
+# `action: drop` to remove those postings instead. Your years come from config/profile.yml
 # (candidate.years_of_experience). One JD request per new posting at most, via
 # the ATS's public JSON API: Greenhouse, Lever, Ashby (one request per board),
 # Workday, SmartRecruiters, Workable, Zoho Recruit. Zero LLM tokens. Other hosts
@@ -442,12 +444,13 @@
 # experience_filter:
 #   enabled: true
 #   stretch_years: 1     # how far above your years a JD's minimum may go (default 1)
-#   action: drop         # drop | label (label keeps every row, marking `above band`)
+#   action: label        # label (default: keep every row, mark `above band`) | drop
 #   # years: 4           # overrides candidate.years_of_experience for scanning
 #   # concurrency: 4     # parallel JD requests (1-16)
 #
 # Example, strict: 3 years, stretch_years: 0 keeps "2-4" and "3-5" (floors 2
-# and 3) and drops "4+", "5-7" and "5+".
+# and 3) and marks "4+", "5-7" and "5+" above band (or drops them with
+# `action: drop`).
 
 # -- Title filter --
 # The scanner uses these keywords to decide if a title is relevant.

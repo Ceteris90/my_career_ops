@@ -8,7 +8,9 @@
  * the title) cannot answer it. The number is in the JD body, and this module
  * reads it there: rules only, no LLM, so the scanner stays zero-token.
  *
- * The one rule everything below serves: a posting is dropped only when the JD
+ * Nothing is dropped unless `action: drop` is set; by default an out-of-band
+ * posting is kept and marked `above band`. With `drop` on, the one rule
+ * everything below serves: a posting is dropped only when the JD
  * states a clear overall requirement and even its lowest reading is out of
  * reach. Everything else (no statement, a preferred-only or skill-only figure,
  * bars that disagree, a JD that could not be read) is kept and labelled. A
@@ -398,7 +400,9 @@ export function resolveExperienceFilter(block, profileYears) {
   }
   const stretch = cfg.stretch_years ?? 1;
   const stretchYears = typeof stretch === 'number' && Number.isFinite(stretch) && stretch >= 0 ? stretch : 1;
-  const action = cfg.action === 'label' ? 'label' : 'drop';
+  // `label` unless `drop` is asked for: a wrong drop silently costs a real job,
+  // a wrong label costs one glance at a row.
+  const action = cfg.action === 'drop' ? 'drop' : 'label';
   const conc = cfg.concurrency;
   const concurrency = Number.isInteger(conc) && /** @type {number} */ (conc) >= 1 && /** @type {number} */ (conc) <= 16 ? /** @type {number} */ (conc) : 4;
   return { enabled: true, years, stretchYears, action, concurrency };

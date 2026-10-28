@@ -382,13 +382,26 @@ test('years of experience and experience_filter are written when given', () => {
   const answers = {
     ...ANSWERS,
     candidate: { ...ANSWERS.candidate, years_of_experience: 4 },
-    portals: { ...ANSWERS.portals, experience_filter: { stretch_years: 0, action: 'label' } },
+    portals: { ...ANSWERS.portals, experience_filter: { stretch_years: 0, action: 'drop' } },
   };
   const { dir, res, read } = run(answers);
   try {
     assert.equal(res.status, 0, describeSpawn(res));
     assert.equal(yaml.load(read('config/profile.yml')).candidate.years_of_experience, 4);
-    assert.deepEqual(yaml.load(read('portals.yml')).experience_filter, { enabled: true, stretch_years: 0, action: 'label' });
+    assert.deepEqual(yaml.load(read('portals.yml')).experience_filter, { enabled: true, stretch_years: 0, action: 'drop' });
+  } finally { cleanup(dir); }
+});
+
+test('experience_filter with no action is written as label', () => {
+  const answers = {
+    ...ANSWERS,
+    candidate: { ...ANSWERS.candidate, years_of_experience: 4 },
+    portals: { ...ANSWERS.portals, experience_filter: {} },
+  };
+  const { dir, res, read } = run(answers);
+  try {
+    assert.equal(res.status, 0, describeSpawn(res));
+    assert.deepEqual(yaml.load(read('portals.yml')).experience_filter, { enabled: true, stretch_years: 1, action: 'label' });
   } finally { cleanup(dir); }
 });
 
