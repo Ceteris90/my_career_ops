@@ -62,15 +62,21 @@ writeFileSync(join(code, 'data', 'pdf-index.tsv'), '', 'utf-8');
 
 const cvDoc = (bullet) => `<!doctype html>\n<html>\n  <body>\n    <main><h1>Jordan Example</h1><p>${bullet}</p></main>\n  </body>\n</html>\n`;
 // The two cv.md files disagree on the one number the CV claims.
-writeFileSync(join(code, 'cv.md'), '# Jordan Example\n\n- Led a team of 40 engineers.\n', 'utf-8');
+const DATA_CV = '# Jordan Example\n\n- Led a team of 40 engineers.\n';
 const WORKSPACE_CV = '# Jordan Example\n\n- Led a team of 4 engineers.\n';
 writeFileSync(join(workspace, 'inflated.html'), cvDoc('Led a team of 40 engineers.'), 'utf-8');
 writeFileSync(join(workspace, 'honest.html'), cvDoc('Led a team of 4 engineers.'), 'utf-8');
 
-function render(input) {
+function resetFactFixtures() {
+  writeFileSync(join(code, 'cv.md'), DATA_CV, 'utf-8');
+  writeFileSync(join(workspace, 'cv.md'), WORKSPACE_CV, 'utf-8');
+  for (const root of [code, workspace]) fsRmSync(join(root, 'config'), { recursive: true, force: true });
+}
+
+function render(input, flags = []) {
   const output = join(workspace, 'output', input.replace(/\.html$/, '.pdf'));
   fsRmSync(output, { force: true });
-  const result = spawnSync(NODE, [script, join(workspace, input), output], {
+  const result = spawnSync(NODE, [script, join(workspace, input), output, ...flags], {
     cwd: code,
     encoding: 'utf-8',
     timeout: 30_000,
@@ -82,7 +88,7 @@ function render(input) {
 console.log('\ngenerate-pdf — the fact gate reads the workspace it renders for');
 
 try {
-  writeFileSync(join(workspace, 'cv.md'), WORKSPACE_CV, 'utf-8');
+  resetFactFixtures();
 
   // The other direction of the same split: checked against the data root's
   // cv.md ("40"), the honest "4" was blocked as an invented metric.
@@ -94,6 +100,7 @@ try {
   }
 
   // THE BUG: the gate read the data root's cv.md ("40") and passed.
+  resetFactFixtures();
   const inflated = render('inflated.html');
   if (inflated.status !== 0 && !inflated.rendered && /Fact check failed for inflated\.html/.test(inflated.output)) {
     pass('a number absent from the workspace cv.md is blocked, though the data root cv.md has it');
@@ -101,6 +108,7 @@ try {
     fail(`inflated CV against the workspace cv.md: status=${inflated.status} rendered=${inflated.rendered}\n${inflated.output.trim()}`);
   }
 
+  resetFactFixtures();
   fsRmSync(join(workspace, 'cv.md'));
   const unchecked = render('honest.html');
   const notice = `Fact check did not run: no cv.md at ${join(workspace, 'cv.md')}`;
@@ -108,6 +116,50 @@ try {
     pass('with no workspace cv.md the render says the gate did not run');
   } else {
     fail(`no workspace cv.md: expected "${notice}"\n${unchecked.output.trim()}`);
+  }
+
+  // The required-source path must add its requirement to the same workspace
+  // inputs, without falling back to the data root's sources or phrase config.
+  resetFactFixtures();
+  const requiredHonest = render('honest.html', ['--require-cv-source']);
+  if (requiredHonest.status === 0 && requiredHonest.rendered && /Fact check passed: honest\.html/.test(requiredHonest.output)) {
+    pass('--require-cv-source accepts the workspace metric despite a disagreeing data root');
+  } else {
+    fail(`required workspace source: status=${requiredHonest.status} rendered=${requiredHonest.rendered}\n${requiredHonest.output.trim()}`);
+  }
+
+  resetFactFixtures();
+  const requiredInflated = render('inflated.html', ['--require-cv-source']);
+  if (requiredInflated.status !== 0 && !requiredInflated.rendered && /Fact check failed for inflated\.html/.test(requiredInflated.output)) {
+    pass('--require-cv-source rejects a metric supported only by the data root');
+  } else {
+    fail(`required workspace source rejected wrong metric: status=${requiredInflated.status} rendered=${requiredInflated.rendered}\n${requiredInflated.output.trim()}`);
+  }
+
+  resetFactFixtures();
+  for (const root of [code, workspace]) {
+    mkdirSync(join(root, 'config'), { recursive: true });
+    writeFileSync(join(root, 'config', 'cv-facts.json'), JSON.stringify({
+      allow_metrics: [], allow_facts: [], warn_phrases: [],
+      forbidden_phrases: root === workspace ? ['Led a team'] : [],
+    }));
+  }
+  const forbidden = render('honest.html', ['--require-cv-source']);
+  if (forbidden.status !== 0 && !forbidden.rendered
+      && /Fact check failed for honest\.html/.test(forbidden.output) && /Led a team/.test(forbidden.output)) {
+    pass('--require-cv-source applies the workspace phrase config, not the data root config');
+  } else {
+    fail(`required workspace phrase config: status=${forbidden.status} rendered=${forbidden.rendered}\n${forbidden.output.trim()}`);
+  }
+
+  resetFactFixtures();
+  fsRmSync(join(workspace, 'cv.md'));
+  const requiredMissing = render('honest.html', ['--require-cv-source']);
+  if (requiredMissing.status !== 0 && !requiredMissing.rendered
+      && requiredMissing.output.includes(`Required primary CV source is missing or empty: ${join(workspace, 'cv.md')}`)) {
+    pass('--require-cv-source rejects a missing workspace source even when the data root has one');
+  } else {
+    fail(`required missing workspace source: status=${requiredMissing.status} rendered=${requiredMissing.rendered}\n${requiredMissing.output.trim()}`);
   }
 } finally {
   rmSync(base, { recursive: true, force: true });

@@ -46,20 +46,23 @@ try {
     });
   }
 
-  check('a nonempty required LaTeX body still supports its actual metric', () => {
-    fs.writeFileSync(latexSource, String.raw`\documentclass{article}
+  const nonemptyLatexFixture = String.raw`\documentclass{article}
 \newcommand{\oldTeam}{Managed 999 people.}
 \begin{document}
 % Managed 777 people.
 Managed 20 people.
 \end{document}
-`);
+`;
+
+  check('a nonempty required LaTeX body still supports its actual metric', () => {
+    fs.writeFileSync(latexSource, nonemptyLatexFixture);
     const result = verifyFacts('Managed 20 people.', latexOptions);
     assert.equal(result.verdict, 'pass');
     assert.deepEqual(result.invented, []);
   });
 
   check('required LaTeX sources still exclude preamble and comment metrics from evidence', () => {
+    fs.writeFileSync(latexSource, nonemptyLatexFixture);
     const result = verifyFacts('Managed 999 people. Managed 777 people.', latexOptions);
     assert.equal(result.verdict, 'block');
     assert.deepEqual(result.invented.sort(), ['777 people', '999 people']);

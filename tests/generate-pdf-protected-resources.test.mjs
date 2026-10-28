@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { SANDBOX_DATA_ROOT } from './helpers.mjs';
+import { toolRequired } from './required-tools.mjs';
 import { renderHtmlToPdf } from '../generate-pdf.mjs';
 
 const PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n'
@@ -60,7 +61,11 @@ test('protected local images and styles retain browser base-URL semantics', {
 }, async t => {
   let browser;
   try { browser = await chromium.launch({ headless: true }); }
-  catch (error) { t.skip(`Chromium unavailable: ${error.message.split('\n')[0]}`); return; }
+  catch (error) {
+    if (toolRequired('browser')) throw error;
+    t.skip(`Chromium unavailable: ${error.message.split('\n')[0]}`);
+    return;
+  }
   const root = mkdtempSync(join(SANDBOX_DATA_ROOT, 'protected-resources-'));
   const inputDir = join(root, 'input');
   const assets = join(root, 'assets');
