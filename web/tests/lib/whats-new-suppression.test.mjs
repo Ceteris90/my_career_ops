@@ -89,3 +89,132 @@ test("missing rows and fields do not throw", () => {
   const keys = evaluatedAt(["Acme", "Staff Engineer"]);
   assert.equal(isEvaluated(keys, norm, undefined, undefined), false);
 });
+
+// ── Posting URL refinement (#5684) ──────────────────────────────────────────
+//
+// Company + role alone hid every LATER requisition with the same title — one
+// opening per city, a second req a recruiter posted with the same title — for
+// good. When the evaluated row's posting URL and the scan row's URL are both
+// known, the URL decides; when either is unknown, the #3131 key still does.
+// The report reader is injected in production (the route passes
+// readLinkedReport from career-ops.ts), so these tests inject a fake one.
+
+const REQ_A = "https://boards.greenhouse.io/acme/jobs/1001";
+const REQ_B = "https://boards.greenhouse.io/acme/jobs/2002";
+const REQ_C = "https://boards.greenhouse.io/acme/jobs/3003";
+
+const reportWithUrl = (url) => `# Evaluation: Acme — Staff Engineer\n\n**Date:** 2026-10-01\n**URL:** ${url}\n**Score:** 4.1/5\n`;
+
+/** A tracker row linked to report `n`, plus a reader that records each read. */
+function evaluatedWithReports(rows) {
+  const reads = [];
+  const apps = rows.map(([company, role, report], i) => ({
+    company,
+    role,
+    report: `[${i + 1}](../reports/${String(i + 1).padStart(3, "0")}-acme-2026-10-01.md)`,
+    url: "",
+    reportText: report,
+  }));
+  const readReport = (app) => {
+    reads.push(app.report);
+    return app.reportText;
+  };
+  return { keys: evaluatedKeys(apps, norm, readReport), reads };
+}
+
+test("a second posting with the same company and title stays visible (#5684)", () => {
+  const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", reportWithUrl(REQ_A)]]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true, "the evaluated posting should stay hidden");
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), false, "a second requisition with the same title was hidden");
+});
+
+test("the evaluated posting is still hidden under a cosmetically different URL", () => {
+  // Same posting, spellings the core URL key folds: http, a tracking param, a
+  // trailing slash. A refinement that compared raw strings would resurface it.
+  const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", reportWithUrl(REQ_A)]]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", "http://boards.greenhouse.io/acme/jobs/1001/?utm_source=x"), true);
+});
+
+test("the tracker's URL cell is used before the report, and the report is not read", () => {
+  const reads = [];
+  const keys = evaluatedKeys(
+    [{ company: "Acme", role: "Staff Engineer", url: REQ_A, report: "[1](../reports/001-acme-2026-10-01.md)" }],
+    norm,
+    (app) => {
+      reads.push(app.report);
+      return reportWithUrl(REQ_B);
+    },
+  );
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), false);
+  assert.deepEqual(reads, [], "the report was read although the URL cell named the posting");
+});
+
+test("an inline report header still yields the posting URL", () => {
+  // The documented header can be one line (`**Score:** … | **URL:** … | …`),
+  // which is why the core matches `**URL:**` anywhere on the line.
+  const inline = `# Evaluation: Acme — Staff Engineer\n\n**Score:** 4.1/5 | **URL:** ${REQ_A} | **PDF:** ❌\n`;
+  const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", inline]]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), false);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true);
+});
+
+test("an unknown report URL falls back to company + role", () => {
+  // No report, no `**URL:**` line, a recruiter-sourced `N/A`, an empty header
+  // (which must not capture the next line's text): none of these say which
+  // posting was evaluated, so the #3131 key decides and both rows stay hidden.
+  for (const report of [null, "# Evaluation: Acme — Staff Engineer\n\n**Score:** 4.1/5\n", reportWithUrl("N/A"), "**URL:**\n**Score:** 4.1/5\n"]) {
+    const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", report]]);
+    assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true, `report: ${JSON.stringify(report)}`);
+    assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), true, `report: ${JSON.stringify(report)}`);
+  }
+  // No reader injected at all (older callers): the same fallback.
+  const keys = evaluatedAt(["Acme", "Staff Engineer"]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), true);
+});
+
+test("an unknown scan-row URL falls back to company + role", () => {
+  const { keys, reads } = evaluatedWithReports([["Acme", "Staff Engineer", reportWithUrl(REQ_A)]]);
+  for (const url of [undefined, "", "N/A", "not a url"]) {
+    assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", url), true, `scan url: ${JSON.stringify(url)}`);
+  }
+  assert.deepEqual(reads, [], "a report was read although the scan row had no URL to compare");
+});
+
+test("URLs on two different hosts are not evidence of two postings", () => {
+  // An aggregator listing is evaluated under the EMPLOYER's URL (AGENTS.md,
+  // "Aggregator Listings"), so the scan row and the report name one posting
+  // on two hosts. Treating that as two postings would resurface every such
+  // evaluated role.
+  const { keys } = evaluatedWithReports([["Acme", "Staff Engineer", reportWithUrl(REQ_A)]]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", "https://remoteok.com/remote-jobs/123456"), true);
+});
+
+test("several evaluated postings with one title: each hides only its own", () => {
+  const { keys } = evaluatedWithReports([
+    ["Acme", "Staff Engineer", reportWithUrl(REQ_A)],
+    ["Acme", "Staff Engineer", reportWithUrl(REQ_B)],
+  ]);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_A), true);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B), true);
+  assert.equal(isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_C), false, "a third requisition was hidden");
+
+  // One of them without a URL: it could be any posting, so it hides them all.
+  const mixed = evaluatedWithReports([
+    ["Acme", "Staff Engineer", reportWithUrl(REQ_A)],
+    ["Acme", "Staff Engineer", null],
+  ]);
+  assert.equal(isEvaluated(mixed.keys, norm, "Acme", "Staff Engineer", REQ_C), true);
+});
+
+test("reports are read lazily: only for a company + role match, once each", () => {
+  const { keys, reads } = evaluatedWithReports([
+    ["Acme", "Staff Engineer", reportWithUrl(REQ_A)],
+    ["Globex", "Data Engineer", reportWithUrl("https://jobs.lever.co/globex/1")],
+  ]);
+  assert.deepEqual(reads, [], "building the keys read reports");
+  isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_B);
+  isEvaluated(keys, norm, "Acme", "Staff Engineer", REQ_C);
+  isEvaluated(keys, norm, "Initech", "Staff Engineer", REQ_B);
+  assert.deepEqual(reads, ["[1](../reports/001-acme-2026-10-01.md)"], "expected one read, for the matching row only");
+});

@@ -393,12 +393,8 @@ export function findReportFile(n: string): string | null {
   const target = Number(n);
   const root = careerOpsRoot();
   const app = readApplications().find((a) => parseInt(a.n, 10) === target);
-  const linked = firstMarkdownLinkTarget(app?.report);
-  if (linked) {
-    const p = path.resolve(root, "data", linked);
-    // Containment: a hand-edited link must not resolve outside the project.
-    if (p.endsWith(".md") && !isReservedReportFile(p) && containedRealpath(p, root)) return p;
-  }
+  const linked = linkedReportFile(app, root);
+  if (linked) return linked;
   let files: string[];
   try {
     files = fs.readdirSync(path.join(root, "reports"));
@@ -411,6 +407,33 @@ export function findReportFile(n: string): string | null {
   if (!match) return null;
   const p = path.join(root, "reports", match);
   return containedRealpath(p, root) ? p : null;
+}
+
+/** The report a tracker row's own Report link names, or null when the cell
+ *  has no link or the link is not a contained, non-reserved `.md`. */
+function linkedReportFile(app: { report?: string } | undefined, root: string): string | null {
+  const linked = firstMarkdownLinkTarget(app?.report);
+  if (!linked) return null;
+  const p = path.resolve(root, "data", linked);
+  // Containment: a hand-edited link must not resolve outside the project.
+  return p.endsWith(".md") && !isReservedReportFile(p) && containedRealpath(p, root) ? p : null;
+}
+
+/** Text of the report a tracker row links to, or null. The What's New
+ *  suppression reads its `**URL:**` (lib/whats-new-suppression.mjs). Link
+ *  only, never findReportFile's number fallback: row and report numbers drift
+ *  apart (#1733), and a guessed report would hand the row another posting's
+ *  URL. A read failure is null too, which there means "URL unknown" and falls
+ *  back to the company + role match. */
+export function readLinkedReport(app: { report?: string }): string | null {
+  const file = linkedReportFile(app, careerOpsRoot());
+  if (!file) return null;
+  try {
+    // Reports live in the user's runtime checkout, outside the web build graph.
+    return fs.readFileSync(/* turbopackIgnore: true */ file, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 /** True containment check: resolves symlinks before comparing, so a link
