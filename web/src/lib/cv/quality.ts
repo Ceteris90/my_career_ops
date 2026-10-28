@@ -4,12 +4,44 @@
 
 export type CvReadiness = { scoreable: boolean; words: number; hasExperience: boolean; hasSkills: boolean; hint?: string };
 
+const ROLE_HEADING = /^(#{1,3})\s*(?:work\s+experience|professional\s+experience|experience|work|employment|empleo|experiencia)\s*$/i;
+const YEAR_RANGE = /\b(20\d\d)\s*[-–—]\s*(20\d\d|present|now|actualidad)/i;
+
+function experienceHeading(text: string): boolean {
+  return text.split("\n").some((line) => ROLE_HEADING.test(line));
+}
+
+// A year range, a line under the heading, or a deeper heading such as
+// "### Floor lead" counts. "Work Authorization" is not that heading, and a
+// sibling section such as "## Skills" is not a role under it.
+function experienceHasRole(text: string): boolean {
+  if (YEAR_RANGE.test(text)) return true;
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const heading = lines[i].match(ROLE_HEADING);
+    if (!heading) continue;
+    const level = heading[1].length;
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j].trim();
+      if (!line) continue;
+      const sub = /^(#+)\s+\S/.exec(line);
+      if (sub) {
+        if (sub[1].length <= level) break;
+        return true;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 export function cvReadiness(md: string): CvReadiness {
   const text = (md || "").trim();
   const words = text ? text.split(/\s+/).length : 0;
-  const hasExperience = /(^|\n)#{1,3}\s*(experience|work|employment|empleo|experiencia)/i.test(text) || /\b(20\d\d)\s*[-–—]\s*(20\d\d|present|now|actualidad)/i.test(text);
+  const hasExperience = experienceHeading(text) || YEAR_RANGE.test(text);
   const hasSkills = /(^|\n)#{1,3}\s*(skills|technologies|competenc|habilidad)/i.test(text);
-  const scoreable = words >= 80 && (hasExperience || hasSkills || words >= 200);
+  const hasRole = experienceHasRole(text);
+  const scoreable = hasRole || (words >= 80 && (hasSkills || words >= 200));
   let hint: string | undefined;
   if (!scoreable) hint = words < 40 ? "That's very short — add your experience for real matches (you can save anyway)." : "Looks thin — add a role or two for better matches (you can save anyway).";
   return { scoreable, words, hasExperience, hasSkills, hint };
