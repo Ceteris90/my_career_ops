@@ -44,6 +44,7 @@ import {
   extractCompanies,
   extractPipelineCompanies,
   extractTrackerCompanies,
+  fetchRegisterCsv,
   initialismCandidates,
   initialismKey,
   isCacheFresh,
@@ -440,6 +441,51 @@ test('pickRegisterCsvUrl: refuses a CSV that is not https on a GOV.UK host', () 
   }
   const relative = pickRegisterCsvUrl({ details: { attachments: [{ url: '/media/x/reg.csv', content_type: 'text/csv' }] } });
   assert.equal(relative.url, 'https://www.gov.uk/media/x/reg.csv', 'a relative URL resolves against GOV.UK');
+});
+
+/** A fetch stand-in that answers each URL from `routes` and records what was requested. */
+function fakeFetch(routes) {
+  const requested = [];
+  const fetchImpl = async (url, init) => {
+    requested.push(url);
+    assert.equal(init.redirect, 'manual', 'redirects must never be followed automatically');
+    const route = routes[url];
+    if (!route) throw new Error(`unexpected request: ${url}`);
+    return route.location
+      ? new Response(null, { status: route.status || 301, headers: { location: route.location } })
+      : new Response(route.body ?? 'csv', { status: 200 });
+  };
+  return { fetchImpl, requested };
+}
+
+const ASSET = 'https://assets.publishing.service.gov.uk/media';
+
+test('fetchRegisterCsv: follows a GOV.UK redirect to the current snapshot', async () => {
+  // The shape GOV.UK really serves: a protocol-relative Location to a newer file.
+  const { fetchImpl, requested } = fakeFetch({
+    [`${ASSET}/old/reg.csv`]: { location: '//assets.publishing.service.gov.uk/media/new/reg.csv' },
+    [`${ASSET}/new/reg.csv`]: { body: 'register' },
+  });
+  const { res, url } = await fetchRegisterCsv(`${ASSET}/old/reg.csv`, { fetchImpl });
+  assert.equal(await res.text(), 'register');
+  assert.equal(url, `${ASSET}/new/reg.csv`);
+  assert.deepEqual(requested, [`${ASSET}/old/reg.csv`, `${ASSET}/new/reg.csv`]);
+});
+
+test('fetchRegisterCsv: a redirect off GOV.UK is refused before it is requested', async () => {
+  for (const location of ['https://example.com/reg.csv', 'http://assets.publishing.service.gov.uk/media/x/reg.csv', 'http://169.254.169.254/']) {
+    const { fetchImpl, requested } = fakeFetch({ [`${ASSET}/x/reg.csv`]: { location, status: 302 } });
+    await assert.rejects(fetchRegisterCsv(`${ASSET}/x/reg.csv`, { fetchImpl }), /unexpected host/, location);
+    assert.deepEqual(requested, [`${ASSET}/x/reg.csv`], `${location} must never be fetched`);
+  }
+});
+
+test('fetchRegisterCsv: a redirect loop gives up instead of following forever', async () => {
+  const { fetchImpl } = fakeFetch({
+    [`${ASSET}/a/reg.csv`]: { location: `${ASSET}/b/reg.csv` },
+    [`${ASSET}/b/reg.csv`]: { location: `${ASSET}/a/reg.csv` },
+  });
+  await assert.rejects(fetchRegisterCsv(`${ASSET}/a/reg.csv`, { fetchImpl }), /redirected more than/);
 });
 
 // --- 6. Employer extraction and roll-up -------------------------------------

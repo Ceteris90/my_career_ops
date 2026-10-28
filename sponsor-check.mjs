@@ -928,12 +928,8 @@ export function pickRegisterCsvUrl(payload) {
       `GOV.UK Content API lists ${attachments.length} attachment(s) but no CSV — the publication's format changed; check ${REGISTER_PAGE}`,
     );
   }
-  const url = new URL(csv.url, REGISTER_PAGE);
-  if (url.protocol !== 'https:' || !REGISTER_ASSET_HOSTS.has(url.hostname)) {
-    throw new Error(`refusing register CSV from an unexpected host: ${url.href}`);
-  }
   return {
-    url: url.href,
+    url: registerAssetUrl(csv.url, REGISTER_PAGE).href,
     filename: csv.filename || null,
     publishedAt: payload?.public_updated_at || payload?.updated_at || null,
   };
@@ -945,6 +941,50 @@ export function pickRegisterCsvUrl(payload) {
  * response must not point an 11 MB download at an arbitrary or internal host.
  */
 const REGISTER_ASSET_HOSTS = new Set(['assets.publishing.service.gov.uk', 'www.gov.uk']);
+
+/**
+ * Resolve `href` against `base` and refuse anything that is not https on a
+ * REGISTER_ASSET_HOSTS host.
+ *
+ * @returns {URL}
+ */
+function registerAssetUrl(href, base) {
+  const url = new URL(href, base);
+  if (url.protocol !== 'https:' || !REGISTER_ASSET_HOSTS.has(url.hostname)) {
+    throw new Error(`refusing register CSV from an unexpected host: ${url.href}`);
+  }
+  return url;
+}
+
+/** Redirects followed for one CSV download before giving up. */
+const MAX_REGISTER_REDIRECTS = 5;
+
+/**
+ * Fetch the register CSV, following redirects one hop at a time.
+ *
+ * GOV.UK redirects a superseded asset URL to the current snapshot (the
+ * 2026-10-23 file 301s to the 2026-10-27 one), so redirects cannot simply be
+ * refused. fetch()'s automatic following would skip the host check on every
+ * hop after the first, so each Location is checked the same way the attachment
+ * URL was before it is requested.
+ *
+ * @param {string} url - Already checked by pickRegisterCsvUrl().
+ * @returns {Promise<{res: Response, url: string}>} The final response and the URL it came from.
+ */
+export async function fetchRegisterCsv(url, { timeoutMs = 120_000, fetchImpl = fetch } = {}) {
+  let current = registerAssetUrl(url);
+  for (let hop = 0; hop <= MAX_REGISTER_REDIRECTS; hop++) {
+    const res = await fetchImpl(current.href, {
+      headers: { 'User-Agent': DEFAULT_USER_AGENT, Accept: 'text/csv' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!location) return { res, url: current.href };
+    current = registerAssetUrl(location, current);
+  }
+  throw new Error(`register CSV download redirected more than ${MAX_REGISTER_REDIRECTS} times (${url})`);
+}
 
 /** Minimum plausible register size, below which a download is treated as truncated. */
 const MIN_REGISTER_ROWS = 1000;
@@ -967,17 +1007,14 @@ export async function refreshCache({ timeoutMs = 120_000, cacheDir = CACHE_DIR, 
   if (!apiRes.ok) throw new Error(`GOV.UK Content API returned HTTP ${apiRes.status} for the sponsor register`);
   const source = pickRegisterCsvUrl(await apiRes.json());
 
-  const csvRes = await fetch(source.url, {
-    headers: { 'User-Agent': DEFAULT_USER_AGENT, Accept: 'text/csv' },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!csvRes.ok) throw new Error(`register CSV download returned HTTP ${csvRes.status} (${source.url})`);
+  const { res: csvRes, url: csvUrl } = await fetchRegisterCsv(source.url, { timeoutMs });
+  if (!csvRes.ok) throw new Error(`register CSV download returned HTTP ${csvRes.status} (${csvUrl})`);
   const csvText = await csvRes.text();
 
   const parsed = parseRegister(csvText);
   if (parsed.rowCount < MIN_REGISTER_ROWS) {
     throw new Error(
-      `register CSV parsed to only ${parsed.rowCount} row(s) — refusing to cache a truncated register, since every lookup against it would read as "not found". Source: ${source.url}`,
+      `register CSV parsed to only ${parsed.rowCount} row(s) — refusing to cache a truncated register, since every lookup against it would read as "not found". Source: ${csvUrl}`,
     );
   }
 
@@ -986,7 +1023,7 @@ export async function refreshCache({ timeoutMs = 120_000, cacheDir = CACHE_DIR, 
 
   const meta = {
     fetchedAt: new Date().toISOString(),
-    sourceUrl: source.url,
+    sourceUrl: csvUrl,
     sourceFilename: source.filename,
     publishedAt: source.publishedAt,
     contentApi: REGISTER_CONTENT_API,
