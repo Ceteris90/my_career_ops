@@ -8,6 +8,10 @@ Optional passes:
 
 **Locked Sections:** If `cv.locked_sections` is defined in `profile.yml`, NEVER remove, shorten, or paraphrase those sections during CV generation or tailoring. They must appear verbatim.
 
+For a user-requested CV built from explicitly selected Master Career Profile
+facts, use **Selected Profile generation (opt-in)** below for the rendering
+branch. The sourcing, JD review and user decisions in this pipeline still apply.
+
 ## Application-scoped artifacts
 
 When a CV is reused or lightly tailored for an existing application, initialize a bundle with `npm run application:init -- --report {report-number} --company "{company}" --role "{role}" --version 1`. Keep the current JD at `jd/current.md`, the comparison JD at `jd/previous.md`, the source CV at `cv/source/original.html`, the tailored CV at `cv/tailored/v001/cv.html`, the PDF at `cv/tailored/v001/cv.pdf`, the change notes at `cv/tailored/v001/changes.md`, and the reuse decision at `decision/reuse.json` under the printed bundle root. Resolve the application/report first with `node find.mjs {report-or-tracker-number}` so the bundle uses the report number, not an ambiguous tracker row.
@@ -121,6 +125,108 @@ Run `npm run jd:similarity -- {bundle-root}/jd/current.md {bundle-root}/jd/previ
     ' {json-file}
     ```
 23. Report: PDF path, number of pages, keyword coverage % and whether its keywords came from the report or the archived JD (when Step 22 ran), the ATS variant's HTML path and any lint findings the user left open (when Step 21a ran), and any skill gaps from Step 4 still unaddressed
+
+## Selected Profile generation (opt-in)
+
+Use this branch only when the user requests selected Profile facts. Follow
+`modes/master-profile.md` to keep the original HTML payload, obtain explicit
+experience bindings and ordered fact IDs, and create the `selection.json` and
+`prepared.json` bundle. Never choose a binding by a company/role label alone.
+Selected bullets are verbatim `fact.text`; do not inject keywords, translate
+or rewrite them after selection. The Profile remains a reviewed selection
+index, not an additional primary source, and the mapping covers only selected
+bullets.
+
+Before final generation, review `prepared.payload` under Steps 17a/17b, using
+a temporary JSON copy for those CLIs, and handle warnings by the policy above.
+Both checks remain warning-only; their successful exit does not resolve a
+title mismatch or an `UNVERIFIED` result on the user's behalf. If the user
+chooses a change, change the original source-backed payload or selection and
+prepare again; original-payload edits require new selection anchors. Do not
+edit `prepared.payload`, its mapping or the rendered HTML directly.
+
+Resolve the template as usual, then run:
+
+```bash
+node career-profile.mjs generate-cv --payload base.json --selection selection.json --prepared prepared.json --html output/cv-v1.html --pdf output/cv-v1.pdf --template /absolute/path/to/resolved-template.html --report 123
+```
+
+All CLI paths resolve from the Data Root; absolute paths work too. Omit
+`--report` only when no report exists, and use the resolved report number
+otherwise. The default Profile is `data/career-profile.yml`; `--profile`
+selects another reviewed Profile file. The resolved template must contain
+`{{EXPERIENCE}}` outside comments, and its sibling `sections/experience.html`
+partial, if any, must contain `{{BULLETS}}` directly in its `ENTRY` block.
+These token checks do not prove rendered visibility or factual truth. Omit
+`--template` to use the configured `cv.template` or its base-template fallback.
+
+This command owns Steps 17a, 17b, 18, 19 and 21 for the final artifact: it
+re-reads the current Profile, verifies the entire payload and mapping against
+the originals, then passes a private snapshot to the existing checks and HTML
+builder before invoking the existing PDF generator. It requires a non-empty
+`cv.md` and aligned Data Root/tracker workspaces. The HTML and PDF destinations
+must be new `.html`/`.pdf` paths inside that workspace; existing files,
+directories and symlinks are rejected. Use a new versioned pair for retries.
+Both subprocesses use `--no-clobber` and inherit the validated workspace's open
+directory descriptor. A Python 3 standard-library helper walks output directories
+relative to that descriptor with `O_DIRECTORY | O_NOFOLLOW`, creates temporary
+files exclusively, and publishes HTML/PDF with a descriptor-relative atomic
+hard link that refuses an existing destination. After the workspace descriptor
+opens, replacing an ancestor with a symlink cannot redirect these writes.
+Ancestors above the workspace remain trusted during the initial path checks
+and descriptor open. Symlinks below the workspace root are
+rejected, including links to other directories inside it; root aliases work.
+Renderer scratch HTML uses a private OS temporary directory, with relative
+resources still resolved from the input HTML's directory.
+PDF index updates also use the workspace descriptor and the existing manifest
+lock convention. A symlinked index directory or an external `CAREER_OPS_PDF_INDEX`
+is refused with the usual manifest warning, leaving the generated PDF intact.
+The protected writer waits for existing locks and never reclaims a stale lock.
+
+`generate-cv` and standalone `--no-clobber` require `python3` on PATH and POSIX
+descriptor-relative filesystem APIs (Linux/macOS; WSL on Windows). They stop if
+these are unavailable, without falling back to pathname writes. The default
+PDF workflow keeps its existing runtime requirements and overwrite policy.
+The command resolves the payload's page format/country once for the PDF sheet
+to match the HTML body; do not add separate format flags. It exposes no
+fact-check skip or reordering override. Existing title/structure warnings,
+section and experience order checks, locked sections and fact checking retain
+their policies. The fact check's existing language coverage is unchanged.
+Its mandatory `--require-cv-source` makes the actual fact gate require a
+readable, non-empty `cv.md`; that requirement and claim extraction use one
+read rather than trusting only the earlier preflight. The flag conflicts with
+`--skip-fact-check` and is supported only for single-file PDF generation.
+
+If a fact gate fails, return to the source-backed inputs and prepare again.
+Never add Profile text or its evidence metadata as a new primary source to
+force a pass. A retained HTML draft after a failure is not a successful PDF.
+If the renderer reports `Manifest update failed`, surface the warning and keep
+the generated files, but do not mark the tracker PDF ready. Resolve the underlying
+index/lock/path problem without bypassing workspace protections, repair the index
+entry to point to the newly generated HTML/PDF, and verify that the dashboard
+linkage resolves to the new CV. Once registration succeeds, continue with Steps
+22/23 and the normal post-generation flow.
+
+Optional passes must preserve this preparation boundary:
+
+- **Hiring-manager audit:** before final generation, verify the bundle and
+  build an audit preview from a temporary JSON copy of `prepared.payload` using
+  the resolved template. Run Step 19's fact gate on that preview before the
+  audit, and supply that JSON explicitly as the tailored artifact. Any accepted
+  edit returns to the original payload/selection and preparation. The final
+  PDF still comes from `generate-cv`, which verifies and builds fresh HTML;
+  the preview, including any edited copy, is never its input.
+- **ATS copy:** apply Step 21a's payload transform to a separate original-base
+  copy, then create matching selection anchors and prepare a separate bundle.
+  Keep the user's selected fact IDs/order. For HTML-only output, verify that
+  bundle immediately before building its `prepared.payload` with the ATS
+  template, then run the fact gate as in Step 21a. If a PDF is requested, use
+  `generate-cv` with the ATS template and new paths, without `--report`, to
+  preserve the styled pair's report linkage. Never patch either HTML file or
+  reuse the styled bundle's mapping for a transformed payload.
+
+Without this opt-in request, use the normal pipeline above; its default
+generation behavior and source files are unchanged.
 
 ## ATS Rules (clean parsing)
 

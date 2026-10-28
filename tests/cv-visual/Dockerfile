@@ -20,7 +20,7 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/nodesource.list \
          sleep $((attempt * 20)); \
        done \
     && apt-get install -y --no-install-recommends \
-      fonts-liberation fonts-noto-cjk poppler-utils \
+      fonts-liberation fonts-noto-cjk poppler-utils python3 \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
