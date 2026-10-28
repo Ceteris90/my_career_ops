@@ -1049,7 +1049,7 @@ func UpdateApplicationStatusAndNotes(careerOpsPath string, app model.CareerAppli
 // Reject malformed UI input cheaply; the writer validates against states.yml.
 func isCanonicalStatusName(status string) bool {
 	switch strings.ToLower(status) {
-	case "evaluated", "applied", "responded", "assessment", "interview", "offer", "hired", "rejected", "discarded", "skip":
+	case "evaluated", "preparation", "applied", "responded", "assessment", "interview", "offer", "hired", "rejected", "discarded", "skip":
 		return true
 	}
 	return false
@@ -1075,7 +1075,7 @@ func StatusPriority(status string) int {
 		return 3
 	case "applied":
 		return 4
-	case "evaluated":
+	case "evaluated", "preparation":
 		return 5
 	case "skip":
 		return 6
