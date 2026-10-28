@@ -232,7 +232,7 @@ console.log('\n--- 1b. --flag=value form ---');
     rmSync(dataRoot, { recursive: true, force: true });
     rmSync(decoyCwd, { recursive: true, force: true });
   }
-  ok('missing data directory fails cleanly instead of reading cwd', missingDataExit !== 0);
+  ok('missing data directory fails cleanly instead of reading cwd', missingDataExit === 1);
 }
 
 // ── 2. Subtract already-tracked ───────────────────────────────────────────────
