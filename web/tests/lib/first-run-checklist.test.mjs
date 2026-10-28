@@ -48,6 +48,15 @@ test("a bare experience heading is not a role", () => {
   assert.equal(cvReadiness("## Experience\nFloor lead, Northwind Market").scoreable, true);
 });
 
+test("work authorization is not a role, and a subheading under experience is", () => {
+  const auth = cvReadiness("## Work Authorization\nAuthorized to work");
+  assert.equal(auth.scoreable, false);
+  assert.equal(auth.hasExperience, false);
+  const sub = cvReadiness("## Experience\n### Floor lead, Northwind Market");
+  assert.equal(sub.scoreable, true);
+  assert.equal(cvReadiness("## Work Experience\nFloor lead, Northwind Market").scoreable, true);
+});
+
 const SECTIONS = [
   { heading: "## Your Target Roles", state: "filled" },
   { heading: "## Your Deal Breakers", state: "missing" },
