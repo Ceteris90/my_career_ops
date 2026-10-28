@@ -200,7 +200,12 @@ read rather than trusting only the earlier preflight. The flag conflicts with
 If a fact gate fails, return to the source-backed inputs and prepare again.
 Never add Profile text or its evidence metadata as a new primary source to
 force a pass. A retained HTML draft after a failure is not a successful PDF.
-After success, continue with Steps 22/23 and the normal post-generation flow.
+If the renderer reports `Manifest update failed`, surface the warning and keep
+the generated files, but do not mark the tracker PDF ready. Resolve the underlying
+index/lock/path problem without bypassing workspace protections, repair the index
+entry to point to the newly generated HTML/PDF, and verify that the dashboard
+linkage resolves to the new CV. Once registration succeeds, continue with Steps
+22/23 and the normal post-generation flow.
 
 Optional passes must preserve this preparation boundary:
 

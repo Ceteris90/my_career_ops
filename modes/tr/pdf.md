@@ -109,8 +109,16 @@ yalnızca tek dosyalı PDF üretiminde desteklenir.
 Bilgi doğrulama kapısı başarısız olursa kaynaklara dayalı girdilere dön ve
 yeniden hazırla. Kontrolü geçirmek için Profil metnini veya kanıt meta
 verilerini asla yeni bir birincil kaynak olarak ekleme. Başarısızlık sonrası
-saklanan HTML taslağı, başarılı bir PDF anlamına gelmez. Başarıdan sonra
-22/23. adımlarla ve normal üretim sonrası akışla devam et.
+saklanan HTML taslağı, başarılı bir PDF anlamına gelmez.
+
+Üretici `Manifest update failed` uyarısı verirse uyarıyı kullanıcıya ilet ve
+oluşturulan HTML/PDF dosyalarını koru. Altta yatan sorunu giderdikten sonra
+PDF indeksindeki bağlantıyı yeni HTML/PDF dosyalarını gösterecek şekilde
+düzelt; bunu yaparken korumalı çalışma alanının yol ve yazma kısıtlarını
+aşma. Takipçide PDF'i hazır olarak işaretlemeden veya 22/23. adımlarla ve
+normal üretim sonrası akışla devam etmeden önce bu bağlantıyı doğrula.
+İndeks kaydı başarılı olduğunda 22/23. adımlarla ve normal üretim sonrası
+akışla devam et.
 
 İsteğe bağlı ek işlemler bu hazırlık sınırını korumalıdır:
 
