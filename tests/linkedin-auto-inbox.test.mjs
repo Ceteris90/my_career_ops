@@ -342,3 +342,12 @@ test('an enabled gmail plugin runs on the schedule only with auto: true', async 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('the scheduled inbox poll holds the same lock as the job run', () => {
+  const src = readFileSync(join(ROOT, 'web', 'scripts', 'scheduled-jobs-runner.mjs'), 'utf8');
+  const lockAt = src.indexOf('return withResourceLock(');
+  const pollAt = src.indexOf('await pollLinkedInInbox(');
+  assert.ok(lockAt > 0 && pollAt > lockAt, 'poll runs inside the runner lock');
+  const callback = src.slice(lockAt, src.indexOf('timeoutMs:', lockAt));
+  assert.match(callback, /if \(!manualJobId\) \{[\s\S]*await pollLinkedInInbox\(/);
+});

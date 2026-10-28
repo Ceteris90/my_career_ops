@@ -297,23 +297,24 @@ function requestedJobId(args) {
 async function main() {
   const root = getCareerOpsRoot();
   const manualJobId = requestedJobId(process.argv.slice(2));
-  // The inbox belongs to the 15-minute worker. Running one job by hand does not drain it.
-  if (!manualJobId) {
-    try {
-      await pollLinkedInInbox(root, {
-        codeRoot: CODE_ROOT,
-        log: (line) => process.stderr.write(`${line}\n`),
-      });
-    } catch (error) {
-      process.stderr.write(`linkedin inbox: ${error instanceof Error ? error.message : String(error)}\n`);
-    }
-  }
   const storePath = scheduledStorePath(root);
   const runnerResource = runnerResourcePath(storePath);
 
   return withResourceLock(
     runnerResource,
     async () => {
+      // The inbox belongs to the 15-minute worker. Running one job by hand does not drain it.
+      // The poll shares this lock so two workers cannot plan the same alert.
+      if (!manualJobId) {
+        try {
+          await pollLinkedInInbox(root, {
+            codeRoot: CODE_ROOT,
+            log: (line) => process.stderr.write(`${line}\n`),
+          });
+        } catch (error) {
+          process.stderr.write(`linkedin inbox: ${error instanceof Error ? error.message : String(error)}\n`);
+        }
+      }
       let claim;
       if (manualJobId) {
         if (!isSafeScheduledId(manualJobId)) throw new Error("Invalid scheduled job identifier.");
