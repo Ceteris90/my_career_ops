@@ -120,6 +120,53 @@ await ok(`parser reads ${PARSE_CASES.length} real phrasings`, () => {
   assert.deepStrictEqual(misses, []);
 });
 
+// Pre-landing review (2026-10-28): each of these was read as a confident bar
+// above a 3-year band (years 3, stretch 1), so `action: drop` removed the very
+// early-career postings the filter exists to keep.
+const NEVER_OUT = [
+  // A ceiling is not a floor.
+  'Up to 10 years of experience in finance.',
+  'Less than 8 years of professional experience',
+  'No more than 6 years of experience',
+  '5 years of experience maximum.',
+  'Requirements:\n- 6 years of experience or less',
+  // Someone else's experience.
+  "You'll join a team that averages 12 years of industry experience.",
+  'Manage a team of analysts with 5-8 years of experience.',
+  'Responsibilities:\n- Support clients with 10+ years of experience in the market.',
+  'Experience hiring candidates with 10+ years of experience.',
+  // A heading the parser does not know is not a required section.
+  'Requirements:\n- 2+ years of experience with SQL\nWhat we\'d love to see\n- 8+ years of experience in fintech',
+  'Requirements:\n- 2+ years of experience with SQL\nAdditional Qualifications\n- 8+ years of experience in fintech',
+  'Requirements:\n- 2+ years of experience with SQL\nPreferred Qualifications (any 2 of the following)\n- 7+ years of experience in fintech',
+  'Requirements:\n- 2+ years of experience with SQL\nIt would be great if you also have the following things\n- 7+ years of experience in fintech',
+];
+
+await ok(`review regressions: ${NEVER_OUT.length} ceilings, third parties and unknown headings never read as out`, () => {
+  const bad = NEVER_OUT
+    .map(jd => ({ jd, req: parseYearsRequirement(jd) }))
+    .filter(({ req }) => classifyYears(req, { years: 3, stretchYears: 1 }) === 'out')
+    .map(({ jd, req }) => `${JSON.stringify(jd)} → ${req.display}`);
+  assert.deepStrictEqual(bad, []);
+});
+
+await ok('a bar under an unknown heading still gates when the sentence speaks to the candidate', () => {
+  const req = parseYearsRequirement('About the role\n- You have 8+ years of experience in fintech.');
+  assert.strictEqual(classifyYears(req, { years: 3, stretchYears: 1 }), 'out');
+  // A short bullet with a figure in parentheses is not a heading, so it does
+  // not end the required section it sits in (a live Lever JD).
+  const travel = parseYearsRequirement('What We Require\n- Ability to travel (50%+) per business needs\n- 10+ years of outbound sales experience');
+  assert.strictEqual(classifyYears(travel, { years: 3, stretchYears: 1 }), 'out');
+});
+
+await ok('pathological whitespace and tag-like input parse in well under a second', () => {
+  for (const jd of [`5+ years${' '.repeat(60_000)}of experience. Next`, '<a'.repeat(30_000)]) {
+    const t = performance.now();
+    parseYearsRequirement(jd);
+    assert.ok(performance.now() - t < 500, `${Math.round(performance.now() - t)}ms`);
+  }
+});
+
 await ok('a full multi-section JD gates on its required section only', () => {
   const jd = [
     'About Acme',
@@ -187,6 +234,9 @@ await ok('off unless experience_filter is present and not disabled', () => {
   assert.deepStrictEqual(resolveExperienceFilter(undefined, 5), { enabled: false });
   assert.deepStrictEqual(resolveExperienceFilter(null, 5), { enabled: false });
   assert.deepStrictEqual(resolveExperienceFilter({ enabled: false }, 5), { enabled: false });
+  // A string is not a switch: `enabled: "false"` must not turn the filter on.
+  assert.strictEqual(resolveExperienceFilter({ enabled: 'false' }, 5).enabled, false);
+  assert.match(String(resolveExperienceFilter({ enabled: 'yes' }, 5).reason), /true or false/);
 });
 
 await ok('on with profile years and defaults (action defaults to label)', () => {

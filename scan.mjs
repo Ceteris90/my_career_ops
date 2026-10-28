@@ -4942,7 +4942,9 @@ async function main() {
   }
   if (experienceFilter.enabled) {
     const band = `${experienceFilter.years} yrs + ${experienceFilter.stretchYears} stretch`;
-    console.log(`Filtered by experience: ${experienceDropped.length} removed (band: JD minimum ≤ ${band})`);
+    console.log(experienceFilter.action === 'drop'
+      ? `Filtered by experience: ${experienceDropped.length} removed (band: JD minimum ≤ ${band})`
+      : `Experience filter:     label only, nothing removed (band: JD minimum ≤ ${band})`);
   }
   console.log(`Duplicates:            ${totalDupes} skipped`);
   if (blacklist.size > 0) {

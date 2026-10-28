@@ -59,7 +59,7 @@ import { fetchJsonWithRetry, makeHttpCtx } from './providers/_http.mjs';
  * @typedef {Object} YearsMention
  * @property {number} floor        Lowest figure ("3" in "3-5 years")
  * @property {number|null} ceiling Upper bound of a range, null for "N+"
- * @property {'required'|'preferred'} kind
+ * @property {'required'|'preferred'|'unclear'} kind   unclear: under a heading the parser does not know
  * @property {'overall'|'skill'|'degree-substitute'|'sub'} scope
  * @property {boolean} degreeAlt  One of several degree-conditional bars
  * @property {boolean} [alternative] The JD offers another way to meet it
@@ -109,6 +109,10 @@ const EXPERIENCE_TRAIL = /^(?:\s+[-—–]|(?:'s|')?\s*(?:\+\s*)?(?:of\b|in\b|as
 const NON_EXPERIENCE_OF = /^(?:'s|')?\s*of\s+(?:age|college|university|school|schooling|education|study|studies|service|history|data|operations?|growth|existence|tenure|employment with us)\b/i;
 // Words right before the number that make it a time window, not a requirement.
 const WINDOW_LEAD = /\b(?:within|after|every|per|ago|the (?:first|next|last|past)|(?:first|next|last|past)|in the|for the|over the|up to the|aged?|age of)\s*$/i;
+// A ceiling, not a floor: "up to 10 years", "less than 8 years", "6 years
+// or less", "5 years maximum". Never a minimum, so never a bar.
+const CEILING_LEAD = /\b(?:up to|less than|fewer than|no more than|not more than|under|at most|maximum of|max(?:imum)?\.?)\s*$/i;
+const CEILING_TRAIL = /^(?:'s|')?\s*(?:\+\s*)?(?:of\s+)?(?:[\w/&-]+\s+){0,4}?(?:experience\s+)?(?:or (?:less|fewer|under)|maximum|max\b|at most|at the most)/i;
 // Sentences about something other than the candidate's experience.
 const NOT_A_REQUIREMENT = /\b(?:year[- ]over[- ]year|years? old|years? of age|ago\b|founded|anniversary|in business|vest(?:s|ed|ing)?\b|contract (?:term|length|duration)|fixed[- ]term|warranty|retention bonus|sabbatical|parental leave|commitment of|\d+[- ]year (?:degree|program|programme|course|plan|contract|term|appointment)|(?:four|two|three)[- ]year (?:degree|college|university|program))/i;
 // Company voice ("our team has 50 years of combined experience") with no
@@ -118,7 +122,13 @@ const NOT_A_REQUIREMENT = /\b(?:year[- ]over[- ]year|years? old|years? of age|ag
 // "learn from mentors who have 15 years". Skipping it can only keep a row.
 const THIRD_PARTY_LEAD = /\b(?:engineers|experts|colleagues|peers|leaders|mentors|teammates|team members|veterans|specialists|founders|partners|advisors|people)\s+(?:with|who have|who bring|having)\s+(?:over\s+|more than\s+|a combined\s+|decades and\s+)?$/i;
 const THIRD_PARTY_SENTENCE = /\b(?:alongside|learn from|mentored by|surrounded by|led by)\b/i;
+// A team's average ("a team that averages 12 years"), or the people the role
+// manages, serves or hires ("manage analysts with 5-8 years", "hiring
+// candidates with 10+ years"): their experience, not the candidate's.
+const THIRD_PARTY_AVERAGE = /\baverag(?:e|es|ing)\s+(?:of\s+)?(?:over\s+|more than\s+)?$/i;
+const THIRD_PARTY_OBJECT = /\b(?:manag\w*|lead|leading|supervis\w*|support\w*|serv(?:e|es|ing)|coach\w*|mentor(?:s|ing)?|hir(?:e|es|ing)|recruit\w*|sourc(?:e|es|ing)|interview\w*|team of|group of)\b[^.;]{0,50}\b[a-z]+s\s+with\s+(?:over\s+|more than\s+)?$/i;
 const COMPANY_VOICE = /\b(?:[Ww]e|[Ww]e've|[Ww]e're|[Oo]ur|us)\b/;
+const CANDIDATE_HAS = /\byou(?:'ve| have| bring| possess|'ll (?:need|have|bring)| will (?:need|have|bring)| should have| must have)\b/i;
 const CANDIDATE_VOICE = /\b(?:you|your|candidate|applicant|required|requirements?|minimum|must|should|ideal(?:ly)?|qualif\w*|looking for|seeking|need)\b/i;
 
 const PREFERRED_CUE = /\b(?:prefer(?:red|ably|ence)?|nice[- ]to[- ]have|bonus|a (?:big |huge |strong )?plus|is a plus|are a plus|ideally|desired|desirable|advantageous|would be (?:great|nice|helpful|ideal)|is helpful|not required|extra credit|stand out)\b/gi;
@@ -141,7 +151,7 @@ const EQUIVALENT_COMBINATION = /\bequivalent combination\b|\bor (?:an? )?equival
 const NO_EXPERIENCE_RE = /\bno (?:prior |previous )?(?:work |professional |industry )?experience (?:is )?(?:required|necessary|needed)\b/i;
 
 // Heading shapes: short, no year figure, and a recognisable section name.
-const PREFERRED_HEADING = /\b(?:prefer|nice[- ]to[- ]have|good[- ]to[- ]have|great[- ]to[- ]have|bonus|desir|plus|ideal|extra credit|stand out|even better|would be (?:great|nice)|great if|added advantage|differentiat)/i;
+const PREFERRED_HEADING = /\b(?:prefer|nice[- ]to[- ]have|good[- ]to[- ]have|great[- ]to[- ]have|bonus|desir|plus|ideal|extra credit|stand out|even better|would be (?:great|nice)|great if|added advantage|differentiat|love to see|also have)/i;
 const REQUIRED_HEADING = /\b(?:require|minimum|basic|must|qualif|what you(?:'ll)? (?:need|bring)|you (?:have|bring)|looking for|about you|who you are|experience|skills)/i;
 
 /** @param {string} raw */
@@ -157,8 +167,10 @@ function toNumber(raw) {
  */
 function toLines(input) {
   const raw = String(input ?? '');
-  const text = /<[a-z!/][^>]*>/i.test(raw) ? jdHtmlToText(raw) : raw;
-  return text.replace(/[’‘]/g, "'").split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, '').trim()).filter(Boolean);
+  // [^<>]: '<a<a<a…' fails each start at once instead of scanning to the end.
+  const text = /<[a-z!/][^<>]*>/i.test(raw) ? jdHtmlToText(raw) : raw;
+  // Runs of spaces collapse first: the sentence split is quadratic on them.
+  return text.replace(/[’‘]/g, "'").replace(/[^\S\r\n]+/g, ' ').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•·]|\d+[.)])\s+/, '').trim()).filter(Boolean);
 }
 
 /**
@@ -172,12 +184,22 @@ function sentences(line) {
 
 /** @param {string} line */
 function headingKind(line) {
-  if (line.length > 60 || /\d/.test(line)) return null;
-  const words = line.split(/\s+/).length;
-  if (!/:$/.test(line) && (words > 6 || /[.!?]$/.test(line))) return null;
-  if (PREFERRED_HEADING.test(line)) return 'preferred';
-  if (REQUIRED_HEADING.test(line)) return 'required';
-  return 'other';
+  // "Preferred Qualifications (any 2 of the following)": the parenthetical
+  // is an aside, not a figure.
+  const bare = line.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  // A lead-in line that introduces a preferred list, however long ("It would
+  // be great if you also have the following things").
+  if (bare.length <= 120 && !/\d/.test(bare) && PREFERRED_HEADING.test(bare) && /(?::|\bfollowing\b[\w\s]*)$/i.test(bare)) return 'preferred';
+  if (bare.length > 60 || /\d/.test(bare)) return null;
+  const words = bare.split(/\s+/).length;
+  if (!/:$/.test(bare) && (words > 6 || /[.!?]$/.test(bare))) return null;
+  // A digit only inside a parenthetical is allowed for a heading that names
+  // its section; "Ability to travel (50%+)" is a bullet, not a heading.
+  const known = PREFERRED_HEADING.test(bare) ? 'preferred'
+    // "Additional Qualifications" may be required or preferred: unclear.
+    : REQUIRED_HEADING.test(bare) && !/^additional\b/i.test(bare) ? 'required' : null;
+  if (/\d/.test(line) && !known) return null;
+  return known ?? 'other';
 }
 
 /**
@@ -185,8 +207,8 @@ function headingKind(line) {
  * before it, else the first after it, else the section default.
  * @param {string} sentence
  * @param {number} at
- * @param {'required'|'preferred'} fallback
- * @returns {'required'|'preferred'}
+ * @param {'required'|'preferred'|'unclear'} fallback
+ * @returns {'required'|'preferred'|'unclear'}
  */
 function mentionKind(sentence, at, fallback) {
   // A sentence that ends on the cue ("Minimum of 2 years ... preferred")
@@ -196,7 +218,12 @@ function mentionKind(sentence, at, fallback) {
   const cues = [];
   for (const m of sentence.matchAll(PREFERRED_CUE)) cues.push({ pos: m.index ?? 0, kind: 'preferred' });
   for (const m of sentence.matchAll(REQUIRED_CUE)) cues.push({ pos: m.index ?? 0, kind: 'required' });
-  if (cues.length === 0) return fallback;
+  if (cues.length === 0) {
+    // Under a heading the parser does not know ("About the role",
+    // "Responsibilities"), only a sentence addressed to the candidate is a bar.
+    if (fallback === 'unclear') return CANDIDATE_HAS.test(sentence) ? 'required' : 'unclear';
+    return fallback;
+  }
   const before = cues.filter(c => c.pos < at).sort((a, b) => b.pos - a.pos)[0];
   if (before) return before.kind;
   return cues.sort((a, b) => a.pos - b.pos)[0].kind;
@@ -205,7 +232,7 @@ function mentionKind(sentence, at, fallback) {
 /**
  * Every experience mention in one sentence.
  * @param {string} sentence
- * @param {'required'|'preferred'} sectionKind
+ * @param {'required'|'preferred'|'unclear'} sectionKind
  * @returns {YearsMention[]}
  */
 function mentionsIn(sentence, sectionKind) {
@@ -218,7 +245,8 @@ function mentionsIn(sentence, sectionKind) {
   const consider = (/** @type {number} */ at, /** @type {number} */ end, /** @type {number} */ floor, /** @type {number|null} */ ceiling, /** @type {string} */ unit) => {
     const lead = sentence.slice(Math.max(0, at - 40), at);
     const trail = sentence.slice(end);
-    if (WINDOW_LEAD.test(lead) || THIRD_PARTY_LEAD.test(lead)) return;
+    if (WINDOW_LEAD.test(lead) || THIRD_PARTY_LEAD.test(lead) || THIRD_PARTY_AVERAGE.test(lead) || THIRD_PARTY_OBJECT.test(lead)) return;
+    if (CEILING_LEAD.test(lead) || CEILING_TRAIL.test(trail)) return;
     if (NON_EXPERIENCE_OF.test(trail)) return;
     const months = /^mo/i.test(unit);
     if (months && !/^(?:'s|')?\s*(?:of\s+)?(?:\w+\s+){0,3}?experience\b/i.test(trail)) return;
@@ -300,6 +328,9 @@ export function parseYearsRequirement(jd) {
   /** @type {YearsMention[]} */
   const mentions = [];
   /** @type {'required'|'preferred'} */
+  // Text before any heading reads as required; a heading the parser does not
+  // know makes its section unclear, so its bars show but never gate.
+  /** @type {'required'|'preferred'|'unclear'} */
   let section = 'required';
   let noExperience = false;
   /** @type {YearsMention[]} */
@@ -308,7 +339,7 @@ export function parseYearsRequirement(jd) {
     if (NO_EXPERIENCE_RE.test(line)) noExperience = true;
     const heading = headingKind(line);
     if (heading) {
-      section = heading === 'preferred' ? 'preferred' : 'required';
+      section = heading === 'other' ? 'unclear' : heading;
       continue;
     }
     for (const sentence of sentences(line)) {
@@ -323,7 +354,9 @@ export function parseYearsRequirement(jd) {
     }
   }
 
-  const gating = mentions.filter(m => m.kind === 'required' && m.scope === 'overall');
+  // Unclear bars count toward the lowest reading, so they can show and keep a
+  // row, but a reading that rests on one is never confident: it cannot drop.
+  const gating = mentions.filter(m => (m.kind === 'required' || m.kind === 'unclear') && m.scope === 'overall');
   if (gating.length === 0 && noExperience) {
     return { status: 'stated', min: 0, max: null, confident: true, display: '0+', mentions };
   }
@@ -347,8 +380,10 @@ export function parseYearsRequirement(jd) {
   if (floors.length > 1) {
     display = gating.every(m => m.degreeAlt) ? `${floors.join('/')}+ by degree` : `${floors.join('/')}+`;
   }
-  const confident = !gating.some(m => m.alternative);
-  if (!confident) display = `${display} or equivalent`;
+  const alternative = gating.some(m => m.alternative);
+  const unclear = gating.some(m => m.kind === 'unclear' && m.floor === lowest.floor);
+  const confident = !alternative && !unclear;
+  if (alternative) display = `${display} or equivalent`;
   return { status: 'stated', min: lowest.floor, max: lowest.ceiling, confident, display, mentions };
 }
 
@@ -394,6 +429,8 @@ export function resolveExperienceFilter(block, profileYears) {
   if (typeof block !== 'object' || Array.isArray(block)) return { enabled: false, reason: 'experience_filter must be an object' };
   const cfg = /** @type {Record<string, unknown>} */ (block);
   if (cfg.enabled === false) return { enabled: false };
+  // Off rather than guessed: `enabled: "false"` must not switch it on.
+  if (cfg.enabled !== undefined && cfg.enabled !== true) return { enabled: false, reason: 'experience_filter.enabled must be true or false' };
   const years = cfg.years ?? profileYears;
   if (typeof years !== 'number' || !Number.isFinite(years) || years < 0 || years > 60) {
     return { enabled: false, reason: 'experience_filter is on but no years are set: add candidate.years_of_experience to config/profile.yml (or experience_filter.years)' };
@@ -521,7 +558,8 @@ export async function applyExperienceFilter(offers, filter, deps = {}) {
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
       }
-      const listing = typeof offer.description === 'string' ? offer.description.trim() : '';
+      // Capped like an ATS read: a provider's description has no size limit.
+      const listing = typeof offer.description === 'string' ? offer.description.slice(0, JD_TEXT_CAP).trim() : '';
       if (text) {
         req = parseYearsRequirement(text);
         source = 'ats';
