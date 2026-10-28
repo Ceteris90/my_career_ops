@@ -57,8 +57,15 @@ function resolveApiUrl(entry) {
  *  former silently hides every other eligible location from scan.mjs's
  *  location_filter (e.g. a req open in Barcelona AND Montevideo looks
  *  Barcelona-only). Mirrors resolveLocation() in providers/remotli.mjs.
- *  @param {any} categories */
-function resolveLocation(categories) {
+ *
+ *  `workplaceType` is a top-level posting flag (`remote` | `hybrid` | `onsite`),
+ *  not a location. A remote role whose city is "London" never contains the word
+ *  Remote, so a filter that allows Remote drops it. Hybrid stays city-only:
+ *  the office is still the place. Append once, and skip when a segment already
+ *  says remote ("Remote — Europe").
+ *  @param {any} categories
+ *  @param {unknown} workplaceType */
+function resolveLocation(categories, workplaceType) {
   const primary = typeof categories?.location === 'string' ? categories.location.trim() : '';
   const all = Array.isArray(categories?.allLocations)
     ? categories.allLocations.filter(l => typeof l === 'string' && l.trim()).map(l => l.trim())
@@ -67,6 +74,8 @@ function resolveLocation(categories) {
   for (const l of [primary, ...all]) {
     if (l && !merged.some(m => m.toLowerCase() === l.toLowerCase())) merged.push(l);
   }
+  const remote = typeof workplaceType === 'string' && workplaceType.trim().toLowerCase() === 'remote';
+  if (remote && !merged.some(m => /remote/i.test(m))) merged.push('Remote');
   return merged.join('; ');
 }
 
@@ -120,7 +129,7 @@ export default {
       listingIdentity: boardSlug && typeof j.id === 'string' && j.id.trim()
         ? { ats_provider: 'lever', board_slug: boardSlug, posting_id: j.id }
         : undefined,
-      location: resolveLocation(j.categories),
+      location: resolveLocation(j.categories, j.workplaceType),
       // Lever's v0 postings list ships the full description for free (same
       // payload, no per-job request) — enables scan.mjs content_filter.
       description: leverDescription(j),
