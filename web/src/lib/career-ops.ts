@@ -15,6 +15,7 @@ import { parseInbox, splitLines } from "@/lib/pipeline-table.mjs";
 // run-cli-support.mjs — see report-files.mjs for why it lives there.
 import { isReservedReportFile } from "@/lib/report-files.mjs";
 import { firstMarkdownLinkTarget } from "@/lib/posting-url.mjs";
+import { normalizeToApplicationUrl } from "@/lib/apply/url-normalize.mjs";
 import { resolvePdfIndexPath } from "@/lib/core/pdf-index";
 // Pure parser, no I/O — shared with the apply flow's CV resolver so the two
 // don't drift into two different definitions of "which report does this
@@ -174,7 +175,7 @@ export function readApplications(): Application[] {
   // never a hand-written return-shape list that the two could drift from. The
   // third argument is the running system checkout, so a data-only root (no
   // tracker-aliases.json of its own) still resolves headers correctly.
-  return parseApplications(md, careerOpsRoot(), path.resolve(process.cwd(), "..")) as Application[];
+  return parseApplications(md, careerOpsRoot(), resolveCodeRoot(careerOpsRoot(), process.env)) as Application[];
 }
 
 export type StatusLogRow = {
@@ -449,6 +450,27 @@ export function findApplication(n: string): Application | null {
   if (!/^\d+$/.test(n)) return null;
   const target = Number(n);
   return readApplications().find((a) => parseInt(a.n, 10) === target) ?? null;
+}
+
+/** Matches an application in the tracker by URL, normalizing form and query suffixes. */
+export function findApplicationByUrl(rawUrl: string): Application | null {
+  if (!rawUrl || typeof rawUrl !== "string") return null;
+  const clean = (u: string) => {
+    try {
+      const normalized = normalizeToApplicationUrl(u);
+      return normalized.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+    } catch {
+      return u.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+    }
+  };
+  const target = clean(rawUrl);
+  if (!target) return null;
+
+  for (const app of readApplications()) {
+    const rawTarget = firstMarkdownLinkTarget(app.url) || app.url || firstMarkdownLinkTarget(app.applyLink) || app.applyLink;
+    if (rawTarget && clean(rawTarget) === target) return app;
+  }
+  return null;
 }
 
 /** The CANONICAL user-customization file the CLI/TUI reads. Durable facts the
